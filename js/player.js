@@ -1,4 +1,5 @@
 import { BIOMES } from './biomes.js';
+import { getMicroTile, CHUNK_SIZE } from './chunking.js';
 
 export const player = {
   x: 0,
@@ -11,19 +12,18 @@ export function setPlayerPos(x, y) {
 }
 
 export function canWalk(x, y, data) {
-  if (x < 0 || x >= data.width || y < 0 || y >= data.height) return false;
+  if (x < 0 || x >= data.width * CHUNK_SIZE || y < 0 || y >= data.height * CHUNK_SIZE) return false;
   
-  const idx = y * data.width + x;
-  const bId = data.biomes[idx];
+  const tile = getMicroTile(Math.floor(x), Math.floor(y), data);
+  const bId = tile.biomeId;
   
   // Terrenos inescaláveis
   if (bId === BIOMES.PEAK.id || bId === BIOMES.VOLCANO.id || bId === BIOMES.MOUNTAIN.id) {
     return false;
   }
   
-  // Água bloqueia, a não ser que tenha uma rota (ponte)
+  // Água bloqueia, mas as pontes agora viram BEACH no microtile, então não caem aqui
   if (bId === BIOMES.OCEAN.id) {
-    if (data.roadTraffic && data.roadTraffic[idx] > 0) return true;
     return false;
   }
   

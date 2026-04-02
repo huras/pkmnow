@@ -3,6 +3,7 @@ import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer } from './player.js';
+import { CHUNK_SIZE, getMicroTile } from './chunking.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -112,7 +113,7 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 function enterPlayMode(gx, gy) {
-  setPlayerPos(gx, gy);
+  setPlayerPos(gx * CHUNK_SIZE + CHUNK_SIZE / 2, gy * CHUNK_SIZE + CHUNK_SIZE / 2);
   appMode = 'play';
   btnExport.classList.add('hidden');
   btnBackToMap.classList.remove('hidden');
@@ -156,22 +157,25 @@ window.addEventListener('keydown', (e) => {
         updateView();
         
         // Update HUD
-        const idx = player.y * currentData.width + player.x;
-        const bId = currentData.biomes[idx];
+        const tile = getMicroTile(player.x, player.y, currentData);
+        const bId = tile.biomeId;
         const encounters = getEncounters(bId);
         let prefix = "";
         
-        // Verifica Cidade/Rota de forma simplificada
+        // As cidades e rotas estão em macro-coordenadas
+        const macroX = Math.floor(player.x / CHUNK_SIZE);
+        const macroY = Math.floor(player.y / CHUNK_SIZE);
+
         if (currentData.graph) {
-           const city = currentData.graph.nodes.find(n => Math.abs(n.x - player.x) <= 1 && Math.abs(n.y - player.y) <= 1);
+           const city = currentData.graph.nodes.find(n => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1);
            if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
         }
         if (!prefix && currentData.paths) {
-           const activePath = currentData.paths.find(p => p.some(c => c.x === player.x && c.y === player.y));
+           const activePath = currentData.paths.find(p => p.some(c => c.x === macroX && c.y === macroY));
            if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
         }
         
-        infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Selvagens: ${encounters.slice(0, 3).join(', ')}</span>`;
+        infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${Object.values(BIOMES).find(b=>b.id===bId).name} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>`;
       }
     }
     

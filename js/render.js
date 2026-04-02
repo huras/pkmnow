@@ -3,6 +3,7 @@ import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell, seededHash, seededHashInt, parseShape } from './tessellation-logic.js';
 import { BIOME_TO_TERRAIN, BIOME_VEGETATION } from './biome-tiles.js';
+import { getMicroTile, CHUNK_SIZE } from './chunking.js';
 
 const imageCache = new Map();
 
@@ -75,13 +76,13 @@ export function render(canvas, data, options = {}) {
     const py = (player.y + 0.5) * tileH;
     ctx.translate(Math.floor(cx - px), Math.floor(cy - py));
     
-    // Frustum Culling
+    // Frustum Culling em espaço MICRO
     const txRadius = Math.ceil((cw / tileW) / 2) + 1;
     const tyRadius = Math.ceil((ch / tileH) / 2) + 1;
     startX = Math.max(0, player.x - txRadius);
     startY = Math.max(0, player.y - tyRadius);
-    endX = Math.min(width, player.x + txRadius);
-    endY = Math.min(height, player.y + tyRadius);
+    endX = Math.min(width * CHUNK_SIZE, player.x + txRadius);
+    endY = Math.min(height * CHUNK_SIZE, player.y + tyRadius);
   } else {
     tileW = cw / width;
     tileH = ch / height;
@@ -94,87 +95,115 @@ export function render(canvas, data, options = {}) {
   }, {});
 
   // 1. Desenha Terreno
-  const isLandAt = (r, c) => {
-    if (r < 0 || r >= height || c < 0 || c >= width) return false;
-    // Simplificado: terra é qualquer coisa que não seja oceano para fins de borda
-    return biomes[r * width + c] !== BIOMES.OCEAN.id;
-  };
-
-  for (let y = startY; y < endY; y++) {
-    for (let x = startX; x < endX; x++) {
-      const idx = y * width + x;
-      const bId = biomes[idx];
-      
-      if (viewType === 'elevation') {
-        const val = cells[idx];
-        const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
-        ctx.fillStyle = val < 0.3 ? `rgb(0, 0, ${colorVal})` : `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
-        ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-      } else if (viewType === 'moisture') {
-        const moist = data.moisture ? data.moisture[idx] : 0;
-        const colorVal = Math.floor(Math.max(0, Math.min(1, moist)) * 255);
-        ctx.fillStyle = `rgb(${255 - colorVal}, ${255 - colorVal}, 255)`;
-        ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-      } else {
-        // VIEW: BIOMES (Usando Tilesets se disponíveis)
-        const setName = BIOME_TO_TERRAIN[bId];
-        const set = TERRAIN_SETS[setName];
+  if (appMode === 'map') {
+    const isLandAt = (r, c) => {
+      if (r < 0 || r >= height || c < 0 || c >= width) return false;
+      return biomes[r * width + c] !== BIOMES.OCEAN.id;
+    };
+    
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const idx = y * width + x;
+        const bId = biomes[idx];
         
-        if (set && imageCache.size > 0) {
-          const imgPath = TessellationEngine.getImagePath(set.file);
-          const img = imageCache.get(imgPath);
-          
-          if (img) {
-            const role = getRoleForCell(y, x, height, width, isLandAt, set.type);
-            const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
-            const cols = imgPath.includes('caves') ? 50 : 57;
-            const tx = tileId % cols;
-            const ty = Math.floor(tileId / cols);
-            const sSize = 16; // Supondo 16px base, pode variar no tileset
-            
-            ctx.drawImage(
-              img,
-              tx * sSize, ty * sSize, sSize, sSize,
-              Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH)
-            );
-          }
-        } else {
-          // Fallback cores solidas
-          ctx.fillStyle = biomeColors[bId] || '#f0f';
+        if (viewType === 'elevation') {
+          const val = cells[idx];
+          const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
+          ctx.fillStyle = val < 0.3 ? `rgb(0, 0, ${colorVal})` : `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
           ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+        } else if (viewType === 'moisture') {
+          const moist = data.moisture ? data.moisture[idx] : 0;
+          const colorVal = Math.floor(Math.max(0, Math.min(1, moist)) * 255);
+          ctx.fillStyle = `rgb(${255 - colorVal}, ${255 - colorVal}, 255)`;
+          ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+        } else {
+          const setName = BIOME_TO_TERRAIN[bId];
+          const set = TERRAIN_SETS[setName];
+          if (set && imageCache.size > 0) {
+            const imgPath = TessellationEngine.getImagePath(set.file);
+            const img = imageCache.get(imgPath);
+            if (img) {
+              const role = getRoleForCell(y, x, height, width, isLandAt, set.type);
+              const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+              const cols = imgPath.includes('caves') ? 50 : 57;
+              const tx = tileId % cols;
+              const ty = Math.floor(tileId / cols);
+              ctx.drawImage(img, tx * 16, ty * 16, 16, 16, Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+            }
+          } else {
+            ctx.fillStyle = biomeColors[bId] || '#f0f';
+            ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+          }
         }
+      }
+    }
+  } else {
+    // ==== PLAY MODE: MICRO GRID OTIMIZADO ====
+    const isLandAtMicro = (r, c) => {
+      // Evitar saídas do mapa
+      if (r < 0 || r >= height * CHUNK_SIZE || c < 0 || c >= width * CHUNK_SIZE) return false;
+      return getMicroTile(c, r, data).biomeId !== BIOMES.OCEAN.id;
+    };
 
-        // Camada de Vegetação (Scatter)
-        if (viewType === 'biomes' && imageCache.size > 0) {
-          const vegList = BIOME_VEGETATION[bId];
-          if (vegList && seededHash(x, y, data.seed + 123) < 0.15) {
-             const vegName = vegList[seededHashInt(x, y, data.seed + 456) % vegList.length];
-             const obj = OBJECT_SETS[vegName];
-             if (obj) {
-                const imgPath = TessellationEngine.getImagePath(obj.file);
-                const img = imageCache.get(imgPath);
-                const { rows: objH, cols: objW } = parseShape(obj.shape);
-                const cols = imgPath.includes('caves') ? 50 : 57;
-                
-                // Desenha apenas se for 1x1 por enquanto para simplificar o render loop
-                if (objH === 1 && objW === 1 && img) {
-                   const tId = obj.parts[0].ids[0];
-                   const tx = tId % cols;
-                   const ty = Math.floor(tId / cols);
-                   ctx.drawImage(
-                     img,
-                     tx * 16, ty * 16, 16, 16,
-                     Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH)
-                   );
-                }
-             }
+    for (let my = startY; my < endY; my++) {
+      for (let mx = startX; mx < endX; mx++) {
+        const tile = getMicroTile(mx, my, data);
+        const bId = tile.biomeId;
+        
+        if (viewType === 'elevation') {
+          const val = tile.elevation;
+          const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
+          ctx.fillStyle = val < 0.3 ? `rgb(0, 0, ${colorVal})` : `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
+          ctx.fillRect(Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+        } else {
+          const setName = BIOME_TO_TERRAIN[bId];
+          const set = TERRAIN_SETS[setName];
+          
+          if (set && imageCache.size > 0) {
+            const imgPath = TessellationEngine.getImagePath(set.file);
+            const img = imageCache.get(imgPath);
+            if (img) {
+              const role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, isLandAtMicro, set.type);
+              const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+              const cols = imgPath.includes('caves') ? 50 : 57;
+              const tx = tileId % cols;
+              const ty = Math.floor(tileId / cols);
+              ctx.drawImage(img, tx * 16, ty * 16, 16, 16, Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+            }
+          } else {
+            ctx.fillStyle = biomeColors[bId] || '#f0f';
+            ctx.fillRect(Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+          }
+
+          // Scatter Dinâmico da Vegetação (Densidade menor no Micro-Grid)
+          if (imageCache.size > 0) {
+            const vegList = BIOME_VEGETATION[bId];
+            if (vegList && seededHash(mx, my, data.seed + 123) < 0.05) {
+               const vegName = vegList[seededHashInt(mx, my, data.seed + 456) % vegList.length];
+               const obj = OBJECT_SETS[vegName];
+               if (obj) {
+                  const imgPath = TessellationEngine.getImagePath(obj.file);
+                  const img = imageCache.get(imgPath);
+                  const { rows: objH, cols: objW } = parseShape(obj.shape);
+                  const cols = imgPath.includes('caves') ? 50 : 57;
+                  
+                  if (objH === 1 && objW === 1 && img) {
+                     const tId = obj.parts[0].ids[0];
+                     const tx = tId % cols;
+                     const ty = Math.floor(tId / cols);
+                     ctx.drawImage(img, tx * 16, ty * 16, 16, 16, Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+                  }
+               }
+            }
           }
         }
       }
     }
   }
 
-  // 2. Desenha Caminhos (Fase 2.3 Refinamento: Linhas Contínuas e Importance-aware)
+  // Apenas renderizar caminhos/grafos no modo Mapa para evitar bagunça no Zoom
+  if (appMode === 'map') {
+    // 2. Desenha Caminhos (Fase 2.3 Refinamento: Linhas Contínuas e Importance-aware)
   if (overlayPaths && paths && paths.length > 0) {
     const traffic = data.roadTraffic;
     
@@ -317,6 +346,7 @@ export function render(canvas, data, options = {}) {
       ctx.shadowBlur = 0;
     }
   }
+} // Fim de if (appMode === 'map')
 
   // 5. Highlight de Hover (apenas Modo Mapa)
   if (options.hover && appMode === 'map') {
@@ -386,7 +416,7 @@ function renderMinimap(canvas, data, player) {
   const tileW = w / data.width;
   const tileH = h / data.height;
   
-  // Desenha biomas básicos no minimapa (simplificado, sem imagens)
+  // Desenha biomas básicos no minimapa
   for (let y = 0; y < data.height; y++) {
     for (let x = 0; x < data.width; x++) {
       const idx = y * data.width + x;
@@ -397,12 +427,16 @@ function renderMinimap(canvas, data, player) {
     }
   }
   
-  // Desenha ponto do jogador
+  // Como o player agora está em micro-space (2048x2048), ajustamos pro macro-space do mapa original (128)
+  const macroPx = player.x / CHUNK_SIZE;
+  const macroPy = player.y / CHUNK_SIZE;
+  
+  // Desenha ponto do jogador no minimapa
   ctx.fillStyle = '#ff0000';
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc((player.x + 0.5) * tileW, (player.y + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2);
+  ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 }
