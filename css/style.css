@@ -101,6 +101,69 @@ button#generate:hover {
   line-height: 0;
 }
 
+.toolbar-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border: 1px solid #2a2a32;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.field-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.field-group strong {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.radio-label, .check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  color: #ccc;
+  user-select: none;
+}
+
+.radio-label:hover, .check-label:hover {
+  color: #fff;
+}
+
+.radio-label input, .check-label input {
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+
+button.btn-secondary {
+  margin-left: auto;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #4a4a52;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+button.btn-secondary:hover {
+  background: #2a2a32;
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 #hud-info {
   position: sticky;

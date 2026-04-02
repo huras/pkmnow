@@ -18,6 +18,21 @@
         </div>
         <button type="button" id="generate">Gerar</button>
       </div>
+      
+      <div class="toolbar-secondary">
+        <div class="field-group">
+          <strong>View:</strong>
+          <label class="radio-label"><input type="radio" name="viewType" value="biomes" checked> Biomas</label>
+          <label class="radio-label"><input type="radio" name="viewType" value="elevation"> Elevação</label>
+          <label class="radio-label"><input type="radio" name="viewType" value="moisture"> Umidade</label>
+        </div>
+        <div class="field-group">
+          <strong>Overlays:</strong>
+          <label class="check-label"><input type="checkbox" id="chkRotas" checked> Rotas</label>
+          <label class="check-label"><input type="checkbox" id="chkGrafo" checked> Grafo</label>
+        </div>
+        <button type="button" id="exportBtn" class="btn-secondary">Exportar JSON</button>
+      </div>
 
       <div class="map-wrap">
         <div id="hud-info">Mova o mouse sobre o mapa para ver os detalhes do terreno</div>

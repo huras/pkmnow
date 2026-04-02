@@ -10,7 +10,7 @@ import { BIOMES } from './biomes.js';
  *   graph?: { nodes: Array<{ id: number, x: number, y: number }>, edges: Array<{ u: number, v: number }> },
  *   paths?: Array<Array<{x: number, y: number}>>
  * } | null} data
- * @param {{ hover?: {x: number, y: number} }} [options]
+ * @param {{ hover?: {x: number, y: number}, settings?: { viewType: string, overlayPaths: boolean, overlayGraph: boolean } }} [options]
  */
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -28,6 +28,10 @@ export function render(canvas, data, options = {}) {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, cw, ch);
 
+  const viewType = options.settings?.viewType || 'biomes';
+  const overlayPaths = options.settings?.overlayPaths ?? true;
+  const overlayGraph = options.settings?.overlayGraph ?? true;
+
   // Cache de cores de bioma
   const biomeColors = Object.values(BIOMES).reduce((acc, b) => {
     acc[b.id] = b.color;
@@ -40,8 +44,18 @@ export function render(canvas, data, options = {}) {
       const idx = y * width + x;
       const bId = biomes[idx];
       
-      // Cor do Bioma
-      ctx.fillStyle = biomeColors[bId] || '#f0f';
+      if (viewType === 'elevation') {
+        const val = cells[idx];
+        const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
+        ctx.fillStyle = val < 0.3 ? `rgb(0, 0, ${colorVal})` : `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
+      } else if (viewType === 'moisture') {
+        const moist = data.moisture ? data.moisture[idx] : 0;
+        const colorVal = Math.floor(Math.max(0, Math.min(1, moist)) * 255);
+        ctx.fillStyle = `rgb(${255 - colorVal}, ${255 - colorVal}, 255)`; // Branco pro azul escuro
+      } else {
+        ctx.fillStyle = biomeColors[bId] || '#f0f';
+      }
+
       ctx.fillRect(
         Math.floor(x * tileW),
         Math.floor(y * tileH),
@@ -50,6 +64,7 @@ export function render(canvas, data, options = {}) {
       );
 
       // Decoração procedural simples
+      if (viewType === 'biomes') {
       if (bId === BIOMES.FOREST.id || bId === BIOMES.JUNGLE.id || bId === BIOMES.TAIGA.id) {
           // Pequenos triângulos (árvores)
           ctx.fillStyle = 'rgba(0,0,0,0.1)';
@@ -84,11 +99,12 @@ export function render(canvas, data, options = {}) {
           ctx.fillStyle = 'rgba(255,0,255,0.1)';
           ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
       }
+      } // End if (viewType === 'biomes')
     }
   }
 
   // 2. Desenha Caminhos (Fase 2.3 Refinamento: Linhas Contínuas e Importance-aware)
-  if (paths && paths.length > 0) {
+  if (overlayPaths && paths && paths.length > 0) {
     const traffic = data.roadTraffic;
     
     ctx.lineCap = 'round';
@@ -140,7 +156,7 @@ export function render(canvas, data, options = {}) {
     }
   }
 
-  if (!hasGraph) return;
+  if (!hasGraph || !overlayGraph) return;
 
   // 3. Desenha Arestas do Grafo (Overlay Abstrato)
   const { nodes, edges } = graph;

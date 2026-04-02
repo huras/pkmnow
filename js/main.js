@@ -15,10 +15,26 @@ if (seedInput) {
   seedInput.value = "demoasdasd1";
 }
 
+function getSettings() {
+  const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
+  const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
+  const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
+  return { viewType, overlayPaths, overlayGraph };
+}
+
+function updateView() {
+  if (currentData) render(canvas, currentData, { settings: getSettings() });
+}
+
 function run() {
   currentData = generate(seedInput.value);
-  render(canvas, currentData);
+  updateView();
 }
+
+// Ouvintes para os botões de Fase 5
+document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEach(el => {
+  el.addEventListener('change', updateView);
+});
 
 // Hover para debug de célula (Estilo Civilization HUD)
 canvas.addEventListener('mousemove', (e) => {
@@ -79,36 +95,64 @@ canvas.addEventListener('mousemove', (e) => {
       ${mainInfo}
     `;
     
-    render(canvas, currentData, { hover: { x: gx, y: gy } });
+    render(canvas, currentData, { hover: { x: gx, y: gy }, settings: getSettings() });
   } else {
     // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
-    render(canvas, currentData);
+    updateView();
   }
 });
 
 canvas.addEventListener('mouseleave', () => {
   // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
-  if (currentData) render(canvas, currentData);
+  if (currentData) updateView();
 });
 
-// Click para copiar JSON bruto
-canvas.addEventListener('click', () => {
-  if (!currentData) return;
-  
-  const json = JSON.stringify({
-    seed: currentData.seed,
-    width: currentData.width,
-    height: currentData.height,
-    cities: currentData.graph.nodes,
-    paths: currentData.paths.length
-  }, null, 2);
-  
-  navigator.clipboard.writeText(json).then(() => {
+// Fase 5: Exportação Completa de Dados
+const btnExport = document.getElementById('exportBtn');
+if (btnExport) {
+  btnExport.addEventListener('click', () => {
+    if (!currentData) return;
+    
+    // Convertendo TypedArrays para exportação no JSON
+    const exportData = {
+      seed: currentData.seed,
+      width: currentData.width,
+      height: currentData.height,
+      cells: currentData.cells ? Array.from(currentData.cells) : [],
+      biomes: currentData.biomes ? Array.from(currentData.biomes) : [],
+      temperature: currentData.temperature ? Array.from(currentData.temperature) : [],
+      moisture: currentData.moisture ? Array.from(currentData.moisture) : [],
+      graph: currentData.graph,
+      paths: currentData.paths,
+      landmarks: currentData.landmarks
+    };
+
+    // Não usa null, 2 para o arquivo final não ficar gigante com as arrays,
+    // mas ainda é um JSON padrão.
+    const jsonStr = JSON.stringify(exportData);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `pkmn-region-${currentData.seed}.json`;
+    document.body.appendChild(a);
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
     const originalContent = infoBar.innerHTML;
-    infoBar.innerHTML = "<b style='color:#00ff00'>JSON COPIADO PARA O CLIPBOARD!</b>";
-    setTimeout(() => infoBar.innerHTML = originalContent, 1500);
+    infoBar.innerHTML = "<b style='color:#00ff00'>JSON EXPORTADO COM SUCESSO!</b>";
+    setTimeout(() => {
+      // Evita piscar se o mouse for movido rapidamente
+      if (infoBar.innerHTML.includes('JSON EXPORTADO')) {
+         infoBar.innerHTML = originalContent;
+      }
+    }, 2000);
   });
-});
+}
 
 btnGenerate.addEventListener('click', run);
 seedInput.addEventListener('keydown', (e) => {
