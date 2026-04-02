@@ -4,6 +4,13 @@ import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer, updatePlayer } from './player.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
+import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { getRoleForCell, seededHash } from './tessellation-logic.js';
+import {
+  BIOME_TO_TERRAIN, BIOME_VEGETATION,
+  GRASS_TILES, TREE_TILES,
+  getGrassVariant, getTreeType
+} from './biome-tiles.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -264,13 +271,47 @@ canvas.addEventListener('contextmenu', (e) => {
       biome: biome?.name,
       heightStep: tile.heightStep,
       isRoad: tile.isRoad,
-      isCity: tile.isCity
+      isCity: tile.isCity,
+      spriteId: (function() {
+         const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+         const set = TERRAIN_SETS[setName];
+         if (!set) return null;
+         const isAtOrAbove = (r, c) => (getMicroTile(c, r, currentData)?.heightStep ?? -99) >= tile.heightStep;
+         const role = getRoleForCell(my, mx, currentData.height * CHUNK_SIZE, currentData.width * CHUNK_SIZE, isAtOrAbove, set.type);
+         return set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+      })()
     },
     vegetation: {
       noiseTrees: fdTrees.toFixed(3),
       noiseScatter: fdScatter.toFixed(3),
       noiseGrass: fdGrass.toFixed(3),
-      typeFactor: ft.toFixed(3)
+      typeFactor: ft.toFixed(3),
+      activeSprites: (function() {
+        const sprites = [];
+        // Checando Formal Trees
+        if ((mx + my) % 3 === 0 && fdTrees >= 0.6) {
+           const type = getTreeType(tile.biomeId), ids = TREE_TILES[type];
+           if (ids) sprites.push({ type: 'formal-tree-base', ids: ids.base }, { type: 'formal-tree-top', ids: ids.top });
+        }
+        // Checando Scatter
+        const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
+        if (scatterItems.length > 0 && fdScatter > 0.82) {
+           const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
+           const objSet = OBJECT_SETS[itemKey];
+           if (objSet) {
+              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+              const top = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+              if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
+              if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
+           }
+        }
+        // Checando Grass
+        if (sprites.length === 0 && fdGrass >= 0.45) {
+           const variant = getGrassVariant(tile.biomeId), tiles = GRASS_TILES[variant];
+           if (tiles) sprites.push({ type: `grass-${variant}`, ids: [ (ft < 0.5) ? tiles.original : (tiles.grass2 || tiles.original) ] });
+        }
+        return sprites;
+      })()
     },
     logic: {
       isFormalTree: (mx + my) % 3 === 0 && fdTrees >= 0.6,

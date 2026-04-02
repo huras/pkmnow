@@ -277,17 +277,29 @@ export function render(canvas, data, options = {}) {
           const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
           const objSet = OBJECT_SETS[itemKey];
           if (objSet) {
-            const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
-            if (topPart) {
-              const { rows, cols } = parseShape(objSet.shape);
-              const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.12;
-              const topRows = Math.ceil(topPart.ids.length / cols);
-              ctx.save(); ctx.translate(tx + (cols * tw)/2, ty + 1); ctx.rotate(angle);
-              topPart.ids.forEach((id, idx) => {
-                const ox = idx % cols, oy = Math.floor(idx / cols), drawY = -(topRows - oy) * th;
-                ctx.drawImage(natureImg, (id % TCOLS) * 16, Math.floor(id / TCOLS) * 16, 16, 16, (ox * tw) - (cols * tw)/2, drawY, tw, th);
-              });
-              ctx.restore();
+            const { cols } = parseShape(objSet.shape);
+            
+            // Lógica canSpawn IDENTICA ao Pass 2 para garantir exclusão mútua total
+            let canSpawn = true;
+            for(let ox=0; ox<cols; ox++) {
+              const tx_check = mx + ox;
+              const isFormalTree = (tx_check + my) % 3 === 0 && foliageDensity(tx_check, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              const isFormalNeighbor = (tx_check + my) % 3 === 1 && foliageDensity(tx_check - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              if (isFormalTree || isFormalNeighbor) { canSpawn = false; break; }
+            }
+
+            if (canSpawn) {
+              const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+              if (topPart) {
+                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.12;
+                const topRows = Math.ceil(topPart.ids.length / cols);
+                ctx.save(); ctx.translate(tx + (cols * tw)/2, ty + 1); ctx.rotate(angle);
+                topPart.ids.forEach((id, idx) => {
+                  const ox = idx % cols, oy = Math.floor(idx / cols), drawY = -(topRows - oy) * th;
+                  ctx.drawImage(natureImg, (id % TCOLS) * 16, Math.floor(id / TCOLS) * 16, 16, 16, (ox * tw) - (cols * tw)/2, drawY, tw, th);
+                });
+                ctx.restore();
+              }
             }
           }
         }
