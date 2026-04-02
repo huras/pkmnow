@@ -2,6 +2,7 @@ import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
 import { getBiome, BIOMES } from './biomes.js';
+import { applyMorphologicalCleanup } from './tessellation-logic.js';
 import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
 
@@ -64,14 +65,14 @@ function generateNoiseMap(rng, w, h, scale) {
 export function generate(seedInput) {
   const seedSnapshot = normalizeSeed(seedInput);
   const rng = createRng(seedSnapshot);
-  const width = 32;
-  const height = 32;
+  const width = 128;
+  const height = 128;
   
-  // Mapas de Ruído
-  const elevation = generateNoiseMap(rng, width, height, 8);
-  const temperature = generateNoiseMap(rng, width, height, 16);
-  const moisture = generateNoiseMap(rng, width, height, 12);
-  const anomaly = generateNoiseMap(rng, width, height, 10); // Ruído de Misticismo
+  // Mapas de Ruído (Escalas subindo junto com a resolução)
+  const elevation = generateNoiseMap(rng, width, height, 24);
+  const temperature = generateNoiseMap(rng, width, height, 32);
+  const moisture = generateNoiseMap(rng, width, height, 28);
+  const anomaly = generateNoiseMap(rng, width, height, 20); // Ruído de Misticismo
 
   // Mapeamento de Biomas com Pós-processamento de Anomalias
   const biomes = new Uint8Array(width * height);
@@ -96,6 +97,17 @@ export function generate(seedInput) {
 
     biomes[i] = biomeObj.id;
   }
+
+  // Pós-processamento de Morfologia: Evitar tiles isolados que quebram o autotiler
+  // de 13 papéis. Rodamos um cleanup básico na terra.
+  const isLandAt = (r, c) => {
+    if (r < 0 || r >= height || c < 0 || c >= width) return false;
+    return elevation[r * width + c] >= 0.3; // Nosso threshold clássico
+  };
+  const setLandAt = (r, c, isLand) => {
+    if (!isLand) elevation[r * width + c] = 0.25; // Garante que vira água
+  };
+  applyMorphologicalCleanup(width, height, isLandAt, setLandAt);
 
   const graph = generateWorldGraph(rng, width, height, elevation, {
     cityCount: 14,

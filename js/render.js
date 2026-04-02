@@ -1,4 +1,32 @@
 import { BIOMES } from './biomes.js';
+import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { TessellationEngine } from './tessellation-engine.js';
+import { getRoleForCell, seededHash, seededHashInt, parseShape } from './tessellation-logic.js';
+import { BIOME_TO_TERRAIN, BIOME_VEGETATION } from './biome-tiles.js';
+
+const imageCache = new Map();
+
+export async function loadTilesetImages() {
+  const sources = [
+    'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
+    'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png'
+  ];
+  
+  const promises = sources.map(src => {
+    if (imageCache.has(src)) return Promise.resolve(imageCache.get(src));
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        imageCache.set(src, img);
+        resolve(img);
+      };
+      img.onerror = reject;
+      img.src = src;
+    });
+  });
+  
+  return Promise.all(promises);
+}
 
 /**
  * Desenha dados já gerados — não conhece RNG nem algoritmos de mundo.
@@ -39,6 +67,12 @@ export function render(canvas, data, options = {}) {
   }, {});
 
   // 1. Desenha Terreno
+  const isLandAt = (r, c) => {
+    if (r < 0 || r >= height || c < 0 || c >= width) return false;
+    // Simplificado: terra é qualquer coisa que não seja oceano para fins de borda
+    return biomes[r * width + c] !== BIOMES.OCEAN.id;
+  };
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
@@ -48,58 +82,68 @@ export function render(canvas, data, options = {}) {
         const val = cells[idx];
         const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
         ctx.fillStyle = val < 0.3 ? `rgb(0, 0, ${colorVal})` : `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
+        ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
       } else if (viewType === 'moisture') {
         const moist = data.moisture ? data.moisture[idx] : 0;
         const colorVal = Math.floor(Math.max(0, Math.min(1, moist)) * 255);
-        ctx.fillStyle = `rgb(${255 - colorVal}, ${255 - colorVal}, 255)`; // Branco pro azul escuro
+        ctx.fillStyle = `rgb(${255 - colorVal}, ${255 - colorVal}, 255)`;
+        ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
       } else {
-        ctx.fillStyle = biomeColors[bId] || '#f0f';
-      }
+        // VIEW: BIOMES (Usando Tilesets se disponíveis)
+        const setName = BIOME_TO_TERRAIN[bId];
+        const set = TERRAIN_SETS[setName];
+        
+        if (set && imageCache.size > 0) {
+          const imgPath = TessellationEngine.getImagePath(set.file);
+          const img = imageCache.get(imgPath);
+          
+          if (img) {
+            const role = getRoleForCell(y, x, height, width, isLandAt, set.type);
+            const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+            const cols = imgPath.includes('caves') ? 50 : 57;
+            const tx = tileId % cols;
+            const ty = Math.floor(tileId / cols);
+            const sSize = 16; // Supondo 16px base, pode variar no tileset
+            
+            ctx.drawImage(
+              img,
+              tx * sSize, ty * sSize, sSize, sSize,
+              Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH)
+            );
+          }
+        } else {
+          // Fallback cores solidas
+          ctx.fillStyle = biomeColors[bId] || '#f0f';
+          ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+        }
 
-      ctx.fillRect(
-        Math.floor(x * tileW),
-        Math.floor(y * tileH),
-        Math.ceil(tileW),
-        Math.ceil(tileH),
-      );
-
-      // Decoração procedural simples
-      if (viewType === 'biomes') {
-      if (bId === BIOMES.FOREST.id || bId === BIOMES.JUNGLE.id || bId === BIOMES.TAIGA.id) {
-          // Pequenos triângulos (árvores)
-          ctx.fillStyle = 'rgba(0,0,0,0.1)';
-          ctx.beginPath();
-          ctx.moveTo(x * tileW + tileW*0.5, y * tileH + tileH*0.2);
-          ctx.lineTo(x * tileW + tileW*0.2, y * tileH + tileH*0.8);
-          ctx.lineTo(x * tileW + tileW*0.8, y * tileH + tileH*0.8);
-          ctx.fill();
-      } else if (bId === BIOMES.DESERT.id) {
-          // Pontinhos (areia)
-          ctx.fillStyle = 'rgba(0,0,0,0.1)';
-          ctx.fillRect(x * tileW + tileW*0.3, y * tileH + tileH*0.4, 2, 2);
-          ctx.fillRect(x * tileW + tileW*0.6, y * tileH + tileH*0.7, 2, 2);
-      } else if (bId === BIOMES.VOLCANO.id) {
-          // Magma/Cratera
-          ctx.fillStyle = '#ff3300'; // Lava
-          ctx.beginPath();
-          ctx.arc(x * tileW + tileW*0.5, y * tileH + tileH*0.5, tileW*0.3, 0, Math.PI*2);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-          ctx.stroke();
-      } else if (bId === BIOMES.GHOST_WOODS.id) {
-          // Árvores Tortas / Sombras
-          ctx.fillStyle = 'rgba(0,0,0,0.3)';
-          ctx.fillRect(x * tileW + tileW*0.4, y * tileH + tileH*0.2, tileW*0.2, tileH*0.6);
-          ctx.fillRect(x * tileW + tileW*0.2, y * tileH + tileH*0.4, tileW*0.6, tileH*0.1);
-      } else if (bId === BIOMES.ARCANE.id) {
-          // Brilho Neon
-          ctx.fillStyle = '#ff00ff';
-          ctx.fillRect(x * tileW + tileW*0.2, y * tileH + tileH*0.2, 2, 2);
-          ctx.fillRect(x * tileW + tileW*0.7, y * tileH + tileH*0.7, 2, 2);
-          ctx.fillStyle = 'rgba(255,0,255,0.1)';
-          ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
+        // Camada de Vegetação (Scatter)
+        if (viewType === 'biomes' && imageCache.size > 0) {
+          const vegList = BIOME_VEGETATION[bId];
+          if (vegList && seededHash(x, y, data.seed + 123) < 0.15) {
+             const vegName = vegList[seededHashInt(x, y, data.seed + 456) % vegList.length];
+             const obj = OBJECT_SETS[vegName];
+             if (obj) {
+                const imgPath = TessellationEngine.getImagePath(obj.file);
+                const img = imageCache.get(imgPath);
+                const { rows: objH, cols: objW } = parseShape(obj.shape);
+                const cols = imgPath.includes('caves') ? 50 : 57;
+                
+                // Desenha apenas se for 1x1 por enquanto para simplificar o render loop
+                if (objH === 1 && objW === 1 && img) {
+                   const tId = obj.parts[0].ids[0];
+                   const tx = tId % cols;
+                   const ty = Math.floor(tId / cols);
+                   ctx.drawImage(
+                     img,
+                     tx * 16, ty * 16, 16, 16,
+                     Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH)
+                   );
+                }
+             }
+          }
+        }
       }
-      } // End if (viewType === 'biomes')
     }
   }
 

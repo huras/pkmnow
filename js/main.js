@@ -1,5 +1,5 @@
 import { generate } from './generator.js';
-import { render } from './render.js';
+import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 
@@ -159,5 +159,7 @@ seedInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') run();
 });
 
-// Execução inicial
-run();
+// Execução inicial com pré-carregamento de ativos
+loadTilesetImages().then(() => {
+  run();
+});
