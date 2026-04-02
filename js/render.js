@@ -320,7 +320,7 @@ export function render(canvas, data, options = {}) {
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
   }
 
-  if (options.hover && appMode === 'map') {
+  if (options.hover) {
     const { x, y } = options.hover;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));

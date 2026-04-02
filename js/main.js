@@ -3,7 +3,7 @@ import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer, updatePlayer } from './player.js';
-import { CHUNK_SIZE, getMicroTile } from './chunking.js';
+import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -33,7 +33,7 @@ function getSettings() {
 }
 
 function updateView() {
-  if (currentData) render(canvas, currentData, { settings: getSettings() });
+  if (currentData) render(canvas, currentData, { settings: getSettings(), hover: lastHoverTile });
 }
 
 // Animation loop (Play Mode only)
@@ -89,18 +89,29 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 });
 
 // Hover para debug de célula (Estilo Civilization HUD)
+let lastHoverTile = null;
+
 canvas.addEventListener('mousemove', (e) => {
-  if (!currentData || appMode === 'play') return;
+  if (!currentData) return;
 
   const rect = canvas.getBoundingClientRect();
-  
-  // Coordenadas relativas ao canvas
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
-  // Escala para coordenadas de grid
+  if (appMode === 'play') {
+    const tileW = 40, tileH = 40;
+    const vx = player.visualX ?? player.x;
+    const vy = player.visualY ?? player.y;
+    const mx = Math.floor((mouseX - canvas.width/2)/tileW + vx + 0.5);
+    const my = Math.floor((mouseY - canvas.height/2)/tileH + vy + 0.5);
+    lastHoverTile = { x: mx, y: my };
+    return; // O loop de animação vai cuidar do render(canvas, ...)
+  }
+
+  // Escala para coordenadas de grid (Modo Mapa)
   const gx = Math.floor((mouseX / rect.width) * currentData.width);
   const gy = Math.floor((mouseY / rect.height) * currentData.height);
+  lastHoverTile = { x: gx, y: gy };
 
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     const idx = gy * currentData.width + gx;
@@ -219,6 +230,63 @@ canvas.addEventListener('click', (e) => {
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     enterPlayMode(gx, gy);
   }
+});
+
+// Menu de contexto para Debug no Modo Play
+canvas.addEventListener('contextmenu', (e) => {
+  if (appMode !== 'play' || !currentData) return;
+  e.preventDefault();
+
+  const rect = canvas.getBoundingClientRect();
+  const screenX = e.clientX - rect.left;
+  const screenY = e.clientY - rect.top;
+  
+  // Constantes do render.js Play Mode
+  const tileW = 40, tileH = 40;
+  const vx = player.visualX ?? player.x;
+  const vy = player.visualY ?? player.y;
+
+  const mx = Math.floor((screenX - canvas.width/2)/tileW + vx + 0.5);
+  const my = Math.floor((screenY - canvas.height/2)/tileH + vy + 0.5);
+
+  const tile = getMicroTile(mx, my, currentData);
+  const biome = Object.values(BIOMES).find(b => b.id === tile.biomeId);
+
+  const seed = currentData.seed;
+  const fdTrees = foliageDensity(mx, my, seed + 5555, 2);
+  const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
+  const fdGrass = foliageDensity(mx, my, seed, 3);
+  const ft = foliageType(mx, my, seed);
+
+  const debugInfo = {
+    coord: { mx, my },
+    terrain: {
+      biome: biome?.name,
+      heightStep: tile.heightStep,
+      isRoad: tile.isRoad,
+      isCity: tile.isCity
+    },
+    vegetation: {
+      noiseTrees: fdTrees.toFixed(3),
+      noiseScatter: fdScatter.toFixed(3),
+      noiseGrass: fdGrass.toFixed(3),
+      typeFactor: ft.toFixed(3)
+    },
+    logic: {
+      isFormalTree: (mx + my) % 3 === 0 && fdTrees >= 0.6,
+      isFormalNeighbor: (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6
+    }
+  };
+
+  navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2)).then(() => {
+    const original = infoBar.innerHTML;
+    infoBar.innerHTML = `<b style="color:#00ffff">DEBUG JSON COPIADO! Tile: ${mx},${my}</b>`;
+    setTimeout(() => {
+       if (infoBar.innerHTML.includes('DEBUG JSON COPIADO')) {
+         infoBar.innerHTML = original;
+       }
+    }, 2000);
+  });
 });
 
 // Teclado: Track held keys para movimento contínuo estilo Pokémon
