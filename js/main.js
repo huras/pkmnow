@@ -5,27 +5,7 @@ import { BIOMES } from './biomes.js';
 const canvas = document.getElementById('map');
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
-
-// Tooltip para debug (estilo injetado para garantir legibilidade)
-const tooltip = document.createElement('div');
-tooltip.className = 'debug-tooltip';
-Object.assign(tooltip.style, {
-  position: 'absolute',
-  backgroundColor: 'rgba(0, 0, 0, 0.85)',
-  color: '#fff',
-  padding: '8px',
-  borderRadius: '4px',
-  fontSize: '12px',
-  pointerEvents: 'none',
-  display: 'none',
-  zIndex: '1000',
-  border: '1px solid rgba(255, 255, 255, 0.2)',
-  boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-  fontFamily: 'sans-serif',
-  lineHeight: '1.4'
-});
-canvas.parentElement.style.position = 'relative';
-canvas.parentElement.appendChild(tooltip);
+const infoBar = document.getElementById('hud-info');
 
 let currentData = null;
 
@@ -39,7 +19,7 @@ function run() {
   render(canvas, currentData);
 }
 
-// Hover para debug de célula
+// Hover para debug de célula (Estilo Civilization HUD)
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
 
@@ -66,36 +46,28 @@ canvas.addEventListener('mousemove', (e) => {
     const moist = currentData.moisture ? currentData.moisture[idx] : 0;
     const bId = currentData.biomes ? currentData.biomes[idx] : 0;
     const biome = Object.values(BIOMES).find(b => b.id === bId) || { name: 'Desconhecido' };
+    const anom = currentData.anomaly ? currentData.anomaly[idx] : 0;
     
-    tooltip.style.display = 'block';
-    tooltip.style.left = `${mouseX + 15}px`;
-    tooltip.style.top = `${mouseY + 15}px`;
-    
-    // Conteúdo formatado (Fase 3: Biomas)
-    tooltip.innerHTML = `
-      <div style="font-weight:bold; border-bottom:1px solid rgba(255,255,255,0.2); margin-bottom:4px; padding-bottom:2px;">
-        Célula [${gx}, ${gy}]
-      </div>
-      <div style="display:grid; grid-template-columns: auto 1fr; gap: 8px;">
-        <span>Biome:</span> <b style="text-align:right; color:#00ffff">${biome.name}</b>
-        <span>Elev:</span> <b style="text-align:right">${val.toFixed(3)}</b>
-        <span>Temp:</span> <b style="text-align:right">${temp.toFixed(3)}</b>
-        <span>Humid:</span> <b style="text-align:right">${moist.toFixed(3)}</b>
-        <span>Traffic:</span> <b style="text-align:right">${traffic} paths</b>
-        <span>Import.:</span> <b style="text-align:right; color:${imp > 5 ? '#ffd700' : '#fff'}">${imp}</b>
-      </div>
-      ${city ? `<div style="margin-top:6px; color:#ff5b5b; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;"><b>CITY (ID: ${city.id})</b></div>` : ''}
+    // Conteúdo formatado para o HUD FIXO
+    infoBar.innerHTML = `
+      <span class="biome-name">${biome.name}</span>
+      <span><span class="label">Elev</span><b>${val.toFixed(2)}</b></span>
+      <span><span class="label">Temp</span><b>${temp.toFixed(2)}</b></span>
+      <span><span class="label">Humid</span><b>${moist.toFixed(2)}</b></span>
+      <span><span class="label">Anom</span><b style="color:#ff00ff">${anom.toFixed(2)}</b></span>
+      <span><span class="label">Paths</span><b>${traffic}</b></span>
+      ${city ? `<span style="color:#ff5b5b; font-weight:bold; margin-left:10px;">[CIDADE ID: ${city.id}]</span>` : ''}
     `;
     
     render(canvas, currentData, { hover: { x: gx, y: gy } });
   } else {
-    tooltip.style.display = 'none';
+    // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
     render(canvas, currentData);
   }
 });
 
 canvas.addEventListener('mouseleave', () => {
-  tooltip.style.display = 'none';
+  // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
   if (currentData) render(canvas, currentData);
 });
 
@@ -112,9 +84,9 @@ canvas.addEventListener('click', () => {
   }, null, 2);
   
   navigator.clipboard.writeText(json).then(() => {
-    const originalContent = tooltip.innerHTML;
-    tooltip.innerHTML = "<b style='color:#00ff00'>JSON COPIADO!</b>";
-    setTimeout(() => tooltip.innerHTML = originalContent, 1000);
+    const originalContent = infoBar.innerHTML;
+    infoBar.innerHTML = "<b style='color:#00ff00'>JSON COPIADO PARA O CLIPBOARD!</b>";
+    setTimeout(() => infoBar.innerHTML = originalContent, 1500);
   });
 });
 

@@ -102,24 +102,40 @@ button#generate:hover {
   line-height: 0;
 }
 
-.debug-tooltip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  background: rgba(18, 18, 20, 0.95);
+#hud-info {
+  background: linear-gradient(180deg, rgba(20, 20, 25, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%);
   color: #fff;
-  padding: 0.75rem;
-  border-radius: 8px;
-  font-family: "Cascadia Code", "Fira Code", monospace;
-  font-size: 0.8rem;
-  line-height: 1.4;
-  z-index: 100;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  white-space: pre;
-  display: none;
+  padding: 0.6rem 1rem;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.3); /* Dourado suave estilo Civ */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  min-height: 40px;
+  backdrop-filter: blur(8px);
+  z-index: 10;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  letter-spacing: 0.02em;
+}
+
+#hud-info b {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+#hud-info .label {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  margin-right: 0.4rem;
+}
+
+#hud-info .biome-name {
+  color: #ffd700;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 #map {

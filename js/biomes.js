@@ -16,6 +16,9 @@ export const BIOMES = {
   JUNGLE: { id: 10, name: "Selva", color: "#205020" },
   MOUNTAIN: { id: 11, name: "Montanha", color: "#706050" },
   PEAK: { id: 12, name: "Pico Nevado", color: "#ffffff" },
+  VOLCANO: { id: 13, name: "Vulcão", color: "#303030" }, // Cinza escuro/obsidiana
+  GHOST_WOODS: { id: 14, name: "Misty Woods", color: "#403050" }, // Roxo sombrio
+  ARCANE: { id: 15, name: "Vale Arcano", color: "#602080" }, // Magenta
 };
 
 /**

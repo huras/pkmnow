@@ -63,6 +63,26 @@ export function render(canvas, data, options = {}) {
           ctx.fillStyle = 'rgba(0,0,0,0.1)';
           ctx.fillRect(x * tileW + tileW*0.3, y * tileH + tileH*0.4, 2, 2);
           ctx.fillRect(x * tileW + tileW*0.6, y * tileH + tileH*0.7, 2, 2);
+      } else if (bId === BIOMES.VOLCANO.id) {
+          // Magma/Cratera
+          ctx.fillStyle = '#ff3300'; // Lava
+          ctx.beginPath();
+          ctx.arc(x * tileW + tileW*0.5, y * tileH + tileH*0.5, tileW*0.3, 0, Math.PI*2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+          ctx.stroke();
+      } else if (bId === BIOMES.GHOST_WOODS.id) {
+          // Árvores Tortas / Sombras
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.fillRect(x * tileW + tileW*0.4, y * tileH + tileH*0.2, tileW*0.2, tileH*0.6);
+          ctx.fillRect(x * tileW + tileW*0.2, y * tileH + tileH*0.4, tileW*0.6, tileH*0.1);
+      } else if (bId === BIOMES.ARCANE.id) {
+          // Brilho Neon
+          ctx.fillStyle = '#ff00ff';
+          ctx.fillRect(x * tileW + tileW*0.2, y * tileH + tileH*0.2, 2, 2);
+          ctx.fillRect(x * tileW + tileW*0.7, y * tileH + tileH*0.7, 2, 2);
+          ctx.fillStyle = 'rgba(255,0,255,0.1)';
+          ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
       }
     }
   }

@@ -1,12 +1,10 @@
 import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
-import { getBiome } from './biomes.js';
+import { getBiome, BIOMES } from './biomes.js';
 
 /**
  * Aceita número finito (unsigned) ou string (hash FNV).
- * @param {string|number} input
- * @returns {number} seed efetiva 32-bit
  */
 export function normalizeSeed(input) {
   if (typeof input === 'number' && Number.isFinite(input)) {
@@ -59,7 +57,7 @@ function generateNoiseMap(rng, w, h, scale) {
 }
 
 /**
- * Fase 3.0: Biomas e Ecossistemas (Whittaker).
+ * Fase 3.1: Biomas Exóticos e Anomalias.
  */
 export function generate(seedInput) {
   const seedSnapshot = normalizeSeed(seedInput);
@@ -71,11 +69,30 @@ export function generate(seedInput) {
   const elevation = generateNoiseMap(rng, width, height, 8);
   const temperature = generateNoiseMap(rng, width, height, 16);
   const moisture = generateNoiseMap(rng, width, height, 12);
+  const anomaly = generateNoiseMap(rng, width, height, 10); // Ruído de Misticismo
 
-  // Mapeamento de Biomas
+  // Mapeamento de Biomas com Pós-processamento de Anomalias
   const biomes = new Uint8Array(width * height);
   for (let i = 0; i < width * height; i++) {
-    biomes[i] = getBiome(elevation[i], temperature[i], moisture[i]).id;
+    const e = elevation[i];
+    const t = temperature[i];
+    const m = moisture[i];
+    const a = anomaly[i];
+    
+    let biomeObj = getBiome(e, t, m);
+
+    // Regras de Anomalia (Ideia 1 + 2)
+    if (a > 0.7) {
+      if (e > 0.8 && t > 0.6) {
+        biomeObj = BIOMES.VOLCANO;
+      } else if (m > 0.7 && t < 0.4) {
+        biomeObj = BIOMES.GHOST_WOODS;
+      } else if (a > 0.9 && e < 0.5) {
+        biomeObj = BIOMES.ARCANE;
+      }
+    }
+
+    biomes[i] = biomeObj.id;
   }
 
   const graph = generateWorldGraph(rng, width, height, elevation, {
@@ -110,7 +127,7 @@ export function generate(seedInput) {
       width, height, 
       workingCosts, 
       waterCostBase,
-      elevation // Passamos o elevation original para o custo base
+      elevation
     );
     
     if (p) {
@@ -127,13 +144,14 @@ export function generate(seedInput) {
 
   return {
     version: 1,
-    phase: 3.0,
+    phase: 3.1,
     seed: seedSnapshot,
     width,
     height,
     cells: elevation,
     temperature,
     moisture,
+    anomaly,
     biomes,
     graph,
     paths,
