@@ -43,7 +43,7 @@ export const GRASS_TILES = {
   default:  { original: 117, small: 60, grass2: 3 },
   ice:      { original: 118, small: 61, grass2: 4 },
   desert:   { original: 1884, cactusBase: 1997, cactusTop: 1940 },
-  dirt:     { small: 60, mushroom: 119, dryGrass: 65 },
+  dirt:     { original: 65, small: 60, mushroom: 119, dryGrass: 65 },
 };
 
 /** Tree overlay: 2×3 tiles (2 cols, 3 rows: 2 top + 1 base row) */

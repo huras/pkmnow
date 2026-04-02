@@ -15,4 +15,50 @@ Craft igual zelda BOTW de potions, comidas, pokeballs
 
 Ao inves de random batles nos matinhos.
 	Aparece animaçãod e exclamação antes de entre no matinho que ia gerar a balhar, e o pokemon surge de do matinho pra atacar.
+
+
+Fogo queima grama e arvores pra abrir caminho
+Pokemons de planta coletam a grama em materiais uteis ao inve´s de sód estruilas.
+
+Arvores mesma coisa so que mais complexo pq tem tronco tbm
+
+
+Points of interest:
+	Beedrill Hive
+		Chão de mel
+		Labirinto de cera
+		Beedrills
+		Kakunas
+		Weedles
+	Cemitério
+		Pokemons Fantasmas
+	Fazenda
+		Pokemons normais
+			Miltank
+				Leite
+			Mareep
+				Lã
+			Tauros
+				Força
+			Pidgey
+				Ovos
+	Pokemon Nest
+		Venusaur Nest
+			On deep of the forest, near shallow caves
+		Charizard Nest
+			On top of the mountain, near shallow caves
+		Blastoise Nest
+			On deep of the ocean, near deep water
+		Meganium Nest
+			On deep of the forest, near shallow water
+		Typhlosion Nest
+			
+Construir pontes
+Plantar Sementes
+	Oran Berry
+	Cherri Berry
+	Pecha Berry
+	
+Auto and manual Add marks on map for points of interest
+	Emoji
 	
