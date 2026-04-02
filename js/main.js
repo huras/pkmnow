@@ -1,5 +1,6 @@
 import { generate } from './generator.js';
 import { render } from './render.js';
+import { BIOMES } from './biomes.js';
 
 const canvas = document.getElementById('map');
 const seedInput = document.getElementById('seed');
@@ -61,17 +62,25 @@ canvas.addEventListener('mousemove', (e) => {
     // Procura se há cidade aqui
     const city = currentData.graph.nodes.find(n => n.x === gx && n.y === gy);
     
+    const temp = currentData.temperature ? currentData.temperature[idx] : 0;
+    const moist = currentData.moisture ? currentData.moisture[idx] : 0;
+    const bId = currentData.biomes ? currentData.biomes[idx] : 0;
+    const biome = Object.values(BIOMES).find(b => b.id === bId) || { name: 'Desconhecido' };
+    
     tooltip.style.display = 'block';
     tooltip.style.left = `${mouseX + 15}px`;
     tooltip.style.top = `${mouseY + 15}px`;
     
-    // Conteúdo formatado
+    // Conteúdo formatado (Fase 3: Biomas)
     tooltip.innerHTML = `
       <div style="font-weight:bold; border-bottom:1px solid rgba(255,255,255,0.2); margin-bottom:4px; padding-bottom:2px;">
         Célula [${gx}, ${gy}]
       </div>
       <div style="display:grid; grid-template-columns: auto 1fr; gap: 8px;">
-        <span>Terrain:</span> <b style="text-align:right">${val.toFixed(3)}</b>
+        <span>Biome:</span> <b style="text-align:right; color:#00ffff">${biome.name}</b>
+        <span>Elev:</span> <b style="text-align:right">${val.toFixed(3)}</b>
+        <span>Temp:</span> <b style="text-align:right">${temp.toFixed(3)}</b>
+        <span>Humid:</span> <b style="text-align:right">${moist.toFixed(3)}</b>
         <span>Traffic:</span> <b style="text-align:right">${traffic} paths</b>
         <span>Import.:</span> <b style="text-align:right; color:${imp > 5 ? '#ffd700' : '#fff'}">${imp}</b>
       </div>

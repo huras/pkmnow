@@ -1,6 +1,7 @@
 import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
+import { getBiome } from './biomes.js';
 
 /**
  * Aceita número finito (unsigned) ou string (hash FNV).
@@ -20,11 +21,10 @@ export function normalizeSeed(input) {
 }
 
 /**
- * Gera um grid de "ruído" simples (Value Noise 2D) para terreno.
+ * Gera um grid de "ruído" simples (Value Noise 2D).
  */
-function generateTerrain(rng, w, h) {
+function generateNoiseMap(rng, w, h, scale) {
   const cells = new Float32Array(w * h);
-  const scale = 8;
   const controlW = Math.ceil(w / scale) + 1;
   const controlH = Math.ceil(h / scale) + 1;
   const controls = new Float32Array(controlW * controlH);
@@ -59,42 +59,49 @@ function generateTerrain(rng, w, h) {
 }
 
 /**
- * Fase 2.3: Centralidade de Grafo + Orçamento de Infraestutura.
+ * Fase 3.0: Biomas e Ecossistemas (Whittaker).
  */
 export function generate(seedInput) {
-  const seed = normalizeSeed(seedInput);
-  const rng = createRng(seed);
+  const seedSnapshot = normalizeSeed(seedInput);
+  const rng = createRng(seedSnapshot);
   const width = 32;
   const height = 32;
   
-  const cells = generateTerrain(rng, width, height);
-  const graph = generateWorldGraph(rng, width, height, cells, {
+  // Mapas de Ruído
+  const elevation = generateNoiseMap(rng, width, height, 8);
+  const temperature = generateNoiseMap(rng, width, height, 16);
+  const moisture = generateNoiseMap(rng, width, height, 12);
+
+  // Mapeamento de Biomas
+  const biomes = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    biomes[i] = getBiome(elevation[i], temperature[i], moisture[i]).id;
+  }
+
+  const graph = generateWorldGraph(rng, width, height, elevation, {
     cityCount: 14,
     gymCount: 8,
     margin: 2,
     extraEdges: 3,
   });
 
-  // 1. Calcula importância das arestas (Centralidade)
+  // Centralidade
   const importanceMap = calculateImportance(graph.nodes, graph.edges);
-  
-  // 2. Anexa importância ao objeto de aresta e ordena
   const getEdgeKey = (u, v) => [u, v].sort((a,b) => a-b).join(',');
   const sortedEdges = [...graph.edges].map(e => ({
     ...e,
     importance: importanceMap.get(getEdgeKey(e.u, e.v)) || 1
   })).sort((a, b) => b.importance - a.importance);
 
-  // 3. Pathfinding Dinâmico com Orçamento
-  const workingCosts = new Float32Array(cells);
+  // Caminhos
+  const workingCosts = new Float32Array(width * height);
   const roadTraffic = new Uint8Array(width * height);
-  const cellImportance = new Uint16Array(width * height); // Guarda a maior importância que passa na célula
+  const cellImportance = new Uint16Array(width * height);
   const paths = [];
 
   for (const edge of sortedEdges) {
     const startNode = graph.nodes[edge.u];
     const endNode = graph.nodes[edge.v];
-    
     const waterCostBase = Math.max(5, 40 / (1 + (edge.importance - 1) * 0.15));
 
     const p = findPath(
@@ -102,13 +109,13 @@ export function generate(seedInput) {
       endNode.x, endNode.y, 
       width, height, 
       workingCosts, 
-      waterCostBase
+      waterCostBase,
+      elevation // Passamos o elevation original para o custo base
     );
     
     if (p) {
       p.importance = edge.importance;
       paths.push(p);
-
       for (const cell of p) {
         const idx = cell.y * width + cell.x;
         roadTraffic[idx]++;
@@ -120,11 +127,14 @@ export function generate(seedInput) {
 
   return {
     version: 1,
-    phase: 2.3,
-    seed,
+    phase: 3.0,
+    seed: seedSnapshot,
     width,
     height,
-    cells,
+    cells: elevation,
+    temperature,
+    moisture,
+    biomes,
     graph,
     paths,
     roadTraffic,

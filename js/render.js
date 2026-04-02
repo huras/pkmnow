@@ -1,3 +1,5 @@
+import { BIOMES } from './biomes.js';
+
 /**
  * Desenha dados já gerados — não conhece RNG nem algoritmos de mundo.
  * @param {HTMLCanvasElement} canvas
@@ -14,7 +16,7 @@ export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !data) return;
 
-  const { width, height, cells, paths } = data;
+  const { width, height, cells, biomes, paths } = data;
   const cw = canvas.width;
   const ch = canvas.height;
   const tileW = cw / width;
@@ -26,37 +28,42 @@ export function render(canvas, data, options = {}) {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, cw, ch);
 
+  // Cache de cores de bioma
+  const biomeColors = Object.values(BIOMES).reduce((acc, b) => {
+    acc[b.id] = b.color;
+    return acc;
+  }, {});
+
   // 1. Desenha Terreno
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const v = cells[y * width + x];
+      const idx = y * width + x;
+      const bId = biomes[idx];
       
-      // Cores simples: [0, 0.3) água, [0.3, 0.7) grama, [0.7, 1.0] montanha
-      let r, g, b;
-      if (v < 0.3) {
-        // Águia (tons de azul)
-        r = 30 + v * 50;
-        g = 100 + v * 100;
-        b = 200 + v * 55;
-      } else if (v < 0.7) {
-        // Grama (tons de verde)
-        r = 60 + v * 40;
-        g = 140 + v * 60;
-        b = 40 + v * 40;
-      } else {
-        // Montanha (tons de marrom/cinza)
-        r = 100 + v * 80;
-        g = 90 + v * 70;
-        b = 70 + v * 60;
-      }
-
-      ctx.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+      // Cor do Bioma
+      ctx.fillStyle = biomeColors[bId] || '#f0f';
       ctx.fillRect(
         Math.floor(x * tileW),
         Math.floor(y * tileH),
         Math.ceil(tileW),
         Math.ceil(tileH),
       );
+
+      // Decoração procedural simples
+      if (bId === BIOMES.FOREST.id || bId === BIOMES.JUNGLE.id || bId === BIOMES.TAIGA.id) {
+          // Pequenos triângulos (árvores)
+          ctx.fillStyle = 'rgba(0,0,0,0.1)';
+          ctx.beginPath();
+          ctx.moveTo(x * tileW + tileW*0.5, y * tileH + tileH*0.2);
+          ctx.lineTo(x * tileW + tileW*0.2, y * tileH + tileH*0.8);
+          ctx.lineTo(x * tileW + tileW*0.8, y * tileH + tileH*0.8);
+          ctx.fill();
+      } else if (bId === BIOMES.DESERT.id) {
+          // Pontinhos (areia)
+          ctx.fillStyle = 'rgba(0,0,0,0.1)';
+          ctx.fillRect(x * tileW + tileW*0.3, y * tileH + tileH*0.4, 2, 2);
+          ctx.fillRect(x * tileW + tileW*0.6, y * tileH + tileH*0.7, 2, 2);
+      }
     }
   }
 
