@@ -2,13 +2,18 @@ import { generate } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
+import { player, setPlayerPos, tryMovePlayer } from './player.js';
 
 const canvas = document.getElementById('map');
+const minimap = document.getElementById('minimap');
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
+const btnExport = document.getElementById('exportBtn');
+const btnBackToMap = document.getElementById('btnBackToMap');
 
 let currentData = null;
+let appMode = 'map'; // 'map' ou 'play'
 
 // Semente padrão solicitada
 if (seedInput) {
@@ -19,7 +24,7 @@ function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
-  return { viewType, overlayPaths, overlayGraph };
+  return { viewType, overlayPaths, overlayGraph, appMode, player };
 }
 
 function updateView() {
@@ -38,7 +43,7 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 // Hover para debug de célula (Estilo Civilization HUD)
 canvas.addEventListener('mousemove', (e) => {
-  if (!currentData) return;
+  if (!currentData || appMode === 'play') return;
 
   const rect = canvas.getBoundingClientRect();
   
@@ -103,12 +108,80 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mouseleave', () => {
-  // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
-  if (currentData) updateView();
+  if (currentData && appMode === 'map') updateView();
+});
+
+function enterPlayMode(gx, gy) {
+  setPlayerPos(gx, gy);
+  appMode = 'play';
+  btnExport.classList.add('hidden');
+  btnBackToMap.classList.remove('hidden');
+  minimap.classList.remove('hidden');
+  infoBar.innerHTML = "<b style='color:#fff'>Mova-se com WASD ou Setas. Aperte ESC para sair.</b>";
+  updateView();
+}
+
+btnBackToMap.addEventListener('click', () => {
+  appMode = 'map';
+  btnExport.classList.remove('hidden');
+  btnBackToMap.classList.add('hidden');
+  minimap.classList.add('hidden');
+  infoBar.innerHTML = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
+  updateView();
+});
+
+// Clique no mapa entra no modo play
+canvas.addEventListener('click', (e) => {
+  if (!currentData || appMode !== 'map') return;
+  const rect = canvas.getBoundingClientRect();
+  const gx = Math.floor(((e.clientX - rect.left) / rect.width) * currentData.width);
+  const gy = Math.floor(((e.clientY - rect.top) / rect.height) * currentData.height);
+  
+  if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
+    enterPlayMode(gx, gy);
+  }
+});
+
+// Teclado
+window.addEventListener('keydown', (e) => {
+  if (appMode === 'play') {
+    let dx = 0; let dy = 0;
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') dy = -1;
+    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') dy = 1;
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') dx = -1;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') dx = 1;
+    
+    if (dx !== 0 || dy !== 0) {
+      if (tryMovePlayer(dx, dy, currentData)) {
+        updateView();
+        
+        // Update HUD
+        const idx = player.y * currentData.width + player.x;
+        const bId = currentData.biomes[idx];
+        const encounters = getEncounters(bId);
+        let prefix = "";
+        
+        // Verifica Cidade/Rota de forma simplificada
+        if (currentData.graph) {
+           const city = currentData.graph.nodes.find(n => Math.abs(n.x - player.x) <= 1 && Math.abs(n.y - player.y) <= 1);
+           if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
+        }
+        if (!prefix && currentData.paths) {
+           const activePath = currentData.paths.find(p => p.some(c => c.x === player.x && c.y === player.y));
+           if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
+        }
+        
+        infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Selvagens: ${encounters.slice(0, 3).join(', ')}</span>`;
+      }
+    }
+    
+    if (e.key === 'Escape') {
+      btnBackToMap.click();
+    }
+  }
 });
 
 // Fase 5: Exportação Completa de Dados
-const btnExport = document.getElementById('exportBtn');
 if (btnExport) {
   btnExport.addEventListener('click', () => {
     if (!currentData) return;

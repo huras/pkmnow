@@ -32,11 +32,13 @@
           <label class="check-label"><input type="checkbox" id="chkGrafo" checked> Grafo</label>
         </div>
         <button type="button" id="exportBtn" class="btn-secondary">Exportar JSON</button>
+        <button type="button" id="btnBackToMap" class="btn-secondary hidden">Voltar ao Mapa</button>
       </div>
 
       <div class="map-wrap">
         <div id="hud-info">Mova o mouse sobre o mapa para ver os detalhes do terreno</div>
         <canvas id="map" width="512" height="512" aria-label="Pré-visualização do mapa gerado"></canvas>
+        <canvas id="minimap" class="hidden" width="128" height="128" aria-label="Minimapa da região"></canvas>
       </div>
     </div>
 
