@@ -192,6 +192,36 @@ export function render(canvas, data, options = {}) {
     ctx.shadowBlur = 0;
   }
 
+  // 4.5 Desenha Landmarks (POIs)
+  if (data.landmarks) {
+    for (const lm of data.landmarks) {
+      const cx = (lm.x + 0.5) * tileW;
+      const cy = (lm.y + 0.5) * tileH;
+      const r = Math.max(3, Math.min(tileW, tileH) * 0.35);
+
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      
+      // Cor baseada no tipo para diversificar (usando hash mod)
+      const colorHash = lm.type.length * 15 % 360;
+      ctx.fillStyle = `hsl(${colorHash}, 80%, 60%)`;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+
+      ctx.beginPath();
+      // Forma de diamante
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+    }
+  }
+
   // 5. Highlight de Hover
   if (options.hover) {
     const { x, y } = options.hover;

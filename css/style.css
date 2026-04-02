@@ -96,13 +96,17 @@ button#generate:hover {
 .map-wrap {
   position: relative;
   border-radius: 10px;
-  overflow: hidden;
   border: 1px solid #2a2a32;
   background: #0a0a0c;
   line-height: 0;
 }
 
+
 #hud-info {
+  position: sticky;
+  top: 0;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
   background: linear-gradient(180deg, rgba(20, 20, 25, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%);
   color: #fff;
   padding: 0.6rem 1rem;
@@ -142,6 +146,8 @@ button#generate:hover {
   display: block;
   width: 100%;
   height: auto;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }

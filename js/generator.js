@@ -2,6 +2,8 @@ import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
 import { getBiome, BIOMES } from './biomes.js';
+import { generateCityName, generateRouteName } from './names.js';
+import { placeLandmarks } from './landmarks.js';
 
 /**
  * Aceita número finito (unsigned) ou string (hash FNV).
@@ -57,7 +59,7 @@ function generateNoiseMap(rng, w, h, scale) {
 }
 
 /**
- * Fase 3.1: Biomas Exóticos e Anomalias.
+ * Fase 4.0: Identidade e Landmarks.
  */
 export function generate(seedInput) {
   const seedSnapshot = normalizeSeed(seedInput);
@@ -110,11 +112,20 @@ export function generate(seedInput) {
     importance: importanceMap.get(getEdgeKey(e.u, e.v)) || 1
   })).sort((a, b) => b.importance - a.importance);
 
+  // Nomes de Cidades
+  const nextRng = () => rng.next();
+  for (const node of graph.nodes) {
+    const idx = node.y * width + node.x;
+    node.name = generateCityName(biomes[idx], nextRng);
+  }
+
   // Caminhos
   const workingCosts = new Float32Array(width * height);
   const roadTraffic = new Uint8Array(width * height);
   const cellImportance = new Uint16Array(width * height);
   const paths = [];
+
+  let routeCount = 1;
 
   for (const edge of sortedEdges) {
     const startNode = graph.nodes[edge.u];
@@ -132,6 +143,7 @@ export function generate(seedInput) {
     
     if (p) {
       p.importance = edge.importance;
+      p.name = generateRouteName(routeCount++);
       paths.push(p);
       for (const cell of p) {
         const idx = cell.y * width + cell.x;
@@ -142,9 +154,12 @@ export function generate(seedInput) {
     }
   }
 
+  // Landmarks
+  const landmarks = placeLandmarks(nextRng, width, height, biomes, anomaly, graph);
+
   return {
     version: 1,
-    phase: 3.1,
+    phase: 4.0,
     seed: seedSnapshot,
     width,
     height,
@@ -157,5 +172,7 @@ export function generate(seedInput) {
     paths,
     roadTraffic,
     cellImportance,
+    landmarks,
   };
 }
+
