@@ -61,13 +61,14 @@ export function getMicroTile(mx, my, macroData) {
     const eBot = lerp(e01, e11, fx);
     let e = lerp(eTop, eBot, fy);
     
-    // O grande truque orgânico: Ruído na borda do Micro-Grid para fragmentá-la
+    // O grande truque orgânico: Reduzimos o jitter para zero (ou quase zero)
+    // para manter o visual limpo e os platôs estáveis, usando apenas a interpolação macro.
     const noiseVal = (seededHash(mx, my, seed) - 0.5);
-    const microNoise = noiseVal * 0.01; // Reduzido para evitar quebras de relevo acidentais
+    const microNoise = noiseVal * 0.002; // Praticamente zero jitter
     e += microNoise;
 
-    // Umidade e Temperatura continuam com ruído maior para biomas orgânicos
-    const biomeNoise = noiseVal * 0.08; 
+    // Umidade e Temperatura com ruído mínimo apenas para evitar linhas retas perfeitas
+    const biomeNoise = noiseVal * 0.005; 
     const m00 = getMacroVal(moisture, ix, iy, width, height);
     const m10 = getMacroVal(moisture, ix + 1, iy, width, height);
     const m01 = getMacroVal(moisture, ix, iy + 1, width, height);
@@ -80,6 +81,14 @@ export function getMicroTile(mx, my, macroData) {
     const t01 = getMacroVal(temperature, ix, iy + 1, width, height);
     const t11 = getMacroVal(temperature, ix + 1, iy + 1, width, height);
     let t = lerp(lerp(t00, t10, fx), lerp(t01, t11, fx), fy) + biomeNoise;
+    
+    // Para biomas, podemos opcionalmente usar um ruído de escala maior (ex: 4x4)
+    // para que a borda mude de forma mais "bloco" e menos "pixel".
+    const organicX = Math.floor(mx / 4);
+    const organicY = Math.floor(my / 4);
+    const jitter4x4 = (seededHash(organicX, organicY, seed + 123) - 0.5) * 0.02;
+    m += jitter4x4;
+    t += jitter4x4;
     
     let biomeObj = getBiome(e, t, m);
     let bId = biomeObj.id;
