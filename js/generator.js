@@ -78,22 +78,37 @@ export function generate(seedInput) {
     extraEdges: 3,
   });
 
+  // 3. Pathfinding Dinâmico (Fase 2.2: Highway Splicing)
+  // Criamos um mapa de custos de trabalho que será alterado conforme as estradas são "pavimentadas"
+  const workingCosts = new Float32Array(cells);
+  const roadTraffic = new Uint8Array(width * height);
   const paths = [];
+
   for (const edge of graph.edges) {
     const startNode = graph.nodes[edge.u];
     const endNode = graph.nodes[edge.v];
-    const p = findPath(startNode.x, startNode.y, endNode.x, endNode.y, width, height, cells);
-    if (p) paths.push(p);
+    const p = findPath(startNode.x, startNode.y, endNode.x, endNode.y, width, height, workingCosts);
+    
+    if (p) {
+      paths.push(p);
+      // Cada célula usada por este caminho agora fica "barata" para os próximos
+      for (const cell of p) {
+        const idx = cell.y * width + cell.x;
+        roadTraffic[idx]++;
+        workingCosts[idx] = 0.05; // Custo de "estrada pronta" (baixíssimo)
+      }
+    }
   }
 
   return {
     version: 1,
-    phase: 2,
+    phase: 2.2,
     seed,
     width,
     height,
     cells,
     graph,
     paths,
+    roadTraffic,
   };
 }

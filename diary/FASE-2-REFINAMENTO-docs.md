@@ -31,16 +31,24 @@ Isso força o A* a "pensar": *A menos que eu precise MUITO atravessar esse rio p
 Para dar o feeling de progressão de um jogo real, definimos o metadado `isGym`.
 - **Lógica**: Sorteamos 8 cidades entre as 14 para serem os grandes hubs (Ginásios). Reduzimos a aleatoriedade pura para garantir uma estrutura de jogo funcional.
 
+### 2.4 A Economia das Estradas (Highway Splicing)
+**Problema**: Múltiplas rotas paralelas criando um "emaranhado" feio.
+**Solução**: Implementamos um sistema de **Pavimentação Procedural**.
+- O gerador mantém um `workingCostMap`.
+- Assim que o A* define uma rota, ele "pavimenta" aquelas células, reduzindo o custo de travessia para **0.05** (quase zero).
+- Rotas subsequentes, ao calcular seu caminho, são "atraídas" para essas células já pavimentadas, fundindo caminhos diferentes em uma única **Rodovia Central**.
+- **Resultado**: O mapa agora tem "troncos" principais de tráfego, eliminando rotas redundantes.
+
 ---
 
 ## 3. Antes vs Depois (Para o Vídeo)
 
-| Feature | Versão 2.0 (Caos) | Versão 2.1 (Refinada) |
-| :--- | :--- | :--- |
-| **Local das Cidades** | Aleatório (chão ou mar) | **Sempre em terra firme** |
-| **Espaçamento** | Podiam nascer coladas | **Distribuídas pelo mapa** |
-| **Rotas** | Retas e cheias de pontes | **Seguem a costa e evitam o mar** |
-| **Identidade** | Todos os nós são iguais | **Ginásios (Ouro) vs Vilas (Vermelho)** |
+| Feature | Versão 2.0 (Caos) | Versão 2.1 (Refinada) | Versão 2.2 (Rodovias) |
+| :--- | :--- | :--- | :--- |
+| **Local das Cidades** | Aleatório (chão ou mar) | **Sempre em terra firme** | **Sempre em terra firme** |
+| **Espaçamento** | Podiam nascer coladas | **Distribuídas pelo mapa** | **Distribuídas pelo mapa** |
+| **Rotas** | Retas e cheias de pontes | Seguem a costa e evitam o mar | **Fundem-se em "Highways"** |
+| **Identidade** | Todos os nós são iguais | Ginásios vs Vilas | **Hierarquia de tráfego** |
 
 ---
 

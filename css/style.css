@@ -107,15 +107,18 @@ button#generate:hover {
   top: 0;
   left: 0;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(18, 18, 20, 0.95);
   color: #fff;
-  padding: 0.5rem;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
   z-index: 100;
-  border: 1px solid #444;
-  white-space: pre-wrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  white-space: pre;
   display: none;
 }
 

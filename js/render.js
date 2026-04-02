@@ -60,17 +60,49 @@ export function render(canvas, data, options = {}) {
     }
   }
 
-  // 2. Desenha Caminhos (Corredores de Rota)
+  // 2. Desenha Caminhos (Fase 2.2 Refinamento: Linhas Contínuas e Pontes)
   if (paths && paths.length > 0) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'; // Cor da "estrada"
+    const traffic = data.roadTraffic;
+    
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
     for (const p of paths) {
-      for (const cell of p) {
-        ctx.fillRect(
-          Math.floor(cell.x * tileW),
-          Math.floor(cell.y * tileH),
-          Math.ceil(tileW),
-          Math.ceil(tileH),
-        );
+      // Desenha a "sombra" ou base da estrada primeiro (opcional, para volume)
+      // Aqui vamos desenhar segmento por segmento para mudar a cor dinamicamente (Ponte vs Estrada)
+      for (let i = 0; i < p.length - 1; i++) {
+        const p1 = p[i];
+        const p2 = p[i+1];
+        const idx = p1.y * width + p1.x;
+        const count = traffic ? traffic[idx] : 1;
+        const v = cells[idx];
+        const isWater = v < 0.3;
+
+        ctx.beginPath();
+        ctx.moveTo((p1.x + 0.5) * tileW, (p1.y + 0.5) * tileH);
+        ctx.lineTo((p2.x + 0.5) * tileW, (p2.y + 0.5) * tileH);
+
+        if (isWater) {
+          // Visual de PONTE
+          ctx.strokeStyle = count >= 2 ? 'rgba(121, 85, 72, 1)' : 'rgba(121, 85, 72, 0.7)';
+          ctx.lineWidth = count >= 2 ? 6 : 4;
+        } else {
+          // Visual de ESTRADA
+          ctx.strokeStyle = count >= 2 ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.4)';
+          ctx.lineWidth = count >= 2 ? 5 : 3;
+        }
+        
+        ctx.stroke();
+
+        // Linha central mais fina para dar detalhe de "estrada"
+        if (!isWater) {
+          ctx.beginPath();
+          ctx.moveTo((p1.x + 0.5) * tileW, (p1.y + 0.5) * tileH);
+          ctx.lineTo((p2.x + 0.5) * tileW, (p2.y + 0.5) * tileH);
+          ctx.strokeStyle = count >= 2 ? 'rgba(200, 200, 200, 0.5)' : 'rgba(200, 200, 200, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     }
   }
