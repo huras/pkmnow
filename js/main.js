@@ -119,6 +119,12 @@ function enterPlayMode(gx, gy) {
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML = "<b style='color:#fff'>Mova-se com WASD ou Setas. Aperte ESC para sair.</b>";
+  
+  // Ativa Fullscreen UX
+  document.body.classList.add('play-mode-active');
+  document.querySelector('.app').classList.add('play-mode-active');
+  
+  resizeCanvas();
   updateView();
 }
 
@@ -128,7 +134,32 @@ btnBackToMap.addEventListener('click', () => {
   btnBackToMap.classList.add('hidden');
   minimap.classList.add('hidden');
   infoBar.innerHTML = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
+  
+  // Desativa Fullscreen UX
+  document.body.classList.remove('play-mode-active');
+  document.querySelector('.app').classList.remove('play-mode-active');
+
+  resizeCanvas();
   updateView();
+});
+
+function resizeCanvas() {
+  if (appMode === 'play') {
+    const wrap = document.querySelector('.map-wrap');
+    canvas.width = wrap.clientWidth || window.innerWidth;
+    // Pega o espaço que sobra pra tentar preencher bem a tela:
+    canvas.height = wrap.clientHeight || window.innerHeight;
+  } else {
+    canvas.width = 512;
+    canvas.height = 512;
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (currentData) {
+     resizeCanvas();
+     updateView();
+  }
 });
 
 // Clique no mapa entra no modo play
@@ -146,6 +177,11 @@ canvas.addEventListener('click', (e) => {
 // Teclado
 window.addEventListener('keydown', (e) => {
   if (appMode === 'play') {
+    // Parar scroll
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
+       e.preventDefault();
+    }
+
     let dx = 0; let dy = 0;
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') dy = -1;
     if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') dy = 1;
