@@ -5,7 +5,9 @@ Projeto em **HTML, CSS e JavaScript** para explorar geração procedural de mapa
 ## Documentação
 
 - **[Plano, passos, dificuldades e abordagem](docs/PLANO-E-ABORDAGEM.md)** — o que será feito, em que ordem, quais problemas esperar e por quê.
-- **[Diário — Fase 0](diary/FASE-0-execucao-e-aprendizados.md)** — execução e aprendizados.
+- **[Diário — Fase 0](diary/FASE-0-execucao-e-aprendizados.md)** — esqueleto.
+- **[Diário — Fase 1](diary/FASE-1-execucao-e-aprendizados.md)** — grafo mínimo (MST + BFS + conectividade).
+- **[Diário — Fase 2](diary/FASE-2-execucao-e-aprendizados.md)** — geografia e caminhos reais (A*).
 
 ## Executar
 
@@ -24,9 +26,10 @@ Alternativa: extensão **Live Server** no VS Code/Cursor a partir da pasta do pr
 - `index.html` — página e `<canvas>`
 - `css/style.css` — layout básico
 - `js/rng.js` — seed string → número + PRNG determinístico
-- `js/graph.js` — cidades no grid, MST + acordes, BFS e reparo de conectividade
-- `js/generator.js` — `generate(seed)` → grid 32×32 + `graph` (Fase 1)
-- `js/render.js` — `render(canvas, dados)` com overlay do grafo
+- `js/graph.js` — cidades no grid, MST + acordes, BFS e conectividade
+- `js/pathfind.js` — algoritmo A* com pesos de terreno (Fase 2)
+- `js/generator.js` — Value Noise + Pathfinding (Fase 2)
+- `js/render.js` — cores de bioma e corredores de rota
 - `js/main.js` — UI (seed, botão) e orquestração
 
-**Fase 0** (esqueleto) e **Fase 1** (grafo mínimo) estão implementadas. Próximo passo planejado: **Fase 2** — layout macro no grid e corredores (ver documento).
+**Fase 0**, **Fase 1** e **Fase 2** estão implementadas. Próximo passo planejado: **Fase 3** — Micro-detalhes, biomas reais (umidade/temperatura) e tesselação.
