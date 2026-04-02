@@ -88,15 +88,13 @@ export function generate(seedInput) {
   // 3. Pathfinding Dinâmico com Orçamento
   const workingCosts = new Float32Array(cells);
   const roadTraffic = new Uint8Array(width * height);
+  const cellImportance = new Uint16Array(width * height); // Guarda a maior importância que passa na célula
   const paths = [];
 
   for (const edge of sortedEdges) {
     const startNode = graph.nodes[edge.u];
     const endNode = graph.nodes[edge.v];
     
-    // Orçamentando: rotas importantes têm mais verba para pontes (menor waterCostBase)
-    // Se importância for 20 (máxima aprox), custo cai para ~3.6. Se for 1, fica em ~26.
-    // Vamos usar uma curva que garanta que rotas secundárias ainda custem caro.
     const waterCostBase = Math.max(5, 40 / (1 + (edge.importance - 1) * 0.15));
 
     const p = findPath(
@@ -108,14 +106,13 @@ export function generate(seedInput) {
     );
     
     if (p) {
-      // Guardamos a importância no próprio path para o renderizador usar
       p.importance = edge.importance;
       paths.push(p);
 
-      // Pavimenta o caminho
       for (const cell of p) {
         const idx = cell.y * width + cell.x;
         roadTraffic[idx]++;
+        cellImportance[idx] = Math.max(cellImportance[idx], edge.importance);
         workingCosts[idx] = 0.05; 
       }
     }
@@ -131,5 +128,6 @@ export function generate(seedInput) {
     graph,
     paths,
     roadTraffic,
+    cellImportance,
   };
 }
