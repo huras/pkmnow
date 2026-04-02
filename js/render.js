@@ -60,7 +60,7 @@ export function render(canvas, data, options = {}) {
     }
   }
 
-  // 2. Desenha Caminhos (Fase 2.2 Refinamento: Linhas Contínuas e Pontes)
+  // 2. Desenha Caminhos (Fase 2.3 Refinamento: Linhas Contínuas e Importance-aware)
   if (paths && paths.length > 0) {
     const traffic = data.roadTraffic;
     
@@ -68,8 +68,9 @@ export function render(canvas, data, options = {}) {
     ctx.lineJoin = 'round';
 
     for (const p of paths) {
-      // Desenha a "sombra" ou base da estrada primeiro (opcional, para volume)
-      // Aqui vamos desenhar segmento por segmento para mudar a cor dinamicamente (Ponte vs Estrada)
+      // Importância da rota (de 1 a ~20+)
+      const imp = p.importance || 1;
+      
       for (let i = 0; i < p.length - 1; i++) {
         const p1 = p[i];
         const p2 = p[i+1];
@@ -82,25 +83,30 @@ export function render(canvas, data, options = {}) {
         ctx.moveTo((p1.x + 0.5) * tileW, (p1.y + 0.5) * tileH);
         ctx.lineTo((p2.x + 0.5) * tileW, (p2.y + 0.5) * tileH);
 
+        // Lógica Visual baseada em importância e tráfego
+        // imp: importância teórica da rota
+        // count: quantas rotas reais passam por esta célula
+        const isHighway = imp > 5 || count >= 2;
+
         if (isWater) {
           // Visual de PONTE
-          ctx.strokeStyle = count >= 2 ? 'rgba(121, 85, 72, 1)' : 'rgba(121, 85, 72, 0.7)';
-          ctx.lineWidth = count >= 2 ? 6 : 4;
+          ctx.strokeStyle = isHighway ? 'rgba(80, 50, 40, 1)' : 'rgba(121, 85, 72, 0.7)';
+          ctx.lineWidth = isHighway ? 7 : 4;
         } else {
           // Visual de ESTRADA
-          ctx.strokeStyle = count >= 2 ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.4)';
-          ctx.lineWidth = count >= 2 ? 5 : 3;
+          ctx.strokeStyle = isHighway ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.4)';
+          ctx.lineWidth = isHighway ? 6 : 3;
         }
         
         ctx.stroke();
 
-        // Linha central mais fina para dar detalhe de "estrada"
+        // Camada interna para detalhe
         if (!isWater) {
           ctx.beginPath();
           ctx.moveTo((p1.x + 0.5) * tileW, (p1.y + 0.5) * tileH);
           ctx.lineTo((p2.x + 0.5) * tileW, (p2.y + 0.5) * tileH);
-          ctx.strokeStyle = count >= 2 ? 'rgba(200, 200, 200, 0.5)' : 'rgba(200, 200, 200, 0.2)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = isHighway ? 'rgba(180, 180, 180, 0.8)' : 'rgba(200, 200, 200, 0.2)';
+          ctx.lineWidth = isHighway ? 2 : 1;
           ctx.stroke();
         }
       }

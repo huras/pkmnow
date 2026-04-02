@@ -283,3 +283,60 @@ export function generateWorldGraph(rng, gridW, gridH, terrainCells, opts = {}) {
     connected: isConnected(nodes.length, edges),
   };
 }
+
+/**
+ * Calcula a centralidade de intermediação das arestas (Edge Betweenness Centrality) no grafo.
+ * Identifica quais arestas são mais importantes para a conectividade regional.
+ */
+export function calculateImportance(nodes, edges) {
+  const importance = new Map();
+  
+  // Inicializa o mapa de importância para cada aresta
+  const getEdgeKey = (u, v) => [u, v].sort((a,b) => a-b).join(',');
+  edges.forEach(e => importance.set(getEdgeKey(e.u, e.v), 1)); // Base de 1 para evitar divisão por zero
+
+  // Para cada par de nós, encontramos o caminho mais curto topológico
+  for (let s = 0; s < nodes.length; s++) {
+    const distances = new Array(nodes.length).fill(Infinity);
+    const predecessors = new Array(nodes.length).fill(null).map(() => []);
+    const queue = [s];
+    distances[s] = 0;
+
+    let head = 0;
+    while(head < queue.length) {
+      const u = queue[head++];
+      const neighbors = edges
+        .filter(e => e.u === u || e.v === u)
+        .map(e => e.u === u ? e.v : e.u);
+
+      for (const v of neighbors) {
+        if (distances[v] === Infinity) {
+          distances[v] = distances[u] + 1;
+          predecessors[v].push(u);
+          queue.push(v);
+        } else if (distances[v] === distances[u] + 1) {
+          predecessors[v].push(u);
+        }
+      }
+    }
+
+    for (let t = 0; t < nodes.length; t++) {
+      if (s === t) continue;
+      const stack = [t];
+      const visited = new Set();
+      while(stack.length > 0) {
+        const curr = stack.pop();
+        for (const pred of predecessors[curr]) {
+          const key = getEdgeKey(curr, pred);
+          importance.set(key, importance.get(key) + 1);
+          if (!visited.has(pred)) {
+            stack.push(pred);
+            visited.add(pred);
+          }
+        }
+      }
+    }
+  }
+
+  return importance;
+}

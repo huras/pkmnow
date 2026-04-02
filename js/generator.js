@@ -1,5 +1,5 @@
 import { createRng, stringToSeed } from './rng.js';
-import { generateWorldGraph } from './graph.js';
+import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
 
 /**
@@ -59,10 +59,7 @@ function generateTerrain(rng, w, h) {
 }
 
 /**
- * Fase 2: grid macro (Value Noise) + pathfinding A* entre cidades.
- *
- * @param {string|number} seedInput
- * @returns {{ version: number, phase: number, seed: number, width: number, height: number, cells: Float32Array, graph: Object, paths: Array<Array<{x: number, y: number}>> }}
+ * Fase 2.3: Centralidade de Grafo + Orçamento de Infraestutura.
  */
 export function generate(seedInput) {
   const seed = normalizeSeed(seedInput);
@@ -78,31 +75,55 @@ export function generate(seedInput) {
     extraEdges: 3,
   });
 
-  // 3. Pathfinding Dinâmico (Fase 2.2: Highway Splicing)
-  // Criamos um mapa de custos de trabalho que será alterado conforme as estradas são "pavimentadas"
+  // 1. Calcula importância das arestas (Centralidade)
+  const importanceMap = calculateImportance(graph.nodes, graph.edges);
+  
+  // 2. Anexa importância ao objeto de aresta e ordena
+  const getEdgeKey = (u, v) => [u, v].sort((a,b) => a-b).join(',');
+  const sortedEdges = [...graph.edges].map(e => ({
+    ...e,
+    importance: importanceMap.get(getEdgeKey(e.u, e.v)) || 1
+  })).sort((a, b) => b.importance - a.importance);
+
+  // 3. Pathfinding Dinâmico com Orçamento
   const workingCosts = new Float32Array(cells);
   const roadTraffic = new Uint8Array(width * height);
   const paths = [];
 
-  for (const edge of graph.edges) {
+  for (const edge of sortedEdges) {
     const startNode = graph.nodes[edge.u];
     const endNode = graph.nodes[edge.v];
-    const p = findPath(startNode.x, startNode.y, endNode.x, endNode.y, width, height, workingCosts);
+    
+    // Orçamentando: rotas importantes têm mais verba para pontes (menor waterCostBase)
+    // Se importância for 20 (máxima aprox), custo cai para ~3.6. Se for 1, fica em ~26.
+    // Vamos usar uma curva que garanta que rotas secundárias ainda custem caro.
+    const waterCostBase = Math.max(5, 40 / (1 + (edge.importance - 1) * 0.15));
+
+    const p = findPath(
+      startNode.x, startNode.y, 
+      endNode.x, endNode.y, 
+      width, height, 
+      workingCosts, 
+      waterCostBase
+    );
     
     if (p) {
+      // Guardamos a importância no próprio path para o renderizador usar
+      p.importance = edge.importance;
       paths.push(p);
-      // Cada célula usada por este caminho agora fica "barata" para os próximos
+
+      // Pavimenta o caminho
       for (const cell of p) {
         const idx = cell.y * width + cell.x;
         roadTraffic[idx]++;
-        workingCosts[idx] = 0.05; // Custo de "estrada pronta" (baixíssimo)
+        workingCosts[idx] = 0.05; 
       }
     }
   }
 
   return {
     version: 1,
-    phase: 2.2,
+    phase: 2.3,
     seed,
     width,
     height,

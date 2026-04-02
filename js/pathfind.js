@@ -13,6 +13,7 @@ function heuristic(x1, y1, x2, y2) {
   return Math.abs(x1 - x2) + Math.abs(y1 - y2);
 }
 
+
 /**
  * A* Search.
  * @param {number} startX
@@ -22,9 +23,10 @@ function heuristic(x1, y1, x2, y2) {
  * @param {number} width
  * @param {number} height
  * @param {Float32Array} costMatrix - Valores em [0, 1] onde 1 é muito custoso.
- * @returns {Array<{x: number, y: number}> | null} Lista de pontos do caminho (incluindo start e end)
+ * @param {number} [waterCostBase=40] - Custo base para atravessar água.
+ * @returns {Array<{x: number, y: number}> | null} Lista de pontos do caminho.
  */
-export function findPath(startX, startY, endX, endY, width, height, costMatrix) {
+export function findPath(startX, startY, endX, endY, width, height, costMatrix, waterCostBase = 40) {
   const startKey = startY * width + startX;
   const endKey = endY * width + endX;
 
@@ -40,7 +42,6 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
   fScore[startKey] = heuristic(startX, startY, endX, endY);
 
   while (openSet.size > 0) {
-    // Pega o nó no openSet com o menor fScore
     let currentKey = -1;
     let minF = Infinity;
     for (const key of openSet) {
@@ -51,7 +52,6 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
     }
 
     if (currentKey === endKey) {
-      // Reconstrói o caminho
       const path = [];
       let temp = currentKey;
       while (cameFrom.has(temp)) {
@@ -66,12 +66,9 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
     const cx = currentKey % width;
     const cy = Math.floor(currentKey / width);
 
-    // Vizinhos (4-direções)
     const neighbors = [
-      { x: cx + 1, y: cy },
-      { x: cx - 1, y: cy },
-      { x: cx, y: cy + 1 },
-      { x: cx, y: cy - 1 },
+      { x: cx + 1, y: cy }, { x: cx - 1, y: cy },
+      { x: cx, y: cy + 1 }, { x: cx, y: cy - 1 },
     ];
 
     for (const nb of neighbors) {
@@ -80,16 +77,15 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
       const nbKey = nb.y * width + nb.x;
       const v = costMatrix[nbKey];
       
-      // Lógica de custo (Fase 2 Refinamento):
-      // Água (v < 0.3) é CARÍSSIMA para forçar o A* a buscar terra firme.
-      // Montanha (v > 0.7) é custosa, mas menos que a água.
       let d = 1;
-      if (v < 0.3) {
-        d = 40; // Super caro (ponte)
+      if (v < 0.051) {
+        d = 0.05; // Estrada já existente
+      } else if (v < 0.3) {
+        d = waterCostBase; // Custo dinâmico para pontes
       } else if (v > 0.7) {
-        d = 1 + Math.pow(v, 2) * 15; // Montanha dificulta
+        d = 1 + Math.pow(v, 2) * 15; // Montanha
       } else {
-        d = 1 + Math.pow(v, 2) * 3; // Grama é fácil
+        d = 1 + Math.pow(v, 2) * 3; // Grama
       }
       
       const tentativeGScore = gScore[currentKey] + d;
@@ -103,5 +99,5 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
     }
   }
 
-  return null; // Caminho não encontrado
+  return null;
 }
