@@ -6,6 +6,19 @@ import { applyMorphologicalCleanup } from './tessellation-logic.js';
 import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
 
+export const DEFAULT_CONFIG = {
+  waterLevel: 0.38,
+  elevationScale: 24,
+  temperatureScale: 32,
+  moistureScale: 28,
+  desertMoisture: 0.38,
+  forestMoisture: 0.58,
+  anomalyScale: 20,
+  cityCount: 14,
+  gymCount: 8,
+  extraEdges: 3
+};
+
 /**
  * Aceita número finito (unsigned) ou string (hash FNV).
  */
@@ -32,9 +45,7 @@ function generateNoiseMap(rng, w, h, scale) {
   for (let i = 0; i < controls.length; i++) controls[i] = rng.next();
 
   function lerp(a, b, t) {
-    const ft = t * Math.PI;
-    const f = (1 - Math.cos(ft)) * 0.5;
-    return a * (1 - f) + b * f;
+    return a * (1 - t) + b * t;
   }
 
   for (let y = 0; y < h; y++) {
@@ -62,17 +73,18 @@ function generateNoiseMap(rng, w, h, scale) {
 /**
  * Fase 4.0: Identidade e Landmarks.
  */
-export function generate(seedInput) {
+export function generate(seedInput, customConfig = {}) {
+  const config = { ...DEFAULT_CONFIG, ...customConfig };
   const seedSnapshot = normalizeSeed(seedInput);
   const rng = createRng(seedSnapshot);
   const width = 128;
   const height = 128;
   
   // Mapas de Ruído (Escalas subindo junto com a resolução)
-  const elevation = generateNoiseMap(rng, width, height, 24);
-  const temperature = generateNoiseMap(rng, width, height, 32);
-  const moisture = generateNoiseMap(rng, width, height, 28);
-  const anomaly = generateNoiseMap(rng, width, height, 20); // Ruído de Misticismo
+  const elevation = generateNoiseMap(rng, width, height, config.elevationScale);
+  const temperature = generateNoiseMap(rng, width, height, config.temperatureScale);
+  const moisture = generateNoiseMap(rng, width, height, config.moistureScale);
+  const anomaly = generateNoiseMap(rng, width, height, config.anomalyScale); // Ruído de Misticismo
 
   // Mapeamento de Biomas com Pós-processamento de Anomalias
   const biomes = new Uint8Array(width * height);
@@ -82,7 +94,7 @@ export function generate(seedInput) {
     const m = moisture[i];
     const a = anomaly[i];
     
-    let biomeObj = getBiome(e, t, m);
+    let biomeObj = getBiome(e, t, m, config);
 
     // Regras de Anomalia (Ideia 1 + 2)
     if (a > 0.7) {
@@ -102,7 +114,7 @@ export function generate(seedInput) {
   // de 13 papéis. Rodamos um cleanup básico na terra.
   const isLandAt = (r, c) => {
     if (r < 0 || r >= height || c < 0 || c >= width) return false;
-    return elevation[r * width + c] >= 0.3; // Nosso threshold clássico
+    return elevation[r * width + c] >= (config.waterLevel || 0.38); 
   };
   const setLandAt = (r, c, isLand) => {
     if (!isLand) elevation[r * width + c] = 0.25; // Garante que vira água
@@ -110,10 +122,10 @@ export function generate(seedInput) {
   applyMorphologicalCleanup(width, height, isLandAt, setLandAt);
 
   const graph = generateWorldGraph(rng, width, height, elevation, {
-    cityCount: 14,
-    gymCount: 8,
+    cityCount: config.cityCount,
+    gymCount: config.gymCount,
     margin: 2,
-    extraEdges: 3,
+    extraEdges: config.extraEdges,
   });
 
   // Centralidade
@@ -185,6 +197,7 @@ export function generate(seedInput) {
     roadTraffic,
     cellImportance,
     landmarks,
+    config
   };
 }
 

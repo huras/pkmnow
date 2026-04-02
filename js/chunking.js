@@ -2,11 +2,13 @@ import { getBiome, BIOMES } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
 export const CHUNK_SIZE = 16;
+export const LAND_STEPS = 9;   // 9 degraus acima do nível do mar
+export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
+export const SEA_LEVEL = 0.3;
+export const BEACH_UPPER = 0.35;
 
 function lerp(a, b, t) {
-  const ft = t * Math.PI;
-  const f = (1 - Math.cos(ft)) * 0.5;
-  return a * (1 - f) + b * f;
+  return a * (1 - t) + b * t;
 }
 
 function getMacroVal(grid, x, y, width, height) {
@@ -16,15 +18,33 @@ function getMacroVal(grid, x, y, width, height) {
 }
 
 /**
+ * Converte elevação contínua em degrau discreto.
+ * Abaixo de SEA_LEVEL: retorna -1..-WATER_STEPS (mais negativo = mais fundo)
+ * Beach: retorna 0
+ * Acima: retorna 1..LAND_STEPS
+ */
+export function elevationToStep(e) {
+    if (e < SEA_LEVEL) {
+        // Mapeia 0..SEA_LEVEL para -WATER_STEPS..-1
+        const t = e / SEA_LEVEL; // 0..1
+        return -WATER_STEPS + Math.floor(t * WATER_STEPS);
+    }
+    if (e < BEACH_UPPER) return 0; // Praia
+    // Mapeia BEACH_UPPER..1.0 para 1..LAND_STEPS
+    const t = (e - BEACH_UPPER) / (1.0 - BEACH_UPPER);
+    return Math.min(LAND_STEPS, 1 + Math.floor(t * LAND_STEPS));
+}
+
+/**
  * Função Dinâmica e Determinística para gerar um Micro-Tile na hora.
  * NUNCA salva estado na memória. Usa a interpolação do Macro-Grid para computar infinito.
  */
 export function getMicroTile(mx, my, macroData) {
-    const { width, height, cells, temperature, moisture, anomaly, seed } = macroData;
+    const { width, height, cells, temperature, moisture, anomaly, seed, config } = macroData;
     
-    // Interpolação Bilinear: Os centros macro ficam deslocados CHUNK_SIZE/2
-    const gx = (mx - CHUNK_SIZE / 2) / CHUNK_SIZE;
-    const gy = (my - CHUNK_SIZE / 2) / CHUNK_SIZE;
+    // Interpolação Bilinear: Os centros macro ficam alinhados aos múltiplos de CHUNK_SIZE
+    const gx = mx / CHUNK_SIZE;
+    const gy = my / CHUNK_SIZE;
     
     const ix = Math.floor(gx);
     const iy = Math.floor(gy);
@@ -42,50 +62,53 @@ export function getMicroTile(mx, my, macroData) {
     let e = lerp(eTop, eBot, fy);
     
     // O grande truque orgânico: Ruído na borda do Micro-Grid para fragmentá-la
-    const microNoise = (seededHash(mx, my, seed) - 0.5) * 0.08; 
+    const noiseVal = (seededHash(mx, my, seed) - 0.5);
+    const microNoise = noiseVal * 0.01; // Reduzido para evitar quebras de relevo acidentais
     e += microNoise;
 
-    // Umidade
+    // Umidade e Temperatura continuam com ruído maior para biomas orgânicos
+    const biomeNoise = noiseVal * 0.08; 
     const m00 = getMacroVal(moisture, ix, iy, width, height);
     const m10 = getMacroVal(moisture, ix + 1, iy, width, height);
     const m01 = getMacroVal(moisture, ix, iy + 1, width, height);
     const m11 = getMacroVal(moisture, ix + 1, iy + 1, width, height);
-    let m = lerp(lerp(m00, m10, fx), lerp(m01, m11, fx), fy) + microNoise * 0.5;
+    let m = lerp(lerp(m00, m10, fx), lerp(m01, m11, fx), fy) + biomeNoise;
 
     // Temperatura
     const t00 = getMacroVal(temperature, ix, iy, width, height);
     const t10 = getMacroVal(temperature, ix + 1, iy, width, height);
     const t01 = getMacroVal(temperature, ix, iy + 1, width, height);
     const t11 = getMacroVal(temperature, ix + 1, iy + 1, width, height);
-    let t = lerp(lerp(t00, t10, fx), lerp(t01, t11, fx), fy) + microNoise * 0.5;
+    let t = lerp(lerp(t00, t10, fx), lerp(t01, t11, fx), fy) + biomeNoise;
     
     let biomeObj = getBiome(e, t, m);
     let bId = biomeObj.id;
 
-    // ----- OVERS RIDES DISCRETOS: Cidades e Caminhos -----
+    // Stepped height
+    const heightStep = elevationToStep(e);
+
+    // ----- OVERRIDES DISCRETOS: Cidades e Caminhos -----
     const macroCX = Math.floor(mx / CHUNK_SIZE);
     const macroCY = Math.floor(my / CHUNK_SIZE);
     
+    let isCity = false;
+    let isRoad = false;
+
     if (macroCX >= 0 && macroCX < width && macroCY >= 0 && macroCY < height) {
         const macroIdx = macroCY * width + macroCX;
         
-        let isCity = false;
         if (macroData.graph) {
-            // Buscando O(N) nas cidades é meio custoso por pixel. 
-            // O ideal é passarmos um array de tipo `cityArea`, mas para o MVP dinâmico faremos aqui:
             const city = macroData.graph.nodes.find(n => n.x === macroCX && n.y === macroCY);
             if (city) {
                 const localX = mx % CHUNK_SIZE;
                 const localY = my % CHUNK_SIZE;
-                // Uma quadratura central pra cidade
                 if (localX >= 3 && localX < 13 && localY >= 3 && localY < 13) {
                     isCity = true;
-                    bId = BIOMES.DESERT.id; // Placeholder de areia p/ Cidade
+                    bId = BIOMES.DESERT.id;
                 }
             }
         }
         
-        // Caminho procedural transformado em corredores de terra no micro-grid
         if (!isCity && macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
             const localX = mx % CHUNK_SIZE;
             const localY = my % CHUNK_SIZE;
@@ -102,7 +125,7 @@ export function getMicroTile(mx, my, macroData) {
             const inW = hasPathW && localY >= 6 && localY < 10 && localX < 6;
 
             if (inCenter || inN || inS || inE || inW) {
-                // Se o bioma for oceano, mantemos ponte (por simplificacao, usamos DESERT que tem autotiling com areia)
+                isRoad = true;
                 bId = BIOMES.BEACH.id; 
             }
         }
@@ -110,6 +133,25 @@ export function getMicroTile(mx, my, macroData) {
 
     return {
         biomeId: bId,
-        elevation: e
+        elevation: e,
+        heightStep,
+        isCity,
+        isRoad
     };
+}
+
+/**
+ * Ruído de densidade de folhagem para um ponto micro.
+ * Retorna 0.0 .. 1.0. Usado para decidir se colocar grama/árvore.
+ */
+export function foliageDensity(mx, my, seed, scale) {
+    return seededHash(mx * scale | 0, my * scale | 0, seed + 7777);
+}
+
+/**
+ * Ruído de tipo de folhagem para um ponto micro.
+ * Retorna 0.0 .. 1.0. Usado para escolher QUAL grama/árvore.
+ */
+export function foliageType(mx, my, seed) {
+    return seededHash(mx, my, seed + 8888);
 }

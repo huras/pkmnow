@@ -24,14 +24,21 @@ export const BIOMES = {
 /**
  * lookup biome based on elevation (e), temperature (t), and moisture (m).
  * all inputs normalized 0-1.
+ * @param {number} e - elevation
+ * @param {number} t - temperature
+ * @param {number} m - moisture
+ * @param {Object} config - (optional) config with thresholds
  */
-export function getBiome(e, t, m) {
+export function getBiome(e, t, m, config = {}) {
+  const waterLevel = config.waterLevel !== undefined ? config.waterLevel : 0.38;
+  const desertMoisture = config.desertMoisture !== undefined ? config.desertMoisture : 0.33;
+  const forestMoisture = config.forestMoisture !== undefined ? config.forestMoisture : 0.66;
+
   // Água
-  if (e < 0.1) return BIOMES.OCEAN;
-  if (e < 0.3) return BIOMES.OCEAN; // Ajustado para bater com 0.3 anterior
+  if (e < waterLevel) return BIOMES.OCEAN;
   
-  // Praia
-  if (e < 0.35) return BIOMES.BEACH;
+  // Praia (margem estreita acima da água)
+  if (e < waterLevel + 0.05) return BIOMES.BEACH;
   
   // Montanhas Altas
   if (e > 0.8) return BIOMES.PEAK;
@@ -39,19 +46,20 @@ export function getBiome(e, t, m) {
   
   // Tabela de Whittaker Simplificada
   if (t < 0.3) {
-    if (m < 0.33) return BIOMES.TUNDRA;
-    if (m < 0.66) return BIOMES.TAIGA;
+    if (m < desertMoisture) return BIOMES.TUNDRA;
+    if (m < forestMoisture) return BIOMES.TAIGA;
     return BIOMES.SNOW;
   }
   
   if (t < 0.6) {
-    if (m < 0.33) return BIOMES.GRASSLAND;
-    if (m < 0.66) return BIOMES.FOREST;
+    if (m < desertMoisture) return BIOMES.GRASSLAND;
+    if (m < forestMoisture) return BIOMES.FOREST;
     return BIOMES.JUNGLE;
   }
   
   // Quente
-  if (m < 0.33) return BIOMES.DESERT;
-  if (m < 0.66) return BIOMES.SAVANNA;
+  if (m < desertMoisture) return BIOMES.DESERT;
+  if (m < forestMoisture) return BIOMES.SAVANNA;
   return BIOMES.JUNGLE;
 }
+

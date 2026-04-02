@@ -1,8 +1,8 @@
-import { generate } from './generator.js';
+import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
-import { player, setPlayerPos, tryMovePlayer } from './player.js';
+import { player, setPlayerPos, tryMovePlayer, updatePlayer } from './player.js';
 import { CHUNK_SIZE, getMicroTile } from './chunking.js';
 
 const canvas = document.getElementById('map');
@@ -11,29 +11,75 @@ const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
 const btnExport = document.getElementById('exportBtn');
+const btnImport = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+const btnSettings = document.getElementById('btnSettings');
+const settingsModal = document.getElementById('settingsModal');
+const btnApplySettings = document.getElementById('btnApplySettings');
+const btnCloseSettings = document.getElementById('btnCloseSettings');
 const btnBackToMap = document.getElementById('btnBackToMap');
 
 let currentData = null;
-let appMode = 'map'; // 'map' ou 'play'
-
-// Semente padrão solicitada
-if (seedInput) {
-  seedInput.value = "demoasdasd1";
-}
+let appMode = 'map'; // 'map' or 'play'
+let currentConfig = { ...DEFAULT_CONFIG };
+let gameTime = 0;
+let animFrameId = null;
 
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
-  return { viewType, overlayPaths, overlayGraph, appMode, player };
+  return { viewType, overlayPaths, overlayGraph, appMode, player, time: gameTime };
 }
 
 function updateView() {
   if (currentData) render(canvas, currentData, { settings: getSettings() });
 }
 
+// Animation loop (Play Mode only)
+let lastTimestamp = 0;
+const heldKeys = new Set();
+
+function gameLoop(timestamp) {
+  const dt = (timestamp - lastTimestamp) / 1000;
+  lastTimestamp = timestamp;
+  gameTime = timestamp / 1000;
+
+  // Smooth movement update
+  updatePlayer(dt);
+
+  // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo
+  if (!player.moving && currentData) {
+    let dx = 0, dy = 0;
+    if (heldKeys.has('up')) dy = -1;
+    else if (heldKeys.has('down')) dy = 1;
+    else if (heldKeys.has('left')) dx = -1;
+    else if (heldKeys.has('right')) dx = 1;
+    if (dx !== 0 || dy !== 0) {
+      tryMovePlayer(dx, dy, currentData);
+    }
+  }
+
+  updateView();
+  if (appMode === 'play') {
+    animFrameId = requestAnimationFrame(gameLoop);
+  }
+}
+
+function startGameLoop() {
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  animFrameId = requestAnimationFrame(gameLoop);
+}
+
+function stopGameLoop() {
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+  }
+}
+
 function run() {
-  currentData = generate(seedInput.value);
+  currentData = generate(seedInput.value, currentConfig);
   updateView();
 }
 
@@ -125,7 +171,7 @@ function enterPlayMode(gx, gy) {
   document.querySelector('.app').classList.add('play-mode-active');
   
   resizeCanvas();
-  updateView();
+  startGameLoop();
 }
 
 btnBackToMap.addEventListener('click', () => {
@@ -139,6 +185,7 @@ btnBackToMap.addEventListener('click', () => {
   document.body.classList.remove('play-mode-active');
   document.querySelector('.app').classList.remove('play-mode-active');
 
+  stopGameLoop();
   resizeCanvas();
   updateView();
 });
@@ -174,31 +221,42 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-// Teclado
+// Teclado: Track held keys para movimento contínuo estilo Pokémon
+function keyToDir(key) {
+  if (key === 'ArrowUp' || key === 'w' || key === 'W') return 'up';
+  if (key === 'ArrowDown' || key === 's' || key === 'S') return 'down';
+  if (key === 'ArrowLeft' || key === 'a' || key === 'A') return 'left';
+  if (key === 'ArrowRight' || key === 'd' || key === 'D') return 'right';
+  return null;
+}
+
 window.addEventListener('keydown', (e) => {
   if (appMode === 'play') {
-    // Parar scroll
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
        e.preventDefault();
     }
 
-    let dx = 0; let dy = 0;
-    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') dy = -1;
-    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') dy = 1;
-    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') dx = -1;
-    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') dx = 1;
-    
-    if (dx !== 0 || dy !== 0) {
-      if (tryMovePlayer(dx, dy, currentData)) {
-        updateView();
-        
-        // Update HUD
+    const dir = keyToDir(e.key);
+    if (dir) {
+      heldKeys.add(dir);
+
+      // Tenta iniciar movimento imediato se não está andando
+      if (!player.moving && currentData) {
+        let dx = 0, dy = 0;
+        if (dir === 'up') dy = -1;
+        else if (dir === 'down') dy = 1;
+        else if (dir === 'left') dx = -1;
+        else if (dir === 'right') dx = 1;
+        tryMovePlayer(dx, dy, currentData);
+      }
+
+      // Atualiza HUD
+      if (currentData) {
         const tile = getMicroTile(player.x, player.y, currentData);
         const bId = tile.biomeId;
         const encounters = getEncounters(bId);
         let prefix = "";
         
-        // As cidades e rotas estão em macro-coordenadas
         const macroX = Math.floor(player.x / CHUNK_SIZE);
         const macroY = Math.floor(player.y / CHUNK_SIZE);
 
@@ -221,35 +279,92 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Fase 5: Exportação Completa de Dados
+window.addEventListener('keyup', (e) => {
+  const dir = keyToDir(e.key);
+  if (dir) heldKeys.delete(dir);
+});
+
+// --- LÓGICA DE CONFIGURAÇÕES E I/O ---
+
+btnSettings.addEventListener('click', () => {
+  settingsModal.classList.remove('hidden');
+  // Sincroniza sliders com o config atual
+  document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
+  document.getElementById('cfgElevation').value = currentConfig.elevationScale;
+  document.getElementById('cfgTemperature').value = currentConfig.temperatureScale;
+  document.getElementById('cfgMoisture').value = currentConfig.moistureScale;
+  document.getElementById('cfgDesertMoisture').value = (currentConfig.desertMoisture || 0.38) * 100;
+  document.getElementById('cfgForestMoisture').value = (currentConfig.forestMoisture || 0.58) * 100;
+  document.getElementById('cfgAnomaly').value = currentConfig.anomalyScale;
+  document.getElementById('cfgCities').value = currentConfig.cityCount;
+  document.getElementById('cfgGyms').value = currentConfig.gymCount;
+});
+
+btnCloseSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
+
+btnApplySettings.addEventListener('click', () => {
+  currentConfig = {
+    waterLevel: parseInt(document.getElementById('cfgWaterLevel').value) / 100,
+    elevationScale: parseInt(document.getElementById('cfgElevation').value),
+    temperatureScale: parseInt(document.getElementById('cfgTemperature').value),
+    moistureScale: parseInt(document.getElementById('cfgMoisture').value),
+    desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value) / 100,
+    forestMoisture: parseInt(document.getElementById('cfgForestMoisture').value) / 100,
+    anomalyScale: parseInt(document.getElementById('cfgAnomaly').value),
+    cityCount: parseInt(document.getElementById('cfgCities').value),
+    gymCount: parseInt(document.getElementById('cfgGyms').value),
+    extraEdges: currentConfig.extraEdges
+  };
+  settingsModal.classList.add('hidden');
+  run();
+});
+
+btnImport.addEventListener('click', () => importFile.click());
+
+importFile.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (data.seed && data.config) {
+        seedInput.value = data.seed;
+        currentConfig = { ...DEFAULT_CONFIG, ...data.config };
+        run();
+        infoBar.innerHTML = "<b style='color:#00ff00'>MUNDO IMPORTADO!</b>";
+      } else {
+        alert("Arquivo JSON inválido ou formato antigo.");
+      }
+    } catch (err) {
+      alert("Erro ao ler JSON: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Fase 5: Exportação Otimizada (Seed + Config)
 if (btnExport) {
   btnExport.addEventListener('click', () => {
     if (!currentData) return;
     
-    // Convertendo TypedArrays para exportação no JSON
+    // Otimização: Exportamos apenas a Seed e a Configuração.
+    // O sistema de Chunks e o Gerador reconstruirão tudo deterministicamente.
     const exportData = {
-      seed: currentData.seed,
-      width: currentData.width,
-      height: currentData.height,
-      cells: currentData.cells ? Array.from(currentData.cells) : [],
-      biomes: currentData.biomes ? Array.from(currentData.biomes) : [],
-      temperature: currentData.temperature ? Array.from(currentData.temperature) : [],
-      moisture: currentData.moisture ? Array.from(currentData.moisture) : [],
-      graph: currentData.graph,
-      paths: currentData.paths,
-      landmarks: currentData.landmarks
+      version: 2,
+      seed: seedInput.value,
+      config: currentConfig
     };
 
-    // Não usa null, 2 para o arquivo final não ficar gigante com as arrays,
-    // mas ainda é um JSON padrão.
-    const jsonStr = JSON.stringify(exportData);
+    const jsonStr = JSON.stringify(exportData, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `pkmn-region-${currentData.seed}.json`;
+    a.download = `pkmn-config-${exportData.seed}.json`;
     document.body.appendChild(a);
     a.click();
     
