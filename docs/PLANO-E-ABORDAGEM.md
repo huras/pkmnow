@@ -75,6 +75,8 @@ A ordem importa: **decisões grandes primeiro**, detalhe depois.
 
 **Por quê**: sem conectividade, o resto do pipeline vira decoração inútil.
 
+**Status**: implementado — `js/graph.js` (posicionamento no grid, MST Kruskal com peso distância + jitter, acordes aleatórios, BFS `isConnected`, `repairConnectivity` defensivo); `generator.js` incorpora `graph`; `render.js` desenha fundo atenuado + arestas + nós. Overlay no canvas.
+
 ### Fase 2 — Layout macro no grid
 
 - Plano discreto (ex.: 64×64 células “macro”) onde cada célula pode ser água, terra, montanha grossa, etc.
@@ -144,7 +146,7 @@ A ordem importa: **decisões grandes primeiro**, detalhe depois.
 Sem impor framework, uma separação clara ajuda:
 
 - `rng.js` — PRNG determinístico a partir da seed (evitar `Math.random()` para reprodutibilidade).
-- `graph.js` — geração e validação do grafo de mundo.
+- `graph.js` — geração e validação do grafo de mundo (**Fase 1**).
 - `macroMap.js` — grid macro, pathfinding, máscaras.
 - `biomes.js` — campos e classificação.
 - `tiles.js` — discretização e autotiling.

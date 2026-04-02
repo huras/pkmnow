@@ -1,0 +1,99 @@
+/**
+ * Implementação de A* (A-Star) para grid 2D com pesos de terreno.
+ */
+
+/**
+ * @param {number} x1
+ * @param {number} y1
+ * @param {number} x2
+ * @param {number} y2
+ * @returns {number} Manhattan distance
+ */
+function heuristic(x1, y1, x2, y2) {
+  return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+}
+
+/**
+ * A* Search.
+ * @param {number} startX
+ * @param {number} startY
+ * @param {number} endX
+ * @param {number} endY
+ * @param {number} width
+ * @param {number} height
+ * @param {Float32Array} costMatrix - Valores em [0, 1] onde 1 é muito custoso.
+ * @returns {Array<{x: number, y: number}> | null} Lista de pontos do caminho (incluindo start e end)
+ */
+export function findPath(startX, startY, endX, endY, width, height, costMatrix) {
+  const startKey = startY * width + startX;
+  const endKey = endY * width + endX;
+
+  if (startKey === endKey) return [{ x: startX, y: startY }];
+
+  const openSet = new Set([startKey]);
+  const cameFrom = new Map();
+
+  const gScore = new Float32Array(width * height).fill(Infinity);
+  gScore[startKey] = 0;
+
+  const fScore = new Float32Array(width * height).fill(Infinity);
+  fScore[startKey] = heuristic(startX, startY, endX, endY);
+
+  while (openSet.size > 0) {
+    // Pega o nó no openSet com o menor fScore
+    let currentKey = -1;
+    let minF = Infinity;
+    for (const key of openSet) {
+      if (fScore[key] < minF) {
+        minF = fScore[key];
+        currentKey = key;
+      }
+    }
+
+    if (currentKey === endKey) {
+      // Reconstrói o caminho
+      const path = [];
+      let temp = currentKey;
+      while (cameFrom.has(temp)) {
+        path.push({ x: temp % width, y: Math.floor(temp / width) });
+        temp = cameFrom.get(temp);
+      }
+      path.push({ x: startX, y: startY });
+      return path.reverse();
+    }
+
+    openSet.delete(currentKey);
+    const cx = currentKey % width;
+    const cy = Math.floor(currentKey / width);
+
+    // Vizinhos (4-direções)
+    const neighbors = [
+      { x: cx + 1, y: cy },
+      { x: cx - 1, y: cy },
+      { x: cx, y: cy + 1 },
+      { x: cx, y: cy - 1 },
+    ];
+
+    for (const nb of neighbors) {
+      if (nb.x < 0 || nb.x >= width || nb.y < 0 || nb.y >= height) continue;
+
+      const nbKey = nb.y * width + nb.x;
+      const terrainWeight = costMatrix[nbKey];
+      
+      // Custo base 1 + peso exponencial do terreno (ex: montanhas custam MUITO mais)
+      // v=0 (mar seco?) -> custo normal. v=1 (montanha) -> custo alto.
+      const d = 1 + Math.pow(terrainWeight, 2) * 10;
+      
+      const tentativeGScore = gScore[currentKey] + d;
+
+      if (tentativeGScore < gScore[nbKey]) {
+        cameFrom.set(nbKey, currentKey);
+        gScore[nbKey] = tentativeGScore;
+        fScore[nbKey] = tentativeGScore + heuristic(nb.x, nb.y, endX, endY);
+        openSet.add(nbKey);
+      }
+    }
+  }
+
+  return null; // Caminho não encontrado
+}
