@@ -104,7 +104,31 @@ A ordem importa: **decisões grandes primeiro**, detalhe depois.
 - Overlays: grafo, componentes, bioma, altura.
 - Export: JSON com tiles, dimensões, seed, metadados dos nós (para uso futuro ou outra ferramenta).
 
-**Por quê**: procedural sem visibilidade do estado interno vira caixa-preta.
+**Status**: implementado - Barra de ferramentas secundária com toggles de heatmap e botão de download JSON.
+
+### Fase 6 — Fidelidade Visual: Tilesets e Autotiling [PLANEJADO]
+
+- Substituir cores sólidas por um **Tileset de 16-bit**.
+- Implementar **Autotiling (Bitmasking)**: O código decide qual sprite usar (ex: borda de grama com água) baseado na vizinhança.
+- Adicionar camadas de decoração (árvores, flores, pedras) como objetos do grid.
+
+**Por quê**: O visual 2D estilo Pokémon depende de transições suaves e conexão entre tiles, não apenas quadrados coloridos.
+
+### Fase 7 — Interatividade: Modo Explorador [PLANEJADO]
+
+- Adicionar um **Avatar (Treinador)** controlado via teclado (WASD/Setas).
+- Sistema de **Colisão**: Diferenciar tiles "passáveis" (grama, rota) de "bloqueados" (água, montanha, casas).
+- Gatilhos de **Encontros**: Chamar a UI do Ecodex visualmente quando o jogador caminhar em tiles de grama alta.
+
+**Por quê**: Transforma o gerador em um protótipo funcional de jogo e valida a "navegabilidade" do mapa gerado.
+
+### Fase 8 — Robustez de PCG: Conectividade Avançada [PLANEJADO]
+
+- **Pontes e Túneis**: Lógica inteligente para cruzar rios (desenhar ponte) ou montanhas (caverna) mantendo a estética.
+- **Validação de Alcance (Flood Fill)**: Garantir que todo o grafo é acessível a pé a partir do ponto inicial.
+- **Biomas de Transição**: Regras para áreas de fronteira (ex: mistura de areia e neve ou grama queimada perto de vulcões).
+
+**Por quê**: Elimina artefatos de geração e garante que qualquer mapa gerado seja 100% jogável sem "sobras" de erro.
 
 ---
 
