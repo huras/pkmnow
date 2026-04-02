@@ -1,0 +1,52 @@
+# Evolução: Do Caos ao Mapa Pokémon (Refinamento da Fase 2)
+
+Este documento registra os erros "clássicos" de geração procedural encontrados durante a Fase 2 e como as correções foram implementadas. Perfeito para o roteiro do vídeo de evolução do sistema.
+
+---
+
+## 1. O Problema: "Cidades Peixe" e "Cidades Gêmeas"
+
+Na primeira versão da Fase 2, tínhamos 3 problemas críticos que quebravam a imersão:
+1. **Cidades no Mar**: O gerador de cidades sorteava coordenadas (X, Y) sem saber nada sobre o terreno. Resultado: cidades no meio do oceano.
+2. **Clumping (Aglomerados)**: Sem uma regra de distância, duas cidades podiam nascer a 1 metro de distância uma da outra, enquanto o resto do mapa ficava vazio.
+3. **Febre das Pontes**: O algoritmo A* via que o "custo" de andar na água era o mesmo da grama. Ele criava retas perfeitas cortando o mar com dezenas de pontes desnecessárias.
+
+---
+
+## 2. A Evolução do Código (Os Fixes)
+
+### 2.1 Posicionamento Consciente do Terreno
+**Antes**: `id, x, y` sorteados puramente com `rng.next()`.
+**Depois**: O gerador agora consulta o grid de `Value Noise` antes de colocar a cidade.
+- **Regra**: Só é permitido colocar o nó se o valor da célula for `> 0.3` (Terra firme).
+- **Raio de Exclusão**: Implementamos um `minDistSq`. Se uma nova coordenada estiver muito perto de uma cidade já existente, o sistema descarta e tenta de novo (até 500 vezes).
+
+### 2.2 Reequilíbrio de Custo do A*
+Para resolver o problema das pontes infinitas, alteramos a "física" do mundo:
+- **Custo Terreno Plano**: 1-4 unidades.
+- **Custo Água**: 40 unidades.
+Isso força o A* a "pensar": *A menos que eu precise MUITO atravessar esse rio para chegar no destino, eu vou dar a volta por terra firme porque é 10x mais barato.*
+
+### 2.3 Hierarquia: 8 Ginásios e 6 Vilas
+Para dar o feeling de progressão de um jogo real, definimos o metadado `isGym`.
+- **Lógica**: Sorteamos 8 cidades entre as 14 para serem os grandes hubs (Ginásios). Reduzimos a aleatoriedade pura para garantir uma estrutura de jogo funcional.
+
+---
+
+## 3. Antes vs Depois (Para o Vídeo)
+
+| Feature | Versão 2.0 (Caos) | Versão 2.1 (Refinada) |
+| :--- | :--- | :--- |
+| **Local das Cidades** | Aleatório (chão ou mar) | **Sempre em terra firme** |
+| **Espaçamento** | Podiam nascer coladas | **Distribuídas pelo mapa** |
+| **Rotas** | Retas e cheias de pontes | **Seguem a costa e evitam o mar** |
+| **Identidade** | Todos os nós são iguais | **Ginásios (Ouro) vs Vilas (Vermelho)** |
+
+---
+
+## 4. Lição Aprendida
+*Geração procedural não é sobre aleatoriedade total, é sobre **aleatoriedade restrita por regras de design**.* 
+Ao injetar conhecimento do terreno no grafo e no pathfinding, transformamos um amontoado de pontos em uma região que parece ter sido planejada por um arquiteto (ou um Level Designer da Game Freak).
+
+---
+*Documentação preparada para o vídeo de evolução do projeto.*

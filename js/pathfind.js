@@ -78,11 +78,19 @@ export function findPath(startX, startY, endX, endY, width, height, costMatrix) 
       if (nb.x < 0 || nb.x >= width || nb.y < 0 || nb.y >= height) continue;
 
       const nbKey = nb.y * width + nb.x;
-      const terrainWeight = costMatrix[nbKey];
+      const v = costMatrix[nbKey];
       
-      // Custo base 1 + peso exponencial do terreno (ex: montanhas custam MUITO mais)
-      // v=0 (mar seco?) -> custo normal. v=1 (montanha) -> custo alto.
-      const d = 1 + Math.pow(terrainWeight, 2) * 10;
+      // Lógica de custo (Fase 2 Refinamento):
+      // Água (v < 0.3) é CARÍSSIMA para forçar o A* a buscar terra firme.
+      // Montanha (v > 0.7) é custosa, mas menos que a água.
+      let d = 1;
+      if (v < 0.3) {
+        d = 40; // Super caro (ponte)
+      } else if (v > 0.7) {
+        d = 1 + Math.pow(v, 2) * 15; // Montanha dificulta
+      } else {
+        d = 1 + Math.pow(v, 2) * 3; // Grama é fácil
+      }
       
       const tentativeGScore = gScore[currentKey] + d;
 

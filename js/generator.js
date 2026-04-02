@@ -71,8 +71,9 @@ export function generate(seedInput) {
   const height = 32;
   
   const cells = generateTerrain(rng, width, height);
-  const graph = generateWorldGraph(rng, width, height, {
-    cityCount: 7,
+  const graph = generateWorldGraph(rng, width, height, cells, {
+    cityCount: 14,
+    gymCount: 8,
     margin: 2,
     extraEdges: 3,
   });

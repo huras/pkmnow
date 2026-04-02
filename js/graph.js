@@ -4,7 +4,7 @@
  */
 
 /**
- * @typedef {{ id: number, x: number, y: number }} GraphNode
+ * @typedef {{ id: number, x: number, y: number, isGym: boolean }} GraphNode
  * @typedef {{ u: number, v: number }} GraphEdge
  */
 
@@ -53,53 +53,78 @@ function edgeKey(u, v) {
 }
 
 /**
- * Coloca cidades em células inteiras do grid, sem sobreposição.
+ * Coloca cidades em células de TERRA, respeitando distância mínima.
  * @param {{ next: () => number }} rng
  * @param {number} gridW
  * @param {number} gridH
  * @param {number} count
  * @param {number} margin
+ * @param {Float32Array} terrainCells
  * @returns {GraphNode[]}
  */
-export function placeCityNodes(rng, gridW, gridH, count, margin) {
-  const used = new Set();
+export function placeCityNodes(rng, gridW, gridH, count, margin, terrainCells) {
   const nodes = [];
   const spanW = Math.max(1, gridW - 2 * margin);
   const spanH = Math.max(1, gridH - 2 * margin);
+  
+  // Distância mínima desejada (raio de exclusão)
+  const minDistSq = 5 * 5; 
 
   for (let id = 0; id < count; id++) {
-    let x = margin;
-    let y = margin;
+    let bestX = -1;
+    let bestY = -1;
     let placed = false;
-    for (let attempt = 0; attempt < 400 && !placed; attempt++) {
-      x = margin + Math.floor(rng.next() * spanW);
-      y = margin + Math.floor(rng.next() * spanH);
-      const key = y * gridW + x;
-      if (!used.has(key)) {
-        used.add(key);
-        placed = true;
+
+    // Tenta 500 vezes achar um lugar bom (terra + longe o suficiente)
+    for (let attempt = 0; attempt < 500 && !placed; attempt++) {
+      const x = margin + Math.floor(rng.next() * spanW);
+      const y = margin + Math.floor(rng.next() * spanH);
+      const idx = y * gridW + x;
+      
+      // Regra 1: Tem que ser terra (v > 0.3)
+      if (terrainCells[idx] < 0.3) continue;
+
+      // Regra 2: Distância mínima de outras cidades
+      let tooClose = false;
+      for (const other of nodes) {
+        if (distSq({x, y}, other) < minDistSq) {
+          tooClose = true;
+          break;
+        }
       }
+      if (tooClose) continue;
+
+      bestX = x;
+      bestY = y;
+      placed = true;
     }
+
+    // Fallback: se falhar, tenta achar QUALQUER lugar de terra livre (mesmo perto)
     if (!placed) {
-      for (let yy = margin; yy < gridH - margin && !placed; yy++) {
-        for (let xx = margin; xx < gridW - margin && !placed; xx++) {
-          const key = yy * gridW + xx;
-          if (!used.has(key)) {
-            used.add(key);
-            x = xx;
-            y = yy;
+      for (let attempt = 0; attempt < 200 && !placed; attempt++) {
+        const x = margin + Math.floor(rng.next() * spanW);
+        const y = margin + Math.floor(rng.next() * spanH);
+        const idx = y * gridW + x;
+        if (terrainCells[idx] >= 0.3) {
+          // Só checa se não está na MESMA célula
+          if (!nodes.some(n => n.x === x && n.y === y)) {
+            bestX = x;
+            bestY = y;
             placed = true;
           }
         }
       }
     }
-    nodes.push({ id, x, y });
+
+    if (placed) {
+      nodes.push({ id, x: bestX, y: bestY, isGym: false });
+    }
   }
   return nodes;
 }
 
 /**
- * Quadrado da distância euclidiana (inteira).
+ * Quadrado da distância euclidiana.
  */
 function distSq(a, b) {
   const dx = a.x - b.x;
@@ -108,10 +133,7 @@ function distSq(a, b) {
 }
 
 /**
- * MST (Kruskal): prioriza arestas curtas com jitter do RNG (rotas mais “locais”).
- * @param {GraphNode[]} nodes
- * @param {{ next: () => number }} rng
- * @returns {GraphEdge[]}
+ * MST (Kruskal): prioriza arestas curtas com jitter do PRNG.
  */
 export function minimumSpanningTree(nodes, rng) {
   const n = nodes.length;
@@ -121,7 +143,7 @@ export function minimumSpanningTree(nodes, rng) {
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       const d = distSq(nodes[i], nodes[j]);
-      const w = d + rng.next();
+      const w = d + rng.next() * 2; // Pequeno jitter
       cand.push({ u: i, v: j, w });
     }
   }
@@ -151,25 +173,23 @@ export function minimumSpanningTree(nodes, rng) {
 }
 
 /**
- * Adiciona arestas extras aleatórias (ciclos), sem duplicata.
- * @param {GraphEdge[]} base
- * @param {number} nodeCount
- * @param {{ next: () => number }} rng
- * @param {number} extraCount
- * @returns {GraphEdge[]}
+ * Adiciona arestas extras aleatórias (ciclos).
  */
 export function addRandomChordEdges(base, nodeCount, rng, extraCount) {
+  if (nodeCount < 3) return base.slice();
   const set = new Set(base.map((e) => edgeKey(e.u, e.v)));
   const out = base.slice();
   let guard = 0;
-  const maxGuard = extraCount * 200;
+  const maxGuard = extraCount * 100;
   while (out.length - base.length < extraCount && guard < maxGuard) {
     guard++;
     const u = Math.floor(rng.next() * nodeCount);
-    let v = Math.floor(rng.next() * nodeCount);
+    const v = Math.floor(rng.next() * nodeCount);
     if (v === u) continue;
     const k = edgeKey(u, v);
     if (set.has(k)) continue;
+    
+    // Opcional: só adiciona se não for muito longe (ex: dist < 12)
     set.add(k);
     out.push({ u, v });
   }
@@ -177,10 +197,7 @@ export function addRandomChordEdges(base, nodeCount, rng, extraCount) {
 }
 
 /**
- * Se o grafo estiver desconexo, liga componentes com arestas baratas entre pares de nós.
- * @param {GraphNode[]} nodes
- * @param {GraphEdge[]} edges
- * @returns {GraphEdge[]}
+ * Reparo de conectividade.
  */
 export function repairConnectivity(nodes, edges) {
   const n = nodes.length;
@@ -191,8 +208,7 @@ export function repairConnectivity(nodes, edges) {
   while (!isConnected(n, current) && guard < n * n) {
     guard++;
     const adj = buildAdjacency(n, current);
-    const comp = new Int32Array(n);
-    comp.fill(-1);
+    const comp = new Int32Array(n).fill(-1);
     let c = 0;
     for (let s = 0; s < n; s++) {
       if (comp[s] !== -1) continue;
@@ -232,18 +248,31 @@ export function repairConnectivity(nodes, edges) {
  * @param {{ next: () => number }} rng
  * @param {number} gridW
  * @param {number} gridH
- * @param {{ cityCount?: number, margin?: number, extraEdges?: number }} [opts]
+ * @param {Float32Array} terrainCells
+ * @param {{ cityCount?: number, gymCount?: number, margin?: number, extraEdges?: number }} [opts]
  * @returns {{ nodes: GraphNode[], edges: GraphEdge[], connected: boolean }}
  */
-export function generateWorldGraph(rng, gridW, gridH, opts = {}) {
+export function generateWorldGraph(rng, gridW, gridH, terrainCells, opts = {}) {
   const margin = opts.margin ?? 2;
-  const cityCount = Math.min(
-    opts.cityCount ?? 7,
-    Math.max(2, (gridW - 2 * margin) * (gridH - 2 * margin)),
-  );
-  const extraEdges = opts.extraEdges ?? 2;
+  const cityCount = opts.cityCount ?? 14;
+  const gymCount = opts.gymCount ?? 8;
+  const extraEdges = opts.extraEdges ?? 3;
 
-  const nodes = placeCityNodes(rng, gridW, gridH, cityCount, margin);
+  // 1. Posicionamento inteligente (Terra + Distância)
+  const nodes = placeCityNodes(rng, gridW, gridH, cityCount, margin, terrainCells);
+  
+  // 2. Atribuição de Ginásios (8 Gyms, o resto Towns)
+  // Sorteia índices únicos para serem ginásios
+  const indices = nodes.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  for (let i = 0; i < Math.min(gymCount, nodes.length); i++) {
+    nodes[indices[i]].isGym = true;
+  }
+
+  // 3. Conectividade
   let edges = minimumSpanningTree(nodes, rng);
   edges = addRandomChordEdges(edges, nodes.length, rng, extraEdges);
   edges = repairConnectivity(nodes, edges);

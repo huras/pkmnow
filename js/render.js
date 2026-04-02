@@ -8,8 +8,9 @@
  *   graph?: { nodes: Array<{ id: number, x: number, y: number }>, edges: Array<{ u: number, v: number }> },
  *   paths?: Array<Array<{x: number, y: number}>>
  * } | null} data
+ * @param {{ hover?: {x: number, y: number} }} [options]
  */
-export function render(canvas, data) {
+export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !data) return;
 
@@ -102,14 +103,40 @@ export function render(canvas, data) {
     ctx.shadowBlur = 4;
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
     
-    ctx.fillStyle = '#ff5b5b'; // Cidades em vermelho (tipo Centro Pokémon)
+    // Estilo baseado no tipo (Fase 2 Refinamento)
+    const isGym = !!n.isGym;
+    const r = isGym ? nodeR * 1.2 : nodeR;
+    
+    ctx.fillStyle = isGym ? '#ffd700' : '#ff5b5b'; // Dourado (Gym) vs Vermelho (Town)
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = isGym ? 3 : 2;
+    
     ctx.beginPath();
-    ctx.arc(cx, cy, nodeR, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     
+    // Pequeno detalhe no centro para o Ginásio
+    if (isGym) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
     ctx.shadowBlur = 0;
+  }
+
+  // 5. Highlight de Hover
+  if (options.hover) {
+    const { x, y } = options.hover;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(
+      Math.floor(x * tileW),
+      Math.floor(y * tileH),
+      Math.ceil(tileW),
+      Math.ceil(tileH),
+    );
   }
 }

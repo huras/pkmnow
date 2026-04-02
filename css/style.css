@@ -94,11 +94,29 @@ button#generate:hover {
 }
 
 .map-wrap {
+  position: relative;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #2a2a32;
   background: #0a0a0c;
   line-height: 0;
+}
+
+.debug-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  z-index: 100;
+  border: 1px solid #444;
+  white-space: pre-wrap;
+  display: none;
 }
 
 #map {
