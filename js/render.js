@@ -23,6 +23,14 @@ const MAX_SCATTER_ROWS_PASS2 = 8;
 const WATER_ANIM_SRC_W = 16;
 const WATER_ANIM_SRC_H = 16;
 
+/** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles.
+ * Cada bloco é um canvas renderizado uma única vez e mantido em cache.
+ * Isso elimina os picos de lag ao caminhar, pois apenas novos blocos pequenos são assados. */
+const PLAY_CHUNK_SIZE = 8;
+const playChunkMap = new Map();
+let lastDataForCache = null;
+let lastTileWForCache = 0;
+
 const imageCache = new Map();
 
 export async function loadTilesetImages() {
@@ -93,22 +101,18 @@ export function render(canvas, data, options = {}) {
   let startX = 0, startY = 0, endX = width, endY = height;
 
   if (appMode === 'play') {
-    tileW = 40; tileH = 40;
-    const vx = player.visualX ?? player.x;
-    const vy = player.visualY ?? player.y;
-    ctx.translate(
-      Math.round(cw / 2 - (vx + 0.5) * tileW),
-      Math.round(ch / 2 - (vy + 0.5) * tileH)
-    );
-    
-    const txRadius = Math.ceil((cw / tileW) / 2) + 2;
-    const tyRadius = Math.ceil((ch / tileH) / 2) + 2;
-    startX = Math.max(0, Math.floor(vx) - txRadius);
-    startY = Math.max(0, Math.floor(vy) - tyRadius);
-    endX = Math.min(width * CHUNK_SIZE, Math.floor(vx) + txRadius);
-    endY = Math.min(height * CHUNK_SIZE, Math.floor(vy) + tyRadius);
+    tileW = 40;
+    tileH = 40;
   } else {
-    tileW = cw / width; tileH = ch / height;
+    tileW = cw / width;
+    tileH = ch / height;
+  }
+
+  // Invalida o cache global de blocos se os dados básicos (mapa ou escala) mudarem (agora com tileW definido)
+  if (appMode !== 'play' || data !== lastDataForCache || tileW !== lastTileWForCache) {
+    playChunkMap.clear();
+    lastDataForCache = data;
+    lastTileWForCache = tileW;
   }
 
   if (appMode === 'map') {
@@ -223,9 +227,54 @@ export function render(canvas, data, options = {}) {
        }
      }
   } else {
-    // ==== PLAY MODE RENDERER ====
     const snapPx = (n) => Math.round(n);
-    const time = options.settings?.time || 0;
+    const scatterFootprintNoGrassSet = new Set(); // Prevent crash in Pass 5
+    const vx = player.visualX ?? player.x;
+    const vy = player.visualY ?? player.y;
+
+    // Área visível em tiles (com pequena margem para tops de árvores)
+    const viewW = cw / tileW;
+    const viewH = ch / tileH;
+    const startXTiles = Math.floor(vx - viewW / 2) - 2;
+    const startYTiles = Math.floor(vy - viewH / 2) - 2;
+    const endXTiles = Math.ceil(vx + viewW / 2) + 2;
+    const endYTiles = Math.ceil(vy + viewH / 2) + 2;
+
+    startX = Math.max(0, startXTiles);
+    startY = Math.max(0, startYTiles);
+    endX = Math.min(width * CHUNK_SIZE, endXTiles);
+    endY = Math.min(height * CHUNK_SIZE, endYTiles);
+
+    // Identifica quais blocos 8x8 intersectam o viewport
+    const cStartX = Math.floor(startX / PLAY_CHUNK_SIZE);
+    const cStartY = Math.floor(startY / PLAY_CHUNK_SIZE);
+    const cEndX = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
+    const cEndY = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+
+    // Sincroniza o deslocamento da camada estática com a translação global arredondada
+    const currentTransX = Math.round(cw / 2 - (vx + 0.5) * tileW);
+    const currentTransY = Math.round(ch / 2 - (vy + 0.5) * tileH);
+
+    for (let cy = cStartY; cy <= cEndY; cy++) {
+      for (let cx = cStartX; cx <= cEndX; cx++) {
+        const key = `${cx},${cy}`;
+        let chunkCanvas = playChunkMap.get(key);
+        if (!chunkCanvas) {
+          chunkCanvas = bakeChunk(cx, cy, data, tileW, tileH);
+          playChunkMap.set(key, chunkCanvas);
+        }
+        ctx.drawImage(
+          chunkCanvas,
+          currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
+          currentTransY + cy * PLAY_CHUNK_SIZE * tileH
+        );
+      }
+    }
+
+    ctx.translate(currentTransX, currentTransY);
+
+    const getCached = (mx, my) => getMicroTile(mx, my, data);
+
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const cavesImg = imageCache.get('tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png');
     const TCOLS_NATURE = 57;
@@ -234,7 +283,7 @@ export function render(canvas, data, options = {}) {
     const atlasFromObjectSet = (objSet) => {
       const path = TessellationEngine.getImagePath(objSet?.file);
       const img = path ? imageCache.get(path) : null;
-      const cols = path.includes('caves') ? TCOLS_CAVES : TCOLS_NATURE;
+      const cols = path?.includes('caves') ? TCOLS_CAVES : TCOLS_NATURE;
       return { img, cols };
     };
 
@@ -254,34 +303,9 @@ export function render(canvas, data, options = {}) {
         ctx.drawImage(natureImg, sx, sy, 16, 16, snapPx(px), snapPx(py), twNat, thNat);
       }
     };
-    const drawScatterTile16 = (objSet, tileId, px, py, rotation) => {
-      const { img, cols } = atlasFromObjectSet(objSet);
-      if (!img || tileId == null || tileId < 0) return;
-      const sx = (tileId % cols) * 16;
-      const sy = Math.floor(tileId / cols) * 16;
-      if (rotation) {
-        ctx.save();
-        ctx.translate(snapPx(px + tileW / 2), snapPx(py + tileH));
-        ctx.rotate(rotation);
-        ctx.drawImage(img, sx, sy, 16, 16, -twNat / 2, -thNat, twNat, thNat);
-        ctx.restore();
-      } else {
-        ctx.drawImage(img, sx, sy, 16, 16, snapPx(px), snapPx(py), twNat, thNat);
-      }
-    };
 
-    const padding = 2;
-    const cStartX = Math.max(0, startX - padding), cStartY = Math.max(0, startY - padding);
-    const cEndX = Math.min(width * CHUNK_SIZE, endX + padding), cEndY = Math.min(height * CHUNK_SIZE, endY + padding);
-    const vw = cEndX - cStartX, vh = cEndY - cStartY;
-    const tileCache = new Array(vw * vh);
-    for (let my = cStartY; my < cEndY; my++) {
-      for (let mx = cStartX; mx < cEndX; mx++) {
-        tileCache[(my - cStartY) * vw + (mx - cStartX)] = getMicroTile(mx, my, data);
-      }
-    }
-    const getCached = (mx, my) => (mx < cStartX || mx >= cEndX || my < cStartY || my >= cEndY) ? null : tileCache[(my - cStartY) * vw + (mx - cStartX)];
-    const getStep = (mx, my) => getCached(mx, my)?.heightStep ?? -WATER_STEPS - 1;
+    const time = options.settings?.time || 0;
+
 
     // PASS 0: Oceano — animação water-tile.png (faixa 16×16 por frame, empilhados em Y)
     const waterImg = imageCache.get('tilesets/water-tile.png');
@@ -317,287 +341,7 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 1: TERRAIN
-    for (let level = 0; level <= LAND_STEPS; level++) {
-      for (let my = startY; my < endY; my++) {
-        for (let mx = startX; mx < endX; mx++) {
-          const tile = getCached(mx, my);
-          if (!tile || tile.heightStep < level) continue;
-
-          let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-          if (tile.isRoad && TERRAIN_SETS['terrain folliage']) setName = 'terrain folliage';
-          const set = TERRAIN_SETS[setName];
-
-          if (set) {
-            const imgPath = TessellationEngine.getImagePath(set.file), img = imageCache.get(imgPath);
-            const cols = imgPath.includes('caves') ? 50 : 57;
-
-            // NEW LOGIC: A tile only draws a border (Cliff/Edge/Corner) at its OWN height.
-            // For levels below its height, it acts as a solid ground (CENTER) foundation.
-            let role;
-            if (tile.heightStep > level) {
-              // Foundation: Skip drawing unless it's the layer immediately below (to fill the cliff base gap)
-              if (level !== tile.heightStep - 1) continue;
-              role = 'CENTER';
-            } else {
-              // Final Height: Calculate the correct role (Edge, NW, CENTER, etc.)
-              const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= level;
-              role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, isAtOrAbove, set.type);
-            }
-
-            const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
-            if (img && tileId != null) {
-              ctx.drawImage(
-                img,
-                (tileId % cols) * 16,
-                Math.floor(tileId / cols) * 16,
-                16,
-                16,
-                snapPx(mx * tileW),
-                snapPx(my * tileH),
-                twNat,
-                thNat
-              );
-            }
-          }
-        }
-      }
-    }
-
-    // PASS 2: BASES (Veggie Trunks / Scatter Bases)
-    let scatterFootprintNoGrassSet = new Set();
-    if (natureImg || cavesImg) {
-      const microWPass2 = width * CHUNK_SIZE;
-      const microHPass2 = height * CHUNK_SIZE;
-      const getWorldTilePass2 = (tx, ty) => getMicroTile(tx, ty, data);
-      const validOriginMemo = new Map();
-      scatterFootprintNoGrassSet = buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data, validOriginMemo);
-      for (let my = startY; my < endY; my++) {
-        for (let mx = startX; mx < endX; mx++) {
-          const tile = getCached(mx, my);
-          if (!tile || tile.heightStep < 1) continue;
-
-          const treeType_check = getTreeType(tile.biomeId);
-          const isFormalTree = (tx, ty) =>
-            !!treeType_check &&
-            (tx + ty) % 3 === 0 &&
-            foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-          const isFormalNeighbor = (tx, ty) =>
-            !!treeType_check &&
-            (tx + ty) % 3 === 1 &&
-            foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-
-          const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-
-          // 2C antes do gate CENTER: objectos largos (ex.: savannah-tree 3×3) em tiles IN_* no mesmo degrau
-          {
-            let allow2cDest = true;
-            if (setForRole) {
-              const chk2c = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-              const roleDest = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, chk2c, setForRole.type);
-              allow2cDest = terrainRoleAllowsScatter2CContinuation(roleDest);
-            }
-            if (allow2cDest) {
-            // Continuação 2C usa lista do bioma da origem (itemsO), não exige scatter no bioma destino
-            if (!tile.isRoad && !tile.isCity) {
-              let drew2cHere = false;
-              for (let dox = 1; dox <= 4 && !drew2cHere; dox++) {
-                const ox0 = mx - dox;
-                if (ox0 < 0 || ox0 >= width * CHUNK_SIZE) continue;
-
-                for (let oyDelta = 0; oyDelta < MAX_SCATTER_ROWS_PASS2; oyDelta++) {
-                  const oy0 = my - oyDelta;
-                  if (oy0 < 0 || oy0 >= height * CHUNK_SIZE) break;
-
-                  const nTile = getMicroTile(ox0, oy0, data);
-                  if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
-                  if (tile.heightStep !== nTile.heightStep) continue;
-
-                  const treeFormalOrigin = getTreeType(nTile.biomeId);
-                  const isFormalTreeOrig = (tx, ty) =>
-                    !!treeFormalOrigin &&
-                    (tx + ty) % 3 === 0 &&
-                    foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-                  const isFormalNeighborOrig = (tx, ty) =>
-                    !!treeFormalOrigin &&
-                    (tx + ty) % 3 === 1 &&
-                    foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-                  if (isFormalTreeOrig(ox0, oy0) || isFormalNeighborOrig(ox0, oy0)) continue;
-
-                  if (!validScatterOriginMicro(ox0, oy0, data.seed, microWPass2, microHPass2, getWorldTilePass2, validOriginMemo)) continue;
-
-                  const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
-                  const itemKeyO = itemsO[Math.floor(seededHash(ox0, oy0, data.seed + 222) * itemsO.length)];
-                  const objSetO = OBJECT_SETS[itemKeyO];
-                  if (!objSetO) continue;
-                  const { rows: rowsO, cols: colsO } = parseShape(objSetO.shape);
-                  const doy = my - oy0;
-                  if (dox >= colsO || doy < 0 || doy >= rowsO) continue;
-
-                  const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-                  if (!basePartO?.ids?.length) continue;
-                  const idxO = doy * colsO + dox;
-                  if (idxO < 0 || idxO >= basePartO.ids.length) continue;
-
-                  if (isFormalTree(mx, my) || isFormalNeighbor(mx, my)) continue;
-
-                  const angleO = scatterHasWindSway(itemKeyO)
-                    ? Math.sin(time * 2.5 + ox0 * 0.3 + oy0 * 0.7) * 0.04
-                    : 0;
-                  const pxO = Math.floor(mx * tileW);
-                  const pyO = Math.floor(my * tileH);
-                  drawScatterTile16(objSetO, basePartO.ids[idxO], pxO, pyO, angleO);
-                  drew2cHere = true;
-                  break;
-                }
-              }
-            }
-            }
-          }
-
-          // NO VEGETATION ON CLIFFS (2B / grama): só CENTER; 2C já corre acima
-          if (setForRole) {
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-            const role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
-            if (role !== 'CENTER') continue;
-          }
-
-          // 1. Formal Trees (BIOME AWARE) — helpers já definidos no início do tile
-          const isFormalOccupied = isFormalTree(mx, my) || isFormalNeighbor(mx, my);
-          
-          let occupiedByScatter = false;
-          let drawnScatterOrigin = false;
-
-          // 2. Scatter Base Check (Mutual Exclusion with Formal Trees AND other Scatter)
-          const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-          if (!tile.isRoad && !tile.isCity) {
-             // 2A: ocupação por scatter a Oeste (origem pode ser outro bioma com lista scatter)
-             for (let dox = 1; dox <= 3 && !occupiedByScatter; dox++) {
-               const ox = mx - dox;
-               for (let oyDelta = 0; oyDelta < MAX_SCATTER_ROWS_PASS2; oyDelta++) {
-                 const oy = my - oyDelta;
-                 if (oy < 0 || oy >= height * CHUNK_SIZE) break;
-                 const nTile = getMicroTile(ox, oy, data);
-                 if (
-                   nTile &&
-                   foliageDensity(ox, oy, data.seed + 111, 2.5) > 0.82 &&
-                   !nTile.isRoad &&
-                   validScatterOriginMicro(ox, oy, data.seed, microWPass2, microHPass2, getWorldTilePass2, validOriginMemo)
-                 ) {
-                   const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
-                   if (itemsAtO.length === 0) continue;
-                   const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, data.seed + 222) * itemsAtO.length)];
-                   const nObjSet = OBJECT_SETS[nItemKey];
-                   if (nObjSet) {
-                     const { rows, cols } = parseShape(nObjSet.shape);
-                     const doy = my - oy;
-                     if (dox < cols && doy >= 0 && doy < rows) {
-                       occupiedByScatter = true;
-                       break;
-                     }
-                   }
-                 }
-               }
-             }
-
-             // 2B: só se este bioma tem itens scatter
-             if (
-               scatterItems.length > 0 &&
-               !isFormalOccupied &&
-               !occupiedByScatter &&
-               foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
-               validScatterOriginMicro(mx, my, data.seed, microWPass2, microHPass2, getWorldTilePass2, validOriginMemo)
-             ) {
-                const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
-                const objSet = OBJECT_SETS[itemKey];
-                if (objSet) {
-                  const { cols } = parseShape(objSet.shape);
-                  const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
-                  if (basePart) {
-                    const angle = scatterHasWindSway(itemKey)
-                      ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
-                      : 0;
-                    const thB = Math.ceil(tileH);
-                    let drewAnyOriginFrag = false;
-                    basePart.ids.forEach((id, idx) => {
-                      const ox = idx % cols;
-                      if (ox !== 0) return;
-                      const oy = Math.floor(idx / cols);
-                      const tx = mx + ox;
-                      const ty = my + oy;
-                      if (isFormalTree(tx, ty) || isFormalNeighbor(tx, ty)) return;
-                      const px = Math.floor(mx * tileW) + ox * tileW;
-                      const py = Math.floor(my * tileH) + oy * (thB - VEG_MULTITILE_OVERLAP_PX);
-                      drawScatterTile16(objSet, id, px, py, angle);
-                      drewAnyOriginFrag = true;
-                    });
-                    if (drewAnyOriginFrag) {
-                      drawnScatterOrigin = true;
-                      occupiedByScatter = true;
-                    }
-                  }
-                }
-             }
-          }
-
-          if (isFormalOccupied || occupiedByScatter) continue;
-          if (scatterFootprintNoGrassSet.has(`${mx},${my}`)) continue;
-          if (
-            !tile.isRoad &&
-            !tile.isCity &&
-            scatterItems.length > 0 &&
-            !isFormalOccupied &&
-            foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82
-          ) {
-            continue;
-          }
-
-          // 3. Grass/Small Cacti
-          if (foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD && !tile.isRoad && !tile.isCity) {
-            const variant = getGrassVariant(tile.biomeId);
-            if (!variant) continue;
-            
-            const tiles = GRASS_TILES[variant];
-            const fType = foliageType(mx, my, data.seed);
-            const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
-            const intensity = isCactus ? 0.07 : 0.12;
-            const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
-            drawTile16(fType < 0.5 ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original), Math.floor(mx * tileW), Math.floor(my * tileH), angle);
-          }
-        }
-      }
-    }
-
-    // PASS 3: FORMAL TREE BASES ONLY (copas desenhadas no Pass 5, à frente do jogador)
-    for (let my = startY; my < endY; my++) {
-      for (let mx = startX; mx < endX; mx++) {
-        if ((mx + my) % 3 !== 0) continue;
-        const tile = getCached(mx, my);
-        if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
-
-        const treeType = getTreeType(tile.biomeId);
-        if (!treeType) continue;
-
-        // NO TREES ON CLIFFS
-        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        if (setForRole) {
-          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-          if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
-        }
-        if (foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) < TREE_DENSITY_THRESHOLD) continue;
-        const right = getCached(mx+1, my);
-        if (!right || right.heightStep !== tile.heightStep) continue;
-        const ids = TREE_TILES[treeType];
-        if (!ids) continue;
-        const tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH), tw = Math.ceil(tileW), th = Math.ceil(tileH);
-        const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
-        drawTile16(ids.base[0], tx, ty, angle);
-        drawTile16(ids.base[1], tx + tw - VEG_MULTITILE_OVERLAP_PX, ty, angle);
-      }
-    }
-
     // PASS 4: PLAYER
-    const vx = player.visualX ?? player.x, vy = player.visualY ?? player.y;
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
     ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
@@ -624,24 +368,26 @@ export function render(canvas, data, options = {}) {
 
         // 1. Scatter Tops (Palms/Mangroves correct columns)
         const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-        if (scatterItems.length > 0 && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 && !tile.isRoad) {
+        if (
+          scatterItems.length > 0 &&
+          foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
+          !tile.isRoad &&
+          !tile.isCity
+        ) {
           const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
           const objSet = OBJECT_SETS[itemKey];
           if (objSet) {
             const { cols } = parseShape(objSet.shape);
-            
-            // Lógica canSpawn IDENTICA ao Pass 2 para garantir exclusão mútua total (BIOME AWARE)
-            let canSpawn = true;
-            const treeType_chk = getTreeType(tile.biomeId);
-            for(let ox=0; ox<cols; ox++) {
-              const tx_ch = mx + ox;
-              const isFT = !!treeType_chk && (tx_ch + my) % 3 === 0 && foliageDensity(tx_ch, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              const isFN = !!treeType_chk && (tx_ch + my) % 3 === 1 && foliageDensity(tx_ch - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              if (isFT || isFN) { canSpawn = false; break; }
-            }
 
-            if (canSpawn) {
+            const microW = width * CHUNK_SIZE;
+            const microH = height * CHUNK_SIZE;
+            const getT = (tx, ty) => getMicroTile(tx, ty, data);
+
+            // Usa validScatterOriginMicro (que já checa formal trees e overlaps a Oeste)
+            // para garantir que se o Base não desenha, o Top também não desenha.
+            if (validScatterOriginMicro(mx, my, data.seed, microW, microH, getT)) {
               const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+
               if (topPart) {
                 const { img: scatterAtlasImg, cols: atlasCols } = atlasFromObjectSet(objSet);
                 if (scatterAtlasImg) {
@@ -789,4 +535,162 @@ function renderMinimap(canvas, data, player) {
   const macroPx = player.x / CHUNK_SIZE, macroPy = player.y / CHUNK_SIZE;
   ctx.fillStyle = '#ff0000'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2); ctx.fill(); ctx.stroke();
+}
+
+/**
+ * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
+ */
+function bakeChunk(cx, cy, data, tileW, tileH) {
+  const canvas = document.createElement('canvas');
+  const size = PLAY_CHUNK_SIZE * tileW;
+  canvas.width = Math.ceil(size);
+  canvas.height = Math.ceil(size);
+  const octx = canvas.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+
+  const startX = cx * PLAY_CHUNK_SIZE;
+  const startY = cy * PLAY_CHUNK_SIZE;
+  const endX = startX + PLAY_CHUNK_SIZE;
+  const endY = startY + PLAY_CHUNK_SIZE;
+
+  const twNat = Math.ceil(tileW);
+  const thNat = Math.ceil(tileH);
+  const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
+
+  const drawTile16 = (tileId, px, py) => {
+    if (!natureImg || tileId == null || tileId < 0) return;
+    const sx = (tileId % 57) * 16;
+    const sy = Math.floor(tileId / 57) * 16;
+    octx.drawImage(natureImg, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);
+  };
+
+  octx.fillStyle = '#111';
+  octx.fillRect(0, 0, size, size);
+
+  // PASS 1: TERRAIN
+  for (let level = 0; level <= LAND_STEPS; level++) {
+    for (let my = startY; my < endY; my++) {
+      for (let mx = startX; mx < endX; mx++) {
+        const tile = getMicroTile(mx, my, data);
+        if (!tile || tile.heightStep < level) continue;
+
+        let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+        if (tile.isRoad && TERRAIN_SETS['terrain folliage']) setName = 'terrain folliage';
+        const set = TERRAIN_SETS[setName];
+
+        if (set) {
+          const imgPath = TessellationEngine.getImagePath(set.file), img = imageCache.get(imgPath);
+          const cols = imgPath.includes('caves') ? 50 : 57;
+
+          let role;
+          if (tile.heightStep > level) {
+            if (level !== tile.heightStep - 1) continue;
+            role = 'CENTER';
+          } else {
+            const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= level;
+            role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
+          }
+
+          const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+          if (img && tileId != null) {
+            octx.drawImage(
+              img,
+              (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16,
+              Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH),
+              twNat, thNat
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // PASS 2: BASES (Halogened scan for multi-tile objects)
+  const validOriginMemo = new Map();
+  // Scan original position up to 4 tiles West and 4 tiles North (for 3x3 or larger spillover)
+  for (let myScan = startY - 4; myScan < endY; myScan++) {
+    for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
+      if (mxScan < 0 || myScan < 0 || mxScan >= data.width * CHUNK_SIZE || myScan >= data.height * CHUNK_SIZE) continue;
+      
+      const tile = getMicroTile(mxScan, myScan, data);
+      if (!tile || tile.heightStep < 1) continue;
+
+      const treeType = getTreeType(tile.biomeId);
+      const isFormalRoot = (tx, ty) =>
+        !!treeType && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+
+      // 1. Formal Trees (2x1)
+      if (isFormalRoot(mxScan, myScan)) {
+        const ids = TREE_TILES[treeType];
+        if (ids) {
+          // Part 0 (Left half)
+          if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
+            drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
+          }
+          // Part 1 (Right half)
+          const rx = mxScan + 1;
+          if (rx >= startX && rx < endX && myScan >= startY && myScan < endY) {
+            const hRight = getMicroTile(rx, myScan, data)?.heightStep;
+            if (hRight === tile.heightStep) {
+              drawTile16(ids.base[1], (rx - startX) * tileW - VEG_MULTITILE_OVERLAP_PX, (myScan - startY) * tileH);
+            }
+          }
+        }
+      }
+
+      // 2. Scatter Objects
+      if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.isCity) {
+        const isFormalNeighbor = (tx, ty) =>
+           !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+        
+        if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
+           if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getMicroTile(c, r, data), validOriginMemo)) {
+              const items = BIOME_VEGETATION[tile.biomeId] || [];
+              const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+              const objSet = OBJECT_SETS[itemKey];
+              if (objSet) {
+                const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+                const { cols, rows } = parseShape(objSet.shape);
+                if (base?.ids?.length) {
+                  for (let idx = 0; idx < base.ids.length; idx++) {
+                    const ox = idx % cols;
+                    const oy = Math.floor(idx / cols);
+                    const tx = mxScan + ox;
+                    const ty = myScan + oy;
+                    
+                    // Fragment within current chunk bounds?
+                    if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
+                       const destTile = getMicroTile(tx, ty, data);
+                       if (destTile?.heightStep === tile.heightStep) {
+                          let allowDest = true;
+                          if (ox > 0) {
+                             const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
+                             if (setForRole) {
+                                const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+                                const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+                                allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
+                             }
+                          } else {
+                             const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+                             if (setForRole) {
+                                const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+                                if (getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') allowDest = false;
+                             }
+                          }
+
+                          if (allowDest) {
+                             drawTile16(base.ids[idx], (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0), (ty - startY) * tileH);
+                          }
+                       }
+                    }
+                  }
+                }
+              }
+           }
+        }
+      }
+    }
+  }
+
+  return canvas;
 }

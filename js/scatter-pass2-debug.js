@@ -11,6 +11,7 @@ import {
 
 const MAX_SCATTER_ROWS_PASS2 = 8;
 const MAX_SCATTER_COLS_FOOTPRINT = 8;
+const MAX_SCATTER_COLS_OVERLAP_SEARCH = 4; // Deve ser >= cols - 1 de qualquer árvore
 
 /**
  * True se (mx,my) pode ser coluna esquerda de um scatter (2B / origem 2C): não é interior de
@@ -42,16 +43,18 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
   }
 
   const scatterItemsOrigin = BIOME_VEGETATION[nTile.biomeId] || [];
-  for (let dw = 1; dw <= 3; dw++) {
+  for (let dw = 1; dw <= MAX_SCATTER_COLS_OVERLAP_SEARCH; dw++) {
     const nxw = mx - dw;
     const tileWest = getT(nxw, my);
     if (
       tileWest &&
-      scatterItemsOrigin.length > 0 &&
       foliageDensity(nxw, my, seed + 111, 2.5) > 0.82 &&
-      !tileWest.isRoad
+      !tileWest.isRoad &&
+      !tileWest.isCity
     ) {
-      const ik = scatterItemsOrigin[Math.floor(seededHash(nxw, my, seed + 222) * scatterItemsOrigin.length)];
+      const itemsAtWest = BIOME_VEGETATION[tileWest.biomeId] || [];
+      if (itemsAtWest.length === 0) continue;
+      const ik = itemsAtWest[Math.floor(seededHash(nxw, my, seed + 222) * itemsAtWest.length)];
       const os = OBJECT_SETS[ik];
       if (os) {
         const { cols: cWest } = parseShape(os.shape);
@@ -233,20 +236,22 @@ export function analyzeScatterPass2Base(mx, my, data) {
   let centerRoleOk = true;
   const centerFailReasons = [];
   let destTerrainRole = null;
-  let scatter2cDestOk = true;
+  let terrainAtDestAllowsContinuation = true;
   const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+
   if (tile.heightStep < 1) {
     centerRoleOk = false;
-    scatter2cDestOk = false;
+    terrainAtDestAllowsContinuation = false;
     centerFailReasons.push('heightStep < 1');
   } else if (setForRole) {
+    // IMPORTANTE: isAtOrAbove deve ser consistente com o render.js (ignora biomas, foca em degrau)
     const checkAtOrAbove = (r, c) => (getT(c, r)?.heightStep ?? -99) >= tile.heightStep;
     destTerrainRole = getRoleForCell(my, mx, microH, microW, checkAtOrAbove, setForRole.type);
     centerRoleOk = destTerrainRole === 'CENTER';
     if (!centerRoleOk) {
-      centerFailReasons.push(`papel terreno=${destTerrainRole} (≠ CENTER)`);
+      centerFailReasons.push(`papel terreno dest=${destTerrainRole} (≠ CENTER)`);
     }
-    scatter2cDestOk = terrainRoleAllowsScatter2CContinuation(destTerrainRole);
+    terrainAtDestAllowsContinuation = terrainRoleAllowsScatter2CContinuation(destTerrainRole);
   }
 
   const scatterItemsHere = BIOME_VEGETATION[tile.biomeId] || [];
@@ -353,14 +358,17 @@ export function analyzeScatterPass2Base(mx, my, data) {
     reasons2C.push('gate 2C: estrada ou cidade');
   } else if (tile.heightStep < 1) {
     reasons2C.push(...centerFailReasons.filter((r) => r.includes('heightStep')));
-  } else if (!scatter2cDestOk) {
+  } else if (!terrainAtDestAllowsContinuation) {
     reasons2C.push(
-      `2C: papel destino=${destTerrainRole ?? '—'} não permite base de continuação (aceita CENTER e IN_*; bloqueia OUT_* e bordas EDGE_*)`
+      `gate 2C: papel terreno dest=${destTerrainRole ?? '—'} bloqueia continuação (aceita CENTER/IN, bloqueia OUT/EDGE)`
     );
   } else {
     outer2c: for (let dox = 1; dox <= 4; dox++) {
       const ox0 = mx - dox;
-      if (ox0 < 0 || ox0 >= microW) continue;
+      if (ox0 < 0 || ox0 >= microW) {
+        reasons2C.push(`dox=${dox}: fora do mapa micro`);
+        continue;
+      }
 
       for (let oyDelta = 0; oyDelta < MAX_SCATTER_ROWS_PASS2; oyDelta++) {
         const oy0 = my - oyDelta;
@@ -423,12 +431,12 @@ export function analyzeScatterPass2Base(mx, my, data) {
       }
     }
     if (!draws2C) {
-      reasons2C.push('nenhum dox∈[1..4] passou em todos os gates do 2C');
+      reasons2C.push('nenhum dox∈[1..4] passou em todos os gates do 2C (validOrigin / overlap / footprint / out-of-ids)');
     }
   }
 
   const westNeighborHint =
-    !draws2C && !tile.isRoad && !tile.isCity && scatter2cDestOk
+    !draws2C && !tile.isRoad && !tile.isCity && terrainAtDestAllowsContinuation
       ? explain2CForDox(mx, my, 1, tile, getT, seed, microW, microH, originMemo)
       : null;
 
@@ -437,7 +445,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
   return {
     centerRoleOk,
     destTerrainRole,
-    scatter2cDestOk,
+    terrainAtDestAllowsContinuation,
     pass2B: {
       drawsHere: draws2B,
       reasons: reasons2B,
@@ -453,6 +461,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
     },
     pass2ScatterBaseWouldDrawHere,
   };
+
 }
 
 function explain2CForDox(mx, my, dox, tile, getT, seed, microW, microH, memo = null) {
