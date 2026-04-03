@@ -9,6 +9,11 @@ import { placeLandmarks } from './landmarks.js';
 export const DEFAULT_CONFIG = {
   waterLevel: 0.38,
   elevationScale: 24,
+  /** Oitavas extra de value noise suave (maior frequência, baixa amplitude). Não altera a escala macro dos montes. */
+  elevationDetailOctaves: 2,
+  /** Amplitude da 1ª oitava de detalhe no intervalo 0..1 (ex.: 0.034 ≈ ±3.4%). As seguintes × elevationDetailPersistence. */
+  elevationDetailStrength: 0.034,
+  elevationDetailPersistence: 0.5,
   temperatureScale: 32,
   moistureScale: 28,
   desertMoisture: 0.38,
@@ -71,6 +76,44 @@ function generateNoiseMap(rng, w, h, scale) {
 }
 
 /**
+ * Elevação macro (elevationScale) + oitavas de detalhe mais finas e suaves.
+ * Cada oitava usa metade do período da anterior (scale/2, /4, …) e amplitude decrescente,
+ * para variar degraus sem mudar o tamanho dos maciços.
+ */
+function generateFractalElevationMap(rng, w, h, config) {
+  const baseScale = config.elevationScale;
+  const base = generateNoiseMap(rng, w, h, baseScale);
+  const octaves = Math.max(0, Math.min(6, config.elevationDetailOctaves | 0));
+  if (octaves === 0) return base;
+
+  let strength = Number(config.elevationDetailStrength);
+  if (!Number.isFinite(strength) || strength < 0) strength = 0.034;
+  strength = Math.min(strength, 0.12);
+
+  let persistence = Number(config.elevationDetailPersistence);
+  if (!Number.isFinite(persistence) || persistence < 0) persistence = 0.5;
+  persistence = Math.min(persistence, 1);
+
+  const out = new Float32Array(w * h);
+  out.set(base);
+  let amp = strength;
+  for (let o = 0; o < octaves; o++) {
+    const div = 2 ** (o + 1);
+    const scale = Math.max(2, Math.round(baseScale / div));
+    const layer = generateNoiseMap(rng, w, h, scale);
+    for (let i = 0; i < w * h; i++) {
+      out[i] += amp * ((layer[i] - 0.5) * 2);
+    }
+    amp *= persistence;
+  }
+  for (let i = 0; i < w * h; i++) {
+    const v = out[i];
+    out[i] = v <= 0 ? 0 : v >= 1 ? 1 : v;
+  }
+  return out;
+}
+
+/**
  * Fase 4.0: Identidade e Landmarks.
  */
 export function generate(seedInput, customConfig = {}) {
@@ -80,8 +123,8 @@ export function generate(seedInput, customConfig = {}) {
   const width = 128;
   const height = 128;
   
-  // Mapas de Ruído (Escalas subindo junto com a resolução)
-  const elevation = generateNoiseMap(rng, width, height, config.elevationScale);
+  // Mapas de Ruído (escala macro da elevação inalterada; detalhe = oitavas extra)
+  const elevation = generateFractalElevationMap(rng, width, height, config);
   const temperature = generateNoiseMap(rng, width, height, config.temperatureScale);
   const moisture = generateNoiseMap(rng, width, height, config.moistureScale);
   const anomaly = generateNoiseMap(rng, width, height, config.anomalyScale); // Ruído de Misticismo

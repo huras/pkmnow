@@ -50,6 +50,19 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
 }
 
 /**
+ * Base scatter 2C (colunas a leste da origem) pode cair em cantos internos IN_* no mesmo degrau.
+ * Bloqueia OUT_* (quina exterior ao vazio) e EDGE_* (borda exposta), como no Pass 2 para 2B/grama.
+ */
+export function terrainRoleAllowsScatter2CContinuation(role) {
+  if (role == null || role === '') return true;
+  const r = String(role);
+  if (r.startsWith('OUT_')) return false;
+  if (r === 'CENTER') return true;
+  if (r.startsWith('IN_')) return true;
+  return false;
+}
+
+/**
  * Remove anomalias de 1px que o motor de 13-roles não consegue renderizar bem.
  */
 export function applyMorphologicalCleanup(width, height, isLandAtFunc, setLandFunc) {
@@ -86,6 +99,23 @@ export function seededHashInt(x, y, seed) {
   let h = (seed * 374761393 + x * 668265263 + y * 1274126177) | 0;
   h = ((h ^ (h >> 13)) * 1103515245) | 0;
   return h & 0x7fffffff;
+}
+
+/** Sales por “camada” para IDs estáveis não colidirem (grama vs scatter vs props). */
+export const PROC_SALT_GRASS_CELL = 3_010_033;
+export const PROC_SALT_SCATTER_CELL = 3_010_222;
+export const PROC_SALT_SCATTER_INSTANCE = 3_010_501;
+export const PROC_SALT_FORMAL_TREE_CELL = 3_015_555;
+export const PROC_SALT_ROCK = 5_020_100;
+export const PROC_SALT_CRYSTAL = 5_020_200;
+
+/** uint32 determinístico: worldSeed + coords micro + sal de tipo (save / estado / debug). */
+export function proceduralEntityIdUint32(worldSeed, mx, my, kindSalt) {
+  return seededHashInt(mx, my, worldSeed + kindSalt) >>> 0;
+}
+
+export function proceduralEntityIdHex(worldSeed, mx, my, kindSalt) {
+  return proceduralEntityIdUint32(worldSeed, mx, my, kindSalt).toString(16).padStart(8, '0');
 }
 
 export function parseShape(shape) {

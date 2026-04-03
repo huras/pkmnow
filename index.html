@@ -64,6 +64,14 @@
           <input type="range" id="cfgElevation" min="10" max="60" value="24">
         </div>
         <div class="config-row">
+          <label>Oitavas de detalhe (elevação suave, degraus)</label>
+          <input type="range" id="cfgElevationDetailOctaves" min="0" max="5" value="2">
+        </div>
+        <div class="config-row">
+          <label>Força do detalhe (quanto “sobe/desce” suave; padrão 34)</label>
+          <input type="range" id="cfgElevationDetailStrength" min="10" max="80" value="34" title="Valor ÷1000 somado em cada oitava (ex.: 34 → ±~3,4% na 1ª camada)">
+        </div>
+        <div class="config-row">
           <label>Escala Temperatura (Norte/Sul)</label>
           <input type="range" id="cfgTemperature" min="10" max="60" value="32">
         </div>

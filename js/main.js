@@ -5,7 +5,18 @@ import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer, updatePlayer, canWalk } from './player.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
-import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js';
+import {
+  getRoleForCell,
+  seededHash,
+  parseShape,
+  proceduralEntityIdHex,
+  PROC_SALT_GRASS_CELL,
+  PROC_SALT_SCATTER_CELL,
+  PROC_SALT_SCATTER_INSTANCE,
+  PROC_SALT_FORMAL_TREE_CELL,
+  PROC_SALT_ROCK,
+  PROC_SALT_CRYSTAL
+} from './tessellation-logic.js';
 import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
   GRASS_TILES, TREE_TILES,
@@ -13,7 +24,7 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE
 } from './biome-tiles.js';
-import { analyzeScatterPass2Base } from './scatter-pass2-debug.js';
+import { analyzeScatterPass2Base, validScatterOriginMicro } from './scatter-pass2-debug.js';
 import { getTerrainSetWalkKind, isBaseTerrainSpriteWalkable } from './walkability.js';
 
 /** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
@@ -348,30 +359,55 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     let occupiedByScatter = false;
     const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
     if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
-      for (let dox = 1; dox <= 3; dox++) {
-        const nx = mx - dox;
-        const nTile = getMicroTile(nx, my, data);
-        if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82 && !nTile.isRoad) {
-          const nItemKey = scatterItems[Math.floor(seededHash(nx, my, seed + 222) * scatterItems.length)];
-          const nObjSet = OBJECT_SETS[nItemKey];
-          if (nObjSet && dox < parseShape(nObjSet.shape).cols) {
-            occupiedByScatter = true;
-            const base = nObjSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-            const top = nObjSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
-            scatterContinuation = {
-              originMicro: { mx: nx, my },
-              columnIndexFromOrigin: dox,
-              itemKey: nItemKey,
-              shape: nObjSet.shape,
-              baseIds: base?.ids ?? null,
-              topIds: top?.ids ?? null
-            };
-            break;
+      const microWDbg = data.width * CHUNK_SIZE;
+      const microHDbg = data.height * CHUNK_SIZE;
+      const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
+      const validOriginMemoDbg = new Map();
+      const maxScatterRowsDbg = 8;
+      outerCont: for (let dox = 1; dox <= 3; dox++) {
+        const ox = mx - dox;
+        for (let oyDelta = 0; oyDelta < maxScatterRowsDbg; oyDelta++) {
+          const oy = my - oyDelta;
+          if (oy < 0 || oy >= microHDbg) break;
+          const nTile = getMicroTile(ox, oy, data);
+          if (
+            nTile &&
+            foliageDensity(ox, oy, seed + 111, 2.5) > 0.82 &&
+            !nTile.isRoad &&
+            validScatterOriginMicro(ox, oy, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
+          ) {
+            const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
+            const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, seed + 222) * itemsAtO.length)];
+            const nObjSet = OBJECT_SETS[nItemKey];
+            if (nObjSet) {
+              const { rows, cols } = parseShape(nObjSet.shape);
+              const doy = my - oy;
+              if (dox < cols && doy >= 0 && doy < rows) {
+                occupiedByScatter = true;
+                const base = nObjSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+                const top = nObjSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+                scatterContinuation = {
+                  originMicro: { mx: ox, my: oy },
+                  columnIndexFromOrigin: dox,
+                  rowIndexFromOrigin: doy,
+                  itemKey: nItemKey,
+                  shape: nObjSet.shape,
+                  baseIds: base?.ids ?? null,
+                  topIds: top?.ids ?? null
+                };
+                break outerCont;
+              }
+            }
           }
         }
       }
 
-      if (!isFormalOccupied && !occupiedByScatter && fdScatter > 0.82) {
+      if (
+        !isFormalOccupied &&
+        !occupiedByScatter &&
+        fdScatter > 0.82 &&
+        validScatterOriginMicro(mx, my, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
+      ) {
         const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
         const objSet = OBJECT_SETS[itemKey];
         if (objSet) {
@@ -471,6 +507,35 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     );
   }
 
+  const isFormalTreeRoot =
+    !!getTreeType(tile.biomeId) &&
+    (mx + my) % 3 === 0 &&
+    fdTrees >= TREE_DENSITY_THRESHOLD;
+
+  const scatterRootMicro =
+    scatterContinuation?.originMicro ??
+    scatterPass2.pass2C.match?.originMicro ??
+    (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
+
+  const proceduralEntities = {
+    schemaNote:
+      'Hex = uint32 determinístico: seededHashInt(mx,my,worldSeed+kindSalt). Mesmo mundo+coords+sal → mesmo id (save, corte de árvore, minério esgotado, etc.). Scatter multi-tile: id na raiz micro (PROC_SALT_SCATTER_INSTANCE).',
+    worldSeed: seed,
+    grassCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_CELL) },
+    scatterCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_SCATTER_CELL) },
+    rockCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_ROCK) },
+    crystalCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_CRYSTAL) },
+    formalTreeRoot: isFormalTreeRoot
+      ? { micro: { mx, my }, idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_FORMAL_TREE_CELL) }
+      : null,
+    scatterInstance: scatterRootMicro
+      ? {
+          rootMicro: scatterRootMicro,
+          idHex: proceduralEntityIdHex(seed, scatterRootMicro.mx, scatterRootMicro.my, PROC_SALT_SCATTER_INSTANCE)
+        }
+      : null
+  };
+
   return {
     coord: { mx, my, gx, gy },
     macro: {
@@ -527,7 +592,8 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
           foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD
         );
       })()
-    }
+    },
+    proceduralEntities
   };
 }
 
@@ -785,6 +851,33 @@ function openDebugModal(info) {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
+  const pe = info.proceduralEntities;
+  const proceduralHtml = pe
+    ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">IDs procedurais (determinísticos)</div>
+      <p style="font-size:0.72rem;color:#a0a0b0;margin:0 0 8px;line-height:1.45">${escDbg(pe.schemaNote)}</p>
+      <table class="tile-debug-table">
+        <tbody>
+          <tr><th>worldSeed</th><td><code>${escDbg(String(pe.worldSeed))}</code></td></tr>
+          <tr><th>Grama (célula)</th><td><code>${escDbg(pe.grassCell.idHex)}</code></td></tr>
+          <tr><th>Scatter (célula)</th><td><code>${escDbg(pe.scatterCell.idHex)}</code></td></tr>
+          <tr><th>Rocha (reserva)</th><td><code>${escDbg(pe.rockCell.idHex)}</code></td></tr>
+          <tr><th>Cristal (reserva)</th><td><code>${escDbg(pe.crystalCell.idHex)}</code></td></tr>
+          <tr><th>Árvore formal (raiz)</th><td>${
+            pe.formalTreeRoot
+              ? `<code>${escDbg(pe.formalTreeRoot.idHex)}</code> · [${pe.formalTreeRoot.micro.mx},${pe.formalTreeRoot.micro.my}]`
+              : '—'
+          }</td></tr>
+          <tr><th>Instância scatter</th><td>${
+            pe.scatterInstance
+              ? `<code>${escDbg(pe.scatterInstance.idHex)}</code> · raiz [${pe.scatterInstance.rootMicro.mx},${pe.scatterInstance.rootMicro.my}]`
+              : '—'
+          }</td></tr>
+        </tbody>
+      </table>
+    </div>`
+    : '';
+
   const sp = vg.scatterPass2;
   const scatterPass2Html = sp
     ? `<div class="tile-debug-section">
@@ -797,6 +890,7 @@ function openDebugModal(info) {
               : '<span style="color:#f88">não</span>'
           }</td></tr>
           <tr><th>CENTER / altura</th><td>${sp.centerRoleOk ? 'sim' : 'não'}</td></tr>
+          <tr><th>Papel terreno (tile)</th><td>${escDbg(sp.destTerrainRole ?? '—')} · 2C OK: ${sp.scatter2cDestOk ? 'sim' : 'não'}</td></tr>
           <tr><th>2B origem (só col. esq.)</th><td>${
             sp.pass2B.drawsHere ? 'sim' : 'não'
           }${
@@ -816,7 +910,11 @@ function openDebugModal(info) {
       }
       ${
         sp.pass2C.match
-          ? `<p style="font-size:0.76rem;margin:8px 0 0;line-height:1.4">2C: origem [${sp.pass2C.match.originMicro.mx}, ${sp.pass2C.match.originMicro.my}] · coluna +${sp.pass2C.match.columnIndexFromOrigin} · <code>${escDbg(sp.pass2C.match.itemKey)}</code> · sprite base <strong>${sp.pass2C.match.baseSpriteId}</strong></p>`
+          ? `<p style="font-size:0.76rem;margin:8px 0 0;line-height:1.4">2C: origem [${sp.pass2C.match.originMicro.mx}, ${sp.pass2C.match.originMicro.my}] · coluna +${sp.pass2C.match.columnIndexFromOrigin}${
+              sp.pass2C.match.rowIndexFromOrigin != null
+                ? ` · linha +${sp.pass2C.match.rowIndexFromOrigin}`
+                : ''
+            } · <code>${escDbg(sp.pass2C.match.itemKey)}</code> · sprite base <strong>${sp.pass2C.match.baseSpriteId}</strong></p>`
           : ''
       }
       ${
@@ -853,7 +951,9 @@ function openDebugModal(info) {
           .join('');
         return `<div class="tile-debug-section">
       <div class="tile-debug-section-title">Scatter continuação (Oeste → este tile)</div>
-      <p style="font-size:0.78rem;margin:0 0 8px;color:#a0a0b0">Origem micro [${sc.originMicro.mx}, ${sc.originMicro.my}] · coluna +${sc.columnIndexFromOrigin} · <code>${String(sc.itemKey).replace(/</g, '')}</code> · ${sc.shape}</p>
+      <p style="font-size:0.78rem;margin:0 0 8px;color:#a0a0b0">Origem micro [${sc.originMicro.mx}, ${sc.originMicro.my}] · coluna +${sc.columnIndexFromOrigin}${
+        sc.rowIndexFromOrigin != null ? ` · linha +${sc.rowIndexFromOrigin}` : ''
+      } · <code>${String(sc.itemKey).replace(/</g, '')}</code> · ${sc.shape}</p>
       <div class="sprite-badge"><span class="sprite-badge-label">IDs</span><div class="tile-debug-sprite-stack">${icons}</div></div>
     </div>`;
       })()
@@ -893,6 +993,7 @@ function openDebugModal(info) {
     collisionHtml +
     surroundHtml +
     vegHtml +
+    proceduralHtml +
     overlayHintsHtml +
     formalNearbyHtml +
     scatterPass2Html +
@@ -973,6 +1074,11 @@ btnSettings.addEventListener('click', () => {
   // Sincroniza sliders com o config atual
   document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
   document.getElementById('cfgElevation').value = currentConfig.elevationScale;
+  document.getElementById('cfgElevationDetailOctaves').value =
+    currentConfig.elevationDetailOctaves ?? DEFAULT_CONFIG.elevationDetailOctaves;
+  document.getElementById('cfgElevationDetailStrength').value = Math.round(
+    (currentConfig.elevationDetailStrength ?? DEFAULT_CONFIG.elevationDetailStrength) * 1000
+  );
   document.getElementById('cfgTemperature').value = currentConfig.temperatureScale;
   document.getElementById('cfgMoisture').value = currentConfig.moistureScale;
   document.getElementById('cfgDesertMoisture').value = (currentConfig.desertMoisture || 0.38) * 100;
@@ -988,6 +1094,10 @@ btnApplySettings.addEventListener('click', () => {
   currentConfig = {
     waterLevel: parseInt(document.getElementById('cfgWaterLevel').value) / 100,
     elevationScale: parseInt(document.getElementById('cfgElevation').value),
+    elevationDetailOctaves: parseInt(document.getElementById('cfgElevationDetailOctaves').value, 10),
+    elevationDetailStrength:
+      parseInt(document.getElementById('cfgElevationDetailStrength').value, 10) / 1000,
+    elevationDetailPersistence: currentConfig.elevationDetailPersistence ?? DEFAULT_CONFIG.elevationDetailPersistence,
     temperatureScale: parseInt(document.getElementById('cfgTemperature').value),
     moistureScale: parseInt(document.getElementById('cfgMoisture').value),
     desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value) / 100,
