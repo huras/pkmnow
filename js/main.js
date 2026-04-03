@@ -266,8 +266,46 @@ canvas.addEventListener('contextmenu', (e) => {
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
 
+  // Geração da Matriz 3x3 (Surroundings)
+  const surroundings = {
+    heightStep: [[0,0,0],[0,0,0],[0,0,0]],
+    biome: [['','',''],['','',''],['','','']],
+    formals: [[false,false,false],[false,false,false],[false,false,false]],
+    scatter: [[false,false,false],[false,false,false],[false,false,false]]
+  };
+  
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = mx + dx;
+      const ny = my + dy;
+      const t = getMicroTile(nx, ny, currentData) || { heightStep: 0, biomeId: 0 };
+      const bEnv = Object.values(BIOMES).find(b => b.id === t.biomeId);
+      const fTrees = foliageDensity(nx, ny, seed + 5555, 2);
+      const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
+      
+      surroundings.heightStep[dy+1][dx+1] = t.heightStep;
+      surroundings.biome[dy+1][dx+1] = bEnv ? bEnv.name.substring(0,3).toUpperCase() : '???';
+      surroundings.formals[dy+1][dx+1] = ((nx + ny) % 3 === 0 && fTrees >= 0.6);
+      surroundings.scatter[dy+1][dx+1] = (fScat > 0.82);
+    }
+  }
+
+  // Geração dos dados Macro (Raw Scale)
+  const gx = Math.floor(mx / CHUNK_SIZE);
+  const gy = Math.floor(my / CHUNK_SIZE);
+  let macroIdx = -1;
+  const isMacroValid = gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height;
+  if (isMacroValid) macroIdx = gy * currentData.width + gx;
+
   const debugInfo = {
-    coord: { mx, my },
+    coord: { mx, my, gx, gy },
+    macro: {
+      elevation: isMacroValid ? currentData.cells[macroIdx]?.toFixed(3) : 'N/A',
+      temperature: (isMacroValid && currentData.temperature) ? currentData.temperature[macroIdx]?.toFixed(3) : 'N/A',
+      moisture: (isMacroValid && currentData.moisture) ? currentData.moisture[macroIdx]?.toFixed(3) : 'N/A',
+      anomaly: (isMacroValid && currentData.anomaly) ? currentData.anomaly[macroIdx]?.toFixed(3) : 'N/A'
+    },
+    surroundings,
     terrain: {
       biome: biome?.name,
       heightStep: tile.heightStep,
@@ -320,16 +358,148 @@ canvas.addEventListener('contextmenu', (e) => {
     }
   };
 
-  navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2)).then(() => {
-    const original = infoBar.innerHTML;
-    infoBar.innerHTML = `<b style="color:#00ffff">DEBUG JSON COPIADO! Tile: ${mx},${my}</b>`;
-    setTimeout(() => {
-       if (infoBar.innerHTML.includes('DEBUG JSON COPIADO')) {
-         infoBar.innerHTML = original;
-       }
-    }, 2000);
-  });
+  openDebugModal(debugInfo);
 });
+
+// Modal Logic
+const debugModal = document.getElementById('tile-debug-modal');
+const debugContent = document.getElementById('tile-debug-content');
+const btnDebugClose = document.getElementById('tile-debug-close');
+const btnDebugCopy = document.getElementById('tile-debug-copy-json');
+let lastDebugInfo = null;
+
+if (btnDebugClose) {
+  btnDebugClose.addEventListener('click', () => {
+    debugModal.classList.remove('is-open');
+  });
+}
+
+if (btnDebugCopy) {
+  btnDebugCopy.addEventListener('click', () => {
+    if (lastDebugInfo) {
+      navigator.clipboard.writeText(JSON.stringify(lastDebugInfo, null, 2)).then(() => {
+        const oldText = btnDebugCopy.textContent;
+        btnDebugCopy.textContent = 'COPIED!';
+        setTimeout(() => btnDebugCopy.textContent = oldText, 2000);
+      });
+    }
+  });
+}
+
+function openDebugModal(info) {
+  lastDebugInfo = info;
+  
+  const terrainHtml = `
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">Terrain Intelligence</div>
+      <table class="tile-debug-table">
+        <tbody>
+          <tr><th>Biome</th><td>${info.terrain.biome || 'Unknown'}</td></tr>
+          <tr><th>Height Step</th><td>${info.terrain.heightStep}</td></tr>
+          <tr><th>Macro Terrain</th><td>Elev: ${info.macro.elevation} | T: ${info.macro.temperature} | M: ${info.macro.moisture} | A: ${info.macro.anomaly}</td></tr>
+          <tr><th>Road / City</th><td>${info.terrain.isRoad ? 'Yes' : 'No'} / ${info.terrain.isCity ? 'Yes' : 'No'}</td></tr>
+          <tr><th>Base Sprite ID</th><td>
+             <div style="display:flex; align-items:center; gap:8px;">
+               ${info.terrain.spriteId !== null ? info.terrain.spriteId : 'N/A'} 
+               ${info.terrain.spriteId !== null ? `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(info.terrain.spriteId % 57)*16}px -${Math.floor(info.terrain.spriteId / 57)*16}px;"></div>` : ''}
+             </div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderMatrix = (matrix, renderer) => {
+    return `<div class="tile-debug-matrix">
+      ${matrix.map((row, dy) => row.map((cell, dx) => {
+         const isCenter = dy === 1 && dx === 1;
+         return `<div class="tile-debug-cell ${isCenter ? 'active-center' : ''}">${renderer(cell, isCenter, dy, dx)}</div>`;
+      }).join('')).join('')}
+    </div>`;
+  };
+
+  const surroundHtml = `
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">3x3 Surroundings</div>
+      <div style="display:flex; gap:16px;">
+        <div style="flex:1">
+          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">HeightStep</span>
+          ${renderMatrix(info.surroundings.heightStep, val => `H:${val}`)}
+        </div>
+        <div style="flex:1">
+          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Biomes</span>
+          ${renderMatrix(info.surroundings.biome, val => val)}
+        </div>
+        <div style="flex:1">
+          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Tree/Scatter Occup.</span>
+          ${renderMatrix(info.surroundings.formals, (isTree, isC, dy, dx) => {
+             const isScat = info.surroundings.scatter[dy][dx];
+             if (isTree) return '<span style="color:#8ceda1">Tree</span>';
+             if (isScat) return '<span style="color:#d2a1ff">Scat</span>';
+             return '<span style="color:#444">-</span>';
+          })}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const vegHtml = `
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">Vegetation Matrix</div>
+      <div class="tile-debug-grid">
+        <div class="tile-debug-cell">
+            <span class="cell-label">Trees Noise</span>
+            ${info.vegetation.noiseTrees}
+        </div>
+        <div class="tile-debug-cell">
+            <span class="cell-label">Scatter Noise</span>
+            ${info.vegetation.noiseScatter}
+        </div>
+        <div class="tile-debug-cell">
+            <span class="cell-label">Grass Noise</span>
+            ${info.vegetation.noiseGrass}
+        </div>
+        <div class="tile-debug-cell center">
+            <span class="cell-label">Type Factor</span>
+            ${info.vegetation.typeFactor}
+        </div>
+      </div>
+    </div>
+  `;
+
+  let spritesHtml = '';
+  if (info.vegetation.activeSprites && info.vegetation.activeSprites.length > 0) {
+     const badges = info.vegetation.activeSprites.map(s => {
+        let icons = '';
+        if (s.ids) {
+           icons = s.ids.map(id => `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(id % 57)*16}px -${Math.floor(id / 57)*16}px;"></div>`).join('');
+        }
+        return `<div class="sprite-badge"><span class="sprite-badge-label">${s.type}</span><div class="tile-debug-sprite-stack">${icons}</div></div>`;
+     }).join('');
+     spritesHtml = `
+       <div class="tile-debug-section">
+         <div class="tile-debug-section-title">Active Overlays</div>
+         <div>${badges}</div>
+       </div>
+     `;
+  }
+
+  const logicHtml = `
+     <div class="tile-debug-section">
+       <div class="tile-debug-section-title">Exclusion Logic</div>
+       <table class="tile-debug-table">
+         <tbody>
+           <tr><th>Formal Tree Root</th><td>${info.logic.isFormalTree ? 'Yes' : 'No'}</td></tr>
+           <tr><th>Formal Protected Bounds</th><td>${info.logic.isFormalNeighbor ? 'Yes' : 'No'}</td></tr>
+         </tbody>
+       </table>
+     </div>
+  `;
+
+  debugContent.innerHTML = terrainHtml + surroundHtml + vegHtml + logicHtml + spritesHtml;
+  document.getElementById('tile-debug-title').innerHTML = `Telemetry: Sector [${info.coord.mx}, ${info.coord.my}]`;
+  debugModal.classList.add('is-open');
+}
 
 // Teclado: Track held keys para movimento contínuo estilo Pokémon
 function keyToDir(key) {

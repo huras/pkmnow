@@ -345,3 +345,208 @@ body.play-mode-active {
 .btn-primary:hover {
   opacity: 0.9;
 }
+
+/* =========================================
+   DEBUG MODAL (PLANET GENESIS STYLE)
+   ========================================= */
+.tile-debug-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.tile-debug-modal.is-open {
+  display: flex;
+}
+
+.tile-debug-card {
+  background: #0a0b10;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.6);
+  color: #f0f0f5;
+  font-family: 'Inter', sans-serif;
+}
+
+.tile-debug-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tile-debug-header .hud-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #00d2ff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.tile-debug-header .hud-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #00d2ff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00d2ff;
+}
+
+.tile-debug-body {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.tile-debug-section {
+  margin-bottom: 20px;
+}
+.tile-debug-section:last-child {
+  margin-bottom: 0;
+}
+
+.tile-debug-section-title {
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a0a0b0;
+  margin-bottom: 10px;
+}
+
+.tile-debug-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.tile-debug-table th,
+.tile-debug-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tile-debug-table th {
+  color: #a0a0b0;
+  font-weight: 600;
+}
+
+.tile-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-width: 400px;
+}
+
+.tile-debug-cell {
+  padding: 10px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tile-debug-cell.center {
+  background: rgba(0, 210, 255, 0.1);
+  border-color: #00d2ff;
+}
+
+.tile-debug-cell .cell-label {
+  font-weight: 700;
+  color: #a0a0b0;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.btn-hud {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f0f0f5;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+}
+
+.btn-hud:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #00d2ff;
+}
+
+.tile-debug-sprite-stack {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex-wrap: wrap;
+  justify-content: left;
+}
+
+.sprite-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.4);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.sprite-badge-label {
+  font-size: 0.75rem;
+  color: #a0a0b0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Pequeno wrapper para a div de sprite que usa CSS background para renderizar o pedaço do spritesheet */
+.sprite-icon {
+  width: 16px; 
+  height: 16px; 
+  display: inline-block; 
+  image-rendering: crisp-edges; 
+  image-rendering: pixelated;
+}
+
+.tile-debug-matrix {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.tile-debug-matrix .tile-debug-cell {
+  padding: 6px;
+  text-align: center;
+  font-size: 0.70rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.tile-debug-matrix .tile-debug-cell.active-center {
+  background: rgba(0, 210, 255, 0.1);
+  border-color: #00d2ff;
+  color: #fff;
+  font-weight: bold;
+}

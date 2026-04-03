@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gerador de região — Fase 2</title>
     <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -93,6 +96,20 @@
           <button type="button" id="btnCloseSettings" class="btn-secondary">Fechar</button>
         </div>
       </div>
+    </div>
+
+    <!-- Debug Modal (Planet Genesis) -->
+    <div id="tile-debug-modal" class="tile-debug-modal" aria-hidden="true">
+        <div class="tile-debug-card">
+            <div class="tile-debug-header">
+                <div class="hud-title" id="tile-debug-title">Raw Data Dump</div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-hud" id="tile-debug-copy-json">COPY JSON</button>
+                    <button type="button" class="btn-hud" id="tile-debug-close">CLOSE</button>
+                </div>
+            </div>
+            <div class="tile-debug-body" id="tile-debug-content"></div>
+        </div>
     </div>
 
     <script type="module" src="js/main.js"></script>
