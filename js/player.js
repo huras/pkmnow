@@ -1,5 +1,5 @@
-import { BIOMES } from './biomes.js';
-import { getMicroTile, CHUNK_SIZE } from './chunking.js';
+import { CHUNK_SIZE } from './chunking.js';
+import { canWalkMicroTile } from './walkability.js';
 
 const MOVE_DURATION = 0.15; // segundos para andar 1 tile (estilo Pokémon)
 
@@ -25,15 +25,7 @@ export function setPlayerPos(x, y) {
 }
 
 export function canWalk(x, y, data) {
-  if (x < 0 || x >= data.width * CHUNK_SIZE || y < 0 || y >= data.height * CHUNK_SIZE) return false;
-  
-  const tile = getMicroTile(Math.floor(x), Math.floor(y), data);
-  const bId = tile.biomeId;
-  
-  if (bId === BIOMES.PEAK.id || bId === BIOMES.VOLCANO.id || bId === BIOMES.MOUNTAIN.id) return false;
-  if (bId === BIOMES.OCEAN.id) return false;
-  
-  return true;
+  return canWalkMicroTile(x, y, data);
 }
 
 /**

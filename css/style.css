@@ -347,6 +347,45 @@ body.play-mode-active {
 }
 
 /* =========================================
+   PLAY MODE CONTEXT MENU
+   ========================================= */
+.play-context-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 200px;
+  padding: 6px 0;
+  margin: 0;
+  background: #12131a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+.play-context-menu[hidden] {
+  display: none !important;
+}
+
+.play-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #e8e8f0;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.play-context-menu-item:hover,
+.play-context-menu-item:focus {
+  background: rgba(0, 210, 255, 0.12);
+  color: #fff;
+  outline: none;
+}
+
+/* =========================================
    DEBUG MODAL (PLANET GENESIS STYLE)
    ========================================= */
 .tile-debug-modal {
@@ -549,4 +588,13 @@ body.play-mode-active {
   border-color: #00d2ff;
   color: #fff;
   font-weight: bold;
+}
+
+.tile-debug-biome-label {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  word-break: break-word;
+  hyphens: auto;
+  text-align: center;
 }

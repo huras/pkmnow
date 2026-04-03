@@ -11,6 +11,9 @@ import {
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 
+/** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
+const VEG_MULTITILE_OVERLAP_PX = 1;
+
 const imageCache = new Map();
 
 export async function loadTilesetImages() {
@@ -49,6 +52,9 @@ export function render(canvas, data, options = {}) {
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
+  if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'low';
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, cw, ch);
 
@@ -64,7 +70,10 @@ export function render(canvas, data, options = {}) {
     tileW = 40; tileH = 40;
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
-    ctx.translate(Math.floor(cw/2 - (vx + 0.5) * tileW), Math.floor(ch/2 - (vy + 0.5) * tileH));
+    ctx.translate(
+      Math.round(cw / 2 - (vx + 0.5) * tileW),
+      Math.round(ch / 2 - (vy + 0.5) * tileH)
+    );
     
     const txRadius = Math.ceil((cw / tileW) / 2) + 2;
     const tyRadius = Math.ceil((ch / tileH) / 2) + 2;
@@ -189,19 +198,25 @@ export function render(canvas, data, options = {}) {
      }
   } else {
     // ==== PLAY MODE RENDERER ====
+    const snapPx = (n) => Math.round(n);
     const time = options.settings?.time || 0;
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const TCOLS = 57;
 
+    const twNat = Math.ceil(tileW);
+    const thNat = Math.ceil(tileH);
     const drawTile16 = (tileId, px, py, rotation) => {
       if (!natureImg || tileId == null || tileId < 0) return;
-      const tx = (tileId % TCOLS) * 16, ty = Math.floor(tileId / TCOLS) * 16;
+      const sx = (tileId % TCOLS) * 16;
+      const sy = Math.floor(tileId / TCOLS) * 16;
       if (rotation) {
-        ctx.save(); ctx.translate(px + tileW/2, py + tileH); ctx.rotate(rotation);
-        ctx.drawImage(natureImg, tx, ty, 16, 16, -tileW/2, -tileH, Math.ceil(tileW), Math.ceil(tileH));
+        ctx.save();
+        ctx.translate(snapPx(px + tileW / 2), snapPx(py + tileH));
+        ctx.rotate(rotation);
+        ctx.drawImage(natureImg, sx, sy, 16, 16, -twNat / 2, -thNat, twNat, thNat);
         ctx.restore();
       } else {
-        ctx.drawImage(natureImg, tx, ty, 16, 16, px, py, Math.ceil(tileW), Math.ceil(tileH));
+        ctx.drawImage(natureImg, sx, sy, 16, 16, snapPx(px), snapPx(py), twNat, thNat);
       }
     };
 
@@ -248,7 +263,17 @@ export function render(canvas, data, options = {}) {
 
             const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
             if (img && tileId != null) {
-              ctx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+              ctx.drawImage(
+                img,
+                (tileId % cols) * 16,
+                Math.floor(tileId / cols) * 16,
+                16,
+                16,
+                snapPx(mx * tileW),
+                snapPx(my * tileH),
+                twNat,
+                thNat
+              );
             }
           }
         }
@@ -312,7 +337,14 @@ export function render(canvas, data, options = {}) {
                     const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
                     if (basePart) {
                       const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
-                      basePart.ids.forEach((id, idx) => drawTile16(id, Math.floor(mx * tileW) + (idx % cols) * tileW, Math.floor(my * tileH), angle));
+                      const thB = Math.ceil(tileH);
+                      basePart.ids.forEach((id, idx) => {
+                        const ox = idx % cols;
+                        const oy = Math.floor(idx / cols);
+                        const px = Math.floor(mx * tileW) + ox * tileW;
+                        const py = Math.floor(my * tileH) + oy * (thB - VEG_MULTITILE_OVERLAP_PX);
+                        drawTile16(id, px, py, angle);
+                      });
                       drawnScatterOrigin = true;
                       occupiedByScatter = true;
                     }
@@ -339,7 +371,7 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 3: FORMAL TREE TOPS (Behind/Above Player Logic)
+    // PASS 3: FORMAL TREE BASES ONLY (copas desenhadas no Pass 5, à frente do jogador)
     for (let my = startY; my < endY; my++) {
       for (let mx = startX; mx < endX; mx++) {
         if ((mx + my) % 3 !== 0) continue;
@@ -362,17 +394,15 @@ export function render(canvas, data, options = {}) {
         if (!ids) continue;
         const tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH), tw = Math.ceil(tileW), th = Math.ceil(tileH);
         const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
-        drawTile16(ids.base[0], tx, ty, angle); drawTile16(ids.base[1], tx + tw, ty, angle); // Redraw base for layering
-        ctx.save(); ctx.translate(tx + tw, ty + th); ctx.rotate(angle);
-        ctx.drawImage(natureImg, (ids.top[0]%TCOLS)*16, Math.floor(ids.top[0]/TCOLS)*16, 16, 16, -tw, -th * 2, tw, th);
-        ctx.drawImage(natureImg, (ids.top[1]%TCOLS)*16, Math.floor(ids.top[1]/TCOLS)*16, 16, 16, 0, -th * 2, tw, th);
-        ctx.restore();
+        drawTile16(ids.base[0], tx, ty, angle);
+        drawTile16(ids.base[1], tx + tw - VEG_MULTITILE_OVERLAP_PX, ty, angle);
       }
     }
 
     // PASS 4: PLAYER
     const vx = player.visualX ?? player.x, vy = player.visualY ?? player.y;
-    const pcx = Math.floor((vx + 0.5) * tileW), pcy = Math.floor((vy + 0.5) * tileH);
+    const pcx = snapPx((vx + 0.5) * tileW);
+    const pcy = snapPx((vy + 0.5) * tileH);
     ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#ff2222'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.1, tileW*0.4, tileH*0.3);
     ctx.fillStyle = '#3355ee'; ctx.fillRect(pcx - tileW*0.2, pcy + tileH*0.2, tileW*0.15, tileH*0.2); ctx.fillRect(pcx + tileW*0.05, pcy + tileH*0.2, tileW*0.15, tileH*0.2);
@@ -418,10 +448,25 @@ export function render(canvas, data, options = {}) {
               if (topPart) {
                 const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
                 const topRows = Math.ceil(topPart.ids.length / cols);
-                ctx.save(); ctx.translate(tx + (cols * tw)/2, ty + th); ctx.rotate(angle);
+                ctx.save();
+                ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
+                ctx.rotate(angle);
                 topPart.ids.forEach((id, idx) => {
-                  const ox = idx % cols, oy = Math.floor(idx / cols), drawY = -(topRows - oy + 1) * th;
-                  ctx.drawImage(natureImg, (id % TCOLS) * 16, Math.floor(id / TCOLS) * 16, 16, 16, (ox * tw) - (cols * tw)/2, drawY, tw, th);
+                  const ox = idx % cols;
+                  const oy = Math.floor(idx / cols);
+                  const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
+                  const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
+                  ctx.drawImage(
+                    natureImg,
+                    (id % TCOLS) * 16,
+                    Math.floor(id / TCOLS) * 16,
+                    16,
+                    16,
+                    snapPx(lx),
+                    snapPx(drawY),
+                    tw,
+                    th
+                  );
                 });
                 ctx.restore();
               }
@@ -429,17 +474,39 @@ export function render(canvas, data, options = {}) {
           }
         }
 
-        // 2. Formal Tree Tops
+        // 2. Formal tree canopy: todas as fileiras de "top" (meio + ápice) à frente do jogador
         const treeType = getTreeType(tile.biomeId);
         if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-           const ids = TREE_TILES[treeType];
-           if (ids && getCached(mx+1, my)?.heightStep === tile.heightStep) {
-             const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
-             ctx.save(); ctx.translate(tx + tw, ty + th); ctx.rotate(angle);
-             ctx.drawImage(natureImg, (ids.top[2]%TCOLS)*16, Math.floor(ids.top[2]/TCOLS)*16, 16, 16, -tw, -th * 3, tw, th);
-             ctx.drawImage(natureImg, (ids.top[3]%TCOLS)*16, Math.floor(ids.top[3]/TCOLS)*16, 16, 16, 0, -th * 3, tw, th);
-             ctx.restore();
-           }
+          const ids = TREE_TILES[treeType];
+          if (ids?.top?.length && getCached(mx + 1, my)?.heightStep === tile.heightStep) {
+            const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI * 2) * 0.04;
+            const tops = ids.top;
+            const n = tops.length;
+            const canopyCols = 2;
+            const canopyRows = Math.ceil(n / canopyCols);
+            ctx.save();
+            ctx.translate(snapPx(tx + tw), snapPx(ty + th));
+            ctx.rotate(angle);
+            for (let i = 0; i < n; i++) {
+              const id = tops[i];
+              const ox = i % canopyCols;
+              const row = Math.floor(i / canopyCols);
+              const drawY = -(row + canopyRows) * th + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
+              const lx = ox === 0 ? -tw : -VEG_MULTITILE_OVERLAP_PX;
+              ctx.drawImage(
+                natureImg,
+                (id % TCOLS) * 16,
+                Math.floor(id / TCOLS) * 16,
+                16,
+                16,
+                snapPx(lx),
+                snapPx(drawY),
+                tw,
+                th
+              );
+            }
+            ctx.restore();
+          }
         }
         // 3. Foliage Tops (Cacti/Dry Grass)
         const variant = getGrassVariant(tile.biomeId);
@@ -489,8 +556,20 @@ export function render(canvas, data, options = {}) {
                const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
                const intensity = isCactus ? 0.07 : 0.12;
                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
-               ctx.save(); ctx.translate(tx + tw/2, ty + th); ctx.rotate(angle);
-               ctx.drawImage(natureImg, (topId % TCOLS) * 16, Math.floor(topId / TCOLS) * 16, 16, 16, -tw/2, -th * 2, tw, th);
+               ctx.save();
+               ctx.translate(snapPx(tx + tw / 2), snapPx(ty + th));
+               ctx.rotate(angle);
+               ctx.drawImage(
+                 natureImg,
+                 (topId % TCOLS) * 16,
+                 Math.floor(topId / TCOLS) * 16,
+                 16,
+                 16,
+                 snapPx(-tw / 2),
+                 snapPx(-th * 2 + VEG_MULTITILE_OVERLAP_PX),
+                 tw,
+                 th
+               );
                ctx.restore();
              }
            }
@@ -511,8 +590,14 @@ export function render(canvas, data, options = {}) {
 }
 
 function renderMinimap(canvas, data, player) {
-  const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
-  ctx.fillStyle = '#111'; ctx.fillRect(0, 0, w, h);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.imageSmoothingEnabled = false;
+  if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, w, h);
   const tileW = w / data.width, tileH = h / data.height;
   for (let y = 0; y < data.height; y++) {
     for (let x = 0; x < data.width; x++) {

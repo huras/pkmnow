@@ -2,7 +2,7 @@ import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
-import { player, setPlayerPos, tryMovePlayer, updatePlayer } from './player.js';
+import { player, setPlayerPos, tryMovePlayer, updatePlayer, canWalk } from './player.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js';
@@ -11,6 +11,26 @@ import {
   GRASS_TILES, TREE_TILES,
   getGrassVariant, getTreeType
 } from './biome-tiles.js';
+import { getTerrainSetWalkKind, isBaseTerrainSpriteWalkable } from './walkability.js';
+
+/** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
+const OBJECT_TILE_FLAGS_BY_ID = (() => {
+  const m = new Map();
+  for (const objSet of Object.values(OBJECT_SETS)) {
+    for (const part of objSet.parts || []) {
+      if (typeof part.walkable !== 'boolean' || typeof part.abovePlayer !== 'boolean') continue;
+      for (const id of part.ids || []) {
+        m.set(id, { walkable: part.walkable, abovePlayer: part.abovePlayer });
+      }
+    }
+  }
+  return m;
+})();
+
+function getObjectTileFlags(tileId) {
+  if (tileId == null) return null;
+  return OBJECT_TILE_FLAGS_BY_ID.get(tileId) ?? null;
+}
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -212,9 +232,10 @@ btnBackToMap.addEventListener('click', () => {
 function resizeCanvas() {
   if (appMode === 'play') {
     const wrap = document.querySelector('.map-wrap');
-    canvas.width = wrap.clientWidth || window.innerWidth;
-    // Pega o espaço que sobra pra tentar preencher bem a tela:
-    canvas.height = wrap.clientHeight || window.innerHeight;
+    const w = Math.max(1, Math.floor(wrap.clientWidth || window.innerWidth));
+    const h = Math.max(1, Math.floor(wrap.clientHeight || window.innerHeight));
+    canvas.width = w;
+    canvas.height = h;
   } else {
     canvas.width = 512;
     canvas.height = 512;
@@ -240,71 +261,135 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-// Menu de contexto para Debug no Modo Play
-canvas.addEventListener('contextmenu', (e) => {
-  if (appMode !== 'play' || !currentData) return;
-  e.preventDefault();
+function buildPlayModeTileDebugInfo(mx, my, data) {
+  const tile = getMicroTile(mx, my, data);
+  const biome = Object.values(BIOMES).find((b) => b.id === tile.biomeId);
 
-  const rect = canvas.getBoundingClientRect();
-  const screenX = e.clientX - rect.left;
-  const screenY = e.clientY - rect.top;
-  
-  // Constantes do render.js Play Mode
-  const tileW = 40, tileH = 40;
-  const vx = player.visualX ?? player.x;
-  const vy = player.visualY ?? player.y;
-
-  const mx = Math.floor((screenX - canvas.width/2)/tileW + vx + 0.5);
-  const my = Math.floor((screenY - canvas.height/2)/tileH + vy + 0.5);
-
-  const tile = getMicroTile(mx, my, currentData);
-  const biome = Object.values(BIOMES).find(b => b.id === tile.biomeId);
-
-  const seed = currentData.seed;
+  const seed = data.seed;
   const fdTrees = foliageDensity(mx, my, seed + 5555, 2);
   const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
 
-  // Geração da Matriz 3x3 (Surroundings)
   const surroundings = {
-    heightStep: [[0,0,0],[0,0,0],[0,0,0]],
-    biome: [['','',''],['','',''],['','','']],
-    formals: [[false,false,false],[false,false,false],[false,false,false]],
-    scatter: [[false,false,false],[false,false,false],[false,false,false]]
+    heightStep: [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0]
+    ],
+    biome: [
+      ['', '', ''],
+      ['', '', ''],
+      ['', '', '']
+    ],
+    formals: [
+      [false, false, false],
+      [false, false, false],
+      [false, false, false]
+    ],
+    scatter: [
+      [false, false, false],
+      [false, false, false],
+      [false, false, false]
+    ]
   };
-  
+
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
       const nx = mx + dx;
       const ny = my + dy;
-      const t = getMicroTile(nx, ny, currentData) || { heightStep: 0, biomeId: 0 };
-      const bEnv = Object.values(BIOMES).find(b => b.id === t.biomeId);
+      const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
+      const bEnv = Object.values(BIOMES).find((b) => b.id === t.biomeId);
       const fTrees = foliageDensity(nx, ny, seed + 5555, 2);
       const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
       const treeType = getTreeType(t.biomeId);
-      
-      surroundings.heightStep[dy+1][dx+1] = t.heightStep;
-      surroundings.biome[dy+1][dx+1] = bEnv ? bEnv.name.substring(0,3).toUpperCase() : '???';
-      surroundings.formals[dy+1][dx+1] = (!!treeType && (nx + ny) % 3 === 0 && fTrees >= 0.6);
-      surroundings.scatter[dy+1][dx+1] = (fScat > 0.82);
+
+      surroundings.heightStep[dy + 1][dx + 1] = t.heightStep;
+      surroundings.biome[dy + 1][dx + 1] = bEnv ? bEnv.name : '???';
+      surroundings.formals[dy + 1][dx + 1] = !!treeType && (nx + ny) % 3 === 0 && fTrees >= 0.6;
+      surroundings.scatter[dy + 1][dx + 1] = fScat > 0.82;
     }
   }
 
-  // Geração dos dados Macro (Raw Scale)
   const gx = Math.floor(mx / CHUNK_SIZE);
   const gy = Math.floor(my / CHUNK_SIZE);
   let macroIdx = -1;
-  const isMacroValid = gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height;
-  if (isMacroValid) macroIdx = gy * currentData.width + gx;
+  const isMacroValid = gx >= 0 && gx < data.width && gy >= 0 && gy < data.height;
+  if (isMacroValid) macroIdx = gy * data.width + gx;
 
-  const debugInfo = {
+  const centerSpriteId = (() => {
+    const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+    const set = TERRAIN_SETS[setName];
+    if (!set) return null;
+    const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+    const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
+    return set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+  })();
+
+  const activeSprites = (() => {
+    const sprites = [];
+    const treeType = getTreeType(tile.biomeId);
+    const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
+    const isFormalNeighbor = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
+    const isFormalOccupied = isFormalTree || isFormalNeighbor;
+
+    if (isFormalTree) {
+      const ids = TREE_TILES[treeType];
+      if (ids) sprites.push({ type: 'formal-tree-base', ids: ids.base }, { type: 'formal-tree-top', ids: ids.top });
+    }
+
+    let occupiedByScatter = false;
+    const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
+    if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
+      for (let dox = 1; dox <= 3; dox++) {
+        const nx = mx - dox;
+        const nTile = getMicroTile(nx, my, data);
+        if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82) {
+          const nItemKey = scatterItems[Math.floor(seededHash(nx, my, seed + 222) * scatterItems.length)];
+          const nObjSet = OBJECT_SETS[nItemKey];
+          if (nObjSet && dox < parseShape(nObjSet.shape).cols) {
+            occupiedByScatter = true;
+            break;
+          }
+        }
+      }
+
+      if (!isFormalOccupied && !occupiedByScatter && fdScatter > 0.82) {
+        const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
+        const objSet = OBJECT_SETS[itemKey];
+        if (objSet) {
+          const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+          const top = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+          if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
+          if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
+          occupiedByScatter = true;
+        }
+      }
+    }
+
+    if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45) {
+      const variant = getGrassVariant(tile.biomeId);
+      const tiles = GRASS_TILES[variant];
+      if (tiles) {
+        const mainId = ft < 0.5 ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original);
+        sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
+        if (variant === 'desert' && ft >= 0.5 && tiles.cactusTop) {
+          sprites.push({ type: `grass-${variant}-top`, ids: [tiles.cactusTop] });
+        } else if (tiles.originalTop && ft < 0.5) {
+          sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
+        }
+      }
+    }
+    return sprites;
+  })();
+
+  return {
     coord: { mx, my, gx, gy },
     macro: {
-      elevation: isMacroValid ? currentData.cells[macroIdx]?.toFixed(3) : 'N/A',
-      temperature: (isMacroValid && currentData.temperature) ? currentData.temperature[macroIdx]?.toFixed(3) : 'N/A',
-      moisture: (isMacroValid && currentData.moisture) ? currentData.moisture[macroIdx]?.toFixed(3) : 'N/A',
-      anomaly: (isMacroValid && currentData.anomaly) ? currentData.anomaly[macroIdx]?.toFixed(3) : 'N/A'
+      elevation: isMacroValid ? data.cells[macroIdx]?.toFixed(3) : 'N/A',
+      temperature: isMacroValid && data.temperature ? data.temperature[macroIdx]?.toFixed(3) : 'N/A',
+      moisture: isMacroValid && data.moisture ? data.moisture[macroIdx]?.toFixed(3) : 'N/A',
+      anomaly: isMacroValid && data.anomaly ? data.anomaly[macroIdx]?.toFixed(3) : 'N/A'
     },
     surroundings,
     terrain: {
@@ -312,91 +397,122 @@ canvas.addEventListener('contextmenu', (e) => {
       heightStep: tile.heightStep,
       isRoad: tile.isRoad,
       isCity: tile.isCity,
-      spriteId: (function() {
-         const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-         const set = TERRAIN_SETS[setName];
-         if (!set) return null;
-         const isAtOrAbove = (r, c) => (getMicroTile(c, r, currentData)?.heightStep ?? -99) >= tile.heightStep;
-         const role = getRoleForCell(my, mx, currentData.height * CHUNK_SIZE, currentData.width * CHUNK_SIZE, isAtOrAbove, set.type);
-         return set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
-      })()
+      spriteId: centerSpriteId
     },
     vegetation: {
       noiseTrees: fdTrees.toFixed(3),
       noiseScatter: fdScatter.toFixed(3),
       noiseGrass: fdGrass.toFixed(3),
       typeFactor: ft.toFixed(3),
-      activeSprites: (function() {
-        const sprites = [];
-        const treeType = getTreeType(tile.biomeId);
-        const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
-        const isFormalNeighbor = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
-        const isFormalOccupied = isFormalTree || isFormalNeighbor;
-
-        // Checando Formal Trees
-        if (isFormalTree) {
-           const ids = TREE_TILES[treeType];
-           if (ids) sprites.push({ type: 'formal-tree-base', ids: ids.base }, { type: 'formal-tree-top', ids: ids.top });
-        }
-
-        // Checando Scatter
-        let occupiedByScatter = false;
-        const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-        if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
-           // Vizinhos à esquerda
-           for (let dox = 1; dox <= 3; dox++) {
-             const nx = mx - dox, nTile = getMicroTile(nx, my, currentData);
-             if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82) {
-               const nItemKey = scatterItems[Math.floor(seededHash(nx, my, seed + 222) * scatterItems.length)];
-               const nObjSet = OBJECT_SETS[nItemKey];
-               if (nObjSet && dox < parseShape(nObjSet.shape).cols) { occupiedByScatter = true; break; }
-             }
-           }
-
-           if (!isFormalOccupied && !occupiedByScatter && fdScatter > 0.82) {
-              const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
-              const objSet = OBJECT_SETS[itemKey];
-              if (objSet) {
-                 const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
-                 const top = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
-                 if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
-                 if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
-                 occupiedByScatter = true;
-              }
-           }
-        }
-
-        // Checando Grass
-        if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45) {
-           const variant = getGrassVariant(tile.biomeId), tiles = GRASS_TILES[variant];
-           if (tiles) {
-              const mainId = (ft < 0.5) ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original);
-              sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
-              // Se tiver topo (ex: cacto), incluir também
-              if (variant === 'desert' && ft >= 0.5 && tiles.cactusTop) {
-                 sprites.push({ type: `grass-${variant}-top`, ids: [tiles.cactusTop] });
-              } else if (tiles.originalTop && ft < 0.5) {
-                 sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
-              }
-           }
-        }
-        return sprites;
-      })()
+      activeSprites
+    },
+    collision: {
+      gameCanWalk: canWalk(mx, my, data),
+      walkSurfaceKind: getTerrainSetWalkKind(BIOME_TO_TERRAIN[tile.biomeId] || 'grass'),
+      baseTerrainSpriteWalkable: isBaseTerrainSpriteWalkable(centerSpriteId),
+      terrainSprite: {
+        id: centerSpriteId,
+        objectSets: getObjectTileFlags(centerSpriteId)
+      },
+      overlays: activeSprites.map((s) => ({
+        type: s.type,
+        tiles: (s.ids || []).map((id) => ({
+          id,
+          objectSets: getObjectTileFlags(id)
+        }))
+      }))
     },
     logic: {
-      isFormalTree: (function(){ 
+      isFormalTree: (() => {
         const treeType = getTreeType(tile.biomeId);
         return !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
       })(),
-      isFormalNeighbor: (function(){
+      isFormalNeighbor: (() => {
         const treeType = getTreeType(tile.biomeId);
         return !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
       })()
     }
   };
+}
 
-  openDebugModal(debugInfo);
+const playContextMenu = document.getElementById('play-context-menu');
+const btnPlayCtxTeleport = document.getElementById('play-ctx-teleport');
+const btnPlayCtxDebug = document.getElementById('play-ctx-debug');
+let playContextPending = null;
+
+function closePlayContextMenu() {
+  if (!playContextMenu) return;
+  playContextMenu.hidden = true;
+  playContextMenu.setAttribute('aria-hidden', 'true');
+  playContextPending = null;
+  window.removeEventListener('mousedown', onPlayContextMenuDismiss, true);
+  window.removeEventListener('keydown', onPlayContextMenuKey, true);
+}
+
+function onPlayContextMenuDismiss(ev) {
+  if (playContextMenu && playContextMenu.contains(ev.target)) return;
+  closePlayContextMenu();
+}
+
+function onPlayContextMenuKey(ev) {
+  if (ev.key === 'Escape') closePlayContextMenu();
+}
+
+function openPlayContextMenu(pageX, pageY, mx, my) {
+  if (!playContextMenu) return;
+  closePlayContextMenu();
+  playContextPending = { mx, my };
+  playContextMenu.hidden = false;
+  playContextMenu.setAttribute('aria-hidden', 'false');
+  playContextMenu.style.left = `${pageX}px`;
+  playContextMenu.style.top = `${pageY}px`;
+  setTimeout(() => {
+    window.addEventListener('mousedown', onPlayContextMenuDismiss, true);
+    window.addEventListener('keydown', onPlayContextMenuKey, true);
+  }, 0);
+}
+
+canvas.addEventListener('contextmenu', (e) => {
+  if (appMode !== 'play' || !currentData) return;
+  e.preventDefault();
+
+  const rect = canvas.getBoundingClientRect();
+  const screenX = e.clientX - rect.left;
+  const screenY = e.clientY - rect.top;
+
+  const tileW = 40;
+  const tileH = 40;
+  const vx = player.visualX ?? player.x;
+  const vy = player.visualY ?? player.y;
+
+  const mx = Math.floor((screenX - canvas.width / 2) / tileW + vx + 0.5);
+  const my = Math.floor((screenY - canvas.height / 2) / tileH + vy + 0.5);
+
+  const maxMX = currentData.width * CHUNK_SIZE;
+  const maxMY = currentData.height * CHUNK_SIZE;
+  if (mx < 0 || my < 0 || mx >= maxMX || my >= maxMY) return;
+
+  openPlayContextMenu(e.clientX, e.clientY, mx, my);
 });
+
+if (btnPlayCtxTeleport) {
+  btnPlayCtxTeleport.addEventListener('click', () => {
+    if (!playContextPending || !currentData) return;
+    const { mx, my } = playContextPending;
+    setPlayerPos(mx, my);
+    closePlayContextMenu();
+    updateView();
+  });
+}
+
+if (btnPlayCtxDebug) {
+  btnPlayCtxDebug.addEventListener('click', () => {
+    if (!playContextPending || !currentData) return;
+    const { mx, my } = playContextPending;
+    closePlayContextMenu();
+    openDebugModal(buildPlayModeTileDebugInfo(mx, my, currentData));
+  });
+}
 
 // Modal Logic
 const debugModal = document.getElementById('tile-debug-modal');
@@ -423,9 +539,21 @@ if (btnDebugCopy) {
   });
 }
 
+function formatObjectSetsFlags(f) {
+  if (!f) return '— (fora de OBJECT_SETS; bases de terreno vêm de TERRAIN_SETS)';
+  return `walkable: ${f.walkable ? 'sim' : 'não'} · acima do jogador: ${f.abovePlayer ? 'sim' : 'não'}`;
+}
+
 function openDebugModal(info) {
   lastDebugInfo = info;
-  
+  const coll = info.collision;
+  const overlayRows = coll && coll.overlays && coll.overlays.length
+    ? coll.overlays.map((o) => {
+        const cells = o.tiles.map((t) => `#${t.id} → ${formatObjectSetsFlags(t.objectSets)}`).join('<br>');
+        return `<tr><th style="vertical-align:top">${o.type}</th><td style="font-size:0.78rem;line-height:1.35">${cells}</td></tr>`;
+      }).join('')
+    : '<tr><th>Overlays</th><td>—</td></tr>';
+
   const terrainHtml = `
     <div class="tile-debug-section">
       <div class="tile-debug-section-title">Terrain Intelligence</div>
@@ -446,6 +574,21 @@ function openDebugModal(info) {
     </div>
   `;
 
+  const collisionHtml = coll ? `
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">Colisão / metadados do tileset</div>
+      <table class="tile-debug-table">
+        <tbody>
+          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(Layer Base / Terrain Foliage + sprite na allowlist)</span></td></tr>
+          <tr><th>Superfície (set)</th><td>${coll.walkSurfaceKind === 'layer-base' ? 'Layer Base' : coll.walkSurfaceKind === 'terrain-foliage' ? 'Terrain Foliage' : '— (água, penhasco, lava…)'}</td></tr>
+          <tr><th>Sprite base permitido</th><td>${coll.baseTerrainSpriteWalkable ? 'sim' : 'não'}</td></tr>
+          <tr><th>Sprite base → OBJECT_SETS</th><td>${formatObjectSetsFlags(coll.terrainSprite?.objectSets)}</td></tr>
+          ${overlayRows}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
   const renderMatrix = (matrix, renderer) => {
     return `<div class="tile-debug-matrix">
       ${matrix.map((row, dy) => row.map((cell, dx) => {
@@ -465,7 +608,7 @@ function openDebugModal(info) {
         </div>
         <div style="flex:1">
           <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Biomes</span>
-          ${renderMatrix(info.surroundings.biome, val => val)}
+          ${renderMatrix(info.surroundings.biome, val => `<span class="tile-debug-biome-label">${val}</span>`)}
         </div>
         <div style="flex:1">
           <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Tree/Scatter Occup.</span>
@@ -533,7 +676,7 @@ function openDebugModal(info) {
      </div>
   `;
 
-  debugContent.innerHTML = terrainHtml + surroundHtml + vegHtml + logicHtml + spritesHtml;
+  debugContent.innerHTML = terrainHtml + collisionHtml + surroundHtml + vegHtml + logicHtml + spritesHtml;
   document.getElementById('tile-debug-title').innerHTML = `Telemetry: Sector [${info.coord.mx}, ${info.coord.my}]`;
   debugModal.classList.add('is-open');
 }
