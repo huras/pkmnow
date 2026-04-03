@@ -146,7 +146,7 @@ export function render(canvas, data, options = {}) {
 
          // Rótulo
          ctx.fillStyle = '#fff';
-         ctx.font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
+         ctx. font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
          ctx.textAlign = 'center';
          ctx.lineWidth = 3;
          ctx.strokeStyle = '#000';
@@ -296,7 +296,8 @@ export function render(canvas, data, options = {}) {
                   if (canSpawn) {
                     const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
                     if (basePart) {
-                      basePart.ids.forEach((id, idx) => drawTile16(id, Math.floor(mx * tileW) + (idx % cols) * tileW, Math.floor(my * tileH), 0));
+                      const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
+                      basePart.ids.forEach((id, idx) => drawTile16(id, Math.floor(mx * tileW) + (idx % cols) * tileW, Math.floor(my * tileH), angle));
                       drawnScatterOrigin = true;
                       occupiedByScatter = true;
                     }
@@ -332,12 +333,10 @@ export function render(canvas, data, options = {}) {
             
             const tiles = GRASS_TILES[variant];
             const fType = foliageType(mx, my, data.seed);
-            if (variant === 'desert') {
-              drawTile16(fType >= 0.5 ? tiles.cactusBase : tiles.original, Math.floor(mx * tileW), Math.floor(my * tileH), 0);
-            } else {
-              const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.12;
-              drawTile16(fType < 0.5 ? tiles.original : (tiles.grass2 || tiles.original), Math.floor(mx * tileW), Math.floor(my * tileH), angle);
-            }
+            const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
+            const intensity = isCactus ? 0.07 : 0.12;
+            const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
+            drawTile16(fType < 0.5 ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original), Math.floor(mx * tileW), Math.floor(my * tileH), angle);
           }
         }
       }
@@ -362,11 +361,11 @@ export function render(canvas, data, options = {}) {
         const treeType = getTreeType(tile.biomeId), ids = TREE_TILES[treeType];
         if (!ids) continue;
         const tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH), tw = Math.ceil(tileW), th = Math.ceil(tileH);
-        const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.08;
-        drawTile16(ids.base[0], tx, ty); drawTile16(ids.base[1], tx + tw, ty); // Redraw base for layering
-        ctx.save(); ctx.translate(tx + tw, ty + 1); ctx.rotate(angle);
-        ctx.drawImage(natureImg, (ids.top[0]%TCOLS)*16, Math.floor(ids.top[0]/TCOLS)*16, 16, 16, -tw, -th, tw, th);
-        ctx.drawImage(natureImg, (ids.top[1]%TCOLS)*16, Math.floor(ids.top[1]/TCOLS)*16, 16, 16, 0, -th, tw, th);
+        const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
+        drawTile16(ids.base[0], tx, ty, angle); drawTile16(ids.base[1], tx + tw, ty, angle); // Redraw base for layering
+        ctx.save(); ctx.translate(tx + tw, ty + th); ctx.rotate(angle);
+        ctx.drawImage(natureImg, (ids.top[0]%TCOLS)*16, Math.floor(ids.top[0]/TCOLS)*16, 16, 16, -tw, -th * 2, tw, th);
+        ctx.drawImage(natureImg, (ids.top[1]%TCOLS)*16, Math.floor(ids.top[1]/TCOLS)*16, 16, 16, 0, -th * 2, tw, th);
         ctx.restore();
       }
     }
@@ -416,11 +415,11 @@ export function render(canvas, data, options = {}) {
             if (canSpawn) {
               const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
               if (topPart) {
-                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.12;
+                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
                 const topRows = Math.ceil(topPart.ids.length / cols);
-                ctx.save(); ctx.translate(tx + (cols * tw)/2, ty + 1); ctx.rotate(angle);
+                ctx.save(); ctx.translate(tx + (cols * tw)/2, ty + th); ctx.rotate(angle);
                 topPart.ids.forEach((id, idx) => {
-                  const ox = idx % cols, oy = Math.floor(idx / cols), drawY = -(topRows - oy) * th;
+                  const ox = idx % cols, oy = Math.floor(idx / cols), drawY = -(topRows - oy + 1) * th;
                   ctx.drawImage(natureImg, (id % TCOLS) * 16, Math.floor(id / TCOLS) * 16, 16, 16, (ox * tw) - (cols * tw)/2, drawY, tw, th);
                 });
                 ctx.restore();
@@ -433,22 +432,58 @@ export function render(canvas, data, options = {}) {
         if ((mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
            const treeType = getTreeType(tile.biomeId), ids = TREE_TILES[treeType];
            if (ids && getCached(mx+1, my)?.heightStep === tile.heightStep) {
-             const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.08;
-             ctx.save(); ctx.translate(tx + tw, ty + 1); ctx.rotate(angle);
-             ctx.drawImage(natureImg, (ids.top[2]%TCOLS)*16, Math.floor(ids.top[2]/TCOLS)*16, 16, 16, -tw, -th*2, tw, th);
-             ctx.drawImage(natureImg, (ids.top[3]%TCOLS)*16, Math.floor(ids.top[3]/TCOLS)*16, 16, 16, 0, -th*2, tw, th);
+             const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
+             ctx.save(); ctx.translate(tx + tw, ty + th); ctx.rotate(angle);
+             ctx.drawImage(natureImg, (ids.top[2]%TCOLS)*16, Math.floor(ids.top[2]/TCOLS)*16, 16, 16, -tw, -th * 3, tw, th);
+             ctx.drawImage(natureImg, (ids.top[3]%TCOLS)*16, Math.floor(ids.top[3]/TCOLS)*16, 16, 16, 0, -th * 3, tw, th);
              ctx.restore();
            }
         }
+        // 3. Foliage Tops (Cacti/Dry Grass)
+        const variant = getGrassVariant(tile.biomeId);
+        const tiles = GRASS_TILES[variant];
+        if (tiles && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD && !tile.isRoad && !tile.isCity) {
+           const fType = foliageType(mx, my, data.seed);
+           let topId = null;
+           if (variant === 'desert' && fType >= 0.5) topId = tiles.cactusTop;
+           else if (tiles.originalTop && fType < 0.5) topId = tiles.originalTop;
 
-        // 3. Cactus Top
-        if (tile.biomeId === BIOMES.DESERT.id && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD) {
-          const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.12;
-          const fType = foliageType(mx, my, data.seed);
-          const topId = (fType >= 0.5) ? GRASS_TILES.desert.cactusTop : (GRASS_TILES.desert.original - 57);
-          ctx.save(); ctx.translate(tx + tw/2, ty + 1); ctx.rotate(angle);
-          ctx.drawImage(natureImg, (topId % TCOLS) * 16, Math.floor(topId / TCOLS) * 16, 16, 16, -tw/2, -th, tw, th);
-          ctx.restore();
+           if (topId) {
+             // Exclusion checkIDENTICA ao Pass 2 para evitar "meia planta"
+             const isFormalTree = (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+             const isFormalNeighbor = (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+             
+             let occupiedByScatter = false;
+             const items = BIOME_VEGETATION[tile.biomeId] || [];
+             if (items.length > 0) {
+               if (!(isFormalTree || isFormalNeighbor) && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+                 occupiedByScatter = true;
+               } else {
+                 for (let dox = 1; dox <= 3; dox++) {
+                   const nx = mx - dox;
+                   if (foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82) {
+                     const nItem = items[Math.floor(seededHash(nx, my, data.seed + 222) * items.length)];
+                     const nObj = OBJECT_SETS[nItem];
+                     if (nObj) {
+                       const { cols: nCols } = parseShape(nObj.shape);
+                       let nCanSpawn = true;
+                       for(let ox=0; ox<nCols; ox++) { if ((nx+ox+my)%3===0 && foliageDensity(nx+ox, my, data.seed+5555, TREE_NOISE_SCALE)>=TREE_DENSITY_THRESHOLD || (nx+ox+my)%3===1 && foliageDensity(nx+ox-1, my, data.seed+5555, TREE_NOISE_SCALE)>=TREE_DENSITY_THRESHOLD) { nCanSpawn = false; break; } }
+                       if (nCanSpawn && dox < nCols) { occupiedByScatter = true; break; }
+                     }
+                   }
+                 }
+               }
+             }
+
+             if (!isFormalTree && !isFormalNeighbor && !occupiedByScatter) {
+               const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
+               const intensity = isCactus ? 0.07 : 0.12;
+               const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
+               ctx.save(); ctx.translate(tx + tw/2, ty + th); ctx.rotate(angle);
+               ctx.drawImage(natureImg, (topId % TCOLS) * 16, Math.floor(topId / TCOLS) * 16, 16, 16, -tw/2, -th * 2, tw, th);
+               ctx.restore();
+             }
+           }
         }
       }
     }

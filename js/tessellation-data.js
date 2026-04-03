@@ -2207,7 +2207,7 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "large-green-broadleaf-1 [2x1]": {
+  "small-cactus [2x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "shape": "2x1",
     "parts": [

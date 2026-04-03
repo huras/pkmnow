@@ -33,6 +33,8 @@ export const BIOME_VEGETATION = {
   [BIOMES.SNOW.id]: ['baby-pine-tree-full-snow [2x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
+  [BIOMES.DESERT.id]: ['small-cactus [2x1]'],
+  [BIOMES.SAVANNA.id]: ['savannah-tree [4x3]', 'small-cactus [2x1]'],
 };
 
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====
@@ -43,7 +45,7 @@ export const GRASS_TILES = {
   default:  { original: 117, small: 60, grass2: 3 },
   ice:      { original: 118, small: 61, grass2: 4 },
   desert:   { original: 1884, cactusBase: 1997, cactusTop: 1940 },
-  dirt:     { original: 65, small: 60, mushroom: 119, dryGrass: 65 },
+  dirt:     { original: 65, originalTop: 8, small: 60, mushroom: 119, dryGrass: 65 },
 };
 
 /** Tree overlay: 2×3 tiles (2 cols, 3 rows: 2 top + 1 base row) */
@@ -64,7 +66,8 @@ export const NO_GRASS_BIOMES = new Set([
 export const NO_TREE_BIOMES = new Set([
   BIOMES.OCEAN.id, BIOMES.BEACH.id, BIOMES.DESERT.id,
   BIOMES.MOUNTAIN.id, BIOMES.PEAK.id, BIOMES.ICE.id,
-  BIOMES.VOLCANO.id, BIOMES.TUNDRA.id, BIOMES.ARCANE.id
+  BIOMES.VOLCANO.id, BIOMES.TUNDRA.id, BIOMES.ARCANE.id,
+  BIOMES.SAVANNA.id
 ]);
 
 /**
@@ -84,7 +87,6 @@ export function getGrassVariant(biomeId) {
 export function getTreeType(biomeId) {
   if (NO_TREE_BIOMES.has(biomeId)) return null;
   if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TAIGA.id) return 'pine';
-  if (biomeId === BIOMES.SAVANNA.id) return 'palm';
   if (biomeId === BIOMES.GHOST_WOODS.id) return 'broadleaf2';
   return 'broadleaf'; // Forest, Grassland, Jungle
 }
