@@ -7,7 +7,8 @@ import {
   GRASS_TILES, TREE_TILES,
   getGrassVariant, getTreeType,
   GRASS_DENSITY_THRESHOLD, TREE_DENSITY_THRESHOLD,
-  GRASS_NOISE_SCALE, TREE_NOISE_SCALE
+  GRASS_NOISE_SCALE, TREE_NOISE_SCALE,
+  scatterHasWindSway
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 
@@ -201,14 +202,23 @@ export function render(canvas, data, options = {}) {
     const snapPx = (n) => Math.round(n);
     const time = options.settings?.time || 0;
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
-    const TCOLS = 57;
+    const cavesImg = imageCache.get('tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png');
+    const TCOLS_NATURE = 57;
+    const TCOLS_CAVES = 50;
+
+    const atlasFromObjectSet = (objSet) => {
+      const path = TessellationEngine.getImagePath(objSet?.file);
+      const img = path ? imageCache.get(path) : null;
+      const cols = path.includes('caves') ? TCOLS_CAVES : TCOLS_NATURE;
+      return { img, cols };
+    };
 
     const twNat = Math.ceil(tileW);
     const thNat = Math.ceil(tileH);
     const drawTile16 = (tileId, px, py, rotation) => {
       if (!natureImg || tileId == null || tileId < 0) return;
-      const sx = (tileId % TCOLS) * 16;
-      const sy = Math.floor(tileId / TCOLS) * 16;
+      const sx = (tileId % TCOLS_NATURE) * 16;
+      const sy = Math.floor(tileId / TCOLS_NATURE) * 16;
       if (rotation) {
         ctx.save();
         ctx.translate(snapPx(px + tileW / 2), snapPx(py + tileH));
@@ -217,6 +227,21 @@ export function render(canvas, data, options = {}) {
         ctx.restore();
       } else {
         ctx.drawImage(natureImg, sx, sy, 16, 16, snapPx(px), snapPx(py), twNat, thNat);
+      }
+    };
+    const drawScatterTile16 = (objSet, tileId, px, py, rotation) => {
+      const { img, cols } = atlasFromObjectSet(objSet);
+      if (!img || tileId == null || tileId < 0) return;
+      const sx = (tileId % cols) * 16;
+      const sy = Math.floor(tileId / cols) * 16;
+      if (rotation) {
+        ctx.save();
+        ctx.translate(snapPx(px + tileW / 2), snapPx(py + tileH));
+        ctx.rotate(rotation);
+        ctx.drawImage(img, sx, sy, 16, 16, -twNat / 2, -thNat, twNat, thNat);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, sx, sy, 16, 16, snapPx(px), snapPx(py), twNat, thNat);
       }
     };
 
@@ -281,7 +306,7 @@ export function render(canvas, data, options = {}) {
     }
 
     // PASS 2: BASES (Veggie Trunks / Scatter Bases)
-    if (natureImg) {
+    if (natureImg || cavesImg) {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
           const tile = getCached(mx, my);
@@ -293,6 +318,90 @@ export function render(canvas, data, options = {}) {
             const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
             const role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
             if (role !== 'CENTER') continue;
+          }
+
+          // 2C: colunas de base do scatter com dox≥1 sempre aqui (origem desenha só coluna 0 no 2B). Evita buraco quando a origem está na janela mas o 2B não rodou (formal, scatter a Oeste, etc.).
+          {
+            const scatterItemsC = BIOME_VEGETATION[tile.biomeId] || [];
+            if (scatterItemsC.length > 0 && !tile.isRoad && !tile.isCity) {
+              for (let dox = 1; dox <= 4; dox++) {
+                const ox0 = mx - dox;
+                if (ox0 < 0 || ox0 >= width * CHUNK_SIZE) continue;
+                const nTile = getMicroTile(ox0, my, data);
+                if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+                if (tile.heightStep !== nTile.heightStep) continue;
+                const treeFormalOrigin = getTreeType(nTile.biomeId);
+                const isFormalTreeOrig = (tx, ty) =>
+                  !!treeFormalOrigin &&
+                  (tx + ty) % 3 === 0 &&
+                  foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                const isFormalNeighborOrig = (tx, ty) =>
+                  !!treeFormalOrigin &&
+                  (tx + ty) % 3 === 1 &&
+                  foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                if (isFormalTreeOrig(ox0, my) || isFormalNeighborOrig(ox0, my)) continue;
+                const scatterItemsOrigin = BIOME_VEGETATION[nTile.biomeId] || [];
+                let occOriginWest = false;
+                for (let dw = 1; dw <= 3; dw++) {
+                  const nxw = ox0 - dw;
+                  const tileWest = getCached(nxw, my);
+                  if (
+                    tileWest &&
+                    scatterItemsOrigin.length > 0 &&
+                    foliageDensity(nxw, my, data.seed + 111, 2.5) > 0.82 &&
+                    !tileWest.isRoad
+                  ) {
+                    const ik = scatterItemsOrigin[Math.floor(seededHash(nxw, my, data.seed + 222) * scatterItemsOrigin.length)];
+                    const os = OBJECT_SETS[ik];
+                    if (os) {
+                      const { cols: cWest } = parseShape(os.shape);
+                      if (dw < cWest) {
+                        occOriginWest = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+                if (occOriginWest) continue;
+                const setO = TERRAIN_SETS[BIOME_TO_TERRAIN[nTile.biomeId] || 'grass'];
+                if (setO) {
+                  const chkO = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= nTile.heightStep;
+                  if (getRoleForCell(my, ox0, height * CHUNK_SIZE, width * CHUNK_SIZE, chkO, setO.type) !== 'CENTER') continue;
+                }
+                if (foliageDensity(ox0, my, data.seed + 111, 2.5) <= 0.82) continue;
+                const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+                if (itemsO.length === 0) continue;
+                const itemKeyO = itemsO[Math.floor(seededHash(ox0, my, data.seed + 222) * itemsO.length)];
+                const objSetO = OBJECT_SETS[itemKeyO];
+                if (!objSetO) continue;
+                const { cols: colsO } = parseShape(objSetO.shape);
+                if (dox >= colsO) continue;
+                const treeTypeO = getTreeType(nTile.biomeId);
+                let canFrag = true;
+                for (let ox = 0; ox < colsO; ox++) {
+                  const txc = ox0 + ox;
+                  const isFT = !!treeTypeO && (txc + my) % 3 === 0 && foliageDensity(txc, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                  const isFN = !!treeTypeO && (txc + my) % 3 === 1 && foliageDensity(txc - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                  if (isFT || isFN) {
+                    canFrag = false;
+                    break;
+                  }
+                }
+                if (!canFrag) continue;
+                const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+                if (!basePartO?.ids?.length) continue;
+                const row0 = 0;
+                const idxO = row0 * colsO + dox;
+                if (idxO < 0 || idxO >= basePartO.ids.length) continue;
+                const angleO = scatterHasWindSway(itemKeyO)
+                  ? Math.sin(time * 2.5 + ox0 * 0.3 + my * 0.7) * 0.04
+                  : 0;
+                const thBO = Math.ceil(tileH);
+                const pxO = Math.floor(mx * tileW);
+                const pyO = Math.floor(my * tileH) + row0 * (thBO - VEG_MULTITILE_OVERLAP_PX);
+                drawScatterTile16(objSetO, basePartO.ids[idxO], pxO, pyO, angleO);
+              }
+            }
           }
 
           // 1. Formal Trees Detection (BIOME AWARE)
@@ -336,14 +445,17 @@ export function render(canvas, data, options = {}) {
                   if (canSpawn) {
                     const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
                     if (basePart) {
-                      const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
+                      const angle = scatterHasWindSway(itemKey)
+                        ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
+                        : 0;
                       const thB = Math.ceil(tileH);
                       basePart.ids.forEach((id, idx) => {
                         const ox = idx % cols;
+                        if (ox !== 0) return;
                         const oy = Math.floor(idx / cols);
                         const px = Math.floor(mx * tileW) + ox * tileW;
                         const py = Math.floor(my * tileH) + oy * (thB - VEG_MULTITILE_OVERLAP_PX);
-                        drawTile16(id, px, py, angle);
+                        drawScatterTile16(objSet, id, px, py, angle);
                       });
                       drawnScatterOrigin = true;
                       occupiedByScatter = true;
@@ -446,29 +558,34 @@ export function render(canvas, data, options = {}) {
             if (canSpawn) {
               const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
               if (topPart) {
-                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04;
-                const topRows = Math.ceil(topPart.ids.length / cols);
-                ctx.save();
-                ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
-                ctx.rotate(angle);
-                topPart.ids.forEach((id, idx) => {
-                  const ox = idx % cols;
-                  const oy = Math.floor(idx / cols);
-                  const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
-                  const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
-                  ctx.drawImage(
-                    natureImg,
-                    (id % TCOLS) * 16,
-                    Math.floor(id / TCOLS) * 16,
-                    16,
-                    16,
-                    snapPx(lx),
-                    snapPx(drawY),
-                    tw,
-                    th
-                  );
-                });
-                ctx.restore();
+                const { img: scatterAtlasImg, cols: atlasCols } = atlasFromObjectSet(objSet);
+                if (scatterAtlasImg) {
+                  const angle = scatterHasWindSway(itemKey)
+                    ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
+                    : 0;
+                  const topRows = Math.ceil(topPart.ids.length / cols);
+                  ctx.save();
+                  ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
+                  ctx.rotate(angle);
+                  topPart.ids.forEach((id, idx) => {
+                    const ox = idx % cols;
+                    const oy = Math.floor(idx / cols);
+                    const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
+                    const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
+                    ctx.drawImage(
+                      scatterAtlasImg,
+                      (id % atlasCols) * 16,
+                      Math.floor(id / atlasCols) * 16,
+                      16,
+                      16,
+                      snapPx(lx),
+                      snapPx(drawY),
+                      tw,
+                      th
+                    );
+                  });
+                  ctx.restore();
+                }
               }
             }
           }
@@ -495,8 +612,8 @@ export function render(canvas, data, options = {}) {
               const lx = ox === 0 ? -tw : -VEG_MULTITILE_OVERLAP_PX;
               ctx.drawImage(
                 natureImg,
-                (id % TCOLS) * 16,
-                Math.floor(id / TCOLS) * 16,
+                (id % TCOLS_NATURE) * 16,
+                Math.floor(id / TCOLS_NATURE) * 16,
                 16,
                 16,
                 snapPx(lx),
@@ -561,8 +678,8 @@ export function render(canvas, data, options = {}) {
                ctx.rotate(angle);
                ctx.drawImage(
                  natureImg,
-                 (topId % TCOLS) * 16,
-                 Math.floor(topId / TCOLS) * 16,
+                 (topId % TCOLS_NATURE) * 16,
+                 Math.floor(topId / TCOLS_NATURE) * 16,
                  16,
                  16,
                  snapPx(-tw / 2),

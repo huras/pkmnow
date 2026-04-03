@@ -37,6 +37,17 @@ export const BIOME_VEGETATION = {
   [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
 };
 
+/**
+ * Scatter com pedra/cristal não deve balançar com "vento" no render.
+ * Chaves são nomes de OBJECT_SETS (ex.: "small-dirt-rocks-a [1x1]").
+ */
+export function scatterHasWindSway(itemKey) {
+  const k = String(itemKey).toLowerCase();
+  if (k.includes('crystal')) return false;
+  if (k.includes('dirt-rock') || k.includes('dirt-rocks')) return false;
+  return true;
+}
+
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====
 // Estes são tile IDs locais no tileset flurmimons_nature (57 colunas, 16px)
 

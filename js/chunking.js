@@ -2,7 +2,7 @@ import { getBiome, BIOMES } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
 export const CHUNK_SIZE = 16;
-export const LAND_STEPS = 28;  // 14 degraus acima do nível do mar
+export const LAND_STEPS = 38;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
 export const SEA_LEVEL = 0.3;
 export const BEACH_UPPER = 0.32;

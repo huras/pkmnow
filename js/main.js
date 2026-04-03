@@ -9,8 +9,11 @@ import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js'
 import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
   GRASS_TILES, TREE_TILES,
-  getGrassVariant, getTreeType
+  getGrassVariant, getTreeType,
+  TREE_DENSITY_THRESHOLD,
+  TREE_NOISE_SCALE
 } from './biome-tiles.js';
+import { analyzeScatterPass2Base } from './scatter-pass2-debug.js';
 import { getTerrainSetWalkKind, isBaseTerrainSpriteWalkable } from './walkability.js';
 
 /** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
@@ -266,7 +269,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   const biome = Object.values(BIOMES).find((b) => b.id === tile.biomeId);
 
   const seed = data.seed;
-  const fdTrees = foliageDensity(mx, my, seed + 5555, 2);
+  const fdTrees = foliageDensity(mx, my, seed + 5555, TREE_NOISE_SCALE);
   const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
@@ -300,13 +303,13 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       const ny = my + dy;
       const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
       const bEnv = Object.values(BIOMES).find((b) => b.id === t.biomeId);
-      const fTrees = foliageDensity(nx, ny, seed + 5555, 2);
+      const fTrees = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
       const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
       const treeType = getTreeType(t.biomeId);
 
       surroundings.heightStep[dy + 1][dx + 1] = t.heightStep;
       surroundings.biome[dy + 1][dx + 1] = bEnv ? bEnv.name : '???';
-      surroundings.formals[dy + 1][dx + 1] = !!treeType && (nx + ny) % 3 === 0 && fTrees >= 0.6;
+      surroundings.formals[dy + 1][dx + 1] = !!treeType && (nx + ny) % 3 === 0 && fTrees >= TREE_DENSITY_THRESHOLD;
       surroundings.scatter[dy + 1][dx + 1] = fScat > 0.82;
     }
   }
@@ -326,11 +329,15 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     return set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
   })();
 
-  const activeSprites = (() => {
+  const scatterPass2 = analyzeScatterPass2Base(mx, my, data);
+
+  const { activeSprites, scatterContinuation } = (() => {
     const sprites = [];
+    let scatterContinuation = null;
     const treeType = getTreeType(tile.biomeId);
-    const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
-    const isFormalNeighbor = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
+    const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
+    const isFormalNeighbor =
+      !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
     const isFormalOccupied = isFormalTree || isFormalNeighbor;
 
     if (isFormalTree) {
@@ -344,11 +351,21 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       for (let dox = 1; dox <= 3; dox++) {
         const nx = mx - dox;
         const nTile = getMicroTile(nx, my, data);
-        if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82) {
+        if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82 && !nTile.isRoad) {
           const nItemKey = scatterItems[Math.floor(seededHash(nx, my, seed + 222) * scatterItems.length)];
           const nObjSet = OBJECT_SETS[nItemKey];
           if (nObjSet && dox < parseShape(nObjSet.shape).cols) {
             occupiedByScatter = true;
+            const base = nObjSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+            const top = nObjSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+            scatterContinuation = {
+              originMicro: { mx: nx, my },
+              columnIndexFromOrigin: dox,
+              itemKey: nItemKey,
+              shape: nObjSet.shape,
+              baseIds: base?.ids ?? null,
+              topIds: top?.ids ?? null
+            };
             break;
           }
         }
@@ -380,8 +397,79 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
         }
       }
     }
-    return sprites;
+    return { activeSprites: sprites, scatterContinuation };
   })();
+
+  const nearbyFormalTrees = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = mx + dx;
+      const ny = my + dy;
+      const t = getMicroTile(nx, ny, data);
+      if (!t) continue;
+      const tt = getTreeType(t.biomeId);
+      const nNoise = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
+      const phaseRoot = !!tt && (nx + ny) % 3 === 0 && nNoise >= TREE_DENSITY_THRESHOLD;
+      if (!phaseRoot) continue;
+      const blockers = [];
+      if (t.heightStep < 1 || t.isRoad || t.isCity) {
+        blockers.push('altura/estrada/cidade');
+      } else {
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
+        if (setForRole) {
+          const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= t.heightStep;
+          const role = getRoleForCell(ny, nx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+          if (role !== 'CENTER') blockers.push(`papel_terreno=${role}`);
+        }
+        const right = getMicroTile(nx + 1, ny, data);
+        if (!right || right.heightStep !== t.heightStep) blockers.push('direita_mesma_altura');
+      }
+      const pack = tt ? TREE_TILES[tt] : null;
+      nearbyFormalTrees.push({
+        micro: { mx: nx, my: ny },
+        offsetFromCenter: { dx, dy },
+        treeType: tt,
+        noiseTrees: Number(nNoise.toFixed(3)),
+        spriteBaseIds: pack?.base ?? null,
+        spriteTopIds: pack?.top ?? null,
+        rendererWouldDraw: blockers.length === 0,
+        blockers: blockers.length ? blockers : null
+      });
+    }
+  }
+
+  const dbgTreeType = getTreeType(tile.biomeId);
+  const dbgPhase = (mx + my) % 3;
+  const dbgWestRoot =
+    !!dbgTreeType &&
+    (mx - 1 + my) % 3 === 0 &&
+    foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+  const overlayHints = [];
+  if (scatterContinuation) {
+    overlayHints.push(
+      'Este tile pode ser coberto pela base/top de scatter com origem a Oeste — ver scatterContinuation (ids).'
+    );
+  }
+  if (activeSprites.length === 0) {
+    if (dbgPhase === 2) overlayHints.push('(mx+my)%3=2: tile nunca é raiz nem coluna direita da árvore formal 2-wide.');
+    if (dbgPhase === 1 && !dbgWestRoot) {
+      overlayHints.push(
+        `(mx+my)%3=1: seria “metade direita” só se Oeste fosse raiz com noise≥${TREE_DENSITY_THRESHOLD} — Oeste não qualifica.`
+      );
+    }
+    if (dbgPhase === 0 && fdTrees < TREE_DENSITY_THRESHOLD) {
+      overlayHints.push(`Fase raiz mas noiseTrees ${fdTrees.toFixed(3)} < ${TREE_DENSITY_THRESHOLD}.`);
+    }
+    if (fdGrass < 0.45) overlayHints.push(`noiseGrass ${fdGrass.toFixed(3)} < 0.45.`);
+    if (fdScatter <= 0.82 && !scatterContinuation) {
+      overlayHints.push(`noiseScatter ${fdScatter.toFixed(3)} ≤ 0.82 e sem continuação a partir do Oeste.`);
+    }
+  }
+  if (scatterContinuation && !scatterPass2.pass2C.drawsHere) {
+    overlayHints.push(
+      'Continuação geométrica (Oeste) presente, mas Pass 2 · 2C não pinta base aqui — ver scatterPass2.pass2C (westNeighborHint / razões).'
+    );
+  }
 
   return {
     coord: { mx, my, gx, gy },
@@ -404,7 +492,11 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       noiseScatter: fdScatter.toFixed(3),
       noiseGrass: fdGrass.toFixed(3),
       typeFactor: ft.toFixed(3),
-      activeSprites
+      activeSprites,
+      scatterContinuation,
+      scatterPass2,
+      nearbyFormalTrees,
+      overlayHints
     },
     collision: {
       gameCanWalk: canWalk(mx, my, data),
@@ -425,11 +517,15 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     logic: {
       isFormalTree: (() => {
         const treeType = getTreeType(tile.biomeId);
-        return !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
+        return !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
       })(),
       isFormalNeighbor: (() => {
         const treeType = getTreeType(tile.biomeId);
-        return !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
+        return (
+          !!treeType &&
+          (mx + my) % 3 === 1 &&
+          foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD
+        );
       })()
     }
   };
@@ -647,6 +743,122 @@ function openDebugModal(info) {
     </div>
   `;
 
+  const vg = info.vegetation;
+  const overlayHintsHtml =
+    vg.overlayHints && vg.overlayHints.length
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Overlay hints (centro do tile)</div>
+      <ul style="margin:0;padding-left:1.2rem;font-size:0.78rem;line-height:1.45;color:#c8c8d8">
+        ${vg.overlayHints.map((h) => `<li>${String(h).replace(/</g, '&lt;')}</li>`).join('')}
+      </ul>
+    </div>`
+      : '';
+
+  const formalNearbyHtml =
+    vg.nearbyFormalTrees && vg.nearbyFormalTrees.length
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Árvores formais (fase raiz no 3×3)</div>
+      <table class="tile-debug-table">
+        <tbody>
+          ${vg.nearbyFormalTrees
+            .map(
+              (t) => `<tr>
+            <th>Δ${t.offsetFromCenter.dx},${t.offsetFromCenter.dy}</th>
+            <td style="font-size:0.75rem;line-height:1.35">
+              <strong>${t.treeType || '—'}</strong> · noise ${t.noiseTrees}
+              · draw: ${t.rendererWouldDraw ? 'sim' : '<span style="color:#f88">não</span>'}
+              ${t.blockers ? ` · bloqueios: ${t.blockers.join(', ')}` : ''}
+              <br>
+              base ${JSON.stringify(t.spriteBaseIds)} · top ${JSON.stringify(t.spriteTopIds)}
+            </td>
+          </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+    </div>`
+      : '';
+
+  const escDbg = (s) =>
+    String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const sp = vg.scatterPass2;
+  const scatterPass2Html = sp
+    ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Pass 2 — base scatter (espelha render.js)</div>
+      <table class="tile-debug-table">
+        <tbody>
+          <tr><th>Base scatter aqui (2B ∨ 2C)</th><td>${
+            sp.pass2ScatterBaseWouldDrawHere
+              ? '<strong style="color:#8d8">sim</strong>'
+              : '<span style="color:#f88">não</span>'
+          }</td></tr>
+          <tr><th>CENTER / altura</th><td>${sp.centerRoleOk ? 'sim' : 'não'}</td></tr>
+          <tr><th>2B origem (só col. esq.)</th><td>${
+            sp.pass2B.drawsHere ? 'sim' : 'não'
+          }${
+            sp.pass2B.itemKey
+              ? ` · <code style="font-size:0.72rem">${escDbg(sp.pass2B.itemKey)}</code> · cols=${sp.pass2B.cols ?? '—'}`
+              : ''
+          }</td></tr>
+          <tr><th>2C continuação</th><td>${sp.pass2C.drawsHere ? 'sim' : 'não'}</td></tr>
+        </tbody>
+      </table>
+      ${
+        sp.pass2B.baseLeftColumnSpriteIds?.length
+          ? `<p style="font-size:0.75rem;margin:6px 0 0;color:#a8a8b8">2B ids coluna esquerda: <code>${sp.pass2B.baseLeftColumnSpriteIds.join(
+              ', '
+            )}</code></p>`
+          : ''
+      }
+      ${
+        sp.pass2C.match
+          ? `<p style="font-size:0.76rem;margin:8px 0 0;line-height:1.4">2C: origem [${sp.pass2C.match.originMicro.mx}, ${sp.pass2C.match.originMicro.my}] · coluna +${sp.pass2C.match.columnIndexFromOrigin} · <code>${escDbg(sp.pass2C.match.itemKey)}</code> · sprite base <strong>${sp.pass2C.match.baseSpriteId}</strong></p>`
+          : ''
+      }
+      ${
+        sp.pass2C.westNeighborHint
+          ? `<p style="font-size:0.74rem;margin:6px 0 0;line-height:1.45;color:#aac">Vizinho imediato Oeste (dox=1): ${escDbg(sp.pass2C.westNeighborHint)}</p>`
+          : ''
+      }
+      ${
+        !sp.pass2B.drawsHere && sp.pass2B.reasons.length
+          ? `<div style="margin-top:8px;font-size:0.74rem"><strong>Se 2B não desenha:</strong><ul style="margin:4px 0 0;padding-left:1.1rem;line-height:1.4">${sp.pass2B.reasons
+              .map((r) => `<li>${escDbg(r)}</li>`)
+              .join('')}</ul></div>`
+          : ''
+      }
+      ${
+        !sp.pass2C.drawsHere && sp.pass2C.reasons.length
+          ? `<div style="margin-top:8px;font-size:0.74rem"><strong>2C:</strong><ul style="margin:4px 0 0;padding-left:1.1rem;line-height:1.4">${sp.pass2C.reasons
+              .map((r) => `<li>${escDbg(r)}</li>`)
+              .join('')}</ul></div>`
+          : ''
+      }
+    </div>`
+    : '';
+
+  const scatterContHtml = vg.scatterContinuation
+    ? (() => {
+        const sc = vg.scatterContinuation;
+        const allIds = [...(sc.baseIds || []), ...(sc.topIds || [])];
+        const icons = allIds
+          .map(
+            (id) =>
+              `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(id % 57) * 16}px -${Math.floor(id / 57) * 16}px;"></div>`
+          )
+          .join('');
+        return `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Scatter continuação (Oeste → este tile)</div>
+      <p style="font-size:0.78rem;margin:0 0 8px;color:#a0a0b0">Origem micro [${sc.originMicro.mx}, ${sc.originMicro.my}] · coluna +${sc.columnIndexFromOrigin} · <code>${String(sc.itemKey).replace(/</g, '')}</code> · ${sc.shape}</p>
+      <div class="sprite-badge"><span class="sprite-badge-label">IDs</span><div class="tile-debug-sprite-stack">${icons}</div></div>
+    </div>`;
+      })()
+    : '';
+
   let spritesHtml = '';
   if (info.vegetation.activeSprites && info.vegetation.activeSprites.length > 0) {
      const badges = info.vegetation.activeSprites.map(s => {
@@ -676,7 +888,17 @@ function openDebugModal(info) {
      </div>
   `;
 
-  debugContent.innerHTML = terrainHtml + collisionHtml + surroundHtml + vegHtml + logicHtml + spritesHtml;
+  debugContent.innerHTML =
+    terrainHtml +
+    collisionHtml +
+    surroundHtml +
+    vegHtml +
+    overlayHintsHtml +
+    formalNearbyHtml +
+    scatterPass2Html +
+    scatterContHtml +
+    logicHtml +
+    spritesHtml;
   document.getElementById('tile-debug-title').innerHTML = `Telemetry: Sector [${info.coord.mx}, ${info.coord.my}]`;
   debugModal.classList.add('is-open');
 }
