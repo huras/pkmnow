@@ -63,6 +63,7 @@ const settingsModal = document.getElementById('settingsModal');
 const btnApplySettings = document.getElementById('btnApplySettings');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
 const btnBackToMap = document.getElementById('btnBackToMap');
+const playFpsEl = document.getElementById('play-fps');
 
 let currentData = null;
 let appMode = 'map'; // 'map' or 'play'
@@ -84,6 +85,8 @@ function updateView() {
 
 // Animation loop (Play Mode only)
 let lastTimestamp = 0;
+/** Timestamps (performance.now) do fim de cada frame — FPS = quantos caem na última 1 s (mais fiel que 1/dt). */
+const playFpsSampleTimes = [];
 const heldKeys = new Set();
 
 function gameLoop(timestamp) {
@@ -106,7 +109,17 @@ function gameLoop(timestamp) {
     }
   }
 
+  const tFrameStart = performance.now();
   updateView();
+  if (appMode === 'play' && playFpsEl) {
+    const tEnd = performance.now();
+    const frameMs = tEnd - tFrameStart;
+    playFpsSampleTimes.push(tEnd);
+    const cutoff = tEnd - 1000;
+    while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
+    const fps = playFpsSampleTimes.length;
+    playFpsEl.textContent = `${fps} FPS · ${frameMs.toFixed(1)} ms/frame`;
+  }
   if (appMode === 'play') {
     animFrameId = requestAnimationFrame(gameLoop);
   }
@@ -222,7 +235,9 @@ function enterPlayMode(gx, gy) {
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML = "<b style='color:#fff'>Mova-se com WASD ou Setas. Aperte ESC para sair.</b>";
-  
+  playFpsSampleTimes.length = 0;
+  if (playFpsEl) playFpsEl.textContent = '…';
+
   // Ativa Fullscreen UX
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
@@ -366,7 +381,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     const microHDbg = data.height * CHUNK_SIZE;
     const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
     const validOriginMemoDbg = new Map();
-    if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
+    if (!tile.isRoad && !tile.isCity) {
       const maxScatterRowsDbg = 8;
       outerCont: for (let dox = 1; dox <= 3; dox++) {
         const ox = mx - dox;
@@ -381,6 +396,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
             validScatterOriginMicro(ox, oy, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
           ) {
             const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
+            if (itemsAtO.length === 0) continue;
             const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, seed + 222) * itemsAtO.length)];
             const nObjSet = OBJECT_SETS[nItemKey];
             if (nObjSet) {
@@ -407,6 +423,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       }
 
       if (
+        scatterItems.length > 0 &&
         !isFormalOccupied &&
         !occupiedByScatter &&
         fdScatter > 0.82 &&

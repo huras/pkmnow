@@ -349,8 +349,8 @@ export function analyzeScatterPass2Base(mx, my, data) {
   let draws2C = false;
   let match2C = null;
 
-  if (scatterItemsHere.length === 0 || tile.isRoad || tile.isCity) {
-    reasons2C.push('gate 2C: tile atual sem lista scatter ou é estrada/cidade');
+  if (tile.isRoad || tile.isCity) {
+    reasons2C.push('gate 2C: estrada ou cidade');
   } else if (tile.heightStep < 1) {
     reasons2C.push(...centerFailReasons.filter((r) => r.includes('heightStep')));
   } else if (!scatter2cDestOk) {
@@ -428,7 +428,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
   }
 
   const westNeighborHint =
-    !draws2C && scatterItemsHere.length > 0 && !tile.isRoad && !tile.isCity && scatter2cDestOk
+    !draws2C && !tile.isRoad && !tile.isCity && scatter2cDestOk
       ? explain2CForDox(mx, my, 1, tile, getT, seed, microW, microH, originMemo)
       : null;
 

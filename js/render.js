@@ -398,8 +398,8 @@ export function render(canvas, data, options = {}) {
               allow2cDest = terrainRoleAllowsScatter2CContinuation(roleDest);
             }
             if (allow2cDest) {
-            const scatterItemsC = BIOME_VEGETATION[tile.biomeId] || [];
-            if (scatterItemsC.length > 0 && !tile.isRoad && !tile.isCity) {
+            // Continuação 2C usa lista do bioma da origem (itemsO), não exige scatter no bioma destino
+            if (!tile.isRoad && !tile.isCity) {
               let drew2cHere = false;
               for (let dox = 1; dox <= 4 && !drew2cHere; dox++) {
                 const ox0 = mx - dox;
@@ -470,8 +470,8 @@ export function render(canvas, data, options = {}) {
 
           // 2. Scatter Base Check (Mutual Exclusion with Formal Trees AND other Scatter)
           const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-          if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
-             // 2A. Check FIRST if tile is occupied by a scatter to the left
+          if (!tile.isRoad && !tile.isCity) {
+             // 2A: ocupação por scatter a Oeste (origem pode ser outro bioma com lista scatter)
              for (let dox = 1; dox <= 3 && !occupiedByScatter; dox++) {
                const ox = mx - dox;
                for (let oyDelta = 0; oyDelta < MAX_SCATTER_ROWS_PASS2; oyDelta++) {
@@ -485,6 +485,7 @@ export function render(canvas, data, options = {}) {
                    validScatterOriginMicro(ox, oy, data.seed, microWPass2, microHPass2, getWorldTilePass2, validOriginMemo)
                  ) {
                    const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
+                   if (itemsAtO.length === 0) continue;
                    const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, data.seed + 222) * itemsAtO.length)];
                    const nObjSet = OBJECT_SETS[nItemKey];
                    if (nObjSet) {
@@ -499,8 +500,9 @@ export function render(canvas, data, options = {}) {
                }
              }
 
-             // 2B. Check if THIS tile is the origin of a NEW scatter item (ONLY if not occupied)
+             // 2B: só se este bioma tem itens scatter
              if (
+               scatterItems.length > 0 &&
                !isFormalOccupied &&
                !occupiedByScatter &&
                foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
