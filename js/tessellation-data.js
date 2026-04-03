@@ -296,22 +296,22 @@ export const TERRAIN_SETS = {
   },
   "Yellow Dirty sandy": {
     "type": "conc-conv-a",
-    "centerId": 142,
+    "centerId": 1042,
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "roles": {
-      "OUT_NW": 84,
-      "EDGE_N": 85,
-      "OUT_NE": 86,
-      "EDGE_W": 141,
-      "CENTER": 142,
-      "EDGE_E": 143,
-      "IN_SE": 144,
-      "IN_SW": 145,
-      "OUT_SW": 198,
-      "EDGE_S": 199,
-      "OUT_SE": 200,
-      "IN_NE": 201,
-      "IN_NW": 202
+      "OUT_NW": 984,
+      "EDGE_N": 985,
+      "OUT_NE": 986,
+      "EDGE_W": 1041,
+      "CENTER": 1042,
+      "EDGE_E": 1043,
+      "IN_SE": 1044,
+      "IN_SW": 1045,
+      "OUT_SW": 1098,
+      "EDGE_S": 1099,
+      "OUT_SE": 1100,
+      "IN_NE": 1101,
+      "IN_NW": 1102
     }
   },
   "Rocky rock": {
@@ -439,19 +439,19 @@ export const TERRAIN_SETS = {
     "centerId": 2130,
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "roles": {
-      "OUT_NW": 34,
-      "EDGE_N": 35,
-      "OUT_NE": 36,
-      "EDGE_W": 84,
-      "CENTER": 85,
-      "EDGE_E": 86,
-      "IN_SE": 87,
-      "IN_SW": 88,
-      "OUT_SW": 134,
-      "EDGE_S": 135,
-      "OUT_SE": 136,
-      "IN_NE": 137,
-      "IN_NW": 138
+      "OUT_NW": 2072,
+      "EDGE_N": 2073,
+      "OUT_NE": 2074,
+      "EDGE_W": 2129,
+      "CENTER": 2130,
+      "EDGE_E": 2131,
+      "IN_SE": 2132,
+      "IN_SW": 2133,
+      "OUT_SW": 2186,
+      "EDGE_S": 2187,
+      "OUT_SE": 2188,
+      "IN_NE": 2189,
+      "IN_NW": 2190
     }
   },
   "jogador sandy": {
@@ -1418,9 +1418,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "baby-pine-tree-green [2x1]": {
+  "baby-pine-tree-green [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1440,9 +1440,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "baby-pine-tree-red [2x1]": {
+  "baby-pine-tree-red [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1462,9 +1462,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "baby-pine-tree-orange [2x1]": {
+  "baby-pine-tree-orange [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1484,9 +1484,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "baby-pine-tree-yellow [2x1]": {
+  "baby-pine-tree-yellow [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1506,9 +1506,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "baby-pine-tree-full-snow [2x1]": {
+  "baby-pine-tree-full-snow [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1572,9 +1572,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "vine [2x1]": {
+  "vine [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "top",
@@ -1594,9 +1594,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "palm-tree-with-coconuts [3x2]": {
+  "palm-tree-with-coconuts [2x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "3x2",
+    "shape": "2x2",
     "parts": [
       {
         "role": "tops",
@@ -1620,9 +1620,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "palm-tree [3x2]": {
+  "palm-tree [2x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "3x2",
+    "shape": "2x2",
     "parts": [
       {
         "role": "tops",
@@ -1646,9 +1646,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "mangrove-tree [3x2]": {
+  "mangrove-tree [2x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "3x2",
+    "shape": "2x2",
     "parts": [
       {
         "role": "tops",
@@ -2117,9 +2117,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "large-palm-with-bananas [4x3]": {
+  "large-palm-with-bananas [3x3]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "4x3",
+    "shape": "3x3",
     "parts": [
       {
         "role": "tops",
@@ -2149,9 +2149,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "savannah-tree [4x3]": {
+  "savannah-tree [3x3]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "4x3",
+    "shape": "3x3",
     "parts": [
       {
         "role": "tops",
@@ -2181,9 +2181,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "big-cactus-1 [3x2]": {
+  "big-cactus-1 [2x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "3x2",
+    "shape": "2x2",
     "parts": [
       {
         "role": "tops",
@@ -2207,9 +2207,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "small-cactus [2x1]": {
+  "small-cactus [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "2x1",
+    "shape": "1x1",
     "parts": [
       {
         "role": "tops",

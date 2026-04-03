@@ -5,7 +5,7 @@ import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer, updatePlayer } from './player.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
-import { getRoleForCell, seededHash } from './tessellation-logic.js';
+import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js';
 import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
   GRASS_TILES, TREE_TILES,
@@ -282,10 +282,11 @@ canvas.addEventListener('contextmenu', (e) => {
       const bEnv = Object.values(BIOMES).find(b => b.id === t.biomeId);
       const fTrees = foliageDensity(nx, ny, seed + 5555, 2);
       const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
+      const treeType = getTreeType(t.biomeId);
       
       surroundings.heightStep[dy+1][dx+1] = t.heightStep;
       surroundings.biome[dy+1][dx+1] = bEnv ? bEnv.name.substring(0,3).toUpperCase() : '???';
-      surroundings.formals[dy+1][dx+1] = ((nx + ny) % 3 === 0 && fTrees >= 0.6);
+      surroundings.formals[dy+1][dx+1] = (!!treeType && (nx + ny) % 3 === 0 && fTrees >= 0.6);
       surroundings.scatter[dy+1][dx+1] = (fScat > 0.82);
     }
   }
@@ -327,34 +328,70 @@ canvas.addEventListener('contextmenu', (e) => {
       typeFactor: ft.toFixed(3),
       activeSprites: (function() {
         const sprites = [];
+        const treeType = getTreeType(tile.biomeId);
+        const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
+        const isFormalNeighbor = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
+        const isFormalOccupied = isFormalTree || isFormalNeighbor;
+
         // Checando Formal Trees
-        if ((mx + my) % 3 === 0 && fdTrees >= 0.6) {
-           const type = getTreeType(tile.biomeId), ids = TREE_TILES[type];
+        if (isFormalTree) {
+           const ids = TREE_TILES[treeType];
            if (ids) sprites.push({ type: 'formal-tree-base', ids: ids.base }, { type: 'formal-tree-top', ids: ids.top });
         }
+
         // Checando Scatter
+        let occupiedByScatter = false;
         const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-        if (scatterItems.length > 0 && fdScatter > 0.82) {
-           const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
-           const objSet = OBJECT_SETS[itemKey];
-           if (objSet) {
-              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
-              const top = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
-              if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
-              if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
+        if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
+           // Vizinhos à esquerda
+           for (let dox = 1; dox <= 3; dox++) {
+             const nx = mx - dox, nTile = getMicroTile(nx, my, currentData);
+             if (nTile && foliageDensity(nx, my, seed + 111, 2.5) > 0.82) {
+               const nItemKey = scatterItems[Math.floor(seededHash(nx, my, seed + 222) * scatterItems.length)];
+               const nObjSet = OBJECT_SETS[nItemKey];
+               if (nObjSet && dox < parseShape(nObjSet.shape).cols) { occupiedByScatter = true; break; }
+             }
+           }
+
+           if (!isFormalOccupied && !occupiedByScatter && fdScatter > 0.82) {
+              const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
+              const objSet = OBJECT_SETS[itemKey];
+              if (objSet) {
+                 const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+                 const top = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+                 if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
+                 if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
+                 occupiedByScatter = true;
+              }
            }
         }
+
         // Checando Grass
-        if (sprites.length === 0 && fdGrass >= 0.45) {
+        if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45) {
            const variant = getGrassVariant(tile.biomeId), tiles = GRASS_TILES[variant];
-           if (tiles) sprites.push({ type: `grass-${variant}`, ids: [ (ft < 0.5) ? tiles.original : (tiles.grass2 || tiles.original) ] });
+           if (tiles) {
+              const mainId = (ft < 0.5) ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original);
+              sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
+              // Se tiver topo (ex: cacto), incluir também
+              if (variant === 'desert' && ft >= 0.5 && tiles.cactusTop) {
+                 sprites.push({ type: `grass-${variant}-top`, ids: [tiles.cactusTop] });
+              } else if (tiles.originalTop && ft < 0.5) {
+                 sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
+              }
+           }
         }
         return sprites;
       })()
     },
     logic: {
-      isFormalTree: (mx + my) % 3 === 0 && fdTrees >= 0.6,
-      isFormalNeighbor: (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6
+      isFormalTree: (function(){ 
+        const treeType = getTreeType(tile.biomeId);
+        return !!treeType && (mx + my) % 3 === 0 && fdTrees >= 0.6;
+      })(),
+      isFormalNeighbor: (function(){
+        const treeType = getTreeType(tile.biomeId);
+        return !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, 2) >= 0.6;
+      })()
     }
   };
 

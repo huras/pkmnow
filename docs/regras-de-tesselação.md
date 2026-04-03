@@ -56,7 +56,7 @@ Layer Base:
 			super-healthy-light-grass -  Center ID = 1052 [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
 		Yellow Dirty
 			yellow-dirt - Center ID = 1027 , (conc-conv-a), [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
-			sandy - Center ID = 142 , (conc-conv-a), [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
+			sandy - Center ID = 1042 , (conc-conv-a), [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
 		Rocky
 			rock - Center ID = 1032 , (conc-conv-a), [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
 			snowy - Center ID = 1047 , (conc-conv-a), [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)

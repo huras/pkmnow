@@ -28,13 +28,13 @@ export const BIOME_TO_TERRAIN = {
  */
 export const BIOME_VEGETATION = {
   [BIOMES.FOREST.id]: ['green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
-  [BIOMES.JUNGLE.id]: ['palm-tree [3x2]', 'vine [2x1]', 'fern [1x1]'],
+  [BIOMES.JUNGLE.id]: ['palm-tree [2x2]', 'vine [1x1]', 'fern [1x1]'],
   [BIOMES.GRASSLAND.id]: ['small-grass [1x1]', 'yellow-lily [1x1]', 'red-daisy [1x1]'],
-  [BIOMES.SNOW.id]: ['baby-pine-tree-full-snow [2x1]', 'snow-grass [1x1]'],
+  [BIOMES.SNOW.id]: ['baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
-  [BIOMES.DESERT.id]: ['small-cactus [2x1]'],
-  [BIOMES.SAVANNA.id]: ['savannah-tree [4x3]', 'small-cactus [2x1]'],
+  [BIOMES.DESERT.id]: ['small-cactus [1x1]'],
+  [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
 };
 
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====

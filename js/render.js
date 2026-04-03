@@ -270,19 +270,34 @@ export function render(canvas, data, options = {}) {
             if (role !== 'CENTER') continue;
           }
 
-          // 1. Formal Trees Detection
-          const isFormalTree = (mx, my) => (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-          const isFormalNeighbor = (mx, my) => (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          // 1. Formal Trees Detection (BIOME AWARE)
+          const treeType_check = getTreeType(tile.biomeId);
+          const isFormalTree = (mx, my) => !!treeType_check && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          const isFormalNeighbor = (mx, my) => !!treeType_check && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
           const isFormalOccupied = isFormalTree(mx, my) || isFormalNeighbor(mx, my);
           
           let occupiedByScatter = false;
           let drawnScatterOrigin = false;
 
-          // 2. Scatter Base Check (Mutual Exclusion with Formal Trees)
+          // 2. Scatter Base Check (Mutual Exclusion with Formal Trees AND other Scatter)
           const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
           if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
-             // Check if THIS tile is the origin of a scatter item
-             if (!isFormalOccupied && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+             // 2A. Check FIRST if tile is occupied by a scatter to the left
+             for (let dox = 1; dox <= 3; dox++) {
+               const nx = mx - dox;
+               const nTile = getCached(nx, my);
+               if (nTile && foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82 && !nTile.isRoad) {
+                 const nItemKey = scatterItems[Math.floor(seededHash(nx, my, data.seed + 222) * scatterItems.length)];
+                 const nObjSet = OBJECT_SETS[nItemKey];
+                 if (nObjSet) {
+                   const { cols } = parseShape(nObjSet.shape);
+                   if (dox < cols) { occupiedByScatter = true; break; }
+                 }
+               }
+             }
+
+             // 2B. Check if THIS tile is the origin of a NEW scatter item (ONLY if not occupied)
+             if (!isFormalOccupied && !occupiedByScatter && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
                 const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
                 const objSet = OBJECT_SETS[itemKey];
                 if (objSet) {
@@ -303,24 +318,6 @@ export function render(canvas, data, options = {}) {
                     }
                   }
                 }
-             }
-             // Check if tile is occupied by a scatter to the left
-             if (!drawnScatterOrigin) {
-               for (let dox = 1; dox <= 3; dox++) {
-                 const nx = mx - dox;
-                 const nTile = getCached(nx, my);
-                 if (nTile && foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82 && !nTile.isRoad) {
-                   const nItemKey = scatterItems[Math.floor(seededHash(nx, my, data.seed + 222) * scatterItems.length)];
-                   const nObjSet = OBJECT_SETS[nItemKey];
-                   if (nObjSet) {
-                     const { cols } = parseShape(nObjSet.shape);
-                     // If scatter from left covers this tile, and didn't collide with formal there
-                     let nCanSpawn = true; 
-                     for(let ox=0; ox<cols; ox++) { if (isFormalTree(nx+ox, my) || isFormalNeighbor(nx+ox, my)) { nCanSpawn = false; break; } }
-                     if (nCanSpawn && dox < cols) { occupiedByScatter = true; break; }
-                   }
-                 }
-               }
              }
           }
 
@@ -349,6 +346,9 @@ export function render(canvas, data, options = {}) {
         const tile = getCached(mx, my);
         if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
 
+        const treeType = getTreeType(tile.biomeId);
+        if (!treeType) continue;
+
         // NO TREES ON CLIFFS
         const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         if (setForRole) {
@@ -358,7 +358,7 @@ export function render(canvas, data, options = {}) {
         if (foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) < TREE_DENSITY_THRESHOLD) continue;
         const right = getCached(mx+1, my);
         if (!right || right.heightStep !== tile.heightStep) continue;
-        const treeType = getTreeType(tile.biomeId), ids = TREE_TILES[treeType];
+        const ids = TREE_TILES[treeType];
         if (!ids) continue;
         const tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH), tw = Math.ceil(tileW), th = Math.ceil(tileH);
         const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
@@ -403,13 +403,14 @@ export function render(canvas, data, options = {}) {
           if (objSet) {
             const { cols } = parseShape(objSet.shape);
             
-            // Lógica canSpawn IDENTICA ao Pass 2 para garantir exclusão mútua total
+            // Lógica canSpawn IDENTICA ao Pass 2 para garantir exclusão mútua total (BIOME AWARE)
             let canSpawn = true;
+            const treeType_chk = getTreeType(tile.biomeId);
             for(let ox=0; ox<cols; ox++) {
-              const tx_check = mx + ox;
-              const isFormalTree = (tx_check + my) % 3 === 0 && foliageDensity(tx_check, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              const isFormalNeighbor = (tx_check + my) % 3 === 1 && foliageDensity(tx_check - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              if (isFormalTree || isFormalNeighbor) { canSpawn = false; break; }
+              const tx_ch = mx + ox;
+              const isFT = !!treeType_chk && (tx_ch + my) % 3 === 0 && foliageDensity(tx_ch, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              const isFN = !!treeType_chk && (tx_ch + my) % 3 === 1 && foliageDensity(tx_ch - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              if (isFT || isFN) { canSpawn = false; break; }
             }
 
             if (canSpawn) {
@@ -429,8 +430,9 @@ export function render(canvas, data, options = {}) {
         }
 
         // 2. Formal Tree Tops
-        if ((mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-           const treeType = getTreeType(tile.biomeId), ids = TREE_TILES[treeType];
+        const treeType = getTreeType(tile.biomeId);
+        if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
+           const ids = TREE_TILES[treeType];
            if (ids && getCached(mx+1, my)?.heightStep === tile.heightStep) {
              const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI*2) * 0.04;
              ctx.save(); ctx.translate(tx + tw, ty + th); ctx.rotate(angle);
@@ -449,25 +451,33 @@ export function render(canvas, data, options = {}) {
            else if (tiles.originalTop && fType < 0.5) topId = tiles.originalTop;
 
            if (topId) {
-             // Exclusion checkIDENTICA ao Pass 2 para evitar "meia planta"
-             const isFormalTree = (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-             const isFormalNeighbor = (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+             // Exclusion check IDENTICA ao Pass 2 para evitar "meia planta" (BIOME AWARE)
+             const treeT_chk = getTreeType(tile.biomeId);
+             const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+             const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              
              let occupiedByScatter = false;
              const items = BIOME_VEGETATION[tile.biomeId] || [];
              if (items.length > 0) {
-               if (!(isFormalTree || isFormalNeighbor) && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+               if (!(isFT || isFN) && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
                  occupiedByScatter = true;
                } else {
                  for (let dox = 1; dox <= 3; dox++) {
                    const nx = mx - dox;
-                   if (foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82) {
+                   const nTile = getCached(nx, my);
+                   if (nTile && foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82) {
                      const nItem = items[Math.floor(seededHash(nx, my, data.seed + 222) * items.length)];
                      const nObj = OBJECT_SETS[nItem];
                      if (nObj) {
                        const { cols: nCols } = parseShape(nObj.shape);
                        let nCanSpawn = true;
-                       for(let ox=0; ox<nCols; ox++) { if ((nx+ox+my)%3===0 && foliageDensity(nx+ox, my, data.seed+5555, TREE_NOISE_SCALE)>=TREE_DENSITY_THRESHOLD || (nx+ox+my)%3===1 && foliageDensity(nx+ox-1, my, data.seed+5555, TREE_NOISE_SCALE)>=TREE_DENSITY_THRESHOLD) { nCanSpawn = false; break; } }
+                       const nTreeType = getTreeType(nTile.biomeId);
+                       for(let ox=0; ox<nCols; ox++) {
+                         const tx_chk = nx+ox;
+                         const isFT_chk = !!nTreeType && (tx_chk + my) % 3 === 0 && foliageDensity(tx_chk, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                         const isFN_chk = !!nTreeType && (tx_chk + my) % 3 === 1 && foliageDensity(tx_chk - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+                         if (isFT_chk || isFN_chk) { nCanSpawn = false; break; }
+                       }
                        if (nCanSpawn && dox < nCols) { occupiedByScatter = true; break; }
                      }
                    }
@@ -475,7 +485,7 @@ export function render(canvas, data, options = {}) {
                }
              }
 
-             if (!isFormalTree && !isFormalNeighbor && !occupiedByScatter) {
+             if (!isFT && !isFN && !occupiedByScatter) {
                const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
                const intensity = isCactus ? 0.07 : 0.12;
                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
