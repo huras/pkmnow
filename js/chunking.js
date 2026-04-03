@@ -48,24 +48,29 @@ export function getMicroTile(mx, my, macroData) {
     
     const ix = Math.floor(gx);
     const iy = Math.floor(gy);
-    const fx = gx - ix;
-    const fy = gy - iy;
+    const tx = gx - ix;
+    const ty = gy - iy;
     
-    // Elevacao
+    // Smoothstep: Hermite interpolation for straighter height plateaus
+    const sx = tx * tx * (3 - 2 * tx);
+    const sy = ty * ty * (3 - 2 * ty);
+
+    // Linear factors for biomes to keep them slightly more organic
+    const fx = tx;
+    const fy = ty;
+    
+    // Elevation
     const e00 = getMacroVal(cells, ix, iy, width, height);
     const e10 = getMacroVal(cells, ix + 1, iy, width, height);
     const e01 = getMacroVal(cells, ix, iy + 1, width, height);
     const e11 = getMacroVal(cells, ix + 1, iy + 1, width, height);
     
-    const eTop = lerp(e00, e10, fx);
-    const eBot = lerp(e01, e11, fx);
-    let e = lerp(eTop, eBot, fy);
+    const eTop = lerp(e00, e10, sx);
+    const eBot = lerp(e01, e11, sx);
+    let e = lerp(eTop, eBot, sy);
     
-    // O grande truque orgânico: Reduzimos o jitter para zero (ou quase zero)
-    // para manter o visual limpo e os platôs estáveis, usando apenas a interpolação macro.
+    // REMOVED microNoise jitter from elevation to ensure solid plateaus
     const noiseVal = (seededHash(mx, my, seed) - 0.5);
-    const microNoise = noiseVal * 0.002; // Praticamente zero jitter
-    e += microNoise;
 
     // Umidade e Temperatura com ruído mínimo apenas para evitar linhas retas perfeitas
     const biomeNoise = noiseVal * 0.005; 

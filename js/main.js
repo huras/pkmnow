@@ -36,7 +36,8 @@ function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
-  return { viewType, overlayPaths, overlayGraph, appMode, player, time: gameTime };
+  const overlayContours = document.getElementById('chkCurvas')?.checked ?? true;
+  return { viewType, overlayPaths, overlayGraph, overlayContours, appMode, player, time: gameTime };
 }
 
 function updateView() {

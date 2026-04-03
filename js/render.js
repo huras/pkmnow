@@ -9,7 +9,7 @@ import {
   GRASS_DENSITY_THRESHOLD, TREE_DENSITY_THRESHOLD,
   GRASS_NOISE_SCALE, TREE_NOISE_SCALE
 } from './biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType } from './chunking.js';
+import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 
 const imageCache = new Map();
 
@@ -54,6 +54,8 @@ export function render(canvas, data, options = {}) {
 
   const viewType = options.settings?.viewType || 'biomes';
   const overlayPaths = options.settings?.overlayPaths ?? true;
+  const overlayGraph = options.settings?.overlayGraph ?? true;
+  const overlayContours = options.settings?.overlayContours ?? true;
 
   let tileW, tileH;
   let startX = 0, startY = 0, endX = width, endY = height;
@@ -101,6 +103,90 @@ export function render(canvas, data, options = {}) {
          }
        }
      }
+
+     // PASS 2: OVERLAYS (Restaurando Rotas e Cidades)
+     if (overlayPaths && paths) {
+       ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)'; // Dourado para rotas
+       ctx.lineWidth = Math.max(1.5, tileW * 0.45);
+       ctx.lineJoin = 'round';
+       ctx.lineCap = 'round';
+       for (const path of paths) {
+         ctx.beginPath();
+         path.forEach((p, i) => {
+           const px = (p.x + 0.5) * tileW;
+           const py = (p.y + 0.5) * tileH;
+           if (i === 0) ctx.moveTo(px, py);
+           else ctx.lineTo(px, py);
+         });
+         ctx.stroke();
+       }
+     }
+
+     if (overlayGraph && graph) {
+       for (const node of graph.nodes) {
+         const px = (node.x + 0.5) * tileW;
+         const py = (node.y + 0.5) * tileH;
+         const r = Math.max(4, tileW * 0.75);
+         
+         // Marcador
+         ctx.shadowBlur = 6;
+         ctx.shadowColor = 'rgba(0,0,0,0.8)';
+         ctx.fillStyle = node.isGym ? '#ff2222' : '#ffffff';
+         ctx.strokeStyle = '#000';
+         ctx.lineWidth = 2;
+         ctx.beginPath();
+         if (node.isGym) {
+           ctx.moveTo(px, py - r*1.3); ctx.lineTo(px + r*1.3, py); ctx.lineTo(px, py + r*1.3); ctx.lineTo(px - r*1.3, py); ctx.closePath();
+         } else {
+           ctx.arc(px, py, r, 0, Math.PI * 2);
+         }
+         ctx.fill();
+         ctx.stroke();
+         ctx.shadowBlur = 0;
+
+         // Rótulo
+         ctx.fillStyle = '#fff';
+         ctx.font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
+         ctx.textAlign = 'center';
+         ctx.lineWidth = 3;
+         ctx.strokeStyle = '#000';
+         ctx.strokeText(node.name, px, py - r - 6);
+         ctx.fillText(node.name, px, py - r - 6);
+       }
+     }
+
+     // PASS 3: CURVAS DE NÍVEL (Bordas de elevação)
+     if (overlayContours) {
+       ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)'; // Branco translúcido para as curvas
+       ctx.lineWidth = 1;
+       for (let y = startY; y < endY; y++) {
+         for (let x = startX; x < endX; x++) {
+           const h = elevationToStep(cells[y * width + x]);
+           
+           // Borda Direita
+           if (x < width - 1) {
+             const hr = elevationToStep(cells[y * width + (x + 1)]);
+             if (h !== hr) {
+               ctx.beginPath();
+               ctx.moveTo((x + 1) * tileW, y * tileH);
+               ctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+               ctx.stroke();
+             }
+           }
+           
+           // Borda Inferior
+           if (y < height - 1) {
+             const hd = elevationToStep(cells[(y + 1) * width + x]);
+             if (h !== hd) {
+               ctx.beginPath();
+               ctx.moveTo(x * tileW, (y + 1) * tileH);
+               ctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+               ctx.stroke();
+             }
+           }
+         }
+       }
+     }
   } else {
     // ==== PLAY MODE RENDERER ====
     const time = options.settings?.time || 0;
@@ -138,16 +224,32 @@ export function render(canvas, data, options = {}) {
         for (let mx = startX; mx < endX; mx++) {
           const tile = getCached(mx, my);
           if (!tile || tile.heightStep < level) continue;
-          const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+
+          let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+          if (tile.isRoad && TERRAIN_SETS['terrain folliage']) setName = 'terrain folliage';
           const set = TERRAIN_SETS[setName];
+
           if (set) {
             const imgPath = TessellationEngine.getImagePath(set.file), img = imageCache.get(imgPath);
-            const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= level;
-            const role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, isAtOrAbove, set.type);
-            if (tile.heightStep > level && role === 'CENTER') continue;
-            const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
             const cols = imgPath.includes('caves') ? 50 : 57;
-            if (img && tileId != null) ctx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+
+            // NEW LOGIC: A tile only draws a border (Cliff/Edge/Corner) at its OWN height.
+            // For levels below its height, it acts as a solid ground (CENTER) foundation.
+            let role;
+            if (tile.heightStep > level) {
+              // Foundation: Skip drawing unless it's the layer immediately below (to fill the cliff base gap)
+              if (level !== tile.heightStep - 1) continue;
+              role = 'CENTER';
+            } else {
+              // Final Height: Calculate the correct role (Edge, NW, CENTER, etc.)
+              const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= level;
+              role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, isAtOrAbove, set.type);
+            }
+
+            const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+            if (img && tileId != null) {
+              ctx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.floor(mx * tileW), Math.floor(my * tileH), Math.ceil(tileW), Math.ceil(tileH));
+            }
           }
         }
       }
@@ -159,6 +261,14 @@ export function render(canvas, data, options = {}) {
         for (let mx = startX; mx < endX; mx++) {
           const tile = getCached(mx, my);
           if (!tile || tile.heightStep < 1) continue;
+
+          // NO VEGETATION ON CLIFFS (Borders / Roles other than CENTER)
+          const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+          if (setForRole) {
+            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+            const role = getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+            if (role !== 'CENTER') continue;
+          }
 
           // 1. Formal Trees Detection
           const isFormalTree = (mx, my) => (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
@@ -239,6 +349,13 @@ export function render(canvas, data, options = {}) {
         if ((mx + my) % 3 !== 0) continue;
         const tile = getCached(mx, my);
         if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
+
+        // NO TREES ON CLIFFS
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        if (setForRole) {
+          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
+          if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
+        }
         if (foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) < TREE_DENSITY_THRESHOLD) continue;
         const right = getCached(mx+1, my);
         if (!right || right.heightStep !== tile.heightStep) continue;
@@ -269,6 +386,14 @@ export function render(canvas, data, options = {}) {
       for (let mx = startX; mx < endX; mx++) {
         const tile = getCached(mx, my);
         if (!tile || tile.heightStep < 1) continue;
+
+        // NO VEGETATION ON CLIFFS (Tops redraw)
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        if (setForRole) {
+          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
+          if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
+        }
+
         const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
 
         // 1. Scatter Tops (Palms/Mangroves correct columns)
