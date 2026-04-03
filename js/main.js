@@ -24,7 +24,11 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE
 } from './biome-tiles.js';
-import { analyzeScatterPass2Base, validScatterOriginMicro } from './scatter-pass2-debug.js';
+import {
+  analyzeScatterPass2Base,
+  validScatterOriginMicro,
+  grassSuppressedByScatterFootprint
+} from './scatter-pass2-debug.js';
 import { getTerrainSetWalkKind, isBaseTerrainSpriteWalkable } from './walkability.js';
 
 /** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
@@ -358,11 +362,11 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
 
     let occupiedByScatter = false;
     const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
+    const microWDbg = data.width * CHUNK_SIZE;
+    const microHDbg = data.height * CHUNK_SIZE;
+    const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
+    const validOriginMemoDbg = new Map();
     if (scatterItems.length > 0 && !tile.isRoad && !tile.isCity) {
-      const microWDbg = data.width * CHUNK_SIZE;
-      const microHDbg = data.height * CHUNK_SIZE;
-      const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
-      const validOriginMemoDbg = new Map();
       const maxScatterRowsDbg = 8;
       outerCont: for (let dox = 1; dox <= 3; dox++) {
         const ox = mx - dox;
@@ -411,16 +415,43 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
         const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
         const objSet = OBJECT_SETS[itemKey];
         if (objSet) {
+          const { cols } = parseShape(objSet.shape);
+          const treeTypeChk = getTreeType(tile.biomeId);
+          const formalAt = (txc, tyc) =>
+            (!!treeTypeChk &&
+              (txc + tyc) % 3 === 0 &&
+              foliageDensity(txc, tyc, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) ||
+            (!!treeTypeChk &&
+              (txc + tyc) % 3 === 1 &&
+              foliageDensity(txc - 1, tyc, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD);
           const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-          const top = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
-          if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
-          if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
-          occupiedByScatter = true;
+          let anyLeftCol = false;
+          if (base?.ids?.length) {
+            for (let idx = 0; idx < base.ids.length; idx++) {
+              if (idx % cols !== 0) continue;
+              const tyc = my + Math.floor(idx / cols);
+              if (!formalAt(mx, tyc)) anyLeftCol = true;
+            }
+          }
+          if (anyLeftCol) {
+            const top = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+            if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
+            if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
+            occupiedByScatter = true;
+          }
         }
       }
     }
 
-    if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45) {
+    const suppressGrassLikeRender =
+      grassSuppressedByScatterFootprint(mx, my, data, validOriginMemoDbg) ||
+      (scatterItems.length > 0 &&
+        !tile.isRoad &&
+        !tile.isCity &&
+        !isFormalOccupied &&
+        foliageDensity(mx, my, seed + 111, 2.5) > 0.82);
+
+    if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45 && !suppressGrassLikeRender) {
       const variant = getGrassVariant(tile.biomeId);
       const tiles = GRASS_TILES[variant];
       if (tiles) {

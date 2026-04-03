@@ -10,6 +10,7 @@ import {
 } from './biome-tiles.js';
 
 const MAX_SCATTER_ROWS_PASS2 = 8;
+const MAX_SCATTER_COLS_FOOTPRINT = 8;
 
 /**
  * True se (mx,my) pode ser coluna esquerda de um scatter (2B / origem 2C): não é interior de
@@ -110,6 +111,100 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
 
   if (memo) memo.set(memoKey, true);
   return true;
+}
+
+/**
+ * True se (mx,my) está dentro do retângulo base de um scatter cuja origem passa nas mesmas regras do 2B
+ * (origem válida + noise), **mesmo quando o spawn falha** (ex.: formal no footprint).
+ * Evita grama por baixo de “árvores que o gerador queria” mas não desenhou.
+ */
+export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
+  const seed = data.seed;
+  const microW = data.width * CHUNK_SIZE;
+  const microH = data.height * CHUNK_SIZE;
+  const getT = (x, y) => getMicroTile(x, y, data);
+  const here = getT(mx, my);
+  if (!here || here.heightStep < 1 || here.isRoad || here.isCity) return false;
+  if ((BIOME_VEGETATION[here.biomeId] || []).length === 0) return false;
+
+  for (let oy0 = my; oy0 >= my - MAX_SCATTER_ROWS_PASS2 + 1 && oy0 >= 0; oy0--) {
+    for (let ox0 = mx; ox0 >= mx - MAX_SCATTER_COLS_FOOTPRINT + 1 && ox0 >= 0; ox0--) {
+      const dmx = mx - ox0;
+      const dmy = my - oy0;
+      if (dmx < 0 || dmy < 0) continue;
+
+      const nTile = getT(ox0, oy0);
+      if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+      if (here.heightStep !== nTile.heightStep) continue;
+
+      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
+      if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
+
+      const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+      if (itemsO.length === 0) continue;
+      const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
+      const objSet = OBJECT_SETS[itemKey];
+      if (!objSet) continue;
+      const { rows, cols } = parseShape(objSet.shape);
+      if (dmx < cols && dmy < rows) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Conjunto de chaves "mx,my" no viewport onde não se desenha grama (footprint scatter “hipotético” +
+ * células com noise scatter alto). Uma passagem O(origens no retângulo expandido) em vez de
+ * grassSuppressedByScatterFootprint por tile — evita lag no render.
+ */
+export function buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data, memo = null) {
+  const set = new Set();
+  const seed = data.seed;
+  const microW = data.width * CHUNK_SIZE;
+  const microH = data.height * CHUNK_SIZE;
+  const getT = (x, y) => getMicroTile(x, y, data);
+
+  const ox0Min = Math.max(0, startX - MAX_SCATTER_COLS_FOOTPRINT + 1);
+  const oy0Min = Math.max(0, startY - MAX_SCATTER_ROWS_PASS2 + 1);
+  const ox0Max = Math.min(microW, endX);
+  const oy0Max = Math.min(microH, endY);
+
+  for (let oy0 = oy0Min; oy0 < oy0Max; oy0++) {
+    for (let ox0 = ox0Min; ox0 < ox0Max; ox0++) {
+      const nTile = getT(ox0, oy0);
+      if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
+      if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
+
+      const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+      if (itemsO.length === 0) continue;
+      const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
+      const objSet = OBJECT_SETS[itemKey];
+      if (!objSet) continue;
+      const { rows, cols } = parseShape(objSet.shape);
+
+      for (let dy = 0; dy < rows; dy++) {
+        for (let dx = 0; dx < cols; dx++) {
+          const gx = ox0 + dx;
+          const gy = oy0 + dy;
+          if (gx < startX || gx >= endX || gy < startY || gy >= endY) continue;
+          const cTile = getT(gx, gy);
+          if (cTile && cTile.heightStep === nTile.heightStep) set.add(`${gx},${gy}`);
+        }
+      }
+    }
+  }
+
+  for (let gy = startY; gy < endY; gy++) {
+    for (let gx = startX; gx < endX; gx++) {
+      const t = getT(gx, gy);
+      if (!t || t.isRoad || t.isCity) continue;
+      if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
+      if (foliageDensity(gx, gy, seed + 111, 2.5) > 0.82) set.add(`${gx},${gy}`);
+    }
+  }
+
+  return set;
 }
 
 /**
@@ -224,26 +319,27 @@ export function analyzeScatterPass2Base(mx, my, data) {
       } else {
         const { rows, cols } = parseShape(objSet.shape);
         cols2B = cols;
-        let canSpawn = true;
-        for (let oy = 0; oy < rows && canSpawn; oy++) {
-          for (let ox = 0; ox < cols; ox++) {
-            const txc = mx + ox;
-            const tyc = my + oy;
-            if (formalTree(txc, tyc) || formalNeighbor(txc, tyc)) {
-              canSpawn = false;
-              reasons2B.push(`canSpawn false: formal no footprint (${txc},${tyc})`);
-              break;
-            }
+        const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+        if (!basePart?.ids?.length) reasons2B.push('sem part base/CENTER com ids');
+        else {
+          baseLeftColumnSpriteIds = basePart.ids.filter((_, idx) => idx % cols === 0);
+          let drawableLeft = 0;
+          let blockedLeft = 0;
+          for (let idx = 0; idx < basePart.ids.length; idx++) {
+            if (idx % cols !== 0) continue;
+            const tyc = my + Math.floor(idx / cols);
+            if (formalTree(mx, tyc) || formalNeighbor(mx, tyc)) blockedLeft++;
+            else drawableLeft++;
           }
-        }
-        if (canSpawn) {
-          const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-          if (!basePart?.ids?.length) reasons2B.push('sem part base/CENTER com ids');
-          else {
-            baseLeftColumnSpriteIds = basePart.ids.filter((_, idx) => idx % cols === 0);
-            draws2B = baseLeftColumnSpriteIds.length > 0;
-            if (!draws2B) reasons2B.push('sem sprites na coluna esquerda do base');
+          draws2B = drawableLeft > 0;
+          if (blockedLeft > 0) {
+            reasons2B.push(
+              draws2B
+                ? `2B parcial: ${drawableLeft} tile(s) na coluna esquerda · ${blockedLeft} omitido(s) (formal)`
+                : `2B: coluna esquerda toda bloqueada por formal (${blockedLeft} tile(s))`
+            );
           }
+          if (!draws2B && blockedLeft === 0) reasons2B.push('sem sprites na coluna esquerda do base');
         }
       }
     }
@@ -299,6 +395,17 @@ export function analyzeScatterPass2Base(mx, my, data) {
         if (!basePartO?.ids?.length) continue;
         const idxO = doy * colsO + dox;
         if (idxO < 0 || idxO >= basePartO.ids.length) continue;
+
+        const treeFormalDest = getTreeType(tile.biomeId);
+        const isFTD =
+          !!treeFormalDest &&
+          (mx + my) % 3 === 0 &&
+          foliageDensity(mx, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+        const isFND =
+          !!treeFormalDest &&
+          (mx + my) % 3 === 1 &&
+          foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+        if (isFTD || isFND) continue;
 
         draws2C = true;
         match2C = {

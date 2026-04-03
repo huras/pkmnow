@@ -11,7 +11,7 @@ import {
   scatterHasWindSway
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
-import { validScatterOriginMicro } from './scatter-pass2-debug.js';
+import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 
 /** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
 const VEG_MULTITILE_OVERLAP_PX = 1;
@@ -365,15 +365,27 @@ export function render(canvas, data, options = {}) {
     }
 
     // PASS 2: BASES (Veggie Trunks / Scatter Bases)
+    let scatterFootprintNoGrassSet = new Set();
     if (natureImg || cavesImg) {
       const microWPass2 = width * CHUNK_SIZE;
       const microHPass2 = height * CHUNK_SIZE;
       const getWorldTilePass2 = (tx, ty) => getMicroTile(tx, ty, data);
       const validOriginMemo = new Map();
+      scatterFootprintNoGrassSet = buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data, validOriginMemo);
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
           const tile = getCached(mx, my);
           if (!tile || tile.heightStep < 1) continue;
+
+          const treeType_check = getTreeType(tile.biomeId);
+          const isFormalTree = (tx, ty) =>
+            !!treeType_check &&
+            (tx + ty) % 3 === 0 &&
+            foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          const isFormalNeighbor = (tx, ty) =>
+            !!treeType_check &&
+            (tx + ty) % 3 === 1 &&
+            foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
           const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
 
@@ -427,6 +439,8 @@ export function render(canvas, data, options = {}) {
                   const idxO = doy * colsO + dox;
                   if (idxO < 0 || idxO >= basePartO.ids.length) continue;
 
+                  if (isFormalTree(mx, my) || isFormalNeighbor(mx, my)) continue;
+
                   const angleO = scatterHasWindSway(itemKeyO)
                     ? Math.sin(time * 2.5 + ox0 * 0.3 + oy0 * 0.7) * 0.04
                     : 0;
@@ -448,10 +462,7 @@ export function render(canvas, data, options = {}) {
             if (role !== 'CENTER') continue;
           }
 
-          // 1. Formal Trees Detection (BIOME AWARE)
-          const treeType_check = getTreeType(tile.biomeId);
-          const isFormalTree = (mx, my) => !!treeType_check && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-          const isFormalNeighbor = (mx, my) => !!treeType_check && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          // 1. Formal Trees (BIOME AWARE) — helpers já definidos no início do tile
           const isFormalOccupied = isFormalTree(mx, my) || isFormalNeighbor(mx, my);
           
           let occupiedByScatter = false;
@@ -498,33 +509,27 @@ export function render(canvas, data, options = {}) {
                 const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
                 const objSet = OBJECT_SETS[itemKey];
                 if (objSet) {
-                  const { rows, cols } = parseShape(objSet.shape);
-                  // Ensure NO part of this scatter object overlaps a formal tree
-                  let canSpawn = true;
-                  for (let oy = 0; oy < rows && canSpawn; oy++) {
-                    for (let ox = 0; ox < cols; ox++) {
-                      if (isFormalTree(mx + ox, my + oy) || isFormalNeighbor(mx + ox, my + oy)) {
-                        canSpawn = false;
-                        break;
-                      }
-                    }
-                  }
-                  
-                  if (canSpawn) {
-                    const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
-                    if (basePart) {
-                      const angle = scatterHasWindSway(itemKey)
-                        ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
-                        : 0;
-                      const thB = Math.ceil(tileH);
-                      basePart.ids.forEach((id, idx) => {
-                        const ox = idx % cols;
-                        if (ox !== 0) return;
-                        const oy = Math.floor(idx / cols);
-                        const px = Math.floor(mx * tileW) + ox * tileW;
-                        const py = Math.floor(my * tileH) + oy * (thB - VEG_MULTITILE_OVERLAP_PX);
-                        drawScatterTile16(objSet, id, px, py, angle);
-                      });
+                  const { cols } = parseShape(objSet.shape);
+                  const basePart = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+                  if (basePart) {
+                    const angle = scatterHasWindSway(itemKey)
+                      ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
+                      : 0;
+                    const thB = Math.ceil(tileH);
+                    let drewAnyOriginFrag = false;
+                    basePart.ids.forEach((id, idx) => {
+                      const ox = idx % cols;
+                      if (ox !== 0) return;
+                      const oy = Math.floor(idx / cols);
+                      const tx = mx + ox;
+                      const ty = my + oy;
+                      if (isFormalTree(tx, ty) || isFormalNeighbor(tx, ty)) return;
+                      const px = Math.floor(mx * tileW) + ox * tileW;
+                      const py = Math.floor(my * tileH) + oy * (thB - VEG_MULTITILE_OVERLAP_PX);
+                      drawScatterTile16(objSet, id, px, py, angle);
+                      drewAnyOriginFrag = true;
+                    });
+                    if (drewAnyOriginFrag) {
                       drawnScatterOrigin = true;
                       occupiedByScatter = true;
                     }
@@ -534,6 +539,16 @@ export function render(canvas, data, options = {}) {
           }
 
           if (isFormalOccupied || occupiedByScatter) continue;
+          if (scatterFootprintNoGrassSet.has(`${mx},${my}`)) continue;
+          if (
+            !tile.isRoad &&
+            !tile.isCity &&
+            scatterItems.length > 0 &&
+            !isFormalOccupied &&
+            foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82
+          ) {
+            continue;
+          }
 
           // 3. Grass/Small Cacti
           if (foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD && !tile.isRoad && !tile.isCity) {
@@ -708,36 +723,14 @@ export function render(canvas, data, options = {}) {
              const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              
-             let occupiedByScatter = false;
              const items = BIOME_VEGETATION[tile.biomeId] || [];
-             if (items.length > 0) {
-               if (!(isFT || isFN) && foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
-                 occupiedByScatter = true;
-               } else {
-                 for (let dox = 1; dox <= 3; dox++) {
-                   const nx = mx - dox;
-                   const nTile = getCached(nx, my);
-                   if (nTile && foliageDensity(nx, my, data.seed + 111, 2.5) > 0.82) {
-                     const nItem = items[Math.floor(seededHash(nx, my, data.seed + 222) * items.length)];
-                     const nObj = OBJECT_SETS[nItem];
-                     if (nObj) {
-                       const { cols: nCols } = parseShape(nObj.shape);
-                       let nCanSpawn = true;
-                       const nTreeType = getTreeType(nTile.biomeId);
-                       for(let ox=0; ox<nCols; ox++) {
-                         const tx_chk = nx+ox;
-                         const isFT_chk = !!nTreeType && (tx_chk + my) % 3 === 0 && foliageDensity(tx_chk, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-                         const isFN_chk = !!nTreeType && (tx_chk + my) % 3 === 1 && foliageDensity(tx_chk - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-                         if (isFT_chk || isFN_chk) { nCanSpawn = false; break; }
-                       }
-                       if (nCanSpawn && dox < nCols) { occupiedByScatter = true; break; }
-                     }
-                   }
-                 }
-               }
-             }
+             const noGrassTopUnderScatter =
+               scatterFootprintNoGrassSet.has(`${mx},${my}`) ||
+               (items.length > 0 &&
+                 !(isFT || isFN) &&
+                 foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82);
 
-             if (!isFT && !isFN && !occupiedByScatter) {
+             if (!isFT && !isFN && !noGrassTopUnderScatter) {
                const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
                const intensity = isCactus ? 0.07 : 0.12;
                const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
