@@ -94,21 +94,45 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
     if (memo) memo.set(memoKey, false);
     return false;
   }
-  const { cols: colsO } = parseShape(objSetO.shape);
+  const { rows: rowsO, cols: colsO } = parseShape(objSetO.shape);
   const treeTypeO = getTreeType(nTile.biomeId);
-  for (let ox = 0; ox < colsO; ox++) {
-    const txc = mx + ox;
-    const isFT =
-      !!treeTypeO &&
-      (txc + my) % 3 === 0 &&
-      foliageDensity(txc, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-    const isFN =
-      !!treeTypeO &&
-      (txc + my) % 3 === 1 &&
-      foliageDensity(txc - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-    if (isFT || isFN) {
-      if (memo) memo.set(memoKey, false);
-      return false;
+
+  // RIGOROUS FOOTPRINT SCAN: All tiles in the rows x cols area must be valid
+  for (let dy = 0; dy < rowsO; dy++) {
+    for (let dx = 0; dx < colsO; dx++) {
+      const gx = mx + dx;
+      const gy = my + dy;
+      const cTile = getT(gx, gy);
+
+      // 1. Basic Existence and Terrain Gate
+      if (!cTile || cTile.heightStep !== nTile.heightStep || cTile.isRoad || cTile.isCity) {
+        if (memo) memo.set(memoKey, false);
+        return false;
+      }
+
+      // 2. Flat Ground Gate (CENTER role only)
+      const setC = TERRAIN_SETS[BIOME_TO_TERRAIN[cTile.biomeId] || 'grass'];
+      if (setC) {
+        const chkC = (r, c) => (getT(c, r)?.heightStep ?? -99) >= nTile.heightStep;
+        if (getRoleForCell(gy, gx, microH, microW, chkC, setC.type) !== 'CENTER') {
+          if (memo) memo.set(memoKey, false);
+          return false;
+        }
+      }
+
+      // 3. Formal Tree Overlap Gate
+      const isFT =
+        !!treeTypeO &&
+        (gx + gy) % 3 === 0 &&
+        foliageDensity(gx, gy, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+      const isFN =
+        !!treeTypeO &&
+        (gx + gy) % 3 === 1 &&
+        foliageDensity(gx - 1, gy, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+      if (isFT || isFN) {
+        if (memo) memo.set(memoKey, false);
+        return false;
+      }
     }
   }
 

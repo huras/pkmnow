@@ -626,22 +626,23 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         const roleOrig = setRoot ? getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep, setRoot.type) : 'CENTER';
 
         if (roleOrig === 'CENTER') {
-          const ids = TREE_TILES[treeType];
-          if (ids) {
-            // Part 0 (Left half)
-            if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
-              drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
-            }
-          // Part 1 (Right half)
           const rx = mxScan + 1;
-          if (rx >= startX && rx < endX && myScan >= startY && myScan < endY) {
-            const hRight = getMicroTile(rx, myScan, data)?.heightStep;
-            if (hRight === tile.heightStep) {
-              drawTile16(ids.base[1], (rx - startX) * tileW - VEG_MULTITILE_OVERLAP_PX, (myScan - startY) * tileH);
+          const hRight = getMicroTile(rx, myScan, data)?.heightStep;
+          
+          if (hRight === tile.heightStep) {
+            const ids = TREE_TILES[treeType];
+            if (ids) {
+              // Part 0 (Left half)
+              if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
+                drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
+              }
+              // Part 1 (Right half)
+              if (rx >= startX && rx < endX && myScan >= startY && myScan < endY) {
+                drawTile16(ids.base[1], (rx - startX) * tileW - VEG_MULTITILE_OVERLAP_PX, (myScan - startY) * tileH);
+              }
             }
           }
         }
-      }
       }
 
       // 2. Scatter Objects
