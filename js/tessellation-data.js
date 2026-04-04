@@ -514,6 +514,26 @@ export const TERRAIN_SETS = {
       "IN_NW": 2185
     }
   },
+  "road": {
+    "type": "conc-conv-b",
+    "centerId": 2851,
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
+    "roles": {
+      "OUT_NW": 2793,
+      "EDGE_N": 2794,
+      "OUT_NE": 2795,
+      "IN_SE": 2796,
+      "IN_SW": 2797,
+      "EDGE_W": 2850,
+      "CENTER": 2851,
+      "EDGE_E": 2852,
+      "IN_NE": 2853,
+      "IN_NW": 2854,
+      "OUT_SW": 2907,
+      "EDGE_S": 2908,
+      "OUT_SE": 2909
+    }
+  },
   "jogador yellow grass": {
     "type": "conc-conv-b",
     "centerId": 2140,

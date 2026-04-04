@@ -575,7 +575,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         if (!tile || tile.heightStep < level) continue;
 
         let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        if (tile.isRoad && TERRAIN_SETS['terrain folliage']) setName = 'terrain folliage';
+        if (tile.isRoad) setName = 'road';
         const set = TERRAIN_SETS[setName];
 
         if (set) {
@@ -621,12 +621,17 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
 
       // 1. Formal Trees (2x1)
       if (isFormalRoot(mxScan, myScan)) {
-        const ids = TREE_TILES[treeType];
-        if (ids) {
-          // Part 0 (Left half)
-          if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
-            drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
-          }
+        // STRICT HEIGHT CHECK: Formal trees only start on flat ground
+        const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        const roleOrig = setRoot ? getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep, setRoot.type) : 'CENTER';
+
+        if (roleOrig === 'CENTER') {
+          const ids = TREE_TILES[treeType];
+          if (ids) {
+            // Part 0 (Left half)
+            if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
+              drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
+            }
           // Part 1 (Right half)
           const rx = mxScan + 1;
           if (rx >= startX && rx < endX && myScan >= startY && myScan < endY) {
@@ -636,6 +641,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             }
           }
         }
+      }
       }
 
       // 2. Scatter Objects

@@ -103,6 +103,12 @@ Forragem do Terreno:
 		with dirt borders
 			rocky - Center ID = 85 [flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx] (conc-conv-a)
 			
+Estradas / Roads:
+	Camada de asfalto/terra batida que segue caminhos conectando cidades.
+	Sempre usa o set conc-conv-b para bordas suaves com o bioma ao redor.
+	Tipos:
+		road - Center ID = 2851 [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-b)
+			
 Lago no terreno:
 	Non sea water heigh change tiling
 	Tipos:
