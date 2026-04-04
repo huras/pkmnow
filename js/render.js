@@ -277,7 +277,22 @@ export function render(canvas, data, options = {}) {
 
     ctx.translate(currentTransX, currentTransY);
 
-    const getCached = (mx, my) => getMicroTile(mx, my, data);
+    // Otimização de Frame: Cache de tiles para o viewport atual
+    const tileCache = new Map();
+    const getCached = (mx, my) => {
+      const key = (mx << 16) | (my & 0xFFFF);
+      if (tileCache.has(key)) return tileCache.get(key);
+      const t = getMicroTile(mx, my, data);
+      tileCache.set(key, t);
+      return t;
+    };
+
+    // Pré-carregar os tiles visíveis no cache
+    for (let my = startY; my < endY; my++) {
+      for (let mx = startX; mx < endX; mx++) {
+        getCached(mx, my);
+      }
+    }
 
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const cavesImg = imageCache.get('tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png');
@@ -620,11 +635,28 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   octx.fillStyle = '#111';
   octx.fillRect(0, 0, size, size);
 
+  // NOVO: Cache de metadados para evitar recálculos matemáticos (Otimização GIGANTE de FPS)
+  const tileCache = new Map();
+  const getCachedTile = (mx, my) => {
+    const key = (mx << 16) | (my & 0xFFFF); // Chave numérica rápida
+    if (tileCache.has(key)) return tileCache.get(key);
+    const t = getMicroTile(mx, my, data);
+    tileCache.set(key, t);
+    return t;
+  };
+
+  // Pré-aquecer o cache para a área do chunk + margem de segurança para vizinhos
+  for (let my = startY - 2; my < endY + 2; my++) {
+    for (let mx = startX - 2; mx < endX + 2; mx++) {
+      getCachedTile(mx, my);
+    }
+  }
+
   // PASS 1: TERRAIN (Base + Height Layers)
   for (let level = 0; level <= LAND_STEPS; level++) {
     for (let my = startY; my < endY; my++) {
       for (let mx = startX; mx < endX; mx++) {
-        const tile = getMicroTile(mx, my, data);
+        const tile = getCachedTile(mx, my);
         if (!tile || tile.heightStep < level) continue;
 
         // 1.1 Render Base Layer
@@ -642,7 +674,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             if (level !== tile.heightStep - 1) role = null; // Skip if too far below current surface
             else role = 'CENTER';
           } else {
-            const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= level;
+            const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
             role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
           }
 
@@ -658,27 +690,24 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         }
 
         // 1.4 Render Terrain Foliage (Detail Skin)
-        // Only render on the "surface" level for this tile to cut by height
         if (tile.heightStep === level && !tile.isRoad && !tile.isCity && tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD) {
           const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
           const foliageSet = foliageSetName ? TERRAIN_SETS[foliageSetName] : null;
 
           if (foliageSet) {
-            // UNIFIED SAFETY CHECK: Must be foliage AND not near a cliff
+            // UNIFIED SAFETY CHECK Caching neighbors
             const isFoliageSafeAt = (r, c) => {
-              const t = getMicroTile(c, r, data);
+              const t = getCachedTile(c, r);
               if (!t || t.heightStep !== level || t.biomeId !== tile.biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD || t.isRoad || t.isCity) return false;
               
-              // 1-tile radius safety from height transitions
               for (let dy = -1; dy <= 1; dy++) {
                 for (let dx = -1; dx <= 1; dx++) {
-                  if (getMicroTile(c + dx, r + dy, data)?.heightStep !== level) return false;
+                  if (getCachedTile(c + dx, r + dy)?.heightStep !== level) return false;
                 }
               }
               return true;
             };
 
-            // Skip rendering if this tile itself isn't safe (it will be an 'empty' neighbor for others)
             if (!isFoliageSafeAt(my, mx)) continue;
 
             const imgPath = TessellationEngine.getImagePath(foliageSet.file);
@@ -708,7 +737,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   // PASS 1.5: GRASS OVERLAY (Bases)
   for (let my = startY; my < endY; my++) {
     for (let mx = startX; mx < endX; mx++) {
-      const tile = getMicroTile(mx, my, data);
+      const tile = getCachedTile(mx, my);
       if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
 
       const variant = getGrassVariant(tile.biomeId);
@@ -718,7 +747,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         // ENFORCE FLAT GROUND FOR GRASS (No grass on cliffs/edges)
         const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         if (setForRole) {
-           const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+           const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
            const microW = data.width * CHUNK_SIZE;
            const microH = data.height * CHUNK_SIZE;
            if (getRoleForCell(my, mx, microH, microW, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
@@ -745,7 +774,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
     for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
       if (mxScan < 0 || myScan < 0 || mxScan >= data.width * CHUNK_SIZE || myScan >= data.height * CHUNK_SIZE) continue;
       
-      const tile = getMicroTile(mxScan, myScan, data);
+      const tile = getCachedTile(mxScan, myScan);
       if (!tile || tile.heightStep < 1) continue;
 
       const treeType = getTreeType(tile.biomeId);
@@ -756,11 +785,11 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       if (isFormalRoot(mxScan, myScan)) {
         // STRICT HEIGHT CHECK: Formal trees only start on flat ground
         const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        const roleOrig = setRoot ? getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep, setRoot.type) : 'CENTER';
+        const roleOrig = setRoot ? getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep, setRoot.type) : 'CENTER';
 
         if (roleOrig === 'CENTER') {
           const rx = mxScan + 1;
-          const hRight = getMicroTile(rx, myScan, data)?.heightStep;
+          const hRight = getCachedTile(rx, myScan)?.heightStep;
           
           if (hRight === tile.heightStep) {
             const ids = TREE_TILES[treeType];
@@ -784,7 +813,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
            !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
         
         if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
-           if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getMicroTile(c, r, data), validOriginMemo)) {
+           if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getCachedTile(c, r), validOriginMemo)) {
               const items = BIOME_VEGETATION[tile.biomeId] || [];
               const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
               const objSet = OBJECT_SETS[itemKey];
@@ -800,20 +829,20 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
                     
                     // Fragment within current chunk bounds?
                     if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-                       const destTile = getMicroTile(tx, ty, data);
+                       const destTile = getCachedTile(tx, ty);
                        if (destTile?.heightStep === tile.heightStep) {
                           let allowDest = true;
                           if (ox > 0) {
                              const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
                              if (setForRole) {
-                                const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+                                const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
                                 const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
                                 allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
                              }
                           } else {
                              const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
                              if (setForRole) {
-                                const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+                                const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
                                 if (getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') allowDest = false;
                              }
                           }
