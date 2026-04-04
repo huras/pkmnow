@@ -1,4 +1,5 @@
 import { BIOMES } from './biomes.js';
+import { seededHash } from './tessellation-logic.js';
 
 /**
  * Mapeamento entre nossos IDs de Bioma e as chaves do TERRAIN_SETS no tessellation-data.js.
@@ -54,7 +55,7 @@ export function scatterHasWindSway(itemKey) {
   const k = String(itemKey).toLowerCase();
   if (k.includes('crystal')) return false;
   if (k.includes('dirt-rock') || k.includes('dirt-rocks')) return false;
-  if (k.includes('cactus')) return false;
+  if (k.includes('big-cactus')) return false;
   if (k.includes('shell')) return false;
   return true;
 }
@@ -66,15 +67,25 @@ export function scatterHasWindSway(itemKey) {
 export const GRASS_TILES = {
   default: { original: 117, small: 60, grass2: 3 },
   ice: { original: 118, small: 61, grass2: 4 },
-  desert: { original: 1884, cactusBase: 1997, cactusTop: 1940 },
+  /** Desert short-grass overlay only (sand tufts). Small cactus is scatter-only — see `small-cactus [1x1]`, like baby pine. */
+  desert: { original: 1884 },
   dirt: { original: 65, originalTop: 8, small: 60, mushroom: 119, dryGrass: 65 },
 };
 
 /** Tree overlay: 2×3 tiles (2 cols, 3 rows: 2 top + 1 base row) */
 export const TREE_TILES = {
   broadleaf: { base: [285, 286], top: [228, 229, 171, 172] },
+  broadleaf_red: { base: [287, 288], top: [230, 231, 173, 174] },
+  broadleaf_orange: { base: [289, 290], top: [232, 233, 175, 176] },
+  broadleaf_yellow: { base: [291, 292], top: [234, 235, 177, 178] },
+  broadleaf_half_snow: { base: [293, 294], top: [236, 237, 179, 180] },
+  broadleaf_full_snow: { base: [295, 296], top: [238, 239, 181, 182] },
+  
   broadleaf2: { base: [297, 298], top: [240, 241, 183, 184] },
+  
   pine: { base: [311, 312], top: [254, 255, 197, 198] },
+  pine_half_snow: { base: [313, 314], top: [256, 257, 199, 200] },
+  
   palm: { base: [322, 323], top: [265, 266, 208, 209] },
 };
 
@@ -125,7 +136,7 @@ export const BIOME_TO_FOLIAGE = {
  */
 export function getGrassVariant(biomeId) {
   if (NO_GRASS_BIOMES.has(biomeId)) return null;
-  if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TUNDRA.id) return 'ice';
+  if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TUNDRA.id || biomeId === BIOMES.TAIGA.id) return 'ice';
   if (biomeId === BIOMES.DESERT.id || biomeId === BIOMES.SAVANNA.id) return 'desert';
   if (biomeId === BIOMES.BEACH.id) return 'dirt';
   return 'default';
@@ -134,11 +145,49 @@ export function getGrassVariant(biomeId) {
 /**
  * Retorna o tipo de árvore para um biome ID.
  */
-export function getTreeType(biomeId) {
+export function getTreeType(biomeId, mx = 0, my = 0, seed = 0) {
   if (NO_TREE_BIOMES.has(biomeId)) return null;
-  if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TAIGA.id) return 'pine';
-  if (biomeId === BIOMES.GHOST_WOODS.id) return 'broadleaf2';
-  return 'broadleaf'; // Forest, Grassland, Jungle
+  
+  // Deterministic variety within the same biome
+  const h = seededHash(mx, my, seed);
+
+  if (biomeId === BIOMES.SNOW.id) {
+    return h > 0.4 ? 'pine_half_snow' : 'pine';
+  }
+  
+  if (biomeId === BIOMES.ICE.id) {
+    return 'pine_half_snow';
+  }
+
+  if (biomeId === BIOMES.TAIGA.id) {
+    if (h > 0.7) return 'broadleaf_half_snow';
+    if (h > 0.3) return 'pine';
+    return 'pine_half_snow';
+  }
+
+  if (biomeId === BIOMES.GHOST_WOODS.id) {
+    if (h > 0.8) return 'broadleaf_red';
+    if (h > 0.5) return 'broadleaf_orange';
+    return 'broadleaf2';
+  }
+
+  // Temperate Forest / Grassland variety
+  if (biomeId === BIOMES.FOREST.id || biomeId === BIOMES.GRASSLAND.id) {
+     if (h > 0.95) return 'broadleaf_orange';
+     if (h > 0.90) return 'broadleaf_yellow';
+     if (h > 0.85) return 'broadleaf_red';
+     return 'broadleaf';
+  }
+
+  if (biomeId === BIOMES.SAVANNA.id) {
+     return h > 0.6 ? 'broadleaf_orange' : 'broadleaf_yellow';
+  }
+
+  if (biomeId === BIOMES.JUNGLE.id) {
+     return 'palm';
+  }
+
+  return 'broadleaf';
 }
 
 // Configurações dinâmicas de "grama/folhagem curta" por bioma

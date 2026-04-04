@@ -336,7 +336,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       const bEnv = Object.values(BIOMES).find((b) => b.id === t.biomeId);
       const fTrees = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
       const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
-      const treeType = getTreeType(t.biomeId);
+      const treeType = getTreeType(t.biomeId, nx, ny, seed);
 
       surroundings.heightStep[dy + 1][dx + 1] = t.heightStep;
       surroundings.biome[dy + 1][dx + 1] = bEnv ? bEnv.name : '???';
@@ -368,7 +368,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   const { activeSprites, scatterContinuation } = (() => {
     const sprites = [];
     let scatterContinuation = null;
-    const treeType = getTreeType(tile.biomeId);
+    const treeType = getTreeType(tile.biomeId, mx, my, seed);
     const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
     const isFormalNeighbor =
       !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
@@ -437,7 +437,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
         const objSet = OBJECT_SETS[itemKey];
         if (objSet) {
           const { cols } = parseShape(objSet.shape);
-          const treeTypeChk = getTreeType(tile.biomeId);
+          const treeTypeChk = getTreeType(tile.biomeId, mx, my, seed);
           const formalAt = (txc, tyc) =>
             (!!treeTypeChk &&
               (txc + tyc) % 3 === 0 &&
@@ -476,11 +476,14 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       const variant = getGrassVariant(tile.biomeId);
       const tiles = GRASS_TILES[variant];
       if (tiles) {
-        const mainId = ft < 0.5 ? tiles.original : (tiles.cactusBase || tiles.grass2 || tiles.original);
+        const mainId =
+          variant === 'desert'
+            ? tiles.original
+            : ft < 0.5
+              ? tiles.original
+              : tiles.grass2 || tiles.original;
         sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
-        if (variant === 'desert' && ft >= 0.5 && tiles.cactusTop) {
-          sprites.push({ type: `grass-${variant}-top`, ids: [tiles.cactusTop] });
-        } else if (tiles.originalTop && ft < 0.5) {
+        if (variant !== 'desert' && tiles.originalTop && ft < 0.5) {
           sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
         }
       }
@@ -495,7 +498,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       const ny = my + dy;
       const t = getMicroTile(nx, ny, data);
       if (!t) continue;
-      const tt = getTreeType(t.biomeId);
+      const tt = getTreeType(t.biomeId, nx, ny, seed);
       const nNoise = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
       const phaseRoot = !!tt && (nx + ny) % 3 === 0 && nNoise >= TREE_DENSITY_THRESHOLD;
       if (!phaseRoot) continue;
@@ -526,7 +529,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     }
   }
 
-  const dbgTreeType = getTreeType(tile.biomeId);
+  const dbgTreeType = getTreeType(tile.biomeId, mx, my, seed);
   const dbgPhase = (mx + my) % 3;
   const dbgWestRoot =
     !!dbgTreeType &&
@@ -560,7 +563,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   }
 
   const isFormalTreeRoot =
-    !!getTreeType(tile.biomeId) &&
+    !!getTreeType(tile.biomeId, mx, my, seed) &&
     (mx + my) % 3 === 0 &&
     fdTrees >= TREE_DENSITY_THRESHOLD;
 
@@ -633,11 +636,11 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     },
     logic: {
       isFormalTree: (() => {
-        const treeType = getTreeType(tile.biomeId);
+        const treeType = getTreeType(tile.biomeId, mx, my, seed);
         return !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
       })(),
       isFormalNeighbor: (() => {
-        const treeType = getTreeType(tile.biomeId);
+        const treeType = getTreeType(tile.biomeId, mx - 1, my, seed);
         return (
           !!treeType &&
           (mx + my) % 3 === 1 &&

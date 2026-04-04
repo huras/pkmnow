@@ -255,7 +255,7 @@ Trees:
 		
 		big-cactus-1: IDs 1881,1882,1938,1939 (tops) + 1995,1996 (base) [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (3x2)
 		
-		small-cactus: IDs 1940 (tops) + 1997 (base) [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (2x1)
+		small-cactus: ID 1940 (top) + 1997 (base) [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (1×1 footprint, 2 tiles tall stacked like baby pine)
 		
 Terrain Deails / obstables / interactables:
 	Coisas encontradas no terreno que bloqueiam o jogador e enfeitam o cenário.
@@ -341,7 +341,7 @@ Bridges:
 Road Stairs:
 	left-to-right-raising-terrain-stairs - SEAMLESS_CENTER ID = 483  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
 	right-to-left-raising-terrain-stairs - SEAMLESS_CENTER ID = 484  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
-	stair-ns (South-to-North raising) - SEAMLESS_TILE ID = 369  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
+	stair-ns (South-to-North raising) - SEAMLESS_TILE ID = 370  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
 	stair-sn (North-to-South raising) - SEAMLESS_TILE ID = 107  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
 
 

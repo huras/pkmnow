@@ -1572,6 +1572,28 @@ export const OBJECT_SETS = {
       }
     ]
   },
+  "small-cactus [1x1]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
+    "shape": "1x1",
+    "parts": [
+      {
+        "role": "top",
+        "ids": [
+          1940
+        ],
+        "walkable": true,
+        "abovePlayer": true
+      },
+      {
+        "role": "base",
+        "ids": [
+          1997
+        ],
+        "walkable": false,
+        "abovePlayer": false
+      }
+    ]
+  },
   "dry-grass [2x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "shape": "2x1",
@@ -2245,28 +2267,6 @@ export const OBJECT_SETS = {
         "ids": [
           1995,
           1996
-        ],
-        "walkable": false,
-        "abovePlayer": false
-      }
-    ]
-  },
-  "small-cactus [1x1]": {
-    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "1x1",
-    "parts": [
-      {
-        "role": "tops",
-        "ids": [
-          1940
-        ],
-        "walkable": true,
-        "abovePlayer": true
-      },
-      {
-        "role": "base",
-        "ids": [
-          1997
         ],
         "walkable": false,
         "abovePlayer": false
@@ -2979,19 +2979,19 @@ export const OBJECT_SETS = {
     "parts": [
       {
         "role": "ROOF",
-        "ids": [ 0, 1, 2, 3, 4, 15, 16, 17, 18, 19, 30, 31, 32, 33, 34 ],
+        "ids": [0, 1, 2, 3, 4, 15, 16, 17, 18, 19, 30, 31, 32, 33, 34],
         "walkable": true,
         "abovePlayer": true
       },
       {
         "role": "CORE",
-        "ids": [ 45, 46, 47, 48, 49, 60, 61, 62, 63, 64, 75, 76, 78, 79 ],
+        "ids": [45, 46, 47, 48, 49, 60, 61, 62, 63, 64, 75, 76, 78, 79],
         "walkable": false,
         "abovePlayer": false
       },
       {
         "role": "DOOR",
-        "ids": [ 77 ],
+        "ids": [77],
         "walkable": true,
         "abovePlayer": false
       }
@@ -3003,19 +3003,19 @@ export const OBJECT_SETS = {
     "parts": [
       {
         "role": "ROOF",
-        "ids": [ 20, 21, 22, 23, 35, 36, 37, 38 ],
+        "ids": [20, 21, 22, 23, 35, 36, 37, 38],
         "walkable": true,
         "abovePlayer": true
       },
       {
         "role": "CORE",
-        "ids": [ 50, 51, 52, 53, 65, 66, 67, 68, 80, 82, 83 ],
+        "ids": [50, 51, 52, 53, 65, 66, 67, 68, 80, 82, 83],
         "walkable": false,
         "abovePlayer": false
       },
       {
         "role": "DOOR",
-        "ids": [ 81 ],
+        "ids": [81],
         "walkable": true,
         "abovePlayer": false
       }
@@ -3027,19 +3027,19 @@ export const OBJECT_SETS = {
     "parts": [
       {
         "role": "ROOF",
-        "ids": [ 90, 91, 92, 93, 105, 106, 107, 108 ],
+        "ids": [90, 91, 92, 93, 105, 106, 107, 108],
         "walkable": true,
         "abovePlayer": true
       },
       {
         "role": "CORE",
-        "ids": [ 120, 121, 122, 123, 135, 136, 137, 138, 150, 152, 153 ],
+        "ids": [120, 121, 122, 123, 135, 136, 137, 138, 150, 152, 153],
         "walkable": false,
         "abovePlayer": false
       },
       {
         "role": "DOOR",
-        "ids": [ 151 ],
+        "ids": [151],
         "walkable": true,
         "abovePlayer": false
       }
@@ -3143,7 +3143,7 @@ TERRAIN_SETS["stair-sn"] = {
 };
 TERRAIN_SETS["stair-ns"] = {
   "type": "seamless-horizontal-single-piece-a",
-  "centerId": 369,
+  "centerId": 370,
   "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
-  "roles": { "SEAMLESS_TILE": 369 }
+  "roles": { "SEAMLESS_TILE": 370 }
 };

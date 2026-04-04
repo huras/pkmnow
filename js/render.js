@@ -14,7 +14,7 @@ import {
   FOLIAGE_NOISE_SCALE,
   scatterHasWindSway
 } from './biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
+import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, elevationToStep } from './chunking.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 
 /** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
@@ -442,7 +442,7 @@ export function render(canvas, data, options = {}) {
           }
         }
 
-        // 3. (Dynamic Pass) Grass and Cactus Bases
+        // 3. (Dynamic Pass) Short grass overlay bases (desert = sand tufts only; cacti are scatter objects)
         const gv = getGrassVariant(tile.biomeId);
         const gTiles = GRASS_TILES[gv];
         const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
@@ -458,13 +458,12 @@ export function render(canvas, data, options = {}) {
 
            if (isFlat) {
               // Exclusion check (no grass under formal trees)
-              const trType = getTreeType(tile.biomeId);
+              const trType = getTreeType(tile.biomeId, mx, my, data.seed);
               const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
               const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
               
               if (!isFT && !isFN) {
-                 const fType = seededHash(mx, my, data.seed + 9993);
-                 let baseId = (gv === 'desert' && fType < 0.5) ? gTiles.cactusBase : gTiles.original;
+                 let baseId = gTiles.original;
                  
                  if (baseId != null) {
                     const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
@@ -476,7 +475,7 @@ export function render(canvas, data, options = {}) {
               }
            }
         }
-        const treeType = getTreeType(tile.biomeId);
+        const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
         if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
           const ids = TREE_TILES[treeType];
           if (ids?.top?.length && getCached(mx + 1, my)?.heightStep === tile.heightStep) {
@@ -509,16 +508,15 @@ export function render(canvas, data, options = {}) {
             ctx.restore();
           }
         }
-        // 3. Foliage Tops (Cacti/Dry Grass)
+        // 3. Foliage Tops (animated grass tips — not small cactus; cactus is scatter-only)
         const vt = getGrassVariant(tile.biomeId);
         const vTiles = GRASS_TILES[vt];
         const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
         if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
-           const fType = foliageType(mx, my, data.seed);
-           let topId = (vt === 'desert' && fType < 0.5) ? vTiles.cactusTop : vTiles.originalTop;
+           let topId = vTiles.originalTop;
            
            if (topId) {
-             const treeT_chk = getTreeType(tile.biomeId);
+             const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
              const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              
@@ -827,13 +825,12 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         }
 
         // Exclusion check: don't draw grass if it's a formal tree root
-        const treeType = getTreeType(tile.biomeId);
+        const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
         const isFT = !!treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
         const isFN = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
         
         if (!isFT && !isFN) {
-           const fType = foliageType(mx, my, data.seed);
-           let baseId = (variant === 'desert' && fType < 0.5) ? tiles.cactusBase : tiles.original;
+           let baseId = tiles.original;
            if (baseId != null) drawTile16(baseId, (mx - startX) * tileW, (my - startY) * tileH);
         }
       }
@@ -851,7 +848,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       const tile = getCachedTile(mxScan, myScan);
       if (!tile || tile.heightStep < 1) continue;
 
-      const treeType = getTreeType(tile.biomeId);
+      const treeType = getTreeType(tile.biomeId, mxScan, myScan, data.seed);
       const isFormalRoot = (tx, ty) =>
         !!treeType && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
