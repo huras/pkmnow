@@ -85,8 +85,8 @@ export function getMicroTile(mx, my, macroData) {
     const t11 = getMacroVal(temperature, ix + 1, iy + 1, width, height);
     let t = lerp(lerp(t00, t10, fx), lerp(t01, t11, fx), fy) + biomeNoise;
 
-    const organicX = Math.floor(mx / 4);
-    const organicY = Math.floor(my / 4);
+    const organicX = Math.floor(mx / 64);
+    const organicY = Math.floor(my / 64);
     const jitter4x4 = (seededHash(organicX, organicY, seed + 123) - 0.5) * 0.02;
     m += jitter4x4;
     t += jitter4x4;
@@ -161,7 +161,7 @@ export function getMicroTile(mx, my, macroData) {
                                         { x: hox, y: hoy + 5 },
                                         { x: hox + 4, y: hoy + 5 }
                                     ];
-                                    const allCornersIn = corners.every(c => (c.x**2 + c.y**2) < (cityRadius - 1)**2);
+                                    const allCornersIn = corners.every(c => (c.x ** 2 + c.y ** 2) < (cityRadius - 1) ** 2);
 
                                     if (allCornersIn) {
                                         const lDx = dx - hox;
@@ -226,7 +226,7 @@ export function getMicroTile(mx, my, macroData) {
     }
 
     // New Layered Terrain Data
-    const fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // FOLIAGE_NOISE_SCALE - Reduzido de 0.25 para blobs maiores
+    const fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // Restaurado para 0.08
     const fType = seededHash(mx, my, seed + 9993);
 
     return {

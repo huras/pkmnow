@@ -18,7 +18,7 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.MOUNTAIN.id]: "Rocky rock",
   [BIOMES.PEAK.id]: "Rocky snowy",
   [BIOMES.VOLCANO.id]: "lava-lake-dirt",
-  [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
+  [BIOMES.GHOST_WOODS.id]: "Dirty super-healthy-light-grass",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
   [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
 };
@@ -55,18 +55,18 @@ export function scatterHasWindSway(itemKey) {
 
 /** Grass overlay tile IDs per biome variant */
 export const GRASS_TILES = {
-  default:  { original: 117, small: 60, grass2: 3 },
-  ice:      { original: 118, small: 61, grass2: 4 },
-  desert:   { original: 1884, cactusBase: 1997, cactusTop: 1940 },
-  dirt:     { original: 65, originalTop: 8, small: 60, mushroom: 119, dryGrass: 65 },
+  default: { original: 117, small: 60, grass2: 3 },
+  ice: { original: 118, small: 61, grass2: 4 },
+  desert: { original: 1884, cactusBase: 1997, cactusTop: 1940 },
+  dirt: { original: 65, originalTop: 8, small: 60, mushroom: 119, dryGrass: 65 },
 };
 
 /** Tree overlay: 2×3 tiles (2 cols, 3 rows: 2 top + 1 base row) */
 export const TREE_TILES = {
-  broadleaf:    { base: [285, 286],   top: [228, 229, 171, 172] },
-  broadleaf2:   { base: [297, 298],   top: [240, 241, 183, 184] },
-  pine:         { base: [311, 312],   top: [254, 255, 197, 198] },
-  palm:         { base: [322, 323],   top: [265, 266, 208, 209] },
+  broadleaf: { base: [285, 286], top: [228, 229, 171, 172] },
+  broadleaf2: { base: [297, 298], top: [240, 241, 183, 184] },
+  pine: { base: [311, 312], top: [254, 255, 197, 198] },
+  palm: { base: [322, 323], top: [265, 266, 208, 209] },
 };
 
 /** Biomes que NÃO recebem grama */
@@ -101,6 +101,7 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.BEACH.id]: "jogador sandy",
   [BIOMES.SAVANNA.id]: "jogador orange-grass",
   [BIOMES.VOLCANO.id]: "rocky-volcano",
+  [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock", // Fallback para variação roxa
 };
 
@@ -125,12 +126,29 @@ export function getTreeType(biomeId) {
   return 'broadleaf'; // Forest, Grassland, Jungle
 }
 
-// Constantes de densiades
-export const GRASS_DENSITY_THRESHOLD = 0.40;  // 60% de cobertura (nos blobs)
+// Configurações dinâmicas de "grama/folhagem curta" por bioma
+export function getGrassParams(biomeId) {
+  // Padrão (Grasslands, etc.)
+  let scale = 0.2;
+  let threshold = 0.40;
+
+  // Overrides específicos
+  if (biomeId === BIOMES.SAVANNA.id) {
+    scale = 0.1;      // Manchas mais pontuais
+    threshold = 0.90;  // Bem mais ralo (10% de densidade)
+  } else if (biomeId === BIOMES.DESERT.id) {
+    scale = 0.15;    // Frequência menor no deserto (campos de cacto maiores)
+    threshold = 0.35;
+  }
+
+  return { scale, threshold };
+}
+
 export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
 export const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Threshold para a Forragem
 
-export const GRASS_NOISE_SCALE = 0.2;         // Blobs de ~5 tiles
+export const GRASS_NOISE_SCALE = 0.2;         // Fallback legacy
+export const GRASS_DENSITY_THRESHOLD = 0.40;  // Fallback legacy
 export const TREE_NOISE_SCALE = 0.1;          // Blobs de ~10 tiles
 export const FOLIAGE_NOISE_SCALE = 0.25;       // Blobs de ~4 tiles
 

@@ -6,10 +6,10 @@ import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
   BIOME_TO_FOLIAGE,
   GRASS_TILES, TREE_TILES,
-  getGrassVariant, getTreeType,
-  GRASS_DENSITY_THRESHOLD, TREE_DENSITY_THRESHOLD,
+  getGrassVariant, getTreeType, getGrassParams,
+  TREE_DENSITY_THRESHOLD,
   FOLIAGE_DENSITY_THRESHOLD,
-  GRASS_NOISE_SCALE, TREE_NOISE_SCALE,
+  TREE_NOISE_SCALE,
   FOLIAGE_NOISE_SCALE,
   scatterHasWindSway
 } from './biome-tiles.js';
@@ -463,7 +463,8 @@ export function render(canvas, data, options = {}) {
         // 3. Foliage Tops (Cacti/Dry Grass)
         const variant = getGrassVariant(tile.biomeId);
         const tiles = GRASS_TILES[variant];
-        if (tiles && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD && !tile.isRoad && !tile.isCity) {
+        const { scale: gScale, threshold: gThreshold } = getGrassParams(tile.biomeId);
+        if (tiles && foliageDensity(mx, my, data.seed, gScale) >= gThreshold && !tile.isRoad && !tile.isCity) {
            const fType = foliageType(mx, my, data.seed);
            let topId = (variant === 'desert' && fType < 0.5) ? tiles.cactusTop : tiles.originalTop;
            if (topId) {
@@ -663,26 +664,28 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
           const foliageSet = foliageSetName ? TERRAIN_SETS[foliageSetName] : null;
 
           if (foliageSet) {
-            // ENFORCE FLAT GROUND (Must be CENTER role on the Base/Height Layer)
-            const baseSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-            const baseSet = TERRAIN_SETS[baseSetName];
-            if (baseSet) {
-              const isAtLevel = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= level;
-              const roleOnBase = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtLevel, baseSet.type);
-              if (roleOnBase !== 'CENTER') continue;
-            }
+            // UNIFIED SAFETY CHECK: Must be foliage AND not near a cliff
+            const isFoliageSafeAt = (r, c) => {
+              const t = getMicroTile(c, r, data);
+              if (!t || t.heightStep !== level || t.biomeId !== tile.biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD || t.isRoad || t.isCity) return false;
+              
+              // 1-tile radius safety from height transitions
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  if (getMicroTile(c + dx, r + dy, data)?.heightStep !== level) return false;
+                }
+              }
+              return true;
+            };
+
+            // Skip rendering if this tile itself isn't safe (it will be an 'empty' neighbor for others)
+            if (!isFoliageSafeAt(my, mx)) continue;
 
             const imgPath = TessellationEngine.getImagePath(foliageSet.file);
             const img = imageCache.get(imgPath);
             const fCols = imgPath.includes('caves') ? 50 : 57;
 
-            const isFoliageAt = (r, c) => {
-              const t = getMicroTile(c, r, data);
-              // CUT by height AND biome
-              return t && t.heightStep === level && t.biomeId === tile.biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD;
-            };
-
-            const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageAt, foliageSet.type);
+            const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageSafeAt, foliageSet.type);
             const fTileId = (foliageSet.roles[fRole] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId);
 
             if (img && fTileId != null) {
@@ -710,7 +713,8 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
 
       const variant = getGrassVariant(tile.biomeId);
       const tiles = GRASS_TILES[variant];
-      if (tiles && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD) {
+      const { scale: gScale, threshold: gThreshold } = getGrassParams(tile.biomeId);
+      if (tiles && foliageDensity(mx, my, data.seed, gScale) >= gThreshold) {
         // ENFORCE FLAT GROUND FOR GRASS (No grass on cliffs/edges)
         const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         if (setForRole) {
