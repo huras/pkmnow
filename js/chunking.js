@@ -169,7 +169,24 @@ export function getMicroTile(mx, my, macroData) {
  * Retorna 0.0 .. 1.0. Usado para decidir se colocar grama/árvore.
  */
 export function foliageDensity(mx, my, seed, scale) {
-    return seededHash(mx * scale | 0, my * scale | 0, seed + 7777);
+    const gx = mx * scale;
+    const gy = my * scale;
+    const ix = Math.floor(gx);
+    const iy = Math.floor(gy);
+    const tx = gx - ix;
+    const ty = gy - iy;
+
+    // Smoothstep interpolation factor
+    const sx = tx * tx * (3 - 2 * tx);
+    const sy = ty * ty * (3 - 2 * ty);
+
+    const v00 = seededHash(ix, iy, seed + 7777);
+    const v10 = seededHash(ix + 1, iy, seed + 7777);
+    const v01 = seededHash(ix, iy + 1, seed + 7777);
+    const v11 = seededHash(ix + 1, iy + 1, seed + 7777);
+
+    // Bilinear interpolation
+    return lerp(lerp(v00, v10, sx), lerp(v01, v11, sx), sy);
 }
 
 /**

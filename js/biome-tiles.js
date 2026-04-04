@@ -103,7 +103,7 @@ export function getTreeType(biomeId) {
 }
 
 // Constantes de densiades
-export const GRASS_DENSITY_THRESHOLD = 0.45;  // ~55% de cobertura
-export const TREE_DENSITY_THRESHOLD = 0.60;   // ~40% de cobertura
-export const GRASS_NOISE_SCALE = 3;            // Escala do ruído de colocação
-export const TREE_NOISE_SCALE = 2;
+export const GRASS_DENSITY_THRESHOLD = 0.40;  // 60% de cobertura (nos blobs)
+export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
+export const GRASS_NOISE_SCALE = 0.2;         // Blobs de ~5 tiles
+export const TREE_NOISE_SCALE = 0.1;          // Blobs de ~10 tiles

@@ -605,6 +605,29 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
     }
   }
 
+  // PASS 1.5: GRASS OVERLAY (Bases)
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+      const tile = getMicroTile(mx, my, data);
+      if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
+
+      const variant = getGrassVariant(tile.biomeId);
+      const tiles = GRASS_TILES[variant];
+      if (tiles && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD) {
+        // Exclusion check: don't draw grass if it's a formal tree root
+        const treeType = getTreeType(tile.biomeId);
+        const isFT = !!treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+        const isFN = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+        
+        if (!isFT && !isFN) {
+           const fType = foliageType(mx, my, data.seed);
+           let baseId = (variant === 'desert' && fType < 0.5) ? tiles.cactusBase : tiles.original;
+           if (baseId != null) drawTile16(baseId, (mx - startX) * tileW, (my - startY) * tileH);
+        }
+      }
+    }
+  }
+
   // PASS 2: BASES (Halogened scan for multi-tile objects)
   const validOriginMemo = new Map();
   // Scan original position up to 4 tiles West and 4 tiles North (for 3x3 or larger spillover)
