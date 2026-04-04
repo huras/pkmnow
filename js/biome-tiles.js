@@ -17,7 +17,7 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.JUNGLE.id]: "Dirty super-healthy-light-grass",
   [BIOMES.MOUNTAIN.id]: "Rocky rock",
   [BIOMES.PEAK.id]: "Rocky snowy",
-  [BIOMES.VOLCANO.id]: "Borda com dirt/terra lava-lake-dirt",
+  [BIOMES.VOLCANO.id]: "lava-lake-dirt",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
   [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
@@ -100,6 +100,7 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.DESERT.id]: "jogador sandy",
   [BIOMES.BEACH.id]: "jogador sandy",
   [BIOMES.SAVANNA.id]: "jogador orange-grass",
+  [BIOMES.VOLCANO.id]: "rocky-volcano",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock", // Fallback para variação roxa
 };
 

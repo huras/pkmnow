@@ -97,8 +97,6 @@ export function getMicroTile(mx, my, macroData) {
     let isRoad = false;
     let urbanBuilding = null;
     let roadFeature = null;
-
-    // Altura baseada no step (0.38, 0.44, 0.50, etc)
     let heightStep = elevationToStep(e);
 
     const macroCX = Math.floor(gx);
@@ -106,6 +104,14 @@ export function getMicroTile(mx, my, macroData) {
 
     if (macroCX >= 0 && macroCX < width && macroCY >= 0 && macroCY < height) {
         const macroIdx = macroCY * width + macroCX;
+        const macroBiomeId = macroData.biomes[macroIdx];
+
+        // Se o bioma macro for um bioma "especial" (posicionado manualmente ou via regra especial), 
+        // forçamos o micro-tile a respeitá-lo para evitar que suma no modo Play.
+        const specialBiomes = [BIOMES.VOLCANO.id, BIOMES.ARCANE.id, BIOMES.GHOST_WOODS.id];
+        if (specialBiomes.includes(macroBiomeId)) {
+            bId = macroBiomeId;
+        }
 
         if (macroData.graph) {
             // Verifica em um raio 3x3 de células macro para permitir que cidades vazem para chunks vizinhos (raio 45 tiles)
@@ -220,7 +226,7 @@ export function getMicroTile(mx, my, macroData) {
     }
 
     // New Layered Terrain Data
-    const fDensity = foliageDensity(mx, my, seed + 9992, 0.25); // FOLIAGE_NOISE_SCALE
+    const fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // FOLIAGE_NOISE_SCALE - Reduzido de 0.25 para blobs maiores
     const fType = seededHash(mx, my, seed + 9993);
 
     return {

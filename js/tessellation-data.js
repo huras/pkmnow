@@ -254,6 +254,30 @@ export const TERRAIN_SETS = {
       "IN_NW": 936
     }
   },
+  "lava-lake-dirt": {
+    "type": "conc-conv-a",
+    "centerId": 2311,
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
+    "roles": {
+      "OUT_NW": 2253, "EDGE_N": 2254, "OUT_NE": 2255,
+      "EDGE_W": 2310, "CENTER": 2311, "EDGE_E": 2312,
+      "IN_SE": 2313, "IN_SW": 2314,
+      "OUT_SW": 2367, "EDGE_S": 2368, "OUT_SE": 2369,
+      "IN_NE": 2370, "IN_NW": 2371
+    }
+  },
+  "rocky-volcano": {
+    "type": "conc-conv-a",
+    "centerId": 585,
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
+    "roles": {
+      "OUT_NW": 534, "EDGE_N": 535, "OUT_NE": 536,
+      "EDGE_W": 584, "CENTER": 585, "EDGE_E": 586,
+      "IN_SE": 587, "IN_SW": 588,
+      "OUT_SW": 634, "EDGE_S": 635, "OUT_SE": 636,
+      "IN_NE": 637, "IN_NW": 638
+    }
+  },
   "Dirty grassy": {
     "type": "conc-conv-a",
     "centerId": 881,
