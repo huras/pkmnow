@@ -29,7 +29,12 @@ import {
   validScatterOriginMicro,
   grassSuppressedByScatterFootprint
 } from './scatter-pass2-debug.js';
-import { getTerrainSetWalkKind, isBaseTerrainSpriteWalkable } from './walkability.js';
+import {
+  getTerrainSetWalkKind,
+  isBaseTerrainSpriteWalkable,
+  getFoliageOverlayTileId,
+  FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS
+} from './walkability.js';
 
 /** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
 const OBJECT_TILE_FLAGS_BY_ID = (() => {
@@ -304,6 +309,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
+  const foliageOverlayIdDbg = getFoliageOverlayTileId(mx, my, data);
 
   const surroundings = {
     heightStep: [
@@ -619,7 +625,10 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       overlayHints
     },
     collision: {
-      gameCanWalk: canWalk(mx, my, data),
+      gameCanWalk: canWalk(mx, my, data, foliageOverlayIdDbg),
+      foliageOverlaySpriteId: foliageOverlayIdDbg,
+      foliagePoolOverlayBlocksWalk:
+        foliageOverlayIdDbg != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(foliageOverlayIdDbg),
       walkSurfaceKind: getTerrainSetWalkKind(BIOME_TO_TERRAIN[tile.biomeId] || 'grass'),
       baseTerrainSpriteWalkable: isBaseTerrainSpriteWalkable(centerSpriteId),
       terrainSprite: {
@@ -796,7 +805,9 @@ function openDebugModal(info) {
       <div class="tile-debug-section-title">Colisão / metadados do tileset</div>
       <table class="tile-debug-table">
         <tbody>
-          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(Layer Base / Terrain Foliage + sprite na allowlist)</span></td></tr>
+          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(sprite base na allowlist + overlay lava/lago não bloqueante)</span></td></tr>
+          <tr><th>Foliage overlay (sprite)</th><td>${coll.foliageOverlaySpriteId != null ? coll.foliageOverlaySpriteId : '— (sem overlay)'}</td></tr>
+          <tr><th>Overlay pool bloqueia</th><td>${coll.foliagePoolOverlayBlocksWalk ? 'sim (lava: qualquer tile; lago roxo: sem OUT_*)' : 'não'}</td></tr>
           <tr><th>Superfície (set)</th><td>${coll.walkSurfaceKind === 'layer-base' ? 'Layer Base' : coll.walkSurfaceKind === 'terrain-foliage' ? 'Terrain Foliage' : '— (água, penhasco, lava…)'}</td></tr>
           <tr><th>Sprite base permitido</th><td>${coll.baseTerrainSpriteWalkable ? 'sim' : 'não'}</td></tr>
           <tr><th>Sprite base → OBJECT_SETS</th><td>${formatObjectSetsFlags(coll.terrainSprite?.objectSets)}</td></tr>

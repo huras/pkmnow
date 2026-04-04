@@ -24,8 +24,8 @@ export function setPlayerPos(x, y) {
   player.moveProgress = 0;
 }
 
-export function canWalk(x, y, data) {
-  return canWalkMicroTile(x, y, data);
+export function canWalk(x, y, data, cachedFoliageOverlayId) {
+  return canWalkMicroTile(x, y, data, cachedFoliageOverlayId);
 }
 
 /**
