@@ -189,12 +189,14 @@ export function generate(seedInput, customConfig = {}) {
   // Caminhos
   const workingCosts = new Float32Array(width * height);
   const roadTraffic = new Uint8Array(width * height);
+  const roadMasks = new Uint32Array(width * height);
   const cellImportance = new Uint16Array(width * height);
   const paths = [];
 
   let routeCount = 1;
 
-  for (const edge of sortedEdges) {
+  for (let i = 0; i < sortedEdges.length; i++) {
+    const edge = sortedEdges[i];
     const startNode = graph.nodes[edge.u];
     const endNode = graph.nodes[edge.v];
     const waterCostBase = Math.max(5, 40 / (1 + (edge.importance - 1) * 0.15));
@@ -212,9 +214,11 @@ export function generate(seedInput, customConfig = {}) {
       p.importance = edge.importance;
       p.name = generateRouteName(routeCount++);
       paths.push(p);
+      const pathBit = 1 << (i % 32);
       for (const cell of p) {
         const idx = cell.y * width + cell.x;
         roadTraffic[idx]++;
+        roadMasks[idx] |= pathBit;
         cellImportance[idx] = Math.max(cellImportance[idx], edge.importance);
         workingCosts[idx] = 0.05; 
       }
@@ -238,6 +242,7 @@ export function generate(seedInput, customConfig = {}) {
     graph,
     paths,
     roadTraffic,
+    roadMasks,
     cellImportance,
     landmarks,
     config

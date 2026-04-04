@@ -145,10 +145,14 @@ export function getMicroTile(mx, my, macroData) {
         if (!isCity && macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
             const localX = mx % CHUNK_SIZE;
             const localY = my % CHUNK_SIZE;
-            const hasPathN = macroCY > 0 && macroData.roadTraffic[(macroCY - 1) * width + macroCX] > 0;
-            const hasPathS = macroCY < height - 1 && macroData.roadTraffic[(macroCY + 1) * width + macroCX] > 0;
-            const hasPathE = macroCX < width - 1 && macroData.roadTraffic[macroCY * width + macroCX + 1] > 0;
-            const hasPathW = macroCX > 0 && macroData.roadTraffic[macroCY * width + macroCX - 1] > 0;
+
+            const myMask = macroData.roadMasks ? macroData.roadMasks[macroIdx] : 0xFFFFFFFF;
+            const getMask = (nx, ny) => (macroData.roadMasks ? macroData.roadMasks[ny * width + nx] : 0xFFFFFFFF);
+
+            const hasPathN = macroCY > 0 && (myMask & getMask(macroCX, macroCY - 1)) !== 0;
+            const hasPathS = macroCY < height - 1 && (myMask & getMask(macroCX, macroCY + 1)) !== 0;
+            const hasPathE = macroCX < width - 1 && (myMask & getMask(macroCX + 1, macroCY)) !== 0;
+            const hasPathW = macroCX > 0 && (myMask & getMask(macroCX - 1, macroCY)) !== 0;
 
             const inCenter = localX >= 6 && localX < 10 && localY >= 6 && localY < 10;
             const inN = hasPathN && localX >= 6 && localX < 10 && localY < 6;
