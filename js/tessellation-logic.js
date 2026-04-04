@@ -51,11 +51,6 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
   if (!s && !w && n && e)  return 'OUT_SW';
   if (!s && !e && n && w)  return 'OUT_SE';
 
-  // Para conc-conv-c, papéis de corredor interno
-  if (setType === 'conc-conv-c') {
-    if (!w && !e && n && s) return 'IN_EDGE_E';   // corredor vertical estreito
-    if (!n && !s && w && e) return 'IN_EDGE_W';   // corredor horizontal estreito
-  }
 
   // Fallbacks para pontas e pontes finas
   if (!n && !w && !e && s) return 'EDGE_N'; 
