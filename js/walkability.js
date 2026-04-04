@@ -26,6 +26,8 @@ export function getTerrainSetWalkKind(name) {
     name === 'sandy' ||
     name === 'snowy-sandy' ||
     name.endsWith('-pavement') ||
+    name.endsWith('-bridge') ||
+    name.startsWith('stair-') ||
     name === 'cidade chao' ||
     name.startsWith('above ')
   ) {
@@ -48,7 +50,10 @@ export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
 
 export function getBaseTerrainSpriteId(mx, my, data) {
   const tile = getMicroTile(mx, my, data);
-  const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  if (tile.isRoad && tile.roadFeature) {
+    setName = tile.roadFeature;
+  }
   const set = TERRAIN_SETS[setName];
   if (!set) return null;
   const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
@@ -60,7 +65,7 @@ export function getBaseTerrainSpriteId(mx, my, data) {
     isAtOrAbove,
     set.type
   );
-  return set.roles[role] ?? set.roles.CENTER ?? set.centerId ?? null;
+  return set.roles[role] ?? set.roles.CENTER ?? set.roles.SEAMLESS_CENTER ?? set.roles.SEAMLESS_TILE ?? set.centerId ?? null;
 }
 
 export function isBaseTerrainSpriteWalkable(spriteId) {

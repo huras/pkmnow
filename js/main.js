@@ -352,7 +352,10 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   if (isMacroValid) macroIdx = gy * data.width + gx;
 
   const centerSpriteId = (() => {
-    const setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+    let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+    if (tile.isRoad) {
+      setName = tile.roadFeature || 'road';
+    }
     const set = TERRAIN_SETS[setName];
     if (!set) return null;
     const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;

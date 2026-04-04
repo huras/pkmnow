@@ -27,6 +27,31 @@ Sets concavo + convexo:
 			[EDGE_W, CENTER, EDGE_E],
 			[OUT_SW, EDGE_S, OUT_SE]
 		]
+
+Sets esticaveis:
+	As extermidades são os mesmos tiles, mas o meio se repete seamless sem limite.
+	(extentable-vertical-three-piece-a)
+		[
+			[TOP_EXTREMITY],
+			[SEAMLESS_CENTER],
+			[BOTTOM_EXTREMITY]
+		]
+	(extentable-horizontal-three-piece-a)
+		[
+			[LEFT_EXTREMITY, SEAMLESS_CENTER, RIGHT_EXTREMITY]
+		]
+	
+Sets single:
+	Encaixa seamless com ele mesmo mas apenas numa direção (qualquer lado dela)
+	(seamless-horizontal-single-piece-a)
+		[
+			[SEAMLESS_TILE]
+		]
+	
+	(seamless-vertical-single-piece-a)
+		[
+			[SEAMLESS_TILE]
+		]
 		
 For "non-terrain/non-grass" tiles that represent objects, only base tiles of the shape are non walkable! i exemplified on trees but apply it to all obstacles.
 		
@@ -305,7 +330,18 @@ Roads:
 	gray-brick-mosaic-pavement - Center ID = 2647  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
 	cemented-pavement - Center ID = 2652  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
 	detailed-small-bricks-pavement - Center ID = 2629  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-d)
+	
 
+Bridges:
+	wooden-bridge - Center ID = 676  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
+	vertical-planks-but-horizontal-direction-wooden-bridge - Center ID = 673  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-d)
+	horizontal-planks-but-vertical-direction-wooden-bridge - Center ID = 670  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-d)
+
+Road Stairs:
+	left-to-right-raising-terrain-stairs - SEAMLESS_CENTER ID = 483  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
+	right-to-left-raising-terrain-stairs - SEAMLESS_CENTER ID = 484  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
+	south-to-north-raising-terrain-stairs - SEAMLESS_TILE ID = 369  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
+	north-to-south-raising-terrain-stairs - SEAMLESS_TILE ID = 107  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
 
 
 ```

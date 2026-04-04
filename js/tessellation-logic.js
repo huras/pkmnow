@@ -4,10 +4,26 @@
  */
 
 export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
+  if (setType === 'seamless-horizontal-single-piece-a' || setType === 'seamless-vertical-single-piece-a') {
+    return 'SEAMLESS_TILE';
+  }
+
   const n  = isLandAtFunc(r - 1, c);
   const s  = isLandAtFunc(r + 1, c);
   const w  = isLandAtFunc(r, c - 1);
   const e  = isLandAtFunc(r, c + 1);
+
+  if (setType === 'extentable-vertical-three-piece-a') {
+    if (!n) return 'TOP_EXTREMITY';
+    if (!s) return 'BOTTOM_EXTREMITY';
+    return 'SEAMLESS_CENTER';
+  }
+  if (setType === 'extentable-horizontal-three-piece-a') {
+    if (!w) return 'LEFT_EXTREMITY';
+    if (!e) return 'RIGHT_EXTREMITY';
+    return 'SEAMLESS_CENTER';
+  }
+
   const nw = isLandAtFunc(r - 1, c - 1);
   const ne = isLandAtFunc(r - 1, c + 1);
   const sw = isLandAtFunc(r + 1, c - 1);

@@ -3059,3 +3059,65 @@ TERRAIN_SETS["detailed-small-bricks-pavement"] = {
   }
 };
 TERRAIN_SETS["cidade chao"] = TERRAIN_SETS["detailed-small-bricks-pavement"];
+
+// Bridges
+TERRAIN_SETS["wooden-bridge"] = {
+  "type": "conc-conv-a",
+  "centerId": 676,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "OUT_NW": 618, "EDGE_N": 619, "OUT_NE": 620,
+    "EDGE_W": 675, "CENTER": 676, "EDGE_E": 677,
+    "IN_SE": 678, "IN_SW": 679,
+    "OUT_SW": 732, "EDGE_S": 733, "OUT_SE": 734,
+    "IN_NE": 735, "IN_NW": 736
+  }
+};
+TERRAIN_SETS["vertical-planks-bridge"] = {
+  "type": "conc-conv-d",
+  "centerId": 673,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "OUT_NW": 615, "EDGE_N": 616, "OUT_NE": 617,
+    "EDGE_W": 672, "CENTER": 673, "EDGE_E": 674,
+    "OUT_SW": 729, "EDGE_S": 730, "OUT_SE": 731
+  }
+};
+TERRAIN_SETS["horizontal-planks-bridge"] = {
+  "type": "conc-conv-d",
+  "centerId": 670,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "OUT_NW": 612, "EDGE_N": 613, "OUT_NE": 614,
+    "EDGE_W": 669, "CENTER": 670, "EDGE_E": 671,
+    "OUT_SW": 726, "EDGE_S": 727, "OUT_SE": 728
+  }
+};
+
+// Road Stairs
+TERRAIN_SETS["stair-lr"] = {
+  "type": "extentable-vertical-three-piece-a",
+  "centerId": 483,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "TOP_EXTREMITY": 426, "SEAMLESS_CENTER": 483, "BOTTOM_EXTREMITY": 540
+  }
+};
+TERRAIN_SETS["stair-rl"] = {
+  "type": "extentable-vertical-three-piece-a",
+  "centerId": 484,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "TOP_EXTREMITY": 427, "SEAMLESS_CENTER": 484, "BOTTOM_EXTREMITY": 541
+  }
+};
+TERRAIN_SETS["stair-sn"] = {
+  "type": "seamless-horizontal-single-piece-a",
+  "centerId": 369,
+  "roles": { "SEAMLESS_TILE": 369 }
+};
+TERRAIN_SETS["stair-ns"] = {
+  "type": "seamless-horizontal-single-piece-a",
+  "centerId": 107,
+  "roles": { "SEAMLESS_TILE": 107 }
+};

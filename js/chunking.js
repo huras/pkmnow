@@ -96,9 +96,10 @@ export function getMicroTile(mx, my, macroData) {
     let isCity = false;
     let isRoad = false;
     let urbanBuilding = null;
+    let roadFeature = null;
 
     // Altura baseada no step (0.38, 0.44, 0.50, etc)
-    const heightStep = elevationToStep(e);
+    let heightStep = elevationToStep(e);
 
     const macroCX = Math.floor(gx);
     const macroCY = Math.floor(gy);
@@ -110,29 +111,49 @@ export function getMicroTile(mx, my, macroData) {
             // Verifica em um raio 1x1 de células macro para permitir que cidades vazem para chunks vizinhos
             for (let ny = macroCY - 1; ny <= macroCY + 1; ny++) {
                 for (let nx = macroCX - 1; nx <= macroCX + 1; nx++) {
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
                     const city = macroData.graph.nodes.find(n => n.x === nx && n.y === ny);
                     if (city) {
                         const centerX = nx * CHUNK_SIZE + CHUNK_SIZE / 2;
                         const centerY = ny * CHUNK_SIZE + CHUNK_SIZE / 2;
 
-                        if (Math.abs(mx - centerX) < 11 && Math.abs(my - centerY) < 11) {
+                        const distSq = (mx - centerX) ** 2 + (my - centerY) ** 2;
+                        const cityRadius = 15;
+
+                        if (distSq < cityRadius * cityRadius) {
                             isCity = true;
                             bId = BIOMES.CITY.id;
 
                             const dx = mx - centerX;
                             const dy = my - centerY;
 
-                            // 1. PokéCenter (5x6)
-                            if (dx >= -8 && dx < -3 && dy >= -8 && dy < -2) {
-                                urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX - 8, oy: centerY - 8 };
+                            // Building Layout (Deterministic)
+                            // 1. PokéCenter (5x6) - Top Left
+                            if (dx >= -9 && dx < -4 && dy >= -9 && dy < -3) {
+                                urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX - 9, oy: centerY - 9 };
                             }
-                            // 2. PokéMart (4x5)
-                            else if (dx >= 2 && dx < 6 && dy >= -7 && dy < -2) {
-                                urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + 2, oy: centerY - 7 };
+                            // 2. PokéMart (4x5) - Top Right
+                            else if (dx >= 3 && dx < 7 && dy >= -8 && dy < -3) {
+                                urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + 3, oy: centerY - 8 };
                             }
-                            // 3. House (4x5)
-                            else if (dx >= -7 && dx < -3 && dy >= 2 && dy < 7) {
-                                urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX - 7, oy: centerY + 2 };
+                            // 3. Grid of Houses (4x5 each)
+                            else {
+                                const gridX = Math.floor((dx + 20) / 6);
+                                const gridY = Math.floor((dy + 20) / 8);
+                                const hox = gridX * 6 - 20;
+                                const hoy = gridY * 8 - 20;
+
+                                const inCenterMartZone = dy < -2;
+                                const inHorizontalStreet = dy >= -2 && dy < 2;
+                                const inVerticalStreet = dx >= -2 && dx < 2;
+
+                                if (!inCenterMartZone && !inHorizontalStreet && !inVerticalStreet && Math.abs(dx) < 13 && Math.abs(dy) < 13) {
+                                    const lDx = dx - hox;
+                                    const lDy = dy - hoy;
+                                    if (lDx >= 0 && lDx < 4 && lDy >= 0 && lDy < 5) {
+                                        urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX + hox, oy: centerY + hoy };
+                                    }
+                                }
                             }
                             break;
                         }
@@ -163,6 +184,26 @@ export function getMicroTile(mx, my, macroData) {
             if (inCenter || inN || inS || inE || inW) {
                 isRoad = true;
                 bId = BIOMES.BEACH.id;
+
+                // Feature Detection: Bridges and Stairs
+                if (e < SEA_LEVEL) {
+                    roadFeature = 'wooden-bridge';
+
+                    // Force bridge height to beach level (8) to avoid diving underwater
+                    heightStep = 8;
+                } else {
+                    // Stair logic: Compare heightStep with neighbors
+                    const eps = 0.5 / CHUNK_SIZE;
+                    const getH = (dx, dy) => elevationToStep(lerp(lerp(e00, e10, sx + dx), lerp(e01, e11, sx + dx), sy + dy));
+                    const h = heightStep;
+                    const hW = getH(-eps, 0), hE = getH(eps, 0);
+                    const hN = getH(0, -eps), hS = getH(0, eps);
+
+                    if (hW < hE && (hasPathE || hasPathW)) roadFeature = 'stair-lr';
+                    else if (hE < hW && (hasPathE || hasPathW)) roadFeature = 'stair-rl';
+                    else if (hN < hS && (hasPathN || hasPathS)) roadFeature = 'stair-sn';
+                    else if (hS < hN && (hasPathN || hasPathS)) roadFeature = 'stair-ns';
+                }
             }
         }
     }
@@ -173,7 +214,8 @@ export function getMicroTile(mx, my, macroData) {
         heightStep,
         isCity,
         isRoad,
-        urbanBuilding
+        urbanBuilding,
+        roadFeature
     };
 }
 

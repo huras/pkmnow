@@ -48,6 +48,8 @@ export const TessellationEngine = {
      */
     getImagePath(tsxPath) {
         if (!tsxPath) return '';
+        if (tsxPath.endsWith('.png')) return tsxPath; // Já é um caminho relativo de imagem
+        
         // Convert H:/.../tilesets/file.tsx to tilesets/file.png
         const parts = tsxPath.split(/[/\\]/);
         const fileName = parts[parts.length - 1];

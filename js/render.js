@@ -627,7 +627,9 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         if (!tile || tile.heightStep < level) continue;
 
         let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        if (tile.isRoad) setName = 'road';
+        if (tile.isRoad) {
+          setName = tile.roadFeature || 'road';
+        }
         const set = TERRAIN_SETS[setName];
 
         if (set) {
