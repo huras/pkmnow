@@ -35,7 +35,7 @@ const playChunkMap = new Map();
 let lastDataForCache = null;
 let lastTileWForCache = 0;
 
-const imageCache = new Map();
+export const imageCache = new Map();
 
 export async function loadTilesetImages() {
   const sources = [

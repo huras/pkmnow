@@ -4,7 +4,7 @@
     ],
     "fileStates": {
     },
-    "last.imagePath": "H:/cursor/Youtube/experimento-gerador-regiao-pkmn/tilesets",
+    "last.imagePath": "H:/cursor/Youtube/experimento-gerador-regiao-pkmn/pkmn-sprites/gastly",
     "openFiles": [
     ],
     "project": "experimento-gerador-regiao-pkmn.tiled-project",
@@ -12,7 +12,7 @@
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {
-        "height": 16,
-        "width": 16
+        "height": 56,
+        "width": 48
     }
 }

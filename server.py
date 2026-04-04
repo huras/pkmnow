@@ -1,25 +1,26 @@
 import http.server
 import socketserver
-import mimetypes
-
-# Fix for Windows Registry MIME type issues (preventing text/plain for .js)
-mimetypes.add_type('application/javascript', '.js')
-mimetypes.add_type('text/css', '.css')
-mimetypes.add_type('text/html', '.html')
+import os
 
 PORT = 8000
 
-class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+class NuclearHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
-        # Additional safety for COOP/COEP if needed in the future
-        # self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
-        # self.send_header('Cross-Origin-Embedder-Policy', 'require-corp')
+        # Nuclear option: FORCE MIME types based on extension for ALL files
+        ext = os.path.splitext(self.path)[1].lower()
+        if ext == '.js':
+            self.send_header('Content-Type', 'application/javascript')
+        elif ext == '.css':
+            self.send_header('Content-Type', 'text/css')
+        elif ext == '.html':
+            self.send_header('Content-Type', 'text/html')
+        elif ext in ['.png', '.jpg', '.jpeg', '.gif']:
+            self.send_header('Content-Type', f'image/{ext[1:]}')
         super().end_headers()
 
-Handler = MyHTTPRequestHandler
+# Allow socket reuse
+socketserver.TCPServer.allow_reuse_address = True
 
-print(f"Starting server at http://localhost:{PORT}")
-print("MIME types explicitly set for .js, .css, .html")
-
-with socketserver.TCPServer(("", PORT), Handler) as httpd:
+print(f"Server NUCLEAR starting at http://localhost:{PORT}")
+with socketserver.TCPServer(("", PORT), NuclearHTTPRequestHandler) as httpd:
     httpd.serve_forever()

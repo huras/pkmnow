@@ -1,5 +1,6 @@
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
+import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, tryMovePlayer, updatePlayer, canWalk } from './player.js';
@@ -1252,5 +1253,6 @@ seedInput.addEventListener('keydown', (e) => {
 
 // Execução inicial com pré-carregamento de ativos
 loadTilesetImages().then(() => {
+  new BiomesModal(); // Inicializa o explorador de biomas
   run();
 });

@@ -33,7 +33,7 @@ export const BIOME_TO_TERRAIN = {
  */
 export const BIOME_VEGETATION = {
   [BIOMES.FOREST.id]: ['large-green-broadleaf-1 [4x3]', 'green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
-  [BIOMES.JUNGLE.id]: ['palm-tree [2x2]', 'vine [1x1]', 'fern [1x1]'],
+  [BIOMES.JUNGLE.id]: ['fat-palm [4x3]', 'large-palm-with-coconuts [4x3]', 'large-palm-with-bananas [3x3]', 'palm-tree [2x2]', 'vine [1x1]', 'fern [1x1]'],
   [BIOMES.GRASSLAND.id]: ['small-grass [1x1]', 'yellow-lily [1x1]', 'red-daisy [1x1]'],
   [BIOMES.SNOW.id]: ['large-light-blue-crystal [2x2]', 'baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['large-purple-crystal [2x2]', 'large-pink-crystal [2x2]', 'small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
@@ -45,6 +45,12 @@ export const BIOME_VEGETATION = {
   [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'fern [1x1]'],
   [BIOMES.TOWN_STREET.id]: [],
   [BIOMES.ARCANE.id]: ['large-purple-crystal [2x2]', 'small-purple-crystal [1x1]', 'large-light-blue-crystal [2x2]', 'small-light-blue-crystal [1x1]'],
+  [BIOMES.GHOST_WOODS.id]: [
+    'large-red-broadleaf-1 [4x3]', 'large-orange-broadleaf-1 [4x3]', 'large-yellow-broadleaf-1 [4x3]',
+    'red-broadleaf-1 [3x2]', 'orange-broadleaf-1 [3x2]', 'yellow-broadleaf-1 [3x2]',
+    'red-broadleaf-2 [3x2]', 'orange-broadleaf-2 [3x2]', 'yellow-broadleaf-2 [3x2]',
+    'fern [1x1]', 'mushroom-1 [1x1]'
+  ],
 };
 
 /**
@@ -167,8 +173,10 @@ export function getTreeType(biomeId, mx = 0, my = 0, seed = 0) {
 
   if (biomeId === BIOMES.GHOST_WOODS.id) {
     if (h > 0.8) return 'broadleaf_red';
-    if (h > 0.5) return 'broadleaf_orange';
-    return 'broadleaf2';
+    if (h > 0.6) return 'broadleaf_orange';
+    if (h > 0.4) return 'broadleaf_yellow';
+    if (h > 0.2) return 'broadleaf2';
+    return 'broadleaf';
   }
 
   // Temperate Forest / Grassland variety

@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/biomes-modal.css" />
   </head>
   <body>
     <div class="app">
@@ -22,6 +23,7 @@
         </div>
         <button type="button" id="generate">Gerar</button>
         <button type="button" id="btnSettings" title="Configurações de Ruído" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">⚙️</button>
+        <button type="button" id="btnBiomes" title="Explorador de Biomas" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">📊</button>
       </div>
       
       <div class="toolbar-secondary">
@@ -125,6 +127,19 @@
             </div>
             <div class="tile-debug-body" id="tile-debug-content"></div>
         </div>
+    </div>
+
+    <!-- Modal de Explorador de Biomas -->
+    <div id="biomesModal" class="modal hidden">
+      <div class="modal-content biomes-modal-content">
+        <div class="tile-debug-header">
+          <div class="hud-title">Explorador de Biomas</div>
+          <button type="button" class="btn-hud" id="btnCloseBiomes">Fechar</button>
+        </div>
+        <div class="biomes-grid" id="biomesGrid">
+          <!-- Conteúdo gerado via JS -->
+        </div>
+      </div>
     </div>
 
     <script type="module" src="js/main.js"></script>

@@ -9,7 +9,7 @@ export const AnimationRenderer = {
 
     // Configurações de balanço (Sutil)
     // Usamos 3 frames para o balanço clássico sutil
-    WIND_ANGLES: [-0.04, 0, 0.04],
+    WIND_ANGLES: [-0.05, 0, 0.05],
 
     /**
      * Retorna um frame pré-renderizado (Canvas) para o balanço de vento.
