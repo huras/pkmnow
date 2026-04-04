@@ -108,9 +108,9 @@ export function getMicroTile(mx, my, macroData) {
         const macroIdx = macroCY * width + macroCX;
 
         if (macroData.graph) {
-            // Verifica em um raio 1x1 de células macro para permitir que cidades vazem para chunks vizinhos
-            for (let ny = macroCY - 1; ny <= macroCY + 1; ny++) {
-                for (let nx = macroCX - 1; nx <= macroCX + 1; nx++) {
+            // Verifica em um raio 3x3 de células macro para permitir que cidades vazem para chunks vizinhos (raio 45 tiles)
+            for (let ny = macroCY - 3; ny <= macroCY + 3; ny++) {
+                for (let nx = macroCX - 3; nx <= macroCX + 3; nx++) {
                     if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
                     const city = macroData.graph.nodes.find(n => n.x === nx && n.y === ny);
                     if (city) {
@@ -118,7 +118,7 @@ export function getMicroTile(mx, my, macroData) {
                         const centerY = ny * CHUNK_SIZE + CHUNK_SIZE / 2;
 
                         const distSq = (mx - centerX) ** 2 + (my - centerY) ** 2;
-                        const cityRadius = 15;
+                        const cityRadius = 45;
 
                         if (distSq < cityRadius * cityRadius) {
                             isCity = true;
@@ -128,30 +128,41 @@ export function getMicroTile(mx, my, macroData) {
                             const dy = my - centerY;
 
                             // Building Layout (Deterministic)
-                            // 1. PokéCenter (5x6) - Top Left
+                            // 1. PokéCenter (5x6) - Top Left (Keep near center)
                             if (dx >= -9 && dx < -4 && dy >= -9 && dy < -3) {
                                 urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX - 9, oy: centerY - 9 };
                             }
-                            // 2. PokéMart (4x5) - Top Right
+                            // 2. PokéMart (4x5) - Top Right (Keep near center)
                             else if (dx >= 3 && dx < 7 && dy >= -8 && dy < -3) {
                                 urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + 3, oy: centerY - 8 };
                             }
                             // 3. Grid of Houses (4x5 each)
                             else {
-                                const gridX = Math.floor((dx + 20) / 6);
-                                const gridY = Math.floor((dy + 20) / 8);
-                                const hox = gridX * 6 - 20;
-                                const hoy = gridY * 8 - 20;
+                                const gridX = Math.floor((dx + 60) / 6);
+                                const gridY = Math.floor((dy + 60) / 8);
+                                const hox = gridX * 6 - 60;
+                                const hoy = gridY * 8 - 60;
 
-                                const inCenterMartZone = dy < -2;
+                                const inCenterMartZone = dy < -2 && Math.abs(dx) < 14;
                                 const inHorizontalStreet = dy >= -2 && dy < 2;
                                 const inVerticalStreet = dx >= -2 && dx < 2;
 
-                                if (!inCenterMartZone && !inHorizontalStreet && !inVerticalStreet && Math.abs(dx) < 13 && Math.abs(dy) < 13) {
-                                    const lDx = dx - hox;
-                                    const lDy = dy - hoy;
-                                    if (lDx >= 0 && lDx < 4 && lDy >= 0 && lDy < 5) {
-                                        urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX + hox, oy: centerY + hoy };
+                                if (!inCenterMartZone && !inHorizontalStreet && !inVerticalStreet && Math.abs(dx) < 42 && Math.abs(dy) < 42) {
+                                    // Boundary Safety: Check if the entire house (4x5) fits in the city pavement
+                                    const corners = [
+                                        { x: hox, y: hoy },
+                                        { x: hox + 4, y: hoy },
+                                        { x: hox, y: hoy + 5 },
+                                        { x: hox + 4, y: hoy + 5 }
+                                    ];
+                                    const allCornersIn = corners.every(c => (c.x**2 + c.y**2) < (cityRadius - 1)**2);
+
+                                    if (allCornersIn) {
+                                        const lDx = dx - hox;
+                                        const lDy = dy - hoy;
+                                        if (lDx >= 0 && lDx < 4 && lDy >= 0 && lDy < 5) {
+                                            urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX + hox, oy: centerY + hoy };
+                                        }
                                     }
                                 }
                             }
