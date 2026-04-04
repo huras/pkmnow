@@ -58,11 +58,12 @@ export function tryMovePlayer(dx, dy, data) {
 /**
  * Atualiza a posição visual do player por frame.
  * @param {number} dt - delta time em segundos
+ * @param {number} multiplier - multiplicador de velocidade (ex: 5 para correr)
  */
-export function updatePlayer(dt) {
+export function updatePlayer(dt, multiplier = 1) {
   if (!player.moving) return;
 
-  player.moveProgress += dt / MOVE_DURATION;
+  player.moveProgress += (dt * multiplier) / MOVE_DURATION;
   if (player.moveProgress >= 1) {
     player.moveProgress = 1;
     player.moving = false;

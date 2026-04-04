@@ -94,8 +94,9 @@ function gameLoop(timestamp) {
   lastTimestamp = timestamp;
   gameTime = timestamp / 1000;
 
-  // Smooth movement update
-  updatePlayer(dt);
+  // Smooth movement update with speed multiplier (Shift = 5x speed)
+  const speedMultiplier = heldKeys.has('shift') ? 5 : 1;
+  updatePlayer(dt, speedMultiplier);
 
   // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo
   if (!player.moving && currentData) {
@@ -1063,8 +1064,12 @@ function keyToDir(key) {
 
 window.addEventListener('keydown', (e) => {
   if (appMode === 'play') {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'Shift'].includes(e.key)) {
        e.preventDefault();
+    }
+
+    if (e.key === 'Shift') {
+      heldKeys.add('shift');
     }
 
     const dir = keyToDir(e.key);
@@ -1111,6 +1116,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
+  if (e.key === 'Shift') heldKeys.delete('shift');
   const dir = keyToDir(e.key);
   if (dir) heldKeys.delete(dir);
 });
