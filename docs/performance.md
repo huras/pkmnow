@@ -29,13 +29,28 @@ Em vez de chamar a matemática do `getMicroTile` sob demanda, fazemos um "pré-a
 - **Redução extrema**: O número de cálculos de ruído caiu de ~25.000 para exatos **400 por chunk** (área 20x20 contemplando a margem).
 - **Estabilização de FPS**: O framerate subiu de **37~39 FPS** de volta para **60 FPS** estáveis.
 
-## 3. Diretrizes para Futuras Implementações
+## 3. Vento Otimizado: Animation Atlas (Pre-rendered Frames)
+
+### O Problema: Rotação Dinâmica Pesada
+Tentar animar o balanço do vento usando `ctx.rotate()` em milhares de tiles de grama por frame derrubaria o FPS de 60 para ~30. O Canvas 2D sofre com o overhead de `save()`, `translate()`, `rotate()` e `restore()` quando executado em larga escala dentro de um loop de renderização (Pass 5).
+
+### A Solução: Pré-renderização Seletiva
+Em vez de calcular a rotação a cada frame, usamos o **`AnimationRenderer`**:
+1.  **Geração Única**: No primeiro pedido de um tile de vegetação, o sistema gera 3 versões (frames) dele: `Esquerda`, `Centro`, `Direita`, já pré-girados em mini-canvases ocultos.
+2.  **Desativação de Filtros (Pixel Art)**: Forçamos `ctx.imageSmoothingEnabled = false` durante a geração para garantir que a rotação não borre os pixels.
+3.  **Desenho "Burro" (Rápido)**: No `render.js`, apenas escolhemos qual imagem pronta usar baseado no tempo (`Math.sin(time)`). Uma chamada de `ctx.drawImage` de uma imagem estática é ordens de grandeza mais rápida que uma operação de matriz de rotação.
+
+### Resultados:
+*   **Performance**: Estável em **60 FPS** mesmo com toda a grama do mapa balançando simultaneamente.
+*   **Sincronização**: O balanço usa offsets baseados na posição `(mx, my)`, criando um efeito de "onda" que viaja pelo mapa.
+
+## 4. Diretrizes para Futuras Implementações
 
 Para manter o desempenho, siga estas regras ao editar o `render.js`:
 
-1. **Nunca use `getMicroTile` em loops**: Sempre use o `getCachedTile` (dentro do `bakeChunk`) ou o `getCached` (dentro do `render` dinâmico).
-2. **Mantenha o Cache Atualizado**: Se adicionar uma regra que precise de vizinhos mais distantes (raio de 3+ tiles), certifique-se de aumentar a margem de pré-carregamento do cache no início da função.
-3. **Evite Cálculos Pesados no Pass 5**: O Passo 5 (Tops dinâmicos/Vento) roda **todos os frames**. Mantenha a lógica de seleção de tiles simples e delegue tudo que for estático para os passos de "Bake".
+1.  **Nunca use `getMicroTile` em loops**: Sempre use o `getCachedTile` (dentro do `bakeChunk`) ou o `getCached` (dentro do `render` dinâmico).
+2.  **Mantenha o Cache Atualizado**: Se adicionar uma regra que precise de vizinhos mais distantes (raio de 3+ tiles), certifique-se de aumentar a margem de pré-carregamento do cache no início da função.
+3.  **Evite `ctx.rotate()` e `ctx.save()` no Pass 5**: Operações de estado de contexto são custosas. Para novas animações, utilize o **`AnimationRenderer`** para pré-gerar frames rotacionados.
 
 > [!TIP]
 > O uso de chaves numéricas `(mx << 16) | (my & 0xFFFF)` no Cache Map é significativamente mais rápido em Javascript do que chaves de string como `"${mx},${my}"`.

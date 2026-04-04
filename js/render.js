@@ -2,6 +2,7 @@ import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell, seededHash, seededHashInt, parseShape, terrainRoleAllowsScatter2CContinuation } from './tessellation-logic.js';
+import { AnimationRenderer } from './animation-renderer.js';
 import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
   BIOME_TO_FOLIAGE,
@@ -441,7 +442,40 @@ export function render(canvas, data, options = {}) {
           }
         }
 
-        // 2. Formal tree canopy: todas as fileiras de "top" (meio + ápice) à frente do jogador
+        // 3. (Dynamic Pass) Grass and Cactus Bases
+        const gv = getGrassVariant(tile.biomeId);
+        const gTiles = GRASS_TILES[gv];
+        const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
+        
+        if (gTiles && foliageDensity(mx, my, data.seed, gs) >= gt && !tile.isRoad && !tile.isCity) {
+           // ENFORCE FLAT GROUND (same as bakeChunk)
+           let isFlat = true;
+           const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+           if (setForRole) {
+              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+              if (getRoleForCell(my, mx, data.height*CHUNK_SIZE, data.width*CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+           }
+
+           if (isFlat) {
+              // Exclusion check (no grass under formal trees)
+              const trType = getTreeType(tile.biomeId);
+              const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+              
+              if (!isFT && !isFN) {
+                 const fType = seededHash(mx, my, data.seed + 9993);
+                 let baseId = (gv === 'desert' && fType < 0.5) ? gTiles.cactusBase : gTiles.original;
+                 
+                 if (baseId != null) {
+                    const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
+                    const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
+                    if (frame) {
+                       ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH), tileW, tileH * 2); 
+                    }
+                 }
+              }
+           }
+        }
         const treeType = getTreeType(tile.biomeId);
         if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
           const ids = TREE_TILES[treeType];
@@ -476,14 +510,14 @@ export function render(canvas, data, options = {}) {
           }
         }
         // 3. Foliage Tops (Cacti/Dry Grass)
-        const variant = getGrassVariant(tile.biomeId);
-        const tiles = GRASS_TILES[variant];
-        const { scale: gScale, threshold: gThreshold } = getGrassParams(tile.biomeId);
-        if (tiles && foliageDensity(mx, my, data.seed, gScale) >= gThreshold && !tile.isRoad && !tile.isCity) {
+        const vt = getGrassVariant(tile.biomeId);
+        const vTiles = GRASS_TILES[vt];
+        const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
+        if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
            const fType = foliageType(mx, my, data.seed);
-           let topId = (variant === 'desert' && fType < 0.5) ? tiles.cactusTop : tiles.originalTop;
+           let topId = (vt === 'desert' && fType < 0.5) ? vTiles.cactusTop : vTiles.originalTop;
+           
            if (topId) {
-             // Exclusion check IDENTICA ao Pass 2 para evitar "meia planta" (BIOME AWARE)
              const treeT_chk = getTreeType(tile.biomeId);
              const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
              const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
@@ -496,24 +530,11 @@ export function render(canvas, data, options = {}) {
                  foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82);
 
              if (!isFT && !isFN && !noGrassTopUnderScatter) {
-               const isCactus = (variant === 'desert' && fType >= 0.5) || (variant === 'dirt' && tiles.originalTop);
-               const intensity = isCactus ? 0.07 : 0.12;
-               const angle = Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * intensity;
-               ctx.save();
-               ctx.translate(snapPx(tx + tw / 2), snapPx(ty + th));
-               ctx.rotate(angle);
-               ctx.drawImage(
-                 natureImg,
-                 (topId % TCOLS_NATURE) * 16,
-                 Math.floor(topId / TCOLS_NATURE) * 16,
-                 16,
-                 16,
-                 snapPx(-tw / 2),
-                 snapPx(-th * 2 + VEG_MULTITILE_OVERLAP_PX),
-                 tw,
-                 th
-               );
-               ctx.restore();
+               const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
+               const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
+               if (frame) {
+                   ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX), tileW, tileH * 2); 
+               }
              }
            }
         }
@@ -734,6 +755,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
 
 
 
+  /* 
   // PASS 1.5: GRASS OVERLAY (Bases)
   for (let my = startY; my < endY; my++) {
     for (let mx = startX; mx < endX; mx++) {
@@ -766,6 +788,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       }
     }
   }
+  */
 
   // PASS 2: BASES (Halogened scan for multi-tile objects)
   const validOriginMemo = new Map();

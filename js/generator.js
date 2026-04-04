@@ -123,8 +123,8 @@ export function generate(seedInput, customConfig = {}) {
   const width = 128;
   const height = 128;
   
-  // Mapas de Ruído (escala macro da elevação inalterada; detalhe = oitavas extra)
-  const elevation = generateFractalElevationMap(rng, width, height, config);
+  // Mapas de Ruído Simples (Single Octave - No FBM)
+  const elevation = generateNoiseMap(rng, width, height, config.elevationScale);
   const temperature = generateNoiseMap(rng, width, height, config.temperatureScale);
   const moisture = generateNoiseMap(rng, width, height, config.moistureScale);
   const anomaly = generateNoiseMap(rng, width, height, config.anomalyScale); // Ruído de Misticismo
