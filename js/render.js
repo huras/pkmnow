@@ -614,6 +614,15 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       const variant = getGrassVariant(tile.biomeId);
       const tiles = GRASS_TILES[variant];
       if (tiles && foliageDensity(mx, my, data.seed, GRASS_NOISE_SCALE) >= GRASS_DENSITY_THRESHOLD) {
+        // ENFORCE FLAT GROUND FOR GRASS (No grass on cliffs/edges)
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        if (setForRole) {
+           const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+           const microW = data.width * CHUNK_SIZE;
+           const microH = data.height * CHUNK_SIZE;
+           if (getRoleForCell(my, mx, microH, microW, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
+        }
+
         // Exclusion check: don't draw grass if it's a formal tree root
         const treeType = getTreeType(tile.biomeId);
         const isFT = !!treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
