@@ -13,8 +13,9 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
   const sw = isLandAtFunc(r + 1, c - 1);
   const se = isLandAtFunc(r + 1, c + 1);
 
-  // Todos os 4 vizinhos cardinais são terra → checar cantos internos
+  // Todos os 4 vizinhos cardinais são terra
   if (n && s && w && e) {
+    if (setType === 'conc-conv-d') return 'CENTER';
     if (!nw) return 'IN_NW';
     if (!ne) return 'IN_NE';
     if (!sw) return 'IN_SW';

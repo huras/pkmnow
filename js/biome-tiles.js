@@ -20,7 +20,7 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.VOLCANO.id]: "Borda com dirt/terra lava-lake-dirt",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
-  [BIOMES.CITY.id]: "cidade chao",
+  [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
 };
 
 /**

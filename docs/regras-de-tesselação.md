@@ -21,6 +21,12 @@ Sets concavo + convexo:
 			[EDGE_W, CENTER, EDGE_E, IN_EDGE_E, IN_EDGE_W],
 			[OUT_SW, EDGE_S, OUT_SE, IN_NE, IN_NW]
 		]
+	ou (conc-conv-d):
+		[
+			[OUT_NW, EDGE_N, OUT_NE],
+			[EDGE_W, CENTER, EDGE_E],
+			[OUT_SW, EDGE_S, OUT_SE]
+		]
 		
 For "non-terrain/non-grass" tiles that represent objects, only base tiles of the shape are non walkable! i exemplified on trees but apply it to all obstacles.
 		
@@ -294,4 +300,10 @@ Terrain Deails / obstables / interactables:
 			dirt-rock - ID = 31 [flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx] (1x1)
 			medium-dirt-rock - ID = 31 [flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx] (2x1)
 			large-dirt-rock-a - ID = 31 [flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx] (2x2)
+
+Roads:
+	gray-brick-mosaic-pavement - Center ID = 2647  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
+	cemented-pavement - Center ID = 2652  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-a)
+	detailed-small-bricks-pavement - Center ID = 2629  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (conc-conv-d)
+
 ```

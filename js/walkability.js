@@ -25,6 +25,8 @@ export function getTerrainSetWalkKind(name) {
     name.startsWith('Red Dirty ') ||
     name === 'sandy' ||
     name === 'snowy-sandy' ||
+    name.endsWith('-pavement') ||
+    name === 'cidade chao' ||
     name.startsWith('above ')
   ) {
     return 'layer-base';
