@@ -69,7 +69,6 @@ export function getMicroTile(mx, my, macroData) {
     const eBot = lerp(e01, e11, sx);
     let e = lerp(eTop, eBot, sy);
 
-    // REMOVED microNoise jitter from elevation to ensure solid plateaus
     const noiseVal = (seededHash(mx, my, seed) - 0.5);
 
     // Umidade e Temperatura com ruído mínimo apenas para evitar linhas retas perfeitas
@@ -80,15 +79,12 @@ export function getMicroTile(mx, my, macroData) {
     const m11 = getMacroVal(moisture, ix + 1, iy + 1, width, height);
     let m = lerp(lerp(m00, m10, fx), lerp(m01, m11, fx), fy) + biomeNoise;
 
-    // Temperatura
     const t00 = getMacroVal(temperature, ix, iy, width, height);
     const t10 = getMacroVal(temperature, ix + 1, iy, width, height);
     const t01 = getMacroVal(temperature, ix, iy + 1, width, height);
     const t11 = getMacroVal(temperature, ix + 1, iy + 1, width, height);
     let t = lerp(lerp(t00, t10, fx), lerp(t01, t11, fx), fy) + biomeNoise;
 
-    // Para biomas, podemos opcionalmente usar um ruído de escala maior (ex: 4x4)
-    // para que a borda mude de forma mais "bloco" e menos "pixel".
     const organicX = Math.floor(mx / 4);
     const organicY = Math.floor(my / 4);
     const jitter4x4 = (seededHash(organicX, organicY, seed + 123) - 0.5) * 0.02;
@@ -97,16 +93,15 @@ export function getMicroTile(mx, my, macroData) {
 
     let biomeObj = getBiome(e, t, m);
     let bId = biomeObj.id;
-
-    // Stepped height
-    const heightStep = elevationToStep(e);
-
-    // ----- OVERRIDES DISCRETOS: Cidades e Caminhos -----
-    const macroCX = Math.floor(mx / CHUNK_SIZE);
-    const macroCY = Math.floor(my / CHUNK_SIZE);
-
     let isCity = false;
     let isRoad = false;
+    let urbanBuilding = null;
+
+    // Altura baseada no step (0.38, 0.44, 0.50, etc)
+    const heightStep = elevationToStep(e);
+
+    const macroCX = Math.floor(gx);
+    const macroCY = Math.floor(gy);
 
     if (macroCX >= 0 && macroCX < width && macroCY >= 0 && macroCY < height) {
         const macroIdx = macroCY * width + macroCX;
@@ -117,14 +112,28 @@ export function getMicroTile(mx, my, macroData) {
                 for (let nx = macroCX - 1; nx <= macroCX + 1; nx++) {
                     const city = macroData.graph.nodes.find(n => n.x === nx && n.y === ny);
                     if (city) {
-                        // Centro da cidade em coordenadas micro
                         const centerX = nx * CHUNK_SIZE + CHUNK_SIZE / 2;
                         const centerY = ny * CHUNK_SIZE + CHUNK_SIZE / 2;
 
-                        // Meia-largura 11 (22x22 total) para aumentar a área em 5x (original era 10x10)
                         if (Math.abs(mx - centerX) < 11 && Math.abs(my - centerY) < 11) {
                             isCity = true;
-                            bId = BIOMES.DESERT.id;
+                            bId = BIOMES.CITY.id;
+
+                            const dx = mx - centerX;
+                            const dy = my - centerY;
+
+                            // 1. PokéCenter (5x6)
+                            if (dx >= -8 && dx < -3 && dy >= -8 && dy < -2) {
+                                urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX - 8, oy: centerY - 8 };
+                            }
+                            // 2. PokéMart (4x5)
+                            else if (dx >= 2 && dx < 6 && dy >= -7 && dy < -2) {
+                                urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + 2, oy: centerY - 7 };
+                            }
+                            // 3. House (4x5)
+                            else if (dx >= -7 && dx < -3 && dy >= 2 && dy < 7) {
+                                urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX - 7, oy: centerY + 2 };
+                            }
                             break;
                         }
                     }
@@ -136,7 +145,6 @@ export function getMicroTile(mx, my, macroData) {
         if (!isCity && macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
             const localX = mx % CHUNK_SIZE;
             const localY = my % CHUNK_SIZE;
-
             const hasPathN = macroCY > 0 && macroData.roadTraffic[(macroCY - 1) * width + macroCX] > 0;
             const hasPathS = macroCY < height - 1 && macroData.roadTraffic[(macroCY + 1) * width + macroCX] > 0;
             const hasPathE = macroCX < width - 1 && macroData.roadTraffic[macroCY * width + macroCX + 1] > 0;
@@ -160,14 +168,11 @@ export function getMicroTile(mx, my, macroData) {
         elevation: e,
         heightStep,
         isCity,
-        isRoad
+        isRoad,
+        urbanBuilding
     };
 }
 
-/**
- * Ruído de densidade de folhagem para um ponto micro.
- * Retorna 0.0 .. 1.0. Usado para decidir se colocar grama/árvore.
- */
 export function foliageDensity(mx, my, seed, scale) {
     const gx = mx * scale;
     const gy = my * scale;
@@ -176,7 +181,6 @@ export function foliageDensity(mx, my, seed, scale) {
     const tx = gx - ix;
     const ty = gy - iy;
 
-    // Smoothstep interpolation factor
     const sx = tx * tx * (3 - 2 * tx);
     const sy = ty * ty * (3 - 2 * ty);
 
@@ -185,14 +189,9 @@ export function foliageDensity(mx, my, seed, scale) {
     const v01 = seededHash(ix, iy + 1, seed + 7777);
     const v11 = seededHash(ix + 1, iy + 1, seed + 7777);
 
-    // Bilinear interpolation
     return lerp(lerp(v00, v10, sx), lerp(v01, v11, sx), sy);
 }
 
-/**
- * Ruído de tipo de folhagem para um ponto micro.
- * Retorna 0.0 .. 1.0. Usado para escolher QUAL grama/árvore.
- */
 export function foliageType(mx, my, seed) {
     return seededHash(mx, my, seed + 8888);
 }

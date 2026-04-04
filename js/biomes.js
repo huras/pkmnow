@@ -19,6 +19,7 @@ export const BIOMES = {
   VOLCANO: { id: 13, name: "Vulcão", color: "#303030" }, // Cinza escuro/obsidiana
   GHOST_WOODS: { id: 14, name: "Misty Woods", color: "#403050" }, // Roxo sombrio
   ARCANE: { id: 15, name: "Vale Arcano", color: "#602080" }, // Magenta
+  CITY: { id: 16, name: "Cidade", color: "#808080" }, // Cinza
 };
 
 /**

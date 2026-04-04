@@ -36,7 +36,8 @@ const imageCache = new Map();
 export async function loadTilesetImages() {
   const sources = [
     'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
-    'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png'
+    'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
+    'tilesets/PokemonCenter.png'
   ];
 
   const promises = sources.map((src) => {
@@ -500,6 +501,43 @@ export function render(canvas, data, options = {}) {
              }
            }
         }
+
+        // 4. Urban Roofs (Deterministic)
+        if (tile.urbanBuilding && mx === tile.urbanBuilding.ox && my === tile.urbanBuilding.oy) {
+            const objSet = OBJECT_SETS[tile.urbanBuilding.type];
+            if (objSet) {
+                const img = imageCache.get(objSet.file);
+                if (img) {
+                    const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
+                    const pcCols = 15, natureCols = 57;
+                    const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
+
+                    for (let r = 0; r < rowsObj; r++) {
+                        for (let c = 0; c < colsObj; c++) {
+                            let isRoof = tile.urbanBuilding.type.includes('pokecenter') ? (r < 3) : (r < 2);
+                            if (isRoof) {
+                                let drawId = null;
+                                if (tile.urbanBuilding.type.includes('pokecenter')) {
+                                    if (r === 0) drawId = 0 + c;
+                                    else if (r === 1) drawId = 15 + c;
+                                    else if (r === 2) drawId = 30 + c;
+                                } else if (tile.urbanBuilding.type.includes('mart')) {
+                                    if (r === 0) drawId = 20 + c;
+                                    else if (r === 1) drawId = 35 + c;
+                                } else { // House
+                                    if (r === 0) drawId = 90 + c;
+                                    else if (r === 1) drawId = 105 + c;
+                                }
+                                if (drawId != null) {
+                                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
+                                    ctx.drawImage(img, sx, sy, 16, 16, snapPx((mx + c) * tileW), snapPx((my + r) * tileH), tw, th);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
       }
     }
 
@@ -556,12 +594,26 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   const twNat = Math.ceil(tileW);
   const thNat = Math.ceil(tileH);
   const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
+  const TCOLS_NATURE_BAKE = 57;
+  const TCOLS_CAVES_BAKE = 50;
 
   const drawTile16 = (tileId, px, py) => {
     if (!natureImg || tileId == null || tileId < 0) return;
-    const sx = (tileId % 57) * 16;
-    const sy = Math.floor(tileId / 57) * 16;
+    const sx = (tileId % TCOLS_NATURE_BAKE) * 16;
+    const sy = Math.floor(tileId / TCOLS_NATURE_BAKE) * 16;
     octx.drawImage(natureImg, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);
+  };
+
+  /** Bases scatter: OBJECT_SETS podem vir de nature ou caves — não usar sempre nature. */
+  const drawScatterBaseFromObjectSet = (objSet, tileId, px, py) => {
+    if (tileId == null || tileId < 0) return;
+    const path = TessellationEngine.getImagePath(objSet?.file);
+    const img = path ? imageCache.get(path) : null;
+    if (!img) return;
+    const cols = path.includes('caves') ? TCOLS_CAVES_BAKE : TCOLS_NATURE_BAKE;
+    const sx = (tileId % cols) * 16;
+    const sy = Math.floor(tileId / cols) * 16;
+    octx.drawImage(img, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);
   };
 
   octx.fillStyle = '#111';
@@ -718,7 +770,12 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
                           }
 
                           if (allowDest) {
-                             drawTile16(base.ids[idx], (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0), (ty - startY) * tileH);
+                             drawScatterBaseFromObjectSet(
+                               objSet,
+                               base.ids[idx],
+                               (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
+                               (ty - startY) * tileH
+                             );
                           }
                        }
                     }
@@ -728,6 +785,48 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
            }
         }
       }
+       // 3. Urban Buildings (Deterministic CORE)
+       if (tile.urbanBuilding && mxScan === tile.urbanBuilding.ox && myScan === tile.urbanBuilding.oy) {
+          const objSet = OBJECT_SETS[tile.urbanBuilding.type];
+          if (objSet) {
+             const img = imageCache.get(objSet.file);
+             if (img) {
+                const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
+                const pcCols = 15, natureCols = 57;
+                const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
+
+                for (let r = 0; r < rowsObj; r++) {
+                   for (let c = 0; c < colsObj; c++) {
+                      const rx = mxScan + c, ry = myScan + r;
+                      if (rx < startX || rx >= endX || ry < startY || ry >= endY) continue;
+
+                      let isCore = tile.urbanBuilding.type.includes('pokecenter') ? (r >= 3) : (r >= 2);
+                      if (isCore) {
+                         let drawId = null;
+                         if (tile.urbanBuilding.type.includes('pokecenter')) {
+                            if (r === 3) drawId = 45 + c;
+                            else if (r === 4) drawId = 60 + c;
+                            else if (r === 5) drawId = (c === 2) ? 77 : 75 + c;
+                         } else if (tile.urbanBuilding.type.includes('mart')) {
+                            if (r === 2) drawId = 50 + c;
+                            else if (r === 3) drawId = 65 + c;
+                            else if (r === 4) drawId = (c === 1) ? 81 : 80 + c;
+                         } else { // House
+                            if (r === 2) drawId = 120 + c;
+                            else if (r === 3) drawId = 135 + c;
+                            else if (r === 4) drawId = (c === 1) ? 151 : 150 + c;
+                         }
+
+                         if (drawId != null) {
+                            const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
+                            octx.drawImage(img, sx, sy, 16, 16, Math.round((rx - startX) * tileW), Math.round((ry - startY) * tileH), twNat, thNat);
+                         }
+                      }
+                   }
+                }
+             }
+          }
+       }
     }
   }
 

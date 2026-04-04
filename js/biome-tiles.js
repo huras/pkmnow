@@ -20,6 +20,7 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.VOLCANO.id]: "Borda com dirt/terra lava-lake-dirt",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
+  [BIOMES.CITY.id]: "cidade chao",
 };
 
 /**
@@ -35,6 +36,7 @@ export const BIOME_VEGETATION = {
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
   [BIOMES.DESERT.id]: ['small-cactus [1x1]'],
   [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
+  [BIOMES.CITY.id]: [],
 };
 
 /**
@@ -70,7 +72,7 @@ export const TREE_TILES = {
 /** Biomes que NÃO recebem grama */
 export const NO_GRASS_BIOMES = new Set([
   BIOMES.OCEAN.id, BIOMES.MOUNTAIN.id, BIOMES.PEAK.id,
-  BIOMES.ICE.id, BIOMES.VOLCANO.id
+  BIOMES.ICE.id, BIOMES.VOLCANO.id, BIOMES.CITY.id
 ]);
 
 /** Biomes que NÃO recebem árvores */
@@ -78,7 +80,7 @@ export const NO_TREE_BIOMES = new Set([
   BIOMES.OCEAN.id, BIOMES.BEACH.id, BIOMES.DESERT.id,
   BIOMES.MOUNTAIN.id, BIOMES.PEAK.id, BIOMES.ICE.id,
   BIOMES.VOLCANO.id, BIOMES.TUNDRA.id, BIOMES.ARCANE.id,
-  BIOMES.SAVANNA.id
+  BIOMES.SAVANNA.id, BIOMES.CITY.id
 ]);
 
 /**

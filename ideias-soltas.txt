@@ -62,3 +62,6 @@ Plantar Sementes
 Auto and manual Add marks on map for points of interest
 	Emoji
 	
+
+Rotas onde passa até carro
+Rotas onde é estrada de terraou só estrada mesmo

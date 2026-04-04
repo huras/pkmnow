@@ -2948,5 +2948,87 @@ export const OBJECT_SETS = {
         "abovePlayer": false
       }
     ]
+  },
+  "urban-pokecenter [5x6]": {
+    "file": "tilesets/PokemonCenter.png",
+    "shape": "5x6",
+    "parts": [
+      {
+        "role": "ROOF",
+        "ids": [ 0, 1, 2, 3, 4, 15, 16, 17, 18, 19, 30, 31, 32, 33, 34 ],
+        "walkable": true,
+        "abovePlayer": true
+      },
+      {
+        "role": "CORE",
+        "ids": [ 45, 46, 47, 48, 49, 60, 61, 62, 63, 64, 75, 76, 78, 79 ],
+        "walkable": false,
+        "abovePlayer": false
+      },
+      {
+        "role": "DOOR",
+        "ids": [ 77 ],
+        "walkable": true,
+        "abovePlayer": false
+      }
+    ]
+  },
+  "urban-pokemart [4x5]": {
+    "file": "tilesets/PokemonCenter.png",
+    "shape": "4x5",
+    "parts": [
+      {
+        "role": "ROOF",
+        "ids": [ 20, 21, 22, 23, 35, 36, 37, 38 ],
+        "walkable": true,
+        "abovePlayer": true
+      },
+      {
+        "role": "CORE",
+        "ids": [ 50, 51, 52, 53, 65, 66, 67, 68, 80, 82, 83 ],
+        "walkable": false,
+        "abovePlayer": false
+      },
+      {
+        "role": "DOOR",
+        "ids": [ 81 ],
+        "walkable": true,
+        "abovePlayer": false
+      }
+    ]
+  },
+  "urban-house-red [4x5]": {
+    "file": "tilesets/PokemonCenter.png",
+    "shape": "4x5",
+    "parts": [
+      {
+        "role": "ROOF",
+        "ids": [ 90, 91, 92, 93, 105, 106, 107, 108 ],
+        "walkable": true,
+        "abovePlayer": true
+      },
+      {
+        "role": "CORE",
+        "ids": [ 120, 121, 122, 123, 135, 136, 137, 138, 150, 152, 153 ],
+        "walkable": false,
+        "abovePlayer": false
+      },
+      {
+        "role": "DOOR",
+        "ids": [ 151 ],
+        "walkable": true,
+        "abovePlayer": false
+      }
+    ]
+  }
+};
+
+// Adiciona o Set de Terreno Urbano (Chão de Cidade)
+TERRAIN_SETS["cidade chao"] = {
+  "type": "conc-conv-b",
+  "centerId": 2851,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": {
+    "CENTER": 2851
   }
 };
