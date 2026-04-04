@@ -674,6 +674,20 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   }
 
   // PASS 1: TERRAIN (Base + Height Layers)
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+      const tile = getCachedTile(mx, my);
+      if (!tile) continue;
+      
+      // FALLBACK: Draw biome background color first
+      const biome = Object.values(BIOMES).find(b => b.id === tile.biomeId);
+      if (biome) {
+        octx.fillStyle = biome.color;
+        octx.fillRect(Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+      }
+    }
+  }
+
   for (let level = 0; level <= LAND_STEPS; level++) {
     for (let my = startY; my < endY; my++) {
       for (let mx = startX; mx < endX; mx++) {

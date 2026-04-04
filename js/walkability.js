@@ -7,7 +7,7 @@
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { CHUNK_SIZE, getMicroTile } from './chunking.js';
 import { getRoleForCell } from './tessellation-logic.js';
-import { BIOME_TO_TERRAIN } from './biome-tiles.js';
+import { BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE } from './biome-tiles.js';
 
 /**
  * @param {string} name - chave em TERRAIN_SETS
@@ -30,6 +30,7 @@ export function getTerrainSetWalkKind(name) {
     name.startsWith('stair-') ||
     name === 'road' ||
     name === 'cidade chao' ||
+    name === 'rocky-volcano' ||
     name.startsWith('above ')
   ) {
     return 'layer-base';
@@ -40,10 +41,25 @@ export function getTerrainSetWalkKind(name) {
 export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   const s = new Set();
   for (const [name, set] of Object.entries(TERRAIN_SETS)) {
-    if (!getTerrainSetWalkKind(name)) continue;
-    if (set.centerId != null) s.add(set.centerId);
-    for (const id of Object.values(set.roles || {})) {
-      s.add(id);
+    const walkKind = getTerrainSetWalkKind(name);
+    if (walkKind) {
+      if (set.centerId != null) s.add(set.centerId);
+      for (const id of Object.values(set.roles || {})) {
+        s.add(id);
+      }
+    } else if (name.includes('lake') || name.startsWith('Borda com ') || name.startsWith('purples ')) {
+      // No caso de lagos/lava/oceanos, as bordas EXTERNAS (OUT_*) são terra, logo caminháveis.
+      // CENTER (água/lava) e EDGE (beira do precipício/água) continuam bloqueados.
+      for (const [role, id] of Object.entries(set.roles || {})) {
+        if (role.startsWith('OUT_')) s.add(id);
+      }
+    } else if (name.startsWith('altura ')) {
+      // Para conjuntos de altura, permitimos caminhar em TUDO (Centro e Bordas).
+      // Isso desativa a colisão de "paredão" por enquanto, como solicitado.
+      if (set.centerId != null) s.add(set.centerId);
+      for (const id of Object.values(set.roles || {})) {
+        s.add(id);
+      }
     }
   }
   return s;
@@ -85,5 +101,17 @@ export function canWalkMicroTile(x, y, data) {
     return false;
   }
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  return isBaseTerrainSpriteWalkable(sid);
+  if (!isBaseTerrainSpriteWalkable(sid)) return false;
+
+  // 2. Foliage Layer Check (Hazardous skins like Lava or Water Pools)
+  const tile = getMicroTile(mx, my, data);
+  const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Match render.js
+  if (tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD) {
+    const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
+    if (foliageSetName && (foliageSetName.includes('lake') || foliageSetName.includes('lava') || foliageSetName.includes('purples'))) {
+      return false;
+    }
+  }
+
+  return true;
 }

@@ -17,9 +17,9 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.JUNGLE.id]: "Dirty super-healthy-light-grass",
   [BIOMES.MOUNTAIN.id]: "Rocky rock",
   [BIOMES.PEAK.id]: "Rocky snowy",
-  [BIOMES.VOLCANO.id]: "lava-lake-dirt",
+  [BIOMES.VOLCANO.id]: "rocky-volcano",
   [BIOMES.GHOST_WOODS.id]: "Dirty super-healthy-light-grass",
-  [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
+  [BIOMES.ARCANE.id]: "altura Pedra Roxa",
   [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
   [BIOMES.CITY_STREET.id]: "road",
   [BIOMES.TOWN.id]: "Dirty grassy",
@@ -43,6 +43,7 @@ export const BIOME_VEGETATION = {
   [BIOMES.CITY_STREET.id]: [],
   [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'fern [1x1]'],
   [BIOMES.TOWN_STREET.id]: [],
+  [BIOMES.ARCANE.id]: ['large-purple-crystal [2x2]', 'small-purple-crystal [1x1]', 'large-light-blue-crystal [2x2]', 'small-light-blue-crystal [1x1]'],
 };
 
 /**
@@ -110,7 +111,7 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.DESERT.id]: "jogador sandy",
   [BIOMES.BEACH.id]: "jogador sandy",
   [BIOMES.SAVANNA.id]: "jogador orange-grass",
-  [BIOMES.VOLCANO.id]: "rocky-volcano",
+  [BIOMES.VOLCANO.id]: "lava-lake-dirt",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
   [BIOMES.CITY.id]: null,

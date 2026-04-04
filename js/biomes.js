@@ -67,3 +67,26 @@ export function getBiome(e, t, m, config = {}) {
   return BIOMES.JUNGLE;
 }
 
+/**
+ * Versão estendida do getBiome que inclui as regras de anomalia (biomas místicos/raros).
+ */
+export function getBiomeWithAnomalies(e, t, m, a, config = {}) {
+    let biomeObj = getBiome(e, t, m, config);
+
+    // Regras de Anomalia (Biomas Místicos)
+    if (a > 0.6) {
+        const waterLevel = config.waterLevel !== undefined ? config.waterLevel : 0.38;
+        const isLand = e >= waterLevel;
+        if (isLand) {
+            if (e > 0.7 && t > 0.6) {
+                biomeObj = BIOMES.VOLCANO;
+            } else if (m > 0.6 && t < 0.5) {
+                biomeObj = BIOMES.GHOST_WOODS;
+            } else if (a > 0.8 && e < 0.5) {
+                biomeObj = BIOMES.ARCANE;
+            }
+        }
+    }
+    return biomeObj;
+}
+

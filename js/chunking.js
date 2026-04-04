@@ -1,4 +1,4 @@
-import { getBiome, BIOMES } from './biomes.js';
+import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
 export const CHUNK_SIZE = 16;
@@ -114,7 +114,21 @@ export function getMicroTile(mx, my, macroData) {
     m += jitter4x4;
     t += jitter4x4;
 
-    let biomeObj = getBiome(e, t, m);
+    // Organic edges: add jitter to interpolation coordinates (fx, fy) based on local noise
+    const edgeNoiseScale = 0.15;
+    const edgeJitterX = (seededHash(mx, my, seed + 555) - 0.5) * edgeNoiseScale;
+    const edgeJitterY = (seededHash(mx, my, seed + 666) - 0.5) * edgeNoiseScale;
+    const jfx = Math.max(0, Math.min(1, fx + edgeJitterX));
+    const jfy = Math.max(0, Math.min(1, fy + edgeJitterY));
+
+    // Anomaly (interpolated for organic special biomes)
+    const a00 = getMacroVal(anomaly, ix, iy, width, height);
+    const a10 = getMacroVal(anomaly, ix + 1, iy, width, height);
+    const a01 = getMacroVal(anomaly, ix, iy + 1, width, height);
+    const a11 = getMacroVal(anomaly, ix + 1, iy + 1, width, height);
+    const a = lerp(lerp(a00, a10, jfx), lerp(a01, a11, jfx), jfy);
+
+    let biomeObj = getBiomeWithAnomalies(e, t, m, a, config);
     let bId = biomeObj.id;
     let isCity = false;
     let isTown = false; // High scope
@@ -130,11 +144,8 @@ export function getMicroTile(mx, my, macroData) {
         const macroBiomeId = macroData.biomes[macroIdx];
 
         // Se o bioma macro for um bioma "especial" (posicionado manualmente ou via regra especial), 
-        // forçamos o micro-tile a respeitá-lo para evitar que suma no modo Play.
-        const specialBiomes = [BIOMES.VOLCANO.id, BIOMES.ARCANE.id, BIOMES.GHOST_WOODS.id];
-        if (specialBiomes.includes(macroBiomeId)) {
-            bId = macroBiomeId;
-        }
+        // nós deixamos a resolução orgânica acima (getBiomeWithAnomalies) cuidar disso, 
+        // pois ela agora usa o ruído de anomalia interpolado.
 
         if (macroData.graph) {
             // Verifica em um raio 3x3 de células macro para permitir que cidades vazem para chunks vizinhos (raio 45 tiles)

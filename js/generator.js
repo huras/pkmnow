@@ -1,7 +1,7 @@
 import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
-import { getBiome, BIOMES } from './biomes.js';
+import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
 import { applyMorphologicalCleanup } from './tessellation-logic.js';
 import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG = {
   moistureScale: 28,
   desertMoisture: 0.38,
   forestMoisture: 0.58,
-  anomalyScale: 20,
+  anomalyScale: 32,
   cityCount: 14,
   gymCount: 8,
   extraEdges: 3
@@ -52,6 +52,9 @@ function generateNoiseMap(rng, w, h, scale) {
   function lerp(a, b, t) {
     return a * (1 - t) + b * t;
   }
+  function smooth(t) {
+    return t * t * (3 - 2 * t);
+  }
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -62,14 +65,17 @@ function generateNoiseMap(rng, w, h, scale) {
       const fx = gx - ix;
       const fy = gy - iy;
 
+      const sx = smooth(fx);
+      const sy = smooth(fy);
+
       const v00 = controls[iy * controlW + ix];
       const v10 = controls[iy * controlW + (ix + 1)];
       const v01 = controls[(iy + 1) * controlW + ix];
       const v11 = controls[(iy + 1) * controlW + (ix + 1)];
 
-      const top = lerp(v00, v10, fx);
-      const bottom = lerp(v01, v11, fx);
-      cells[y * w + x] = lerp(top, bottom, fy);
+      const top = lerp(v00, v10, sx);
+      const bottom = lerp(v01, v11, sx);
+      cells[y * w + x] = lerp(top, bottom, sy);
     }
   }
   return cells;
@@ -119,7 +125,7 @@ export function generate(seedInput, customConfig = {}) {
   const elevation = generateFBMMap(rng, width, height, config.elevationScale, config.fbmOctaves, config.fbmPersistence);
   const temperature = generateFBMMap(rng, width, height, config.temperatureScale, config.fbmOctaves, config.fbmPersistence);
   const moisture = generateFBMMap(rng, width, height, config.moistureScale, config.fbmOctaves, config.fbmPersistence);
-  const anomaly = generateFBMMap(rng, width, height, config.anomalyScale, 2, 0.4); // Menos FBM na anomalia p/ manter blobs místicos
+  const anomaly = generateFBMMap(rng, width, height, config.anomalyScale, 4, 0.5); // Mais oitavas para bordas orgânicas
 
   // Mapeamento de Biomas com Pós-processamento de Anomalias
   const biomes = new Uint8Array(width * height);
@@ -129,20 +135,7 @@ export function generate(seedInput, customConfig = {}) {
     const m = moisture[i];
     const a = anomaly[i];
     
-    let biomeObj = getBiome(e, t, m, config);
-
-    // Regras de Anomalia (Ideia 1 + 2)
-    if (a > 0.7) {
-      if (e > 0.8 && t > 0.6) {
-        biomeObj = BIOMES.VOLCANO;
-      } else if (m > 0.7 && t < 0.4) {
-        biomeObj = BIOMES.GHOST_WOODS;
-      } else if (a > 0.9 && e < 0.5) {
-        biomeObj = BIOMES.ARCANE;
-      }
-    }
-
-    biomes[i] = biomeObj.id;
+    biomes[i] = getBiomeWithAnomalies(e, t, m, a, config).id;
   }
 
   // Pós-processamento de Morfologia: Evitar tiles isolados que quebram o autotiler
