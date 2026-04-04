@@ -9,11 +9,11 @@ import { placeLandmarks } from './landmarks.js';
 export const DEFAULT_CONFIG = {
   waterLevel: 0.38,
   elevationScale: 24,
-  /** Oitavas extra de value noise suave (maior frequência, baixa amplitude). Não altera a escala macro dos montes. */
-  elevationDetailOctaves: 2,
-  /** Amplitude da 1ª oitava de detalhe no intervalo 0..1 (ex.: 0.034 ≈ ±3.4%). As seguintes × elevationDetailPersistence. */
+  /** Oitavas de ruído fractal para mapas macro (Elevation, Temp, Moisture). */
+  fbmOctaves: 3,
+  fbmPersistence: 0.5,
+  /** Detalhe extra exclusivo da elevação (opcional, p/ pequenas variações locais). */
   elevationDetailStrength: 0.034,
-  elevationDetailPersistence: 0.5,
   temperatureScale: 32,
   moistureScale: 28,
   desertMoisture: 0.38,
@@ -76,39 +76,31 @@ function generateNoiseMap(rng, w, h, scale) {
 }
 
 /**
- * Elevação macro (elevationScale) + oitavas de detalhe mais finas e suaves.
- * Cada oitava usa metade do período da anterior (scale/2, /4, …) e amplitude decrescente,
- * para variar degraus sem mudar o tamanho dos maciços.
+ * Gera um mapa FBM (Fractal Brownian Motion).
  */
-function generateFractalElevationMap(rng, w, h, config) {
-  const baseScale = config.elevationScale;
+function generateFBMMap(rng, w, h, baseScale, octaves, persistence) {
   const base = generateNoiseMap(rng, w, h, baseScale);
-  const octaves = Math.max(0, Math.min(6, config.elevationDetailOctaves | 0));
-  if (octaves === 0) return base;
-
-  let strength = Number(config.elevationDetailStrength);
-  if (!Number.isFinite(strength) || strength < 0) strength = 0.034;
-  strength = Math.min(strength, 0.12);
-
-  let persistence = Number(config.elevationDetailPersistence);
-  if (!Number.isFinite(persistence) || persistence < 0) persistence = 0.5;
-  persistence = Math.min(persistence, 1);
+  if (octaves <= 1) return base;
 
   const out = new Float32Array(w * h);
   out.set(base);
-  let amp = strength;
-  for (let o = 0; o < octaves; o++) {
-    const div = 2 ** (o + 1);
+
+  let amp = persistence;
+  for (let o = 1; o < octaves; o++) {
+    const div = 2 ** o;
     const scale = Math.max(2, Math.round(baseScale / div));
     const layer = generateNoiseMap(rng, w, h, scale);
     for (let i = 0; i < w * h; i++) {
+       // Somar detalhe centralizado em 0
       out[i] += amp * ((layer[i] - 0.5) * 2);
     }
     amp *= persistence;
   }
+
+  // Clamp 0..1
   for (let i = 0; i < w * h; i++) {
     const v = out[i];
-    out[i] = v <= 0 ? 0 : v >= 1 ? 1 : v;
+    out[i] = v < 0 ? 0 : v > 1 ? 1 : v;
   }
   return out;
 }
@@ -123,11 +115,11 @@ export function generate(seedInput, customConfig = {}) {
   const width = 128;
   const height = 128;
   
-  // Mapas de Ruído Simples (Single Octave - No FBM)
-  const elevation = generateNoiseMap(rng, width, height, config.elevationScale);
-  const temperature = generateNoiseMap(rng, width, height, config.temperatureScale);
-  const moisture = generateNoiseMap(rng, width, height, config.moistureScale);
-  const anomaly = generateNoiseMap(rng, width, height, config.anomalyScale); // Ruído de Misticismo
+  // Mapas de Ruído Fractal (FBM)
+  const elevation = generateFBMMap(rng, width, height, config.elevationScale, config.fbmOctaves, config.fbmPersistence);
+  const temperature = generateFBMMap(rng, width, height, config.temperatureScale, config.fbmOctaves, config.fbmPersistence);
+  const moisture = generateFBMMap(rng, width, height, config.moistureScale, config.fbmOctaves, config.fbmPersistence);
+  const anomaly = generateFBMMap(rng, width, height, config.anomalyScale, 2, 0.4); // Menos FBM na anomalia p/ manter blobs místicos
 
   // Mapeamento de Biomas com Pós-processamento de Anomalias
   const biomes = new Uint8Array(width * height);

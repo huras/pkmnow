@@ -58,7 +58,7 @@ export function tryMovePlayer(dx, dy, data) {
 /**
  * Atualiza a posição visual do player por frame.
  * @param {number} dt - delta time em segundos
- * @param {number} multiplier - multiplicador de velocidade (ex: 5 para correr)
+ * @param {number} multiplier - multiplicador de velocidade (ex: 0.5 andar, 10 correr com Shift)
  */
 export function updatePlayer(dt, multiplier = 1) {
   if (!player.moving) return;

@@ -94,8 +94,8 @@ function gameLoop(timestamp) {
   lastTimestamp = timestamp;
   gameTime = timestamp / 1000;
 
-  // Smooth movement update with speed multiplier (Shift = 5x speed)
-  const speedMultiplier = heldKeys.has('shift') ? 5 : 1;
+  // Smooth movement: walk half speed; Shift = run (2× the previous 5× multiplier → 10×)
+  const speedMultiplier = heldKeys.has('shift') ? 7 : 0.5;
   updatePlayer(dt, speedMultiplier);
 
   // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo

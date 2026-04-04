@@ -21,6 +21,9 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.GHOST_WOODS.id]: "Dirty super-healthy-light-grass",
   [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
   [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
+  [BIOMES.CITY_STREET.id]: "road",
+  [BIOMES.TOWN.id]: "Dirty grassy",
+  [BIOMES.TOWN_STREET.id]: "Yellow Dirty sandy",
 };
 
 /**
@@ -28,15 +31,18 @@ export const BIOME_TO_TERRAIN = {
  * Cada entrada é um OBJECT_SET name do tessellation-data.js.
  */
 export const BIOME_VEGETATION = {
-  [BIOMES.FOREST.id]: ['green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
+  [BIOMES.FOREST.id]: ['large-green-broadleaf-1 [4x3]', 'green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
   [BIOMES.JUNGLE.id]: ['palm-tree [2x2]', 'vine [1x1]', 'fern [1x1]'],
   [BIOMES.GRASSLAND.id]: ['small-grass [1x1]', 'yellow-lily [1x1]', 'red-daisy [1x1]'],
-  [BIOMES.SNOW.id]: ['baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
-  [BIOMES.MOUNTAIN.id]: ['small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
+  [BIOMES.SNOW.id]: ['large-light-blue-crystal [2x2]', 'baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
+  [BIOMES.MOUNTAIN.id]: ['large-purple-crystal [2x2]', 'large-pink-crystal [2x2]', 'small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
-  [BIOMES.DESERT.id]: ['small-cactus [1x1]'],
+  [BIOMES.DESERT.id]: ['big-cactus-1 [2x2]', 'small-cactus [1x1]'],
   [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
-  [BIOMES.CITY.id]: [],
+  [BIOMES.CITY.id]: ['white-daisy [1x1]', 'blue-daisy [1x1]', 'pink-daisy [1x1]', 'small-grass [1x1]'],
+  [BIOMES.CITY_STREET.id]: [],
+  [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'fern [1x1]'],
+  [BIOMES.TOWN_STREET.id]: [],
 };
 
 /**
@@ -47,6 +53,8 @@ export function scatterHasWindSway(itemKey) {
   const k = String(itemKey).toLowerCase();
   if (k.includes('crystal')) return false;
   if (k.includes('dirt-rock') || k.includes('dirt-rocks')) return false;
+  if (k.includes('cactus')) return false;
+  if (k.includes('shell')) return false;
   return true;
 }
 
@@ -72,7 +80,8 @@ export const TREE_TILES = {
 /** Biomes que NÃO recebem grama */
 export const NO_GRASS_BIOMES = new Set([
   BIOMES.OCEAN.id, BIOMES.MOUNTAIN.id, BIOMES.PEAK.id,
-  BIOMES.ICE.id, BIOMES.VOLCANO.id, BIOMES.CITY.id
+  BIOMES.ICE.id, BIOMES.VOLCANO.id, BIOMES.CITY.id,
+  BIOMES.CITY_STREET.id, BIOMES.TOWN.id, BIOMES.TOWN_STREET.id
 ]);
 
 /** Biomes que NÃO recebem árvores */
@@ -80,7 +89,8 @@ export const NO_TREE_BIOMES = new Set([
   BIOMES.OCEAN.id, BIOMES.BEACH.id, BIOMES.DESERT.id,
   BIOMES.MOUNTAIN.id, BIOMES.PEAK.id, BIOMES.ICE.id,
   BIOMES.VOLCANO.id, BIOMES.TUNDRA.id, BIOMES.ARCANE.id,
-  BIOMES.SAVANNA.id, BIOMES.CITY.id
+  BIOMES.SAVANNA.id, BIOMES.CITY.id,
+  BIOMES.CITY_STREET.id, BIOMES.TOWN.id, BIOMES.TOWN_STREET.id
 ]);
 
 /**
@@ -102,7 +112,11 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.SAVANNA.id]: "jogador orange-grass",
   [BIOMES.VOLCANO.id]: "rocky-volcano",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
-  [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock", // Fallback para variação roxa
+  [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock",
+  [BIOMES.CITY.id]: null,
+  [BIOMES.CITY_STREET.id]: "cemented-pavement",
+  [BIOMES.TOWN.id]: "jogador sandy",
+  [BIOMES.TOWN_STREET.id]: "jogador light-grass",
 };
 
 /**

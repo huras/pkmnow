@@ -3137,11 +3137,13 @@ TERRAIN_SETS["stair-rl"] = {
 };
 TERRAIN_SETS["stair-sn"] = {
   "type": "seamless-horizontal-single-piece-a",
-  "centerId": 369,
-  "roles": { "SEAMLESS_TILE": 369 }
+  "centerId": 107,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": { "SEAMLESS_TILE": 107 }
 };
 TERRAIN_SETS["stair-ns"] = {
   "type": "seamless-horizontal-single-piece-a",
-  "centerId": 107,
-  "roles": { "SEAMLESS_TILE": 107 }
+  "centerId": 369,
+  "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
+  "roles": { "SEAMLESS_TILE": 369 }
 };

@@ -2,7 +2,7 @@ import { getBiome, BIOMES } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
 export const CHUNK_SIZE = 16;
-export const LAND_STEPS = 32;  // 14 degraus acima do nível do mar
+export const LAND_STEPS = 12;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
 export const SEA_LEVEL = 0.3;
 export const BEACH_UPPER = 0.32;
@@ -33,6 +33,28 @@ export function elevationToStep(e) {
     // Mapeia BEACH_UPPER..1.0 para 1..LAND_STEPS
     const t = (e - BEACH_UPPER) / (1.0 - BEACH_UPPER);
     return Math.min(LAND_STEPS, 1 + Math.floor(t * LAND_STEPS));
+}
+
+/**
+ * Funcao auxiliar para pegar apenas a altura de um micro-tile sem recursao.
+ */
+export function getHeightStepAt(mx, my, macroData) {
+    const { width, height, cells } = macroData;
+    const gx = mx / CHUNK_SIZE;
+    const gy = my / CHUNK_SIZE;
+    const ix = Math.floor(gx);
+    const iy = Math.floor(gy);
+    const tx = gx - ix;
+    const ty = gy - iy;
+    const sx = tx * tx * (3 - 2 * tx);
+    const sy = ty * ty * (3 - 2 * ty);
+
+    const e00 = getMacroVal(cells, ix, iy, width, height);
+    const e10 = getMacroVal(cells, ix + 1, iy, width, height);
+    const e01 = getMacroVal(cells, ix, iy + 1, width, height);
+    const e11 = getMacroVal(cells, ix + 1, iy + 1, width, height);
+    const e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), sy);
+    return elevationToStep(e);
 }
 
 /**
@@ -68,6 +90,7 @@ export function getMicroTile(mx, my, macroData) {
     const eTop = lerp(e00, e10, sx);
     const eBot = lerp(e01, e11, sx);
     let e = lerp(eTop, eBot, sy);
+    let heightStep = elevationToStep(e);
 
     const noiseVal = (seededHash(mx, my, seed) - 0.5);
 
@@ -94,10 +117,10 @@ export function getMicroTile(mx, my, macroData) {
     let biomeObj = getBiome(e, t, m);
     let bId = biomeObj.id;
     let isCity = false;
+    let isTown = false; // High scope
     let isRoad = false;
     let urbanBuilding = null;
     let roadFeature = null;
-    let heightStep = elevationToStep(e);
 
     const macroCX = Math.floor(gx);
     const macroCY = Math.floor(gy);
@@ -128,48 +151,107 @@ export function getMicroTile(mx, my, macroData) {
 
                         if (distSq < cityRadius * cityRadius) {
                             isCity = true;
-                            bId = BIOMES.CITY.id;
 
                             const dx = mx - centerX;
                             const dy = my - centerY;
 
-                            // Building Layout (Deterministic)
-                            // 1. PokéCenter (5x6) - Top Left (Keep near center)
-                            if (dx >= -9 && dx < -4 && dy >= -9 && dy < -3) {
-                                urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX - 9, oy: centerY - 9 };
-                            }
-                            // 2. PokéMart (4x5) - Top Right (Keep near center)
-                            else if (dx >= 3 && dx < 7 && dy >= -8 && dy < -3) {
-                                urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + 3, oy: centerY - 8 };
-                            }
-                            // 3. Grid of Houses (4x5 each)
-                            else {
-                                const gridX = Math.floor((dx + 60) / 6);
-                                const gridY = Math.floor((dy + 60) / 8);
-                                const hox = gridX * 6 - 60;
-                                const hoy = gridY * 8 - 60;
+                            // 0. Distinguish between METROPOLIS (City) and RURAL (Town)
+                            // Use importance (if exists) or a pseudo-random hash
+                            const importance = city.importance || (seededHash(nx, ny, seed + 888) * 10);
+                            isTown = importance < 4;
 
-                                const inCenterMartZone = dy < -2 && Math.abs(dx) < 14;
-                                const inHorizontalStreet = dy >= -2 && dy < 2;
-                                const inVerticalStreet = dx >= -2 && dx < 2;
+                            // 1. Building Layout (Deterministic Grid 6x8) - PRIORITIZED
+                            const gridX = Math.floor((dx + 600) / 6) * 6 - 600;
+                            const gridY = Math.floor((dy + 800) / 8) * 8 - 800;
 
-                                if (!inCenterMartZone && !inHorizontalStreet && !inVerticalStreet && Math.abs(dx) < 42 && Math.abs(dy) < 42) {
-                                    // Boundary Safety: Check if the entire house (4x5) fits in the city pavement
-                                    const corners = [
-                                        { x: hox, y: hoy },
-                                        { x: hox + 4, y: hoy },
-                                        { x: hox, y: hoy + 5 },
-                                        { x: hox + 4, y: hoy + 5 }
-                                    ];
-                                    const allCornersIn = corners.every(c => (c.x ** 2 + c.y ** 2) < (cityRadius - 1) ** 2);
+                            // Check for Special Buildings in specific grid slots
+                            const isPokeCenterSlot = gridX === 6 && gridY === 8;
+                            const isPokeMartSlot = gridX === -6 && gridY === 8;
 
-                                    if (allCornersIn) {
-                                        const lDx = dx - hox;
-                                        const lDy = dy - hoy;
-                                        if (lDx >= 0 && lDx < 4 && lDy >= 0 && lDy < 5) {
-                                            urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX + hox, oy: centerY + hoy };
+                            const centerHeight = getHeightStepAt(centerX + gridX, centerY + gridY, macroData);
+
+                            if (isPokeCenterSlot) {
+                                const lDx = dx - gridX;
+                                const lDy = dy - gridY;
+                                // PokéCenter (5x6) in 6x8 slot. Offset: (1, 1) -> occupies 1..5 X, 1..6 Y
+                                if (lDx >= 1 && lDx < 6 && lDy >= 1 && lDy < 7) {
+                                    let isFlat = true;
+                                    for (let fy = 1; fy < 7; fy++) {
+                                        for (let fx = 1; fx < 6; fx++) {
+                                            if (getHeightStepAt(centerX + gridX + fx, centerY + gridY + fy, macroData) !== centerHeight) {
+                                                isFlat = false; break;
+                                            }
                                         }
+                                        if (!isFlat) break;
                                     }
+                                    if (isFlat) urbanBuilding = { type: 'urban-pokecenter [5x6]', ox: centerX + gridX + 1, oy: centerY + gridY + 1 };
+                                }
+                            }
+                            else if (isPokeMartSlot) {
+                                const lDx = dx - gridX;
+                                const lDy = dy - gridY;
+                                // PokéMart (4x5) in 6x8 slot. Offset: (1, 1) -> occupies 1..4 X, 1..5 Y
+                                if (lDx >= 1 && lDx < 5 && lDy >= 1 && lDy < 6) {
+                                    let isFlat = true;
+                                    for (let fy = 1; fy < 6; fy++) {
+                                        for (let fx = 1; fx < 5; fx++) {
+                                            if (getHeightStepAt(centerX + gridX + fx, centerY + gridY + fy, macroData) !== centerHeight) {
+                                                isFlat = false; break;
+                                            }
+                                        }
+                                        if (!isFlat) break;
+                                    }
+                                    if (isFlat) urbanBuilding = { type: 'urban-pokemart [4x5]', ox: centerX + gridX + 1, oy: centerY + gridY + 1 };
+                                }
+                            }
+                            else if (Math.abs(dx) < 38 && Math.abs(dy) < 38) {
+                                const lDx = dx - gridX;
+                                const lDy = dy - gridY;
+                                // Regular House (4x5) in 6x8 slot. Offset: (1, 1) -> occupies 1..4 X, 1..5 Y
+                                if (lDx >= 1 && lDx < 5 && lDy >= 1 && lDy < 6) {
+                                    let isFlat = true;
+                                    for (let fy = 1; fy < 6; fy++) {
+                                        for (let fx = 1; fx < 5; fx++) {
+                                            if (getHeightStepAt(centerX + gridX + fx, centerY + gridY + fy, macroData) !== centerHeight) {
+                                                isFlat = false; break;
+                                            }
+                                        }
+                                        if (!isFlat) break;
+                                    }
+                                    if (isFlat) urbanBuilding = { type: 'urban-house-red [4x5]', ox: centerX + gridX + 1, oy: centerY + gridY + 1 };
+                                }
+                            }
+
+                            // 2. Hierarquias de Rua (Visible Roads) - COMPLEMENTARY
+                            const inMainStreetH = dy >= -2 && dy < 2;
+                            const inMainStreetV = dx >= -2 && dx < 2;
+
+                            // Ruas secundárias baseadas no grid de casas (6x8)
+                            const lscX = (dx + 600) % 6;
+                            const lscY = (dy + 800) % 8;
+
+                            // SIDEPATH LOGIC: Any tile in the 6x8 slot NOT occupied by the house footprint is a sidewalk
+                            const isInHouseFootprint = (lscX >= 1 && lscX <= 4 && lscY >= 1 && lscY <= 5);
+                            const isInCenterFootprint = (lscX >= 1 && lscX <= 5 && lscY >= 1 && lscY <= 6);
+                            const isSidewalk = isPokeCenterSlot ? !isInCenterFootprint : !isInHouseFootprint;
+
+                            const isStreetH = !urbanBuilding && (inMainStreetH || (lscY === 0 || lscY >= 6));
+                            const isStreetV = !urbanBuilding && (inMainStreetV || (lscX === 0 || lscX === 5));
+                            const isAnyStreet = isStreetH || isStreetV || (isCity && !urbanBuilding && isSidewalk);
+
+                            if (!urbanBuilding && (inMainStreetH || inMainStreetV)) {
+                                bId = isTown ? BIOMES.TOWN_STREET.id : BIOMES.CITY_STREET.id;
+                            } else if (isAnyStreet && !isTown) {
+                                bId = BIOMES.TOWN_STREET.id; // Cor de calçada alternativa
+                            } else {
+                                bId = isTown ? BIOMES.TOWN.id : BIOMES.CITY.id;
+                            }
+                            // 4. Beauty: Fences at city borders
+                            if (!urbanBuilding && !isAnyStreet && distSq > (cityRadius - 3) ** 2) {
+                                // Check if we should place a fence (Pass 2 Logic for small objects)
+                                if (seededHash(mx, my, seed + 777) > 0.4) {
+                                    // isCity already true, we'll let Pass 2 scatter logic handle the fence later
+                                    // if we set a flag. But for now, let's keep it simple.
                                 }
                             }
                             break;
@@ -180,7 +262,7 @@ export function getMicroTile(mx, my, macroData) {
             }
         }
 
-        if (!isCity && macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
+        if (macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
             const localX = mx % CHUNK_SIZE;
             const localY = my % CHUNK_SIZE;
 
@@ -198,30 +280,93 @@ export function getMicroTile(mx, my, macroData) {
             const inE = hasPathE && localY >= 6 && localY < 10 && localX >= 10;
             const inW = hasPathW && localY >= 6 && localY < 10 && localX < 6;
 
+            // --- ORTHOGONAL RELIEF STRAIGHTENING (5-10 range for padding) ---
+            // --- ORTHOGONAL RELIEF STRAIGHTENING (5-10 range for padding) ---
+            const nlx_raw = ((mx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const nly_raw = ((my % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+
+            const inCenterPadding = nlx_raw >= 5 && nlx_raw < 11 && nly_raw >= 5 && nly_raw < 11;
+            const inNPadding = hasPathN && nlx_raw >= 5 && nlx_raw < 11 && nly_raw < 6;
+            const inSPadding = hasPathS && nlx_raw >= 5 && nlx_raw < 11 && nly_raw >= 10;
+            const inEPadding = hasPathE && nly_raw >= 5 && nly_raw < 11 && nlx_raw >= 10;
+            const inWPadding = hasPathW && nly_raw >= 5 && nly_raw < 11 && nlx_raw < 6;
+
+            const isVerticalRoadArea = (inNPadding || inSPadding) && !inEPadding && !inWPadding;
+            const isHorizontalRoadArea = (inEPadding || inWPadding) && !inNPadding && !inSPadding;
+
+            if (inCenterPadding || inNPadding || inSPadding || inEPadding || inWPadding || isRoad) {
+                // Determine stair feature BEFORE choosing snapped elevation to avoid 
+                // road-straightening from "hiding" height plateaus
+
+                // Stair detection needs axis-locking (to stay straight) but not full-snapping
+                const getH_Axis = (dx, dy, axisLockX, axisLockY) => {
+                    const nmx = mx + dx, nmy = my + dy;
+                    const ntx = tx + dx / CHUNK_SIZE;
+                    const nty = ty + dy / CHUNK_SIZE;
+                    const nsx = ntx * ntx * (3 - 2 * ntx);
+                    const nsy = nty * nty * (3 - 2 * nty);
+
+                    let nx = nsx, ny = nsy;
+                    if (axisLockX) nx = 0.5;
+                    if (axisLockY) ny = 0.5;
+
+                    return elevationToStep(lerp(lerp(e00, e10, nx), lerp(e01, e11, nx), ny));
+                };
+
+                // 1. Horizontal Jumps (stair columns): lock Y to macro-center to keep the column straight
+                const hCurW = getH_Axis(0, 0, false, true);
+                const hW = getH_Axis(-1, 0, false, true);
+                const hE = getH_Axis(1, 0, false, true);
+
+                // 2. Vertical Jumps (stair rows): lock X to macro-center to keep the row straight
+                const hCurN = getH_Axis(0, 0, true, false);
+                const hN = getH_Axis(0, -1, true, false);
+                const hS = getH_Axis(0, 1, true, false);
+
+                if (hCurW > hE && (hasPathE || hasPathW)) roadFeature = 'stair-rl';
+                else if (hCurW > hW && (hasPathE || hasPathW)) roadFeature = 'stair-lr';
+                else if (hCurN > hS && (hasPathN || hasPathS)) roadFeature = 'stair-ns';
+                else if (hCurN > hN && (hasPathN || hasPathS)) roadFeature = 'stair-sn';
+
+                // Final Elevation Application: 
+                // Flatten road ONLY if no stair is bridging the gap here.
+                if (roadFeature) {
+                    // Stair is present: follow the slope straight along the road axis
+                    if (isVerticalRoadArea || roadFeature.includes('-ns') || roadFeature.includes('-sn')) {
+                        // vertical road or vertical stair (NS step)
+                        e = lerp(lerp(e00, e10, 0.5), lerp(e01, e11, 0.5), sy);
+                    } else if (isHorizontalRoadArea || roadFeature.includes('-lr') || roadFeature.includes('-rl')) {
+                        // horizontal road or horizontal stair (EW step)
+                        e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), 0.5);
+                    } else {
+                        // Crossroads/Transition: follow slope to be safe
+                        e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), sy);
+                    }
+                } else {
+                    // Normal road: snap to perfectly flat terrace
+                    if (isVerticalRoadArea) { e = lerp(lerp(e00, e10, 0.5), lerp(e01, e11, 0.5), sy); }
+                    else if (isHorizontalRoadArea) { e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), 0.5); }
+                    else if (inCenterPadding) { e = lerp(lerp(e00, e10, 0.5), lerp(e01, e11, 0.5), 0.5); }
+                }
+                heightStep = elevationToStep(e);
+            }
+
             if (inCenter || inN || inS || inE || inW) {
                 isRoad = true;
-                bId = BIOMES.BEACH.id;
 
-                // Feature Detection: Bridges and Stairs
+                if (isCity) {
+                    bId = isTown ? BIOMES.TOWN_STREET.id : BIOMES.CITY_STREET.id;
+                } else {
+                    bId = BIOMES.BEACH.id;
+                }
+
+                // Feature Detection: Bridges remain (Stairs already handled above)
                 if (e < SEA_LEVEL) {
                     roadFeature = 'wooden-bridge';
-
-                    // Force bridge height to beach level (8) to avoid diving underwater
                     heightStep = 8;
-                } else {
-                    // Stair logic: Compare heightStep with neighbors
-                    const eps = 0.5 / CHUNK_SIZE;
-                    const getH = (dx, dy) => elevationToStep(lerp(lerp(e00, e10, sx + dx), lerp(e01, e11, sx + dx), sy + dy));
-                    const h = heightStep;
-                    const hW = getH(-eps, 0), hE = getH(eps, 0);
-                    const hN = getH(0, -eps), hS = getH(0, eps);
-
-                    if (hW < hE && (hasPathE || hasPathW)) roadFeature = 'stair-lr';
-                    else if (hE < hW && (hasPathE || hasPathW)) roadFeature = 'stair-rl';
-                    else if (hN < hS && (hasPathN || hasPathS)) roadFeature = 'stair-sn';
-                    else if (hS < hN && (hasPathN || hasPathS)) roadFeature = 'stair-ns';
                 }
             }
+
         }
     }
 

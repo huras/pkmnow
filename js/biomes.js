@@ -19,7 +19,10 @@ export const BIOMES = {
   VOLCANO: { id: 13, name: "Vulcão", color: "#303030" }, // Cinza escuro/obsidiana
   GHOST_WOODS: { id: 14, name: "Misty Woods", color: "#403050" }, // Roxo sombrio
   ARCANE: { id: 15, name: "Vale Arcano", color: "#602080" }, // Magenta
-  CITY: { id: 16, name: "Cidade", color: "#808080" }, // Cinza
+  CITY: { id: 16, name: "Cidade", color: "#808080" },
+  CITY_STREET: { id: 17, name: "Rua de Cidade", color: "#606060" },
+  TOWN: { id: 18, name: "Vila Rural", color: "#b09070" },
+  TOWN_STREET: { id: 19, name: "Rua de Vila", color: "#907050" },
 };
 
 /**

@@ -341,8 +341,8 @@ Bridges:
 Road Stairs:
 	left-to-right-raising-terrain-stairs - SEAMLESS_CENTER ID = 483  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
 	right-to-left-raising-terrain-stairs - SEAMLESS_CENTER ID = 484  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (extentable-vertical-three-piece-a)
-	south-to-north-raising-terrain-stairs - SEAMLESS_TILE ID = 369  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
-	north-to-south-raising-terrain-stairs - SEAMLESS_TILE ID = 107  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
+	stair-ns (South-to-North raising) - SEAMLESS_TILE ID = 369  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
+	stair-sn (North-to-South raising) - SEAMLESS_TILE ID = 107  [flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx] (seamless-horizontal-single-piece-a)
 
 
 ```

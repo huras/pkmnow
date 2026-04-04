@@ -680,71 +680,108 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         const tile = getCachedTile(mx, my);
         if (!tile || tile.heightStep < level) continue;
 
-        // 1.1 Render Base Layer
-        let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        if (tile.isRoad) setName = tile.roadFeature || 'road';
-        const set = TERRAIN_SETS[setName];
-
-        if (set) {
-          const imgPath = TessellationEngine.getImagePath(set.file);
+        // 1.1 Render Base Layer (BIOME)
+        const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+        const biomeSet = TERRAIN_SETS[biomeSetName];
+        if (biomeSet) {
+          const imgPath = TessellationEngine.getImagePath(biomeSet.file);
           const img = imageCache.get(imgPath);
           const cols = imgPath.includes('caves') ? 50 : 57;
-
           let role;
           if (tile.heightStep > level) {
-            if (level !== tile.heightStep - 1) role = null; // Skip if too far below current surface
+            if (level !== tile.heightStep - 1) role = null;
             else role = 'CENTER';
           } else {
             const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
-            role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
+            role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, biomeSet.type);
           }
-
-          const tileId = role ? (set.roles[role] ?? set.roles['CENTER'] ?? set.centerId) : null;
+          const tileId = role ? (biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId) : null;
           if (img && tileId != null) {
-            octx.drawImage(
-              img,
-              (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16,
-              Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH),
-              twNat, thNat
-            );
+            octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
           }
         }
 
-        // 1.4 Render Terrain Foliage (Detail Skin)
-        if (tile.heightStep === level && !tile.isRoad && !tile.isCity && tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD) {
-          const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
-          const foliageSet = foliageSetName ? TERRAIN_SETS[foliageSetName] : null;
+        const isStair = tile.roadFeature?.startsWith('stair');
 
-          if (foliageSet) {
-            // UNIFIED SAFETY CHECK Caching neighbors
-            const isFoliageSafeAt = (r, c) => {
-              const t = getCachedTile(c, r);
-              if (!t || t.heightStep !== level || t.biomeId !== tile.biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD || t.isRoad || t.isCity) return false;
-              
-              for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                  if (getCachedTile(c + dx, r + dy)?.heightStep !== level) return false;
+        // 1.2 Render Terrain Foliage (Detail Skin) - MOVED BEFORE ROAD
+        if (tile.heightStep === level && tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD) {
+          const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
+          if (foliageSetName) {
+            // "CLEAN ROADS" logic: Only allow grass-based foliage under road/stairs (block sand/rocky/orange/volcano)
+            let allowFoliage = true;
+            if (tile.isRoad) {
+                const lowName = foliageSetName.toLowerCase();
+                const isGrassFoliage = lowName.includes('grass'); 
+                if (!isGrassFoliage) allowFoliage = false;
+            }
+
+            if (allowFoliage) {
+              const foliageSet = TERRAIN_SETS[foliageSetName];
+              if (foliageSet) {
+                const isFoliageSafeAt = (r, c) => {
+                  const t = getCachedTile(c, r);
+                  if (!t || t.heightStep !== level || t.biomeId !== tile.biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) return false;
+                  // If we are drawing under a road, neighbors must be at same height regardless of being road
+                  for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                      if (getCachedTile(c + dx, r + dy)?.heightStep !== level) return false;
+                    }
+                  }
+                  return true;
+                };
+
+                if (isFoliageSafeAt(my, mx)) {
+                  const imgPath = TessellationEngine.getImagePath(foliageSet.file);
+                  const img = imageCache.get(imgPath);
+                  const fCols = imgPath.includes('caves') ? 50 : 57;
+                  const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageSafeAt, foliageSet.type);
+                  const fTileId = (foliageSet.roles[fRole] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId);
+                  if (img && fTileId != null) {
+                    octx.drawImage(img, (fTileId % fCols) * 16, Math.floor(fTileId / fCols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+                  }
                 }
               }
-              return true;
-            };
+            }
+          }
+        }
 
-            if (!isFoliageSafeAt(my, mx)) continue;
-
-            const imgPath = TessellationEngine.getImagePath(foliageSet.file);
+        // 1.3 Render Road Layer (Overlay only for NON-STAIRS)
+        if (tile.isRoad && !isStair) {
+          const roadSetName = tile.roadFeature || 'road';
+          const roadSet = TERRAIN_SETS[roadSetName];
+          if (roadSet) {
+            const imgPath = TessellationEngine.getImagePath(roadSet.file);
             const img = imageCache.get(imgPath);
-            const fCols = imgPath.includes('caves') ? 50 : 57;
+            const cols = imgPath.includes('caves') ? 50 : 57;
+            const isAtOrAboveRoad = (r, c) => {
+              const t = getCachedTile(c, r);
+              return (t?.heightStep ?? -99) >= level && t?.isRoad && !t?.roadFeature?.startsWith('stair');
+            };
+            const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveRoad, roadSet.type);
+            const tileId = role ? (roadSet.roles[role] ?? roadSet.roles['CENTER'] ?? roadSet.centerId) : null;
+            if (img && tileId != null) {
+              octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+            }
+          }
+        }
 
-            const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageSafeAt, foliageSet.type);
-            const fTileId = (foliageSet.roles[fRole] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId);
-
-            if (img && fTileId != null) {
-              octx.drawImage(
-                img,
-                (fTileId % fCols) * 16, Math.floor(fTileId / fCols) * 16, 16, 16,
-                Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH),
-                twNat, thNat
-              );
+        // 1.4 Render STAIRS (Top Overlay)
+        if (tile.isRoad && isStair) {
+          const stairSet = TERRAIN_SETS[tile.roadFeature];
+          if (stairSet) {
+            const imgPath = TessellationEngine.getImagePath(stairSet.file);
+            const img = imageCache.get(imgPath);
+            if (img) {
+              const cols = imgPath.includes('caves') ? 50 : 57;
+              const isAtOrAboveStair = (r, c) => {
+                const t = getCachedTile(c, r);
+                return (t?.heightStep ?? -99) >= tile.heightStep && t?.isRoad && t?.roadFeature === tile.roadFeature;
+              };
+              const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveStair, stairSet.type);
+              const tileId = role ? (stairSet.roles[role] ?? stairSet.roles['CENTER'] ?? stairSet.centerId) : null;
+              if (tileId != null) {
+                octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+              }
             }
           }
         }
@@ -831,7 +868,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       }
 
       // 2. Scatter Objects
-      if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.isCity) {
+      if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.urbanBuilding) {
         const isFormalNeighbor = (tx, ty) =>
            !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
         

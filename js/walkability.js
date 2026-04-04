@@ -28,6 +28,7 @@ export function getTerrainSetWalkKind(name) {
     name.endsWith('-pavement') ||
     name.endsWith('-bridge') ||
     name.startsWith('stair-') ||
+    name === 'road' ||
     name === 'cidade chao' ||
     name.startsWith('above ')
   ) {

@@ -65,3 +65,10 @@ Auto and manual Add marks on map for points of interest
 
 Rotas onde passa até carro
 Rotas onde é estrada de terraou só estrada mesmo
+
+Soltar o jogador no mapa, mas ter construções fixas localizadas aleatorias mas com coisa pra fazer, e um caminho de "balas" levando o jogador à eles.
+
+
+Riding pokemon serves to avoid aggressive pokemon in your path. Some pokemon can be too quick and stilloutrun you, so plan your paths.
+
+Riding pokemon can jump some small cliffs up to 2 tiles high depending on the pokemon.
