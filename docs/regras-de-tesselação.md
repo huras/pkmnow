@@ -18,8 +18,8 @@ Sets concavo + convexo:
 	ou (conc-conv-c):
 		[
 			[OUT_NW, EDGE_N, OUT_NE, IN_SE, IN_SW],
-			[EDGE_W, CENTER, EDGE_E, IN_EDGE_E, IN_EDGE_W],
-			[OUT_SW, EDGE_S, OUT_SE, IN_NE, IN_NW]
+			[EDGE_W, CENTER, EDGE_E, IN_NE, IN_NW],
+			[OUT_SW, EDGE_S, OUT_SE, IN_EDGE_E, IN_EDGE_W]
 		]
 	ou (conc-conv-d):
 		[

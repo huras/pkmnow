@@ -4,10 +4,13 @@ import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell, seededHash, seededHashInt, parseShape, terrainRoleAllowsScatter2CContinuation } from './tessellation-logic.js';
 import {
   BIOME_TO_TERRAIN, BIOME_VEGETATION,
+  BIOME_TO_FOLIAGE,
   GRASS_TILES, TREE_TILES,
   getGrassVariant, getTreeType,
   GRASS_DENSITY_THRESHOLD, TREE_DENSITY_THRESHOLD,
+  FOLIAGE_DENSITY_THRESHOLD,
   GRASS_NOISE_SCALE, TREE_NOISE_SCALE,
+  FOLIAGE_NOISE_SCALE,
   scatterHasWindSway
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
@@ -619,33 +622,33 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   octx.fillStyle = '#111';
   octx.fillRect(0, 0, size, size);
 
-  // PASS 1: TERRAIN
+  // PASS 1: TERRAIN (Base + Height Layers)
   for (let level = 0; level <= LAND_STEPS; level++) {
     for (let my = startY; my < endY; my++) {
       for (let mx = startX; mx < endX; mx++) {
         const tile = getMicroTile(mx, my, data);
         if (!tile || tile.heightStep < level) continue;
 
+        // 1.1 Render Base Layer
         let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        if (tile.isRoad) {
-          setName = tile.roadFeature || 'road';
-        }
+        if (tile.isRoad) setName = tile.roadFeature || 'road';
         const set = TERRAIN_SETS[setName];
 
         if (set) {
-          const imgPath = TessellationEngine.getImagePath(set.file), img = imageCache.get(imgPath);
+          const imgPath = TessellationEngine.getImagePath(set.file);
+          const img = imageCache.get(imgPath);
           const cols = imgPath.includes('caves') ? 50 : 57;
 
           let role;
           if (tile.heightStep > level) {
-            if (level !== tile.heightStep - 1) continue;
-            role = 'CENTER';
+            if (level !== tile.heightStep - 1) role = null; // Skip if too far below current surface
+            else role = 'CENTER';
           } else {
             const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= level;
             role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
           }
 
-          const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
+          const tileId = role ? (set.roles[role] ?? set.roles['CENTER'] ?? set.centerId) : null;
           if (img && tileId != null) {
             octx.drawImage(
               img,
@@ -658,6 +661,54 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       }
     }
   }
+
+  // PASS 1.4: TERRAIN FOLIAGE (Forragem/Skin)
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+      const tile = getMicroTile(mx, my, data);
+      if (!tile || tile.heightStep < 0 || tile.isRoad || tile.isCity) continue;
+      if (tile.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) continue;
+
+      const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
+      const foliageSet = foliageSetName ? TERRAIN_SETS[foliageSetName] : null;
+
+      if (foliageSet) {
+        // ENFORCE FLAT GROUND (Must be CENTER role on the Base/Height Layer)
+        // This ensures foliage doesn't bleed into cliff edges.
+        const baseSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+        const baseSet = TERRAIN_SETS[baseSetName];
+        if (baseSet) {
+           const isAtLevel = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+           const microW = data.width * CHUNK_SIZE;
+           const microH = data.height * CHUNK_SIZE;
+           const roleOnBase = getRoleForCell(my, mx, microH, microW, isAtLevel, baseSet.type);
+           if (roleOnBase !== 'CENTER') continue;
+        }
+
+        const imgPath = TessellationEngine.getImagePath(foliageSet.file);
+        const img = imageCache.get(imgPath);
+        const cols = imgPath.includes('caves') ? 50 : 57;
+
+        const isFoliageAt = (r, c) => {
+           const t = getMicroTile(c, r, data);
+           return t && t.heightStep === tile.heightStep && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD;
+        };
+        const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageAt, foliageSet.type);
+        const tileId = foliageSet.roles[role] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId;
+
+        if (img && tileId != null) {
+          octx.drawImage(
+            img,
+            (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16,
+            Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH),
+            twNat, thNat
+          );
+        }
+      }
+    }
+  }
+
+
 
   // PASS 1.5: GRASS OVERLAY (Bases)
   for (let my = startY; my < endY; my++) {

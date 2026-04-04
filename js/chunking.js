@@ -219,6 +219,10 @@ export function getMicroTile(mx, my, macroData) {
         }
     }
 
+    // New Layered Terrain Data
+    const fDensity = foliageDensity(mx, my, seed + 9992, 0.25); // FOLIAGE_NOISE_SCALE
+    const fType = seededHash(mx, my, seed + 9993);
+
     return {
         biomeId: bId,
         elevation: e,
@@ -226,7 +230,9 @@ export function getMicroTile(mx, my, macroData) {
         isCity,
         isRoad,
         urbanBuilding,
-        roadFeature
+        roadFeature,
+        foliageDensity: fDensity,
+        foliageType: fType
     };
 }
 

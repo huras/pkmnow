@@ -84,6 +84,24 @@ export const NO_TREE_BIOMES = new Set([
 ]);
 
 /**
+ * Mapeamento de "Terrain Foliage" (Forragem/Skin superior).
+ * Usa os sets "jogador X" do tessellation-data.js.
+ */
+export const BIOME_TO_FOLIAGE = {
+  [BIOMES.GRASSLAND.id]: "jogador light-grass",
+  [BIOMES.FOREST.id]: "jogador light-grass",
+  [BIOMES.JUNGLE.id]: "jogador super-healthy-light-grass",
+  [BIOMES.MOUNTAIN.id]: "jogador rocky",
+  [BIOMES.PEAK.id]: "jogador rocky",
+  [BIOMES.SNOW.id]: "jogador light grass",
+  [BIOMES.ICE.id]: "jogador frozen-rocky",
+  [BIOMES.DESERT.id]: "jogador sandy",
+  [BIOMES.BEACH.id]: "jogador sandy",
+  [BIOMES.SAVANNA.id]: "jogador orange-grass",
+  [BIOMES.ARCANE.id]: "purples lago-de-agua-doce-rock", // Fallback para variação roxa
+};
+
+/**
  * Retorna o variant de grama para um biome ID.
  */
 export function getGrassVariant(biomeId) {
@@ -107,5 +125,10 @@ export function getTreeType(biomeId) {
 // Constantes de densiades
 export const GRASS_DENSITY_THRESHOLD = 0.40;  // 60% de cobertura (nos blobs)
 export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
+export const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Threshold para a Forragem
+
 export const GRASS_NOISE_SCALE = 0.2;         // Blobs de ~5 tiles
 export const TREE_NOISE_SCALE = 0.1;          // Blobs de ~10 tiles
+export const FOLIAGE_NOISE_SCALE = 0.25;       // Blobs de ~4 tiles
+
+

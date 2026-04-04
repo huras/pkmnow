@@ -6,20 +6,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 53,
-      "EDGE_N/IN_EDGE_S": 54,
+      "EDGE_N": 54,
       "OUT_NE": 55,
       "IN_SE": 56,
       "IN_SW": 57,
       "EDGE_W": 103,
       "CENTER": 104,
       "EDGE_E": 105,
-      "IN_EDGE_E": 106,
-      "IN_EDGE_W": 107,
+      "IN_NE": 106,
+      "IN_NW": 107,
       "OUT_SW": 153,
-      "EDGE_S/IN_EDGE_N": 154,
+      "EDGE_S": 154,
       "OUT_SE": 155,
-      "IN_NE": 156,
-      "IN_NW": 157
+      "IN_EDGE_E": 156,
+      "IN_EDGE_W": 157
     }
   },
   "altura Terra Amarela": {
@@ -28,20 +28,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 303,
-      "EDGE_N/IN_EDGE_S": 304,
+      "EDGE_N": 304,
       "OUT_NE": 305,
       "IN_SE": 306,
       "IN_SW": 307,
       "EDGE_W": 353,
       "CENTER": 354,
       "EDGE_E": 355,
-      "IN_EDGE_E": 356,
-      "IN_EDGE_W": 357,
+      "IN_NE": 356,
+      "IN_NW": 357,
       "OUT_SW": 403,
-      "EDGE_S/IN_EDGE_N": 404,
+      "EDGE_S": 404,
       "OUT_SE": 405,
-      "IN_NE": 406,
-      "IN_NW": 407
+      "IN_EDGE_E": 406,
+      "IN_EDGE_W": 407
     }
   },
   "altura Terra Vermelha": {
@@ -50,20 +50,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 553,
-      "EDGE_N/IN_EDGE_S": 554,
+      "EDGE_N": 554,
       "OUT_NE": 555,
       "IN_SE": 556,
       "IN_SW": 557,
       "EDGE_W": 603,
       "CENTER": 604,
       "EDGE_E": 605,
-      "IN_EDGE_E": 606,
-      "IN_EDGE_W": 607,
+      "IN_NE": 606,
+      "IN_NW": 607,
       "OUT_SW": 653,
-      "EDGE_S/IN_EDGE_N": 654,
+      "EDGE_S": 654,
       "OUT_SE": 655,
-      "IN_NE": 656,
-      "IN_NW": 657
+      "IN_EDGE_E": 656,
+      "IN_EDGE_W": 657
     }
   },
   "altura Pedra": {
@@ -72,20 +72,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 803,
-      "EDGE_N/IN_EDGE_S": 804,
+      "EDGE_N": 804,
       "OUT_NE": 805,
       "IN_SE": 806,
       "IN_SW": 807,
       "EDGE_W": 853,
       "CENTER": 854,
       "EDGE_E": 855,
-      "IN_EDGE_E": 856,
-      "IN_EDGE_W": 857,
+      "IN_NE": 856,
+      "IN_NW": 857,
       "OUT_SW": 903,
-      "EDGE_S/IN_EDGE_N": 904,
+      "EDGE_S": 904,
       "OUT_SE": 905,
-      "IN_NE": 906,
-      "IN_NW": 907
+      "IN_EDGE_E": 906,
+      "IN_EDGE_W": 907
     }
   },
   "altura Pedra Azul": {
@@ -94,20 +94,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 1053,
-      "EDGE_N/IN_EDGE_S": 1054,
+      "EDGE_N": 1054,
       "OUT_NE": 1055,
       "IN_SE": 1056,
       "IN_SW": 1057,
       "EDGE_W": 1103,
       "CENTER": 1104,
       "EDGE_E": 1105,
-      "IN_EDGE_E": 1106,
-      "IN_EDGE_W": 1107,
+      "IN_NE": 1106,
+      "IN_NW": 1107,
       "OUT_SW": 1153,
-      "EDGE_S/IN_EDGE_N": 1154,
+      "EDGE_S": 1154,
       "OUT_SE": 1155,
-      "IN_NE": 1156,
-      "IN_NW": 1157
+      "IN_EDGE_E": 1156,
+      "IN_EDGE_W": 1157
     }
   },
   "altura Gelo": {
@@ -116,20 +116,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 1253,
-      "EDGE_N/IN_EDGE_S": 1254,
+      "EDGE_N": 1254,
       "OUT_NE": 1255,
       "IN_SE": 1256,
       "IN_SW": 1257,
       "EDGE_W": 1303,
       "CENTER": 1304,
       "EDGE_E": 1305,
-      "IN_EDGE_E": 1306,
-      "IN_EDGE_W": 1307,
+      "IN_NE": 1306,
+      "IN_NW": 1307,
       "OUT_SW": 1353,
-      "EDGE_S/IN_EDGE_N": 1354,
+      "EDGE_S": 1354,
       "OUT_SE": 1355,
-      "IN_NE": 1356,
-      "IN_NW": 1357
+      "IN_EDGE_E": 1356,
+      "IN_EDGE_W": 1357
     }
   },
   "altura Pedra Roxa": {
@@ -138,20 +138,20 @@ export const TERRAIN_SETS = {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.tsx",
     "roles": {
       "OUT_NW": 1503,
-      "EDGE_N/IN_EDGE_S": 1504,
+      "EDGE_N": 1504,
       "OUT_NE": 1505,
       "IN_SE": 1506,
       "IN_SW": 1507,
       "EDGE_W": 1553,
       "CENTER": 1554,
       "EDGE_E": 1555,
-      "IN_EDGE_E": 1556,
-      "IN_EDGE_W": 1557,
+      "IN_NE": 1556,
+      "IN_NW": 1557,
       "OUT_SW": 1603,
-      "EDGE_S/IN_EDGE_N": 1604,
+      "EDGE_S": 1604,
       "OUT_SE": 1605,
-      "IN_NE": 1606,
-      "IN_NW": 1607
+      "IN_EDGE_E": 1606,
+      "IN_EDGE_W": 1607
     }
   },
   "Dirty dirt": {

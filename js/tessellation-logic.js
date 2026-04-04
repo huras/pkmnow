@@ -40,8 +40,8 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
   }
 
   // Tiles de borda — apenas um lado cardinal exposto à água
-  if (!n && s && w && e) return setType === 'conc-conv-c' ? 'EDGE_N/IN_EDGE_S' : 'EDGE_N';
-  if (n && !s && w && e) return setType === 'conc-conv-c' ? 'EDGE_S/IN_EDGE_N' : 'EDGE_S';
+  if (!n && s && w && e) return 'EDGE_N';
+  if (n && !s && w && e) return 'EDGE_S';
   if (n && s && !w && e) return 'EDGE_W';
   if (n && s && w && !e) return 'EDGE_E';
 
