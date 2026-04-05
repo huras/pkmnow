@@ -42,7 +42,8 @@ export async function loadTilesetImages() {
     'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
     'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
     'tilesets/PokemonCenter.png',
-    'tilesets/protagonist.png'
+    'tilesets/gastly_walk.png',
+    'tilesets/gastly_idle.png'
   ];
 
   const promises = sources.map((src) => {
@@ -362,44 +363,77 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 4: PLAYER (Animated Protagonist)
+    // PASS 4: PLAYER (Gastly - PMD Style)
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
-    const protImg = imageCache.get('tilesets/protagonist.png');
     
-    if (protImg) {
-      const sw = 16, sh = 32;
-      const frame = player.animFrame ?? 1;
-      const sx = (frame % 3) * sw; // Frames are 3 per row (0-2, 3-5, 6-8, 9-11)
-      const sy = Math.floor(frame / 3) * sh;
+    const gastlyWalk = imageCache.get('tilesets/gastly_walk.png');
+    const gastlyIdle = imageCache.get('tilesets/gastly_idle.png');
+    
+    if (gastlyWalk && gastlyIdle) {
+      const isMoving = player.moving;
+      const sheet = isMoving ? gastlyWalk : gastlyIdle;
       
-      // Scale: 40px width (match tileW) -> scale = 40/16 = 2.5
-      const scale = tileW / sw;
-      const dw = sw * scale;
-      const dh = sh * scale;
+      const sw = 48; // PMD Format: 48 wide
+      const sh = isMoving ? 64 : 56; // Walk:64, Idle:56
       
-      // Pivot: Origin(0.5, 0.9) from source
+      const frameCol = player.animFrame ?? 0;
+      const frameRow = player.animRow ?? 0;
+      
+      const sx = frameCol * sw;
+      const sy = frameRow * sh;
+      
+      // Gastly Scale: Increased to 1.5x to feel more substantial (approx 72x96/84)
+      const gastlyScale = 1.5;
+      const dw = sw * gastlyScale; 
+      const dh = sh * gastlyScale;
+      
+      // Floating Physics (Bobbing) - Slightly more intense for a larger ghost
+      const bob = Math.sin(time * 3.5) * 8; 
+      
+      // Pivot: Centering the character horizontally and floating it slightly above center
       const pivotX = dw * 0.5;
-      const pivotY = dh * 0.9;
+      const pivotY = dh * 0.75; 
       
-      // Draw Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      // Shadow: Centered within the tile (approx 36px wide total)
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
       ctx.beginPath();
-      ctx.ellipse(pcx, pcy, tileW * 0.25, tileH * 0.1, 0, 0, Math.PI * 2);
+      ctx.ellipse(pcx, pcy, (tileW * 0.3) * gastlyScale, (tileH * 0.12) * gastlyScale, 0, 0, Math.PI * 2);
       ctx.fill();
       
       // Draw Sprite
       ctx.drawImage(
-        protImg,
+        sheet,
         sx, sy, sw, sh,
-        snapPx(pcx - pivotX), snapPx(pcy - pivotY),
+        snapPx(pcx - pivotX), snapPx(pcy - pivotY + bob),
         snapPx(dw), snapPx(dh)
       );
     } else {
-      // Fallback (older placeholder style improved)
-      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ff2222'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.1, tileW*0.4, tileH*0.3);
-      ctx.fillStyle = '#ffccaa'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.4, tileW*0.4, tileH*0.3);
+      const protImg = imageCache.get('tilesets/protagonist.png');
+      if (protImg) {
+        const sw = 16, sh = 32;
+        const frame = player.animFrame ?? 1;
+        const sx = (frame % 3) * sw; 
+        const sy = Math.floor(frame / 3) * sh;
+        const scale = tileW / sw;
+        const dw = sw * scale;
+        const dh = sh * scale;
+        const pivotX = dw * 0.5;
+        const pivotY = dh * 0.9;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(pcx, pcy, tileW * 0.25, tileH * 0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.drawImage(
+          protImg,
+          sx, sy, sw, sh,
+          snapPx(pcx - pivotX), snapPx(pcy - pivotY),
+          snapPx(dw), snapPx(dh)
+        );
+      } else {
+        // Fallback
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
+      }
     }
 
     // PASS 5: TOPS (Above Player)
