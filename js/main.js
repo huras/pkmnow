@@ -34,6 +34,8 @@ import {
   getTerrainSetWalkKind,
   isBaseTerrainSpriteWalkable,
   getFoliageOverlayTileId,
+  getLakeLotusFoliageWalkRole,
+  isPurpleLakePoolWalkBlockingRole,
   FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS
 } from './walkability.js';
 
@@ -311,6 +313,7 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
   const foliageOverlayIdDbg = getFoliageOverlayTileId(mx, my, data);
+  const lakeLotusWalkRoleDbg = getLakeLotusFoliageWalkRole(mx, my, data);
 
   const surroundings = {
     heightStep: [
@@ -486,11 +489,15 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
         const mainId =
           variant === 'desert'
             ? tiles.original
-            : ft < 0.5
-              ? tiles.original
-              : tiles.grass2 || tiles.original;
+            : variant === 'lotus'
+              ? ft < 0.5
+                ? tiles.original
+                : tiles.grass2 ?? tiles.original
+              : ft < 0.5
+                ? tiles.original
+                : tiles.grass2 || tiles.original;
         sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
-        if (variant !== 'desert' && tiles.originalTop && ft < 0.5) {
+        if (variant !== 'desert' && variant !== 'lotus' && tiles.originalTop && ft < 0.5) {
           sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
         }
       }
@@ -630,6 +637,9 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
       foliageOverlaySpriteId: foliageOverlayIdDbg,
       foliagePoolOverlayBlocksWalk:
         foliageOverlayIdDbg != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(foliageOverlayIdDbg),
+      lakeLotusFoliageWalkRole: lakeLotusWalkRoleDbg,
+      lakeLotusWalkRoleBlocks:
+        lakeLotusWalkRoleDbg != null && isPurpleLakePoolWalkBlockingRole(lakeLotusWalkRoleDbg),
       walkSurfaceKind: getTerrainSetWalkKind(BIOME_TO_TERRAIN[tile.biomeId] || 'grass'),
       baseTerrainSpriteWalkable: isBaseTerrainSpriteWalkable(centerSpriteId),
       terrainSprite: {
@@ -806,9 +816,11 @@ function openDebugModal(info) {
       <div class="tile-debug-section-title">Colisão / metadados do tileset</div>
       <table class="tile-debug-table">
         <tbody>
-          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(sprite base na allowlist + overlay lava/lago não bloqueante)</span></td></tr>
+          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(lago roxo: com overlay = bloqueia; sem overlay = só CENTER/IN_* bloqueiam; OUT/EDGE secos OK)</span></td></tr>
           <tr><th>Foliage overlay (sprite)</th><td>${coll.foliageOverlaySpriteId != null ? coll.foliageOverlaySpriteId : '— (sem overlay)'}</td></tr>
-          <tr><th>Overlay pool bloqueia</th><td>${coll.foliagePoolOverlayBlocksWalk ? 'sim (lava: qualquer tile; lago roxo: sem OUT_*)' : 'não'}</td></tr>
+          <tr><th>Overlay pool bloqueia</th><td>${coll.foliagePoolOverlayBlocksWalk ? 'sim (lava: tudo; lago roxo: qualquer tile do overlay)' : 'não'}</td></tr>
+          <tr><th>Lago roxo — papel (walk)</th><td>${coll.lakeLotusFoliageWalkRole != null ? coll.lakeLotusFoliageWalkRole : '—'}</td></tr>
+          <tr><th>Lago roxo — papel bloqueia</th><td>${coll.lakeLotusWalkRoleBlocks ? 'sim (só sem overlay: CENTER ou IN_* )' : 'não'}</td></tr>
           <tr><th>Superfície (set)</th><td>${coll.walkSurfaceKind === 'layer-base' ? 'Layer Base' : coll.walkSurfaceKind === 'terrain-foliage' ? 'Terrain Foliage' : '— (água, penhasco, lava…)'}</td></tr>
           <tr><th>Sprite base permitido</th><td>${coll.baseTerrainSpriteWalkable ? 'sim' : 'não'}</td></tr>
           <tr><th>Sprite base → OBJECT_SETS</th><td>${formatObjectSetsFlags(coll.terrainSprite?.objectSets)}</td></tr>

@@ -17,9 +17,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 107,
       "OUT_SW": 153,
       "EDGE_S": 154,
-      "OUT_SE": 155,
-      "IN_EDGE_E": 156,
-      "IN_EDGE_W": 157
+      "OUT_SE": 155
     }
   },
   "altura Terra Amarela": {
@@ -39,9 +37,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 357,
       "OUT_SW": 403,
       "EDGE_S": 404,
-      "OUT_SE": 405,
-      "IN_EDGE_E": 406,
-      "IN_EDGE_W": 407
+      "OUT_SE": 405
     }
   },
   "altura Terra Vermelha": {
@@ -61,9 +57,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 607,
       "OUT_SW": 653,
       "EDGE_S": 654,
-      "OUT_SE": 655,
-      "IN_EDGE_E": 656,
-      "IN_EDGE_W": 657
+      "OUT_SE": 655
     }
   },
   "altura Pedra": {
@@ -83,9 +77,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 857,
       "OUT_SW": 903,
       "EDGE_S": 904,
-      "OUT_SE": 905,
-      "IN_EDGE_E": 906,
-      "IN_EDGE_W": 907
+      "OUT_SE": 905
     }
   },
   "altura Pedra Azul": {
@@ -105,9 +97,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 1107,
       "OUT_SW": 1153,
       "EDGE_S": 1154,
-      "OUT_SE": 1155,
-      "IN_EDGE_E": 1156,
-      "IN_EDGE_W": 1157
+      "OUT_SE": 1155
     }
   },
   "altura Gelo": {
@@ -127,9 +117,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 1307,
       "OUT_SW": 1353,
       "EDGE_S": 1354,
-      "OUT_SE": 1355,
-      "IN_EDGE_E": 1356,
-      "IN_EDGE_W": 1357
+      "OUT_SE": 1355
     }
   },
   "altura Pedra Roxa": {
@@ -149,9 +137,7 @@ export const TERRAIN_SETS = {
       "IN_NW": 1557,
       "OUT_SW": 1603,
       "EDGE_S": 1604,
-      "OUT_SE": 1605,
-      "IN_EDGE_E": 1606,
-      "IN_EDGE_W": 1607
+      "OUT_SE": 1605
     }
   },
   "Dirty dirt": {

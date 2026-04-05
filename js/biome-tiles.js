@@ -1,5 +1,6 @@
 import { BIOMES } from './biomes.js';
-import { seededHash } from './tessellation-logic.js';
+import { seededHash, getRoleForCell } from './tessellation-logic.js';
+import { TERRAIN_SETS } from './tessellation-data.js';
 
 /**
  * Mapeamento entre nossos IDs de Bioma e as chaves do TERRAIN_SETS no tessellation-data.js.
@@ -76,6 +77,8 @@ export const GRASS_TILES = {
   /** Desert short-grass overlay only (sand tufts). Small cactus is scatter-only — see `small-cactus [1x1]`, like baby pine. */
   desert: { original: 1884 },
   dirt: { original: 65, originalTop: 8, small: 60, mushroom: 119, dryGrass: 65 },
+  /** Freshwater lake foliage (`purples lago-de-agua-doce-*`): OBJECT_SETS lotus / lotus-with-flowers tile IDs on nature sheet */
+  lotus: { original: 86, grass2: 85 },
 };
 
 /** Tree overlay: 2×3 tiles (2 cols, 3 rows: 2 top + 1 base row) */
@@ -142,6 +145,7 @@ export const BIOME_TO_FOLIAGE = {
  */
 export function getGrassVariant(biomeId) {
   if (NO_GRASS_BIOMES.has(biomeId)) return null;
+  if (isLakeLotusFoliageTerrainSet(BIOME_TO_FOLIAGE[biomeId])) return 'lotus';
   if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TUNDRA.id || biomeId === BIOMES.TAIGA.id) return 'ice';
   if (biomeId === BIOMES.DESERT.id || biomeId === BIOMES.SAVANNA.id) return 'desert';
   if (biomeId === BIOMES.BEACH.id) return 'dirt';
@@ -218,6 +222,38 @@ export function getGrassParams(biomeId) {
 
 export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
 export const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Threshold para a Forragem
+
+/** Skins de lagoa doce (roxa): grama animada = lótus; só no CENTER do pool, não nas bordas (mesma lógica que folhagem 1.2). */
+export function isLakeLotusFoliageTerrainSet(name) {
+  return typeof name === 'string' && name.startsWith('purples ') && name.includes('lago-de-agua-doce');
+}
+
+/**
+ * @param {(col: number, row: number) => object | null | undefined} getTile - mesmo contrato que getMicroTile(mx, my): (col, row)
+ * @returns {null | boolean} null = bioma não usa regra de lago; usar gate de altura; true/false = interior CENTER do lago
+ */
+export function lakeLotusGrassInteriorAllowed(mx, my, tile, microRows, microCols, getTile) {
+  const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
+  if (!isLakeLotusFoliageTerrainSet(foliageSetName)) return null;
+  if (tile.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) return false;
+  const foliageSet = TERRAIN_SETS[foliageSetName];
+  if (!foliageSet) return false;
+  const level = tile.heightStep;
+  const biomeId = tile.biomeId;
+  const isFoliageSafeAt = (r, c) => {
+    const t = getTile(c, r);
+    if (!t || t.heightStep !== level || t.biomeId !== biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (getTile(c + dx, r + dy)?.heightStep !== level) return false;
+      }
+    }
+    return true;
+  };
+  if (!isFoliageSafeAt(my, mx)) return false;
+  const fRole = getRoleForCell(my, mx, microRows, microCols, isFoliageSafeAt, foliageSet.type);
+  return fRole === 'CENTER';
+}
 
 export const GRASS_NOISE_SCALE = 0.2;         // Fallback legacy
 export const GRASS_DENSITY_THRESHOLD = 0.40;  // Fallback legacy

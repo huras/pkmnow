@@ -61,8 +61,16 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
   return 'CENTER';
 }
 
+/** Cantos internos conc-conv (a/b/c): só estes quatro; não há IN_EDGE_E / IN_EDGE_W. */
+const TERRAIN_INNER_CORNER_ROLES = new Set(['IN_NE', 'IN_NW', 'IN_SE', 'IN_SW']);
+
+export function isTerrainInnerCornerRole(role) {
+  if (role == null || role === '') return false;
+  return TERRAIN_INNER_CORNER_ROLES.has(String(role));
+}
+
 /**
- * Base scatter 2C (colunas a leste da origem) pode cair em cantos internos IN_* no mesmo degrau.
+ * Base scatter 2C (colunas a leste da origem) pode cair em cantos internos no mesmo degrau.
  * Bloqueia OUT_* (quina exterior ao vazio) e EDGE_* (borda exposta), como no Pass 2 para 2B/grama.
  */
 export function terrainRoleAllowsScatter2CContinuation(role) {
@@ -70,7 +78,7 @@ export function terrainRoleAllowsScatter2CContinuation(role) {
   const r = String(role);
   if (r.startsWith('OUT_')) return false;
   if (r === 'CENTER') return true;
-  if (r.startsWith('IN_')) return true;
+  if (isTerrainInnerCornerRole(r)) return true;
   return false;
 }
 

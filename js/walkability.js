@@ -1,13 +1,18 @@
 /**
  * Caminhável = tile base resolve para um sprite de terreno classificado como
  * Layer Base ou Terrain Foliage (forragem "jogador *"), conforme docs/regras-de-tesselação.md.
- * Exclui penhascos (altura), água/lava (Borda com…), rocha arcana úmida (purples …).
+ * Exclui penhascos (altura), água/lava (Borda com…), lago roxo: ver bloco em `canWalkMicroTile` (overlay vs sem overlay).
  */
 
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { CHUNK_SIZE, getMicroTile } from './chunking.js';
-import { getRoleForCell } from './tessellation-logic.js';
-import { BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE, FOLIAGE_DENSITY_THRESHOLD } from './biome-tiles.js';
+import { getRoleForCell, isTerrainInnerCornerRole } from './tessellation-logic.js';
+import {
+  BIOME_TO_TERRAIN,
+  BIOME_TO_FOLIAGE,
+  FOLIAGE_DENSITY_THRESHOLD,
+  isLakeLotusFoliageTerrainSet
+} from './biome-tiles.js';
 
 /**
  * @param {string} name - chave em TERRAIN_SETS
@@ -91,9 +96,19 @@ export function isBaseTerrainSpriteWalkable(spriteId) {
 }
 
 /**
+ * Só para lago roxo **sem** sprite de folhagem (`getFoliageOverlayTileId === null`): bloqueia CENTER e cantos IN_NE/NW/SE/SW.
+ * Quinas OUT_* e bordas EDGE_* contam como margem seca → não bloqueiam aqui (com overlay, usa-se o Set abaixo).
+ */
+export function isPurpleLakePoolWalkBlockingRole(role) {
+  if (role == null || role === '') return false;
+  if (String(role) === 'CENTER') return true;
+  return isTerrainInnerCornerRole(role);
+}
+
+/**
  * Resolved foliage overlay tile IDs that block walking (O(1) lookup).
  * - `lava-lake-dirt` (Vulcão): **all** roles including OUT_* corners — still lava art, not safe ground.
- * - `purples lago-de-agua-doce-rock` (Arcane): pool only; OUT_* stay as dry corners (walkable).
+ * - `purples lago-de-agua-doce-rock` (Arcane): **todos** os IDs do overlay — com folhagem desenhada, toda a célula é “poça” (inclui quinas OUT_*).
  */
 export const FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS = (() => {
   const bad = new Set();
@@ -103,8 +118,8 @@ export const FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS = (() => {
   }
   const purples = TERRAIN_SETS['purples lago-de-agua-doce-rock'];
   if (purples?.roles) {
-    for (const [role, id] of Object.entries(purples.roles)) {
-      if (!role.startsWith('OUT_')) bad.add(id);
+    for (const id of Object.values(purples.roles)) {
+      bad.add(id);
     }
   }
   return bad;
@@ -154,6 +169,71 @@ export function getFoliageOverlayTileId(mx, my, data) {
 }
 
 /**
+ * Papel do autotile do lago doce (purples lago-de-agua-doce-*) só para colisão.
+ * O render exige `foliageDensity` no centro; aqui o centro pode estar abaixo do limiar mas ainda
+ * ser CENTER/EDGE ou canto IN_NE/NW/SE/SW vizinho de água — sem isso o tile ficava caminhável com base roxa “seca”.
+ * @returns {string | null} papel (ex. IN_NW, OUT_SE) ou null se a regra não se aplica
+ */
+export function getLakeLotusFoliageWalkRole(mx, my, data) {
+  const tile = getMicroTile(mx, my, data);
+  if (!tile) return null;
+  const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
+  if (!foliageSetName || !isLakeLotusFoliageTerrainSet(foliageSetName)) return null;
+
+  const foliageSet = TERRAIN_SETS[foliageSetName];
+  if (!foliageSet) return null;
+
+  const level = tile.heightStep;
+  const biomeId = tile.biomeId;
+
+  const flatPlateauAt = (r, c) => {
+    const t = getMicroTile(c, r, data);
+    if (!t || t.heightStep !== level || t.biomeId !== biomeId) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (getMicroTile(c + dx, r + dy, data)?.heightStep !== level) return false;
+      }
+    }
+    return true;
+  };
+
+  if (!flatPlateauAt(my, mx)) return null;
+
+  const isPoolWater = (r, c) => {
+    const t = getMicroTile(c, r, data);
+    return !!(t && t.heightStep === level && t.biomeId === biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
+  };
+
+  const c = isPoolWater(my, mx);
+  const n = isPoolWater(my - 1, mx);
+  const s = isPoolWater(my + 1, mx);
+  const w = isPoolWater(my, mx - 1);
+  const e = isPoolWater(my, mx + 1);
+  if (!c && !n && !s && !w && !e) return null;
+
+  return getRoleForCell(
+    my,
+    mx,
+    data.height * CHUNK_SIZE,
+    data.width * CHUNK_SIZE,
+    isPoolWater,
+    foliageSet.type
+  );
+}
+
+/**
+ * Colisão em grelha: um único tile micro por amostra.
+ *
+ * **Célula:** `mx = floor(x)`, `my = floor(y)` (coords em tiles micro do mundo).
+ * `tryMovePlayer` chama isto com `(nx, ny)` inteiros (destino); não há hitbox contínua durante o tween.
+ *
+ * **Ordem de decisão (primeiro falhanço bloqueia):**
+ * 1. Fora do mapa → não.
+ * 2. Sprite do **terreno base** em `(mx,my)` (`getBaseTerrainSpriteId`) deve estar em `WALKABLE_SURFACE_TERRAIN_TILE_IDS`.
+ * 3. **Lago/lava (overlay visível):** se `getFoliageOverlayTileId` devolver ID em `FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS` → não. Lago roxo: qualquer tile do set (CENTER, EDGE, IN, OUT).
+ * 4. **Lago roxo sem overlay:** `getLakeLotusFoliageWalkRole` + `isPurpleLakePoolWalkBlockingRole` → bloqueia **CENTER** e cantos **IN_NE/NW/SE/SW**; **OUT_*** e **EDGE_*** são quina/borda seca → sim.
+ * 5. Caso contrário → sim.
+ *
  * @param {number} x - tile micro (pode ser fracionário; usa floor)
  * @param {number} y
  * @param {object} data
@@ -171,6 +251,11 @@ export function canWalkMicroTile(x, y, data, cachedFoliageOverlayId) {
   const overlayId =
     cachedFoliageOverlayId === undefined ? getFoliageOverlayTileId(mx, my, data) : cachedFoliageOverlayId;
   if (overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
+    return false;
+  }
+
+  const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
+  if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
     return false;
   }
 

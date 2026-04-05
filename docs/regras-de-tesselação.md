@@ -19,8 +19,9 @@ Sets concavo + convexo:
 		[
 			[OUT_NW, EDGE_N, OUT_NE, IN_SE, IN_SW],
 			[EDGE_W, CENTER, EDGE_E, IN_NE, IN_NW],
-			[OUT_SW, EDGE_S, OUT_SE, IN_EDGE_E, IN_EDGE_W]
+			[OUT_SW, EDGE_S, OUT_SE]
 		]
+		(Não usar papéis IN_EDGE_E / IN_EDGE_W — não existem neste esquema; só IN_NE, IN_NW, IN_SE, IN_SW.)
 	ou (conc-conv-d):
 		[
 			[OUT_NW, EDGE_N, OUT_NE],

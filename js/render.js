@@ -12,9 +12,10 @@ import {
   FOLIAGE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
   FOLIAGE_NOISE_SCALE,
-  scatterHasWindSway
+  scatterHasWindSway,
+  lakeLotusGrassInteriorAllowed
 } from './biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, elevationToStep } from './chunking.js';
+import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 
@@ -374,10 +375,20 @@ export function render(canvas, data, options = {}) {
         ctx.imageSmoothingEnabled = true;
         if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = true;
         if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
+        const oceanSet = TERRAIN_SETS[BIOME_TO_TERRAIN[BIOMES.OCEAN.id]];
+        const microRows = height * CHUNK_SIZE;
+        const microCols = width * CHUNK_SIZE;
         for (let my = startY; my < endY; my++) {
           for (let mx = startX; mx < endX; mx++) {
             const tile = getCached(mx, my);
             if (!tile || tile.biomeId !== BIOMES.OCEAN.id) continue;
+            // Quinas OUT_* do autotile são “terra” na lógica de caminhada; não cobrir com água animada
+            // (senão parece oceano profundo mas `baseTerrainSpriteWalkable` continua true).
+            if (oceanSet) {
+              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+              const oRole = getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, oceanSet.type);
+              if (oRole && String(oRole).startsWith('OUT_')) continue;
+            }
             const phase = (tick + mx * 2 + my * 5) % waterFrames;
             const sy = phase * WATER_ANIM_SRC_H;
             ctx.drawImage(
@@ -480,10 +491,22 @@ export function render(canvas, data, options = {}) {
 
       if (gTiles && foliageDensity(mx, my, data.seed, gs) >= gt && !tile.isRoad && !tile.isCity) {
         let isFlat = true;
-        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        if (setForRole) {
-          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-          if (getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+        const lakeInterior = lakeLotusGrassInteriorAllowed(
+          mx,
+          my,
+          tile,
+          data.height * CHUNK_SIZE,
+          data.width * CHUNK_SIZE,
+          (c, r) => getCached(c, r)
+        );
+        if (lakeInterior === null) {
+          const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+          if (setForRole) {
+            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+            if (getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+          }
+        } else {
+          isFlat = lakeInterior;
         }
 
         if (isFlat) {
@@ -498,7 +521,11 @@ export function render(canvas, data, options = {}) {
           const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
 
           if (!isFT && !isFN && !isOccupiedByObject) {
-            const baseId = gTiles.original;
+            let baseId = gTiles.original;
+            if (gv === 'lotus' && gTiles.grass2 != null) {
+              const ftPick = foliageType(mx, my, data.seed);
+              baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
+            }
             if (baseId != null) {
               const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
@@ -796,6 +823,29 @@ export function render(canvas, data, options = {}) {
       }
     });
 
+    // Indicador de colisão: círculo com diâmetro = 1 tile no centro da célula lógica (player.x, player.y).
+    // É essa célula que o jogo trata como "onde estás" após um passo; canWalk(nx,ny) avalia o tile de destino da mesma forma (grelha, sem elipse contínua).
+    {
+      const collMx = player.x;
+      const collMy = player.y;
+      const microWCol = width * CHUNK_SIZE;
+      const microHCol = height * CHUNK_SIZE;
+      if (collMx >= 0 && collMy >= 0 && collMx < microWCol && collMy < microHCol) {
+        const collCx = snapPx((collMx + 0.5) * tileW);
+        const collCy = snapPx((collMy + 0.5) * tileH);
+        const collR = Math.min(tileW, tileH) * 0.5;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 240, 200, 0.92)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(collCx, collCy, Math.max(1, collR - 1), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
+
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
   }
@@ -905,6 +955,41 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         octx.fillStyle = biome.color;
         octx.fillRect(Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
       }
+    }
+  }
+
+  const microHBake = data.height * CHUNK_SIZE;
+  const microWBake = data.width * CHUNK_SIZE;
+  // Água (heightStep < 1): o loop seguinte usa level ≥ 0 e `tile.heightStep < level` → estes tiles
+  // nunca eram desenhados, só a cor do PASS 1 (oceano sólido sem autotile).
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+      const tile = getCachedTile(mx, my);
+      if (!tile || tile.heightStep >= 1) continue;
+      const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+      const biomeSet = TERRAIN_SETS[biomeSetName];
+      if (!biomeSet) continue;
+      const imgPath = TessellationEngine.getImagePath(biomeSet.file);
+      const img = imageCache.get(imgPath);
+      if (!img) continue;
+      const cols = imgPath.includes('caves') ? TCOLS_CAVES_BAKE : TCOLS_NATURE_BAKE;
+      const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
+      const role = getRoleForCell(my, mx, microHBake, microWBake, isAtOrAbove, biomeSet.type);
+      const tileId = biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId;
+      if (tileId == null) continue;
+      const sx = (tileId % cols) * 16;
+      const sy = Math.floor(tileId / cols) * 16;
+      octx.drawImage(
+        img,
+        sx,
+        sy,
+        16,
+        16,
+        Math.round((mx - startX) * tileW),
+        Math.round((my - startY) * tileH),
+        twNat,
+        thNat
+      );
     }
   }
 

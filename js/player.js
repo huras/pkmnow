@@ -60,6 +60,7 @@ export function tryMovePlayer(dx, dy, data) {
 
   const nx = player.x + dx;
   const ny = player.y + dy;
+  // Colisão: canWalkMicroTile(floor) num único tile; ver ordem em walkability.js → canWalkMicroTile
   if (canWalk(nx, ny, data)) {
     player.fromX = player.x;
     player.fromY = player.y;
