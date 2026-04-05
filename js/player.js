@@ -73,12 +73,23 @@ export function tryMovePlayer(dx, dy, data) {
 }
 
 /**
+ * Tabela de durações de animação baseada no AnimData.xml do Gengar (#0094)
+ */
+const GENGAR_ANIMS = {
+  Idle: [40, 4, 3, 3, 3, 3, 3, 4], // Frame 0 é a boca fechada (longo)
+  Walk: [8, 10, 8, 10]
+};
+
+/**
  * Atualiza a posição visual e animação do player por frame.
  * @param {number} dt - delta time em segundos
- * @param {number} multiplier - multiplicador de velocidade
+ * @param {number} multiplier - multiplicador de velocidade (não afeta o tempo da animação interna do PMD)
  */
 export function updatePlayer(dt, multiplier = 1) {
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
+  
+  // Ticks do motor PMD (60 ticks por segundo)
+  const ticks = dt * 60;
 
   if (player.moving) {
     player.moveProgress += (dt * multiplier) / MOVE_DURATION;
@@ -87,23 +98,44 @@ export function updatePlayer(dt, multiplier = 1) {
       player.moving = false;
     }
 
-    // Lerp suave para posição visual
     const t = player.moveProgress;
     player.visualX = player.fromX + (player.x - player.fromX) * t;
     player.visualY = player.fromY + (player.y - player.fromY) * t;
 
-    // PMD Walk: 12 frames
-    // Um ciclo (12 frames) por tile.
-    player.animFrame = Math.floor(t * 12) % 12;
+    // Gengar Walk: 4 frames baseados em ticks [8, 10, 8, 10] => Total 36 ticks
+    const seq = GENGAR_ANIMS.Walk;
+    const totalTicks = seq.reduce((a, b) => a + b, 0);
+    
+    // Sincronizamos o progresso de movimento (0-1) com o ciclo de 36 ticks
+    const currentTick = t * totalTicks;
+    let accumulated = 0;
+    player.animFrame = 0;
+    for (let i = 0; i < seq.length; i++) {
+       accumulated += seq[i];
+       if (currentTick <= accumulated) {
+         player.animFrame = i;
+         break;
+       }
+    }
     player.idleTimer = 0;
   } else {
-    // VisualX/Y fixos na posição lógica
     player.visualX = player.x;
     player.visualY = player.y;
     
-    // PMD Idle: 6 frames
-    player.idleTimer += dt;
-    const idleCycleDuration = 0.8; 
-    player.animFrame = Math.floor((player.idleTimer % idleCycleDuration) / (idleCycleDuration / 6));
+    // Gengar Idle Scientífico: Ticks reais do AnimData.xml
+    player.idleTimer += ticks;
+    const seq = GENGAR_ANIMS.Idle;
+    const totalTicks = seq.reduce((a, b) => a + b, 0);
+    const loopTick = player.idleTimer % totalTicks;
+    
+    let accumulated = 0;
+    player.animFrame = 0;
+    for (let i = 0; i < seq.length; i++) {
+       accumulated += seq[i];
+       if (loopTick <= accumulated) {
+         player.animFrame = i;
+         break;
+       }
+    }
   }
 }

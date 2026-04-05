@@ -31,6 +31,28 @@ const WATER_ANIM_SRC_H = 16;
  * Cada bloco é um canvas renderizado uma única vez e mantido em cache.
  * Isso elimina os picos de lag ao caminhar, pois apenas novos blocos pequenos são assados. */
 const PLAY_CHUNK_SIZE = 8;
+
+/** E / W / S / SE / SW from player tile: +y = south. PASS 5a grass on these cells draws after the sprite. */
+const GRASS_DEFER_AROUND_PLAYER_DELTAS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [1, 1],
+  [-1, 1],
+];
+
+/**
+ * Player cell: fraction of each PASS 5a grass quad taken from the **bottom** of the sprite (ground-adjacent bar)
+ * and the **bottom** of the on-screen quad — drawn after the sprite so it sits in front of the character.
+ */
+export const PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC = 0.15;
+
+/** @deprecated Use PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC (same value). */
+export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
+
+/** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
+export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
+
 const playChunkMap = new Map();
 let lastDataForCache = null;
 let lastTileWForCache = 0;
@@ -42,8 +64,8 @@ export async function loadTilesetImages() {
     'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
     'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
     'tilesets/PokemonCenter.png',
-    'tilesets/gastly_walk.png',
-    'tilesets/gastly_idle.png'
+    'tilesets/gengar_walk.png',
+    'tilesets/gengar_idle.png'
   ];
 
   const promises = sources.map((src) => {
@@ -235,7 +257,7 @@ export function render(canvas, data, options = {}) {
      }
   } else {
     const snapPx = (n) => Math.round(n);
-    const scatterFootprintNoGrassSet = new Set(); // Prevent crash in Pass 5
+    const scatterFootprintNoGrassSet = new Set(); // Pass 5a grass tips (optional footprint mask)
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
 
@@ -363,49 +385,192 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 4: PLAYER (Gastly - PMD Style)
+    /** Cliff / CENTER gate shared by PASS 5a (grass) and 5b (canopies). */
+    const forEachAbovePlayerTile = (fn) => {
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          const tile = getCached(mx, my);
+          if (!tile || tile.heightStep < 1) continue;
+
+          const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+          if (gateSet) {
+            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
+            if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
+          }
+
+          const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
+          fn(mx, my, tile, tw, th, tx, ty);
+        }
+      }
+    };
+
+    /** E / W / S / SE / SW neighbors of the player tile: grass draws after the sprite (depth cue). */
+    const isGrassDeferredAroundPlayer = (mx, my) => {
+      const px = Math.floor(vx);
+      const py = Math.floor(vy);
+      const dx = mx - px;
+      const dy = my - py;
+      return (
+        (dx === 1 && dy === 0) ||
+        (dx === -1 && dy === 0) ||
+        (dx === 0 && dy === 1) ||
+        (dx === 1 && dy === 1) ||
+        (dx === -1 && dy === 1)
+      );
+    };
+
+    const passesAbovePlayerTileGate = (mx, my, tile) => {
+      if (!tile || tile.heightStep < 1) return false;
+      const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+      if (gateSet) {
+        const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
+        if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, gateSet.type) !== 'CENTER') return false;
+      }
+      return true;
+    };
+
+    /**
+     * PASS 5a grass for one cell. `mode === 'playerTopOverlay'`: only the bottom PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC
+     * of each layer (source + dest: strip near the ground), after the sprite — simple marked slice.
+     */
+    const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty, mode) => {
+      const playerTopOverlay = mode === 'playerTopOverlay';
+      const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
+
+      const blitGrassQuad = (frame, destYTop, destHFull) => {
+        if (!frame) return;
+        const fw = frame.width || frame.naturalWidth;
+        const fh = frame.height || frame.naturalHeight;
+        if (!playerTopOverlay) {
+          ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
+          return;
+        }
+        const sh = Math.max(1, Math.round(fh * barFrac));
+        const sy = fh - sh;
+        const dh = destHFull * barFrac;
+        const dy = destYTop + destHFull * (1 - barFrac);
+        ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
+      };
+
+      if (playerTopOverlay) {
+        ctx.save();
+        ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA;
+      }
+
+      const gv = getGrassVariant(tile.biomeId);
+      const gTiles = GRASS_TILES[gv];
+      const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
+
+      if (gTiles && foliageDensity(mx, my, data.seed, gs) >= gt && !tile.isRoad && !tile.isCity) {
+        let isFlat = true;
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        if (setForRole) {
+          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+          if (getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+        }
+
+        if (isFlat) {
+          const trType = getTreeType(tile.biomeId, mx, my, data.seed);
+          const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+
+          if (!isFT && !isFN) {
+            const baseId = gTiles.original;
+            if (baseId != null) {
+              const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
+              const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
+              blitGrassQuad(frame, ty - tileH, tileH * 2);
+            }
+          }
+        }
+      }
+
+      const vt = getGrassVariant(tile.biomeId);
+      const vTiles = GRASS_TILES[vt];
+      const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
+      if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
+        const topId = vTiles.originalTop;
+        if (topId) {
+          const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
+          const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+          const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+
+          const items = BIOME_VEGETATION[tile.biomeId] || [];
+          const noGrassTopUnderScatter =
+            scatterFootprintNoGrassSet.has(`${mx},${my}`) ||
+            (items.length > 0 &&
+              !(isFT || isFN) &&
+              foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82);
+
+          if (!isFT && !isFN && !noGrassTopUnderScatter) {
+            const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
+            const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
+            blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+          }
+        }
+      }
+
+      if (playerTopOverlay) {
+        ctx.restore();
+      }
+    };
+
+    const playerTileMx = Math.floor(vx);
+    const playerTileMy = Math.floor(vy);
+
+    // PASS 5a: GRASS under player — player tile: full grass only while moving; idle uses bottom slice after PASS 4. Defer E/W/S/SE/SW.
+    forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+      if (mx === playerTileMx && my === playerTileMy) {
+        if (!player.moving) return;
+        drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+        return;
+      }
+      if (isGrassDeferredAroundPlayer(mx, my)) return;
+      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+    });
+
+    // PASS 4: PLAYER (after grass, before canopies)
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
-    
-    const gastlyWalk = imageCache.get('tilesets/gastly_walk.png');
-    const gastlyIdle = imageCache.get('tilesets/gastly_idle.png');
-    
-    if (gastlyWalk && gastlyIdle) {
+
+    const gengarWalk = imageCache.get('tilesets/gengar_walk.png');
+    const gengarIdle = imageCache.get('tilesets/gengar_idle.png');
+
+    if (gengarWalk && gengarIdle) {
       const isMoving = player.moving;
-      const sheet = isMoving ? gastlyWalk : gastlyIdle;
-      
-      const sw = 48; // PMD Format: 48 wide
-      const sh = isMoving ? 64 : 56; // Walk:64, Idle:56
-      
+      const sheet = isMoving ? gengarWalk : gengarIdle;
+
+      const sw = 32; // Gengar PMD: 32x40
+      const sh = 40;
+
       const frameCol = player.animFrame ?? 0;
       const frameRow = player.animRow ?? 0;
-      
+
       const sx = frameCol * sw;
       const sy = frameRow * sh;
-      
-      // Gastly Scale: Increased to 1.5x to feel more substantial (approx 72x96/84)
-      const gastlyScale = 1.5;
-      const dw = sw * gastlyScale; 
-      const dh = sh * gastlyScale;
-      
-      // Floating Physics (Bobbing) - Slightly more intense for a larger ghost
-      const bob = Math.sin(time * 3.5) * 8; 
-      
-      // Pivot: Centering the character horizontally and floating it slightly above center
+
+      // Gengar Scale: 2.5x to feel robust (80x100)
+      const gengarScale = 2.5;
+      const dw = sw * gengarScale;
+      const dh = sh * gengarScale;
+
+      // Pivot Científico: Gengar #094 é "baixo" no sprite de 40px.
+      // Ajustado para 0.48 para trazer o corpo 1 tile (40px) para baixo.
       const pivotX = dw * 0.5;
-      const pivotY = dh * 0.75; 
-      
-      // Shadow: Centered within the tile (approx 36px wide total)
-      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      const pivotY = dh * 0.48; // Grounding recalibrado (Original: 0.84)
+
+      // Sombra Científica: ShadowSize 2 (aproximadamente 28px no motor original)
+      // Escalado: 1.4 * 2.5 = 3.5. Ajustado visualmente para 0.5 do tile.
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.ellipse(pcx, pcy, (tileW * 0.3) * gastlyScale, (tileH * 0.12) * gastlyScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(pcx, pcy, tileW * 0.45, tileH * 0.12, 0, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Draw Sprite
       ctx.drawImage(
         sheet,
         sx, sy, sw, sh,
-        snapPx(pcx - pivotX), snapPx(pcy - pivotY + bob),
+        snapPx(pcx - pivotX), snapPx(pcy - pivotY),
         snapPx(dw), snapPx(dh)
       );
     } else {
@@ -413,7 +578,7 @@ export function render(canvas, data, options = {}) {
       if (protImg) {
         const sw = 16, sh = 32;
         const frame = player.animFrame ?? 1;
-        const sx = (frame % 3) * sw; 
+        const sx = (frame % 3) * sw;
         const sy = Math.floor(frame / 3) * sh;
         const scale = tileW / sw;
         const dw = sw * scale;
@@ -436,210 +601,172 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 5: TOPS (Above Player)
-    for (let my = startY; my < endY; my++) {
-      for (let mx = startX; mx < endX; mx++) {
-        const tile = getCached(mx, my);
-        if (!tile || tile.heightStep < 1) continue;
+    // PASS 5a-deferred: same grass as 5a on E / W / S / SE / SW of player tile — over sprite, under canopies
+    const ptx = Math.floor(vx);
+    const pty = Math.floor(vy);
+    const microW = width * CHUNK_SIZE;
+    const microH = height * CHUNK_SIZE;
+    for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
+      const mx = ptx + dx;
+      const my = pty + dy;
+      if (mx < 0 || my < 0 || mx >= microW || my >= microH) continue;
+      if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
+      const tile = getCached(mx, my);
+      if (!passesAbovePlayerTileGate(mx, my, tile)) continue;
+      const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
+      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+    }
 
-        // NO VEGETATION ON CLIFFS (Tops redraw)
-        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        if (setForRole) {
-          const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-          if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
-        }
-
-        const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
-
-        // 1. Scatter Tops (Palms/Mangroves correct columns)
-        const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-        if (
-          scatterItems.length > 0 &&
-          foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
-          !tile.isRoad &&
-          !tile.isCity
-        ) {
-          const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
-          const objSet = OBJECT_SETS[itemKey];
-          if (objSet) {
-            const { cols } = parseShape(objSet.shape);
-
-            const microW = width * CHUNK_SIZE;
-            const microH = height * CHUNK_SIZE;
-            const getT = (tx, ty) => getMicroTile(tx, ty, data);
-
-            // Usa validScatterOriginMicro (que já checa formal trees e overlaps a Oeste)
-            // para garantir que se o Base não desenha, o Top também não desenha.
-            if (validScatterOriginMicro(mx, my, data.seed, microW, microH, getT)) {
-              const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
-
-              if (topPart) {
-                const { img: scatterAtlasImg, cols: atlasCols } = atlasFromObjectSet(objSet);
-                if (scatterAtlasImg) {
-                  const angle = scatterHasWindSway(itemKey)
-                    ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
-                    : 0;
-                  const topRows = Math.ceil(topPart.ids.length / cols);
-                  ctx.save();
-                  ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
-                  ctx.rotate(angle);
-                  topPart.ids.forEach((id, idx) => {
-                    const ox = idx % cols;
-                    const oy = Math.floor(idx / cols);
-                    const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
-                    const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
-                    ctx.drawImage(
-                      scatterAtlasImg,
-                      (id % atlasCols) * 16,
-                      Math.floor(id / atlasCols) * 16,
-                      16,
-                      16,
-                      snapPx(lx),
-                      snapPx(drawY),
-                      tw,
-                      th
-                    );
-                  });
-                  ctx.restore();
-                }
-              }
-            }
-          }
-        }
-
-        // 3. (Dynamic Pass) Short grass overlay bases (desert = sand tufts only; cacti are scatter objects)
-        const gv = getGrassVariant(tile.biomeId);
-        const gTiles = GRASS_TILES[gv];
-        const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
-        
-        if (gTiles && foliageDensity(mx, my, data.seed, gs) >= gt && !tile.isRoad && !tile.isCity) {
-           // ENFORCE FLAT GROUND (same as bakeChunk)
-           let isFlat = true;
-           const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-           if (setForRole) {
-              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-              if (getRoleForCell(my, mx, data.height*CHUNK_SIZE, data.width*CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
-           }
-
-           if (isFlat) {
-              // Exclusion check (no grass under formal trees)
-              const trType = getTreeType(tile.biomeId, mx, my, data.seed);
-              const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-              
-              if (!isFT && !isFN) {
-                 let baseId = gTiles.original;
-                 
-                 if (baseId != null) {
-                    const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
-                    const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
-                    if (frame) {
-                       ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH), tileW, tileH * 2); 
-                    }
-                 }
-              }
-           }
-        }
-        const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
-        if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-          const ids = TREE_TILES[treeType];
-          if (ids?.top?.length && getCached(mx + 1, my)?.heightStep === tile.heightStep) {
-            const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI * 2) * 0.04;
-            const tops = ids.top;
-            const n = tops.length;
-            const canopyCols = 2;
-            const canopyRows = Math.ceil(n / canopyCols);
-            ctx.save();
-            ctx.translate(snapPx(tx + tw), snapPx(ty + th));
-            ctx.rotate(angle);
-            for (let i = 0; i < n; i++) {
-              const id = tops[i];
-              const ox = i % canopyCols;
-              const row = Math.floor(i / canopyCols);
-              const drawY = -(row + canopyRows) * th + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
-              const lx = ox === 0 ? -tw : -VEG_MULTITILE_OVERLAP_PX;
-              ctx.drawImage(
-                natureImg,
-                (id % TCOLS_NATURE) * 16,
-                Math.floor(id / TCOLS_NATURE) * 16,
-                16,
-                16,
-                snapPx(lx),
-                snapPx(drawY),
-                tw,
-                th
-              );
-            }
-            ctx.restore();
-          }
-        }
-        // 3. Foliage Tops (animated grass tips — not small cactus; cactus is scatter-only)
-        const vt = getGrassVariant(tile.biomeId);
-        const vTiles = GRASS_TILES[vt];
-        const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
-        if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
-           let topId = vTiles.originalTop;
-           
-           if (topId) {
-             const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
-             const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-             const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-             
-             const items = BIOME_VEGETATION[tile.biomeId] || [];
-             const noGrassTopUnderScatter =
-               scatterFootprintNoGrassSet.has(`${mx},${my}`) ||
-               (items.length > 0 &&
-                 !(isFT || isFN) &&
-                 foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82);
-
-             if (!isFT && !isFN && !noGrassTopUnderScatter) {
-               const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
-               const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
-               if (frame) {
-                   ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX), tileW, tileH * 2); 
-               }
-             }
-           }
-        }
-
-        // 4. Urban Roofs (Deterministic)
-        if (tile.urbanBuilding && mx === tile.urbanBuilding.ox && my === tile.urbanBuilding.oy) {
-            const objSet = OBJECT_SETS[tile.urbanBuilding.type];
-            if (objSet) {
-                const img = imageCache.get(objSet.file);
-                if (img) {
-                    const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
-                    const pcCols = 15, natureCols = 57;
-                    const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
-
-                    for (let r = 0; r < rowsObj; r++) {
-                        for (let c = 0; c < colsObj; c++) {
-                            let isRoof = tile.urbanBuilding.type.includes('pokecenter') ? (r < 3) : (r < 2);
-                            if (isRoof) {
-                                let drawId = null;
-                                if (tile.urbanBuilding.type.includes('pokecenter')) {
-                                    if (r === 0) drawId = 0 + c;
-                                    else if (r === 1) drawId = 15 + c;
-                                    else if (r === 2) drawId = 30 + c;
-                                } else if (tile.urbanBuilding.type.includes('mart')) {
-                                    if (r === 0) drawId = 20 + c;
-                                    else if (r === 1) drawId = 35 + c;
-                                } else { // House
-                                    if (r === 0) drawId = 90 + c;
-                                    else if (r === 1) drawId = 105 + c;
-                                }
-                                if (drawId != null) {
-                                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
-                                    ctx.drawImage(img, sx, sy, 16, 16, snapPx((mx + c) * tileW), snapPx((my + r) * tileH), tw, th);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Player tile: bottom strip of PASS 5a grass over sprite when idle (same step as neighbor deferrals)
+    if (
+      !player.moving &&
+      ptx >= 0 &&
+      pty >= 0 &&
+      ptx < microW &&
+      pty < microH &&
+      ptx >= startX &&
+      ptx < endX &&
+      pty >= startY &&
+      pty < endY
+    ) {
+      const tPlayer = getCached(ptx, pty);
+      if (passesAbovePlayerTileGate(ptx, pty, tPlayer)) {
+        const twP = Math.ceil(tileW), thP = Math.ceil(tileH), txP = Math.floor(ptx * tileW), tyP = Math.floor(pty * tileH);
+        drawGrass5aForCell(ptx, pty, tPlayer, twP, thP, txP, tyP, 'playerTopOverlay');
       }
     }
+
+    // PASS 5b: CANOPIES & roofs (scatter tops, formal tree tops, urban roofs) — over player
+    forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+      const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
+      if (
+        scatterItems.length > 0 &&
+        foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
+        !tile.isRoad &&
+        !tile.isCity
+      ) {
+        const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
+        const objSet = OBJECT_SETS[itemKey];
+        if (objSet) {
+          const { cols } = parseShape(objSet.shape);
+          const getT = (tx, ty) => getMicroTile(tx, ty, data);
+
+          if (
+            validScatterOriginMicro(
+              mx,
+              my,
+              data.seed,
+              width * CHUNK_SIZE,
+              height * CHUNK_SIZE,
+              getT
+            )
+          ) {
+            const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+
+            if (topPart) {
+              const { img: scatterAtlasImg, cols: atlasCols } = atlasFromObjectSet(objSet);
+              if (scatterAtlasImg) {
+                const angle = scatterHasWindSway(itemKey)
+                  ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
+                  : 0;
+                const topRows = Math.ceil(topPart.ids.length / cols);
+                ctx.save();
+                ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
+                ctx.rotate(angle);
+                topPart.ids.forEach((id, idx) => {
+                  const ox = idx % cols;
+                  const oy = Math.floor(idx / cols);
+                  const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
+                  const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
+                  ctx.drawImage(
+                    scatterAtlasImg,
+                    (id % atlasCols) * 16,
+                    Math.floor(id / atlasCols) * 16,
+                    16,
+                    16,
+                    snapPx(lx),
+                    snapPx(drawY),
+                    tw,
+                    th
+                  );
+                });
+                ctx.restore();
+              }
+            }
+          }
+        }
+      }
+
+      const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
+      if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
+        const ids = TREE_TILES[treeType];
+        if (ids?.top?.length && getCached(mx + 1, my)?.heightStep === tile.heightStep) {
+          const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI * 2) * 0.04;
+          const tops = ids.top;
+          const n = tops.length;
+          const canopyCols = 2;
+          const canopyRows = Math.ceil(n / canopyCols);
+          ctx.save();
+          ctx.translate(snapPx(tx + tw), snapPx(ty + th));
+          ctx.rotate(angle);
+          for (let i = 0; i < n; i++) {
+            const id = tops[i];
+            const ox = i % canopyCols;
+            const row = Math.floor(i / canopyCols);
+            const drawY = -(row + canopyRows) * th + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
+            const lx = ox === 0 ? -tw : -VEG_MULTITILE_OVERLAP_PX;
+            ctx.drawImage(
+              natureImg,
+              (id % TCOLS_NATURE) * 16,
+              Math.floor(id / TCOLS_NATURE) * 16,
+              16,
+              16,
+              snapPx(lx),
+              snapPx(drawY),
+              tw,
+              th
+            );
+          }
+          ctx.restore();
+        }
+      }
+
+      if (tile.urbanBuilding && mx === tile.urbanBuilding.ox && my === tile.urbanBuilding.oy) {
+        const objSet = OBJECT_SETS[tile.urbanBuilding.type];
+        if (objSet) {
+          const img = imageCache.get(objSet.file);
+          if (img) {
+            const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
+            const pcCols = 15, natureCols = 57;
+            const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
+
+            for (let r = 0; r < rowsObj; r++) {
+              for (let c = 0; c < colsObj; c++) {
+                const isRoof = tile.urbanBuilding.type.includes('pokecenter') ? (r < 3) : (r < 2);
+                if (isRoof) {
+                  let drawId = null;
+                  if (tile.urbanBuilding.type.includes('pokecenter')) {
+                    if (r === 0) drawId = 0 + c;
+                    else if (r === 1) drawId = 15 + c;
+                    else if (r === 2) drawId = 30 + c;
+                  } else if (tile.urbanBuilding.type.includes('mart')) {
+                    if (r === 0) drawId = 20 + c;
+                    else if (r === 1) drawId = 35 + c;
+                  } else {
+                    if (r === 0) drawId = 90 + c;
+                    else if (r === 1) drawId = 105 + c;
+                  }
+                  if (drawId != null) {
+                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
+                    ctx.drawImage(img, sx, sy, 16, 16, snapPx((mx + c) * tileW), snapPx((my + r) * tileH), tw, th);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
 
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
