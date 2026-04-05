@@ -41,18 +41,6 @@ const GRASS_DEFER_AROUND_PLAYER_DELTAS = [
   [-1, 1],
 ];
 
-/**
- * Player cell: fraction of each PASS 5a grass quad taken from the **bottom** of the sprite (ground-adjacent bar)
- * and the **bottom** of the on-screen quad — drawn after the sprite so it sits in front of the character.
- */
-export const PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC = 0.15;
-
-/** @deprecated Use PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC (same value). */
-export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
-
-/** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
-export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
-
 const playChunkMap = new Map();
 let lastDataForCache = null;
 let lastTileWForCache = 0;
@@ -429,34 +417,7 @@ export function render(canvas, data, options = {}) {
       return true;
     };
 
-    /**
-     * PASS 5a grass for one cell. `mode === 'playerTopOverlay'`: only the bottom PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC
-     * of each layer (source + dest: strip near the ground), after the sprite — simple marked slice.
-     */
-    const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty, mode) => {
-      const playerTopOverlay = mode === 'playerTopOverlay';
-      const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
-
-      const blitGrassQuad = (frame, destYTop, destHFull) => {
-        if (!frame) return;
-        const fw = frame.width || frame.naturalWidth;
-        const fh = frame.height || frame.naturalHeight;
-        if (!playerTopOverlay) {
-          ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
-          return;
-        }
-        const sh = Math.max(1, Math.round(fh * barFrac));
-        const sy = fh - sh;
-        const dh = destHFull * barFrac;
-        const dy = destYTop + destHFull * (1 - barFrac);
-        ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
-      };
-
-      if (playerTopOverlay) {
-        ctx.save();
-        ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA;
-      }
-
+    const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty) => {
       const gv = getGrassVariant(tile.biomeId);
       const gTiles = GRASS_TILES[gv];
       const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
@@ -479,7 +440,9 @@ export function render(canvas, data, options = {}) {
             if (baseId != null) {
               const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
-              blitGrassQuad(frame, ty - tileH, tileH * 2);
+              if (frame) {
+                ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH), tileW, tileH * 2);
+              }
             }
           }
         }
@@ -505,26 +468,16 @@ export function render(canvas, data, options = {}) {
           if (!isFT && !isFN && !noGrassTopUnderScatter) {
             const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
             const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
-            blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+            if (frame) {
+              ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX), tileW, tileH * 2);
+            }
           }
         }
       }
-
-      if (playerTopOverlay) {
-        ctx.restore();
-      }
     };
 
-    const playerTileMx = Math.floor(vx);
-    const playerTileMy = Math.floor(vy);
-
-    // PASS 5a: GRASS under player — player tile: full grass only while moving; idle uses bottom slice after PASS 4. Defer E/W/S/SE/SW.
+    // PASS 5a: GRASS under player — skip E/W/S/SE/SW of player tile (drawn after PASS 4)
     forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
-      if (mx === playerTileMx && my === playerTileMy) {
-        if (!player.moving) return;
-        drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
-        return;
-      }
       if (isGrassDeferredAroundPlayer(mx, my)) return;
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
     });
@@ -615,25 +568,6 @@ export function render(canvas, data, options = {}) {
       if (!passesAbovePlayerTileGate(mx, my, tile)) continue;
       const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
-    }
-
-    // Player tile: bottom strip of PASS 5a grass over sprite when idle (same step as neighbor deferrals)
-    if (
-      !player.moving &&
-      ptx >= 0 &&
-      pty >= 0 &&
-      ptx < microW &&
-      pty < microH &&
-      ptx >= startX &&
-      ptx < endX &&
-      pty >= startY &&
-      pty < endY
-    ) {
-      const tPlayer = getCached(ptx, pty);
-      if (passesAbovePlayerTileGate(ptx, pty, tPlayer)) {
-        const twP = Math.ceil(tileW), thP = Math.ceil(tileH), txP = Math.floor(ptx * tileW), tyP = Math.floor(pty * tileH);
-        drawGrass5aForCell(ptx, pty, tPlayer, twP, thP, txP, tyP, 'playerTopOverlay');
-      }
     }
 
     // PASS 5b: CANOPIES & roofs (scatter tops, formal tree tops, urban roofs) — over player
