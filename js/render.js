@@ -41,7 +41,8 @@ export async function loadTilesetImages() {
   const sources = [
     'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
     'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
-    'tilesets/PokemonCenter.png'
+    'tilesets/PokemonCenter.png',
+    'tilesets/protagonist.png'
   ];
 
   const promises = sources.map((src) => {
@@ -361,15 +362,45 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 4: PLAYER
+    // PASS 4: PLAYER (Animated Protagonist)
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
-    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#ff2222'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.1, tileW*0.4, tileH*0.3);
-    ctx.fillStyle = '#3355ee'; ctx.fillRect(pcx - tileW*0.2, pcy + tileH*0.2, tileW*0.15, tileH*0.2); ctx.fillRect(pcx + tileW*0.05, pcy + tileH*0.2, tileW*0.15, tileH*0.2);
-    ctx.fillStyle = '#ffccaa'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.4, tileW*0.4, tileH*0.3);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(pcx - tileW*0.25, pcy - tileH*0.4, tileW*0.5, tileH*0.1);
-    ctx.fillStyle = '#ff2222'; ctx.fillRect(pcx - tileW * 0.2, pcy - tileH * 0.5, tileW * 0.4, tileH * 0.15);
+    const protImg = imageCache.get('tilesets/protagonist.png');
+    
+    if (protImg) {
+      const sw = 16, sh = 32;
+      const frame = player.animFrame ?? 1;
+      const sx = (frame % 3) * sw; // Frames are 3 per row (0-2, 3-5, 6-8, 9-11)
+      const sy = Math.floor(frame / 3) * sh;
+      
+      // Scale: 40px width (match tileW) -> scale = 40/16 = 2.5
+      const scale = tileW / sw;
+      const dw = sw * scale;
+      const dh = sh * scale;
+      
+      // Pivot: Origin(0.5, 0.9) from source
+      const pivotX = dw * 0.5;
+      const pivotY = dh * 0.9;
+      
+      // Draw Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(pcx, pcy, tileW * 0.25, tileH * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw Sprite
+      ctx.drawImage(
+        protImg,
+        sx, sy, sw, sh,
+        snapPx(pcx - pivotX), snapPx(pcy - pivotY),
+        snapPx(dw), snapPx(dh)
+      );
+    } else {
+      // Fallback (older placeholder style improved)
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ff2222'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.1, tileW*0.4, tileH*0.3);
+      ctx.fillStyle = '#ffccaa'; ctx.fillRect(pcx - tileW*0.2, pcy - tileH*0.4, tileW*0.4, tileH*0.3);
+    }
 
     // PASS 5: TOPS (Above Player)
     for (let my = startY; my < endY; my++) {
