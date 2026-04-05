@@ -16,6 +16,7 @@ import {
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, elevationToStep } from './chunking.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
+import { isPlayerIdleOnWaitingFrame } from './player.js';
 
 /** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
 const VEG_MULTITILE_OVERLAP_PX = 1;
@@ -32,7 +33,10 @@ const WATER_ANIM_SRC_H = 16;
  * Isso elimina os picos de lag ao caminhar, pois apenas novos blocos pequenos são assados. */
 const PLAY_CHUNK_SIZE = 8;
 
-/** E / W / S / SE / SW from player tile: +y = south. PASS 5a grass on these cells draws after the sprite. */
+/**
+ * E / W / S / SE / SW from player tile (+y = south). S / SE / SW: full grass only after the sprite.
+ * E / W: full grass in PASS 5a (under sprite) always; bottom-strip overlay after sprite on idle waiting frame only (player tile same).
+ */
 const GRASS_DEFER_AROUND_PLAYER_DELTAS = [
   [1, 0],
   [-1, 0],
@@ -40,6 +44,18 @@ const GRASS_DEFER_AROUND_PLAYER_DELTAS = [
   [1, 1],
   [-1, 1],
 ];
+
+/**
+ * Player cell: fraction of each PASS 5a grass quad taken from the **bottom** of the sprite (ground-adjacent bar)
+ * and the **bottom** of the on-screen quad — drawn after the sprite so it sits in front of the character.
+ */
+export const PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC = 0.25;
+
+/** @deprecated Use PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC (same value). */
+export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
+
+/** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
+export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
 
 const playChunkMap = new Map();
 let lastDataForCache = null;
@@ -245,9 +261,13 @@ export function render(canvas, data, options = {}) {
      }
   } else {
     const snapPx = (n) => Math.round(n);
-    const scatterFootprintNoGrassSet = new Set(); // Pass 5a grass tips (optional footprint mask)
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
+
+    const isMovingHorizontal = player.moving && (player.y === player.fromY);
+    const overlayMx = isMovingHorizontal ? player.fromX : Math.floor(vx);
+    const overlayMy = isMovingHorizontal ? player.fromY : Math.floor(vy);
+    const shouldDrawPlayerOverlay = isPlayerIdleOnWaitingFrame() || isMovingHorizontal;
 
     // Área visível em tiles (com pequena margem para tops de árvores)
     const viewW = cw / tileW;
@@ -262,6 +282,10 @@ export function render(canvas, data, options = {}) {
     endX = Math.min(width * CHUNK_SIZE, endXTiles);
     endY = Math.min(height * CHUNK_SIZE, endYTiles);
 
+    // Identifica todos os tiles cobertos por scatter (árvores largas/altas) no viewport
+    // REMOVIDO: buildScatterFootprintNoGrassSet era O(N^2) no render loop. 
+    // Agora o suppressionSet é calculado uma única vez no bakeChunk.
+
     // Identifica quais blocos 8x8 intersectam o viewport
     const cStartX = Math.floor(startX / PLAY_CHUNK_SIZE);
     const cStartY = Math.floor(startY / PLAY_CHUNK_SIZE);
@@ -275,13 +299,13 @@ export function render(canvas, data, options = {}) {
     for (let cy = cStartY; cy <= cEndY; cy++) {
       for (let cx = cStartX; cx <= cEndX; cx++) {
         const key = `${cx},${cy}`;
-        let chunkCanvas = playChunkMap.get(key);
-        if (!chunkCanvas) {
-          chunkCanvas = bakeChunk(cx, cy, data, tileW, tileH);
-          playChunkMap.set(key, chunkCanvas);
+        let chunk = playChunkMap.get(key);
+        if (!chunk) {
+          chunk = bakeChunk(cx, cy, data, tileW, tileH);
+          playChunkMap.set(key, chunk);
         }
         ctx.drawImage(
-          chunkCanvas,
+          chunk.canvas,
           currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
           currentTransY + cy * PLAY_CHUNK_SIZE * tileH
         );
@@ -394,10 +418,8 @@ export function render(canvas, data, options = {}) {
 
     /** E / W / S / SE / SW neighbors of the player tile: grass draws after the sprite (depth cue). */
     const isGrassDeferredAroundPlayer = (mx, my) => {
-      const px = Math.floor(vx);
-      const py = Math.floor(vy);
-      const dx = mx - px;
-      const dy = my - py;
+      const dx = mx - overlayMx;
+      const dy = my - overlayMy;
       return (
         (dx === 1 && dy === 0) ||
         (dx === -1 && dy === 0) ||
@@ -405,6 +427,13 @@ export function render(canvas, data, options = {}) {
         (dx === 1 && dy === 1) ||
         (dx === -1 && dy === 1)
       );
+    };
+
+    /** East or west neighbor only (E/W use waiting-frame overlay like the player tile). */
+    const isGrassDeferredEwNeighbor = (mx, my) => {
+      const dx = mx - overlayMx;
+      const dy = my - overlayMy;
+      return (dx === 1 && dy === 0) || (dx === -1 && dy === 0);
     };
 
     const passesAbovePlayerTileGate = (mx, my, tile) => {
@@ -417,7 +446,34 @@ export function render(canvas, data, options = {}) {
       return true;
     };
 
-    const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty) => {
+    /**
+     * PASS 5a grass for one cell. `mode === 'playerTopOverlay'`: only the bottom PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC
+     * of each layer (source + dest: strip near the ground), after the sprite — simple marked slice.
+     */
+    const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty, mode) => {
+      const playerTopOverlay = mode === 'playerTopOverlay';
+      const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
+
+      const blitGrassQuad = (frame, destYTop, destHFull) => {
+        if (!frame) return;
+        const fw = frame.width || frame.naturalWidth;
+        const fh = frame.height || frame.naturalHeight;
+        if (!playerTopOverlay) {
+          ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
+          return;
+        }
+        const sh = Math.max(1, Math.round(fh * barFrac));
+        const sy = fh - sh;
+        const dh = destHFull * barFrac;
+        const dy = destYTop + destHFull * (1 - barFrac);
+        ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
+      };
+
+      if (playerTopOverlay) {
+        ctx.save();
+        ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA;
+      }
+
       const gv = getGrassVariant(tile.biomeId);
       const gTiles = GRASS_TILES[gv];
       const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
@@ -431,18 +487,22 @@ export function render(canvas, data, options = {}) {
         }
 
         if (isFlat) {
+          const items = BIOME_VEGETATION[tile.biomeId] || [];
           const trType = getTreeType(tile.biomeId, mx, my, data.seed);
           const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
           const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
-          if (!isFT && !isFN) {
+          const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
+          const cy = Math.floor(my / PLAY_CHUNK_SIZE);
+          const chunk = playChunkMap.get(`${cx},${cy}`);
+          const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
+
+          if (!isFT && !isFN && !isOccupiedByObject) {
             const baseId = gTiles.original;
             if (baseId != null) {
               const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
-              if (frame) {
-                ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH), tileW, tileH * 2);
-              }
+              blitGrassQuad(frame, ty - tileH, tileH * 2);
             }
           }
         }
@@ -454,31 +514,44 @@ export function render(canvas, data, options = {}) {
       if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
         const topId = vTiles.originalTop;
         if (topId) {
+          const items = BIOME_VEGETATION[tile.biomeId] || [];
           const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
           const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
           const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
-          const items = BIOME_VEGETATION[tile.biomeId] || [];
-          const noGrassTopUnderScatter =
-            scatterFootprintNoGrassSet.has(`${mx},${my}`) ||
-            (items.length > 0 &&
-              !(isFT || isFN) &&
-              foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82);
+          const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
+          const cy = Math.floor(my / PLAY_CHUNK_SIZE);
+          const chunk = playChunkMap.get(`${cx},${cy}`);
+          const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
 
-          if (!isFT && !isFN && !noGrassTopUnderScatter) {
+          if (!isFT && !isFN && !isOccupiedByObject) {
             const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
             const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
-            if (frame) {
-              ctx.drawImage(frame, snapPx(tx), snapPx(ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX), tileW, tileH * 2);
-            }
+            blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
           }
         }
       }
+
+      if (playerTopOverlay) {
+        ctx.restore();
+      }
     };
 
-    // PASS 5a: GRASS under player — skip E/W/S/SE/SW of player tile (drawn after PASS 4)
+    const playerTileMx = Math.floor(vx);
+    const playerTileMy = Math.floor(vy);
+
+    // PASS 5a: full grass under sprite for player + E/W always; idle waiting frame adds bottom strip after PASS 4 (no skip here). S/SE/SW deferred only.
     forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
-      if (isGrassDeferredAroundPlayer(mx, my)) return;
+      if (mx === playerTileMx && my === playerTileMy) {
+        drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+        return;
+      }
+      if (isGrassDeferredAroundPlayer(mx, my)) {
+        if (isGrassDeferredEwNeighbor(mx, my)) {
+          drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+        }
+        return;
+      }
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
     });
 
@@ -554,20 +627,41 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 5a-deferred: same grass as 5a on E / W / S / SE / SW of player tile — over sprite, under canopies
-    const ptx = Math.floor(vx);
-    const pty = Math.floor(vy);
+    // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
     const microW = width * CHUNK_SIZE;
     const microH = height * CHUNK_SIZE;
     for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
-      const mx = ptx + dx;
-      const my = pty + dy;
+      const mx = overlayMx + dx;
+      const my = overlayMy + dy;
       if (mx < 0 || my < 0 || mx >= microW || my >= microH) continue;
       if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
+      
+      const isEw = (dx === 1 && dy === 0) || (dx === -1 && dy === 0);
+      if (isEw && !shouldDrawPlayerOverlay) continue;
+      
       const tile = getCached(mx, my);
       if (!passesAbovePlayerTileGate(mx, my, tile)) continue;
       const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
-      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty, isEw ? 'playerTopOverlay' : undefined);
+    }
+
+    // Player tile: bottom strip over sprite on waiting or horizontal-move frame
+    if (
+      shouldDrawPlayerOverlay &&
+      overlayMx >= 0 &&
+      overlayMy >= 0 &&
+      overlayMx < microW &&
+      overlayMy < microH &&
+      overlayMx >= startX &&
+      overlayMx < endX &&
+      overlayMy >= startY &&
+      overlayMy < endY
+    ) {
+      const tPlayer = getCached(overlayMx, overlayMy);
+      if (passesAbovePlayerTileGate(overlayMx, overlayMy, tPlayer)) {
+        const twP = Math.ceil(tileW), thP = Math.ceil(tileH), txP = Math.floor(overlayMx * tileW), tyP = Math.floor(overlayMy * tileH);
+        drawGrass5aForCell(overlayMx, overlayMy, tPlayer, twP, thP, txP, tyP, 'playerTopOverlay');
+      }
     }
 
     // PASS 5b: CANOPIES & roofs (scatter tops, formal tree tops, urban roofs) — over player
@@ -746,6 +840,8 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   canvas.height = Math.ceil(size);
   const octx = canvas.getContext('2d');
   octx.imageSmoothingEnabled = false;
+
+  const suppressedSet = new Set(); // Metadata for Pass 5a (Animated Grass) suppression
 
   const startX = cx * PLAY_CHUNK_SIZE;
   const startY = cy * PLAY_CHUNK_SIZE;
@@ -1017,6 +1113,18 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
               if (objSet) {
                 const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
                 const { cols, rows } = parseShape(objSet.shape);
+
+                // Suppression rule: No grass under this scatter footprint
+                for (let dy = 0; dy < rows; dy++) {
+                   for (let dx = 0; dx < cols; dx++) {
+                      const fx = mxScan + dx;
+                      const fy = myScan + dy;
+                      if (fx >= startX && fx < endX && fy >= startY && fy < endY) {
+                         suppressedSet.add(`${fx % PLAY_CHUNK_SIZE},${fy % PLAY_CHUNK_SIZE}`);
+                      }
+                   }
+                }
+
                 if (base?.ids?.length) {
                   for (let idx = 0; idx < base.ids.length; idx++) {
                     const ox = idx % cols;
@@ -1105,5 +1213,17 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
     }
   }
 
-  return canvas;
+  // PASS 3: CLUMP SUPPRESSION (Suppress grass clumps where noise is high, avoiding dense overlap)
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+       const t = getCachedTile(mx, my);
+       if (!t || t.isRoad || t.isCity) continue;
+       if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
+       if (foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+          suppressedSet.add(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`);
+       }
+    }
+  }
+
+  return { canvas, suppressedSet };
 }

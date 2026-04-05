@@ -302,8 +302,8 @@ export function getMicroTile(mx, my, macroData) {
             const inEPadding = hasPathE && nly_raw >= 5 && nly_raw < 11 && nlx_raw >= 10;
             const inWPadding = hasPathW && nly_raw >= 5 && nly_raw < 11 && nlx_raw < 6;
 
-            const isVerticalRoadArea = (inNPadding || inSPadding) && !inEPadding && !inWPadding;
-            const isHorizontalRoadArea = (inEPadding || inWPadding) && !inNPadding && !inSPadding;
+            const isVerticalRoadArea = (hasPathN || hasPathS) && !hasPathE && !hasPathW;
+            const isHorizontalRoadArea = (hasPathE || hasPathW) && !hasPathN && !hasPathS;
 
             if (inCenterPadding || inNPadding || inSPadding || inEPadding || inWPadding || isRoad) {
                 // Determine stair feature BEFORE choosing snapped elevation to avoid 

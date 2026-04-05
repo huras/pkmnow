@@ -80,6 +80,13 @@ const GENGAR_ANIMS = {
   Walk: [8, 10, 8, 10]
 };
 
+/** Idle column index for the long “waiting” pose (frame 0 — first entry in Idle sequence). Used e.g. for grass-in-front overlay. */
+export const PLAYER_IDLE_WAITING_FRAME_INDEX = 0;
+
+export function isPlayerIdleOnWaitingFrame() {
+  return !player.moving && player.animFrame === PLAYER_IDLE_WAITING_FRAME_INDEX;
+}
+
 /**
  * Atualiza a posição visual e animação do player por frame.
  * @param {number} dt - delta time em segundos
