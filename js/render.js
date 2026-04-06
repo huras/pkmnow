@@ -70,6 +70,8 @@ let minimapBaseCacheCanvas = null;
 let minimapBaseCacheData = null;
 let minimapBaseCacheW = 0;
 let minimapBaseCacheH = 0;
+let mapOverviewCacheCanvas = null;
+let mapOverviewCacheKey = '';
 
 export async function loadTilesetImages() {
   const sources = [
@@ -157,116 +159,129 @@ export function render(canvas, data, options = {}) {
   }
 
   if (appMode === 'map') {
-     const isLandAt = (r, c) => (r >= 0 && r < height && c >= 0 && c < width) && biomes[r * width + c] !== BIOMES.OCEAN.id;
-     for (let y = startY; y < endY; y++) {
-       for (let x = startX; x < endX; x++) {
-         const idx = y * width + x;
-         const bId = biomes[idx];
-         if (viewType === 'elevation') {
-           const val = cells[idx], colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
-           ctx.fillStyle = val < 0.3 ? `rgb(0,0,${colorVal})` : `rgb(${colorVal},${colorVal},${colorVal})`;
-           ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-         } else {
-           const setName = BIOME_TO_TERRAIN[bId], set = TERRAIN_SETS[setName];
-           if (set && imageCache.size > 0) {
-             const imgPath = TessellationEngine.getImagePath(set.file), img = imageCache.get(imgPath);
-             if (img) {
-               const role = getRoleForCell(y, x, height, width, isLandAt, set.type);
-               const tileId = set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
-               const cols = imgPath.includes('caves') ? 50 : 57;
-               ctx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-             }
-           } else {
-             ctx.fillStyle = Object.values(BIOMES).find(b => b.id === bId)?.color || '#f0f';
-             ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-           }
-         }
-       }
-     }
+    const mapCacheKey = [
+      data.seed,
+      width,
+      height,
+      cw,
+      ch,
+      viewType,
+      overlayPaths ? 1 : 0,
+      overlayGraph ? 1 : 0,
+      overlayContours ? 1 : 0
+    ].join('|');
 
-     // PASS 2: OVERLAYS (Restaurando Rotas e Cidades)
-     if (overlayPaths && paths) {
-       ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)'; // Dourado para rotas
-       ctx.lineWidth = Math.max(1.5, tileW * 0.45);
-       ctx.lineJoin = 'round';
-       ctx.lineCap = 'round';
-       for (const path of paths) {
-         ctx.beginPath();
-         path.forEach((p, i) => {
-           const px = (p.x + 0.5) * tileW;
-           const py = (p.y + 0.5) * tileH;
-           if (i === 0) ctx.moveTo(px, py);
-           else ctx.lineTo(px, py);
-         });
-         ctx.stroke();
-       }
-     }
+    if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
+      mapOverviewCacheCanvas = document.createElement('canvas');
+      mapOverviewCacheCanvas.width = cw;
+      mapOverviewCacheCanvas.height = ch;
+      mapOverviewCacheKey = mapCacheKey;
+      const mctx = mapOverviewCacheCanvas.getContext('2d');
+      if (mctx) {
+        mctx.imageSmoothingEnabled = false;
+        if (mctx.webkitImageSmoothingEnabled !== undefined) mctx.webkitImageSmoothingEnabled = false;
+        mctx.fillStyle = '#111';
+        mctx.fillRect(0, 0, cw, ch);
 
-     if (overlayGraph && graph) {
-       for (const node of graph.nodes) {
-         const px = (node.x + 0.5) * tileW;
-         const py = (node.y + 0.5) * tileH;
-         const r = Math.max(4, tileW * 0.75);
-         
-         // Marcador
-         ctx.shadowBlur = 6;
-         ctx.shadowColor = 'rgba(0,0,0,0.8)';
-         ctx.fillStyle = node.isGym ? '#ff2222' : '#ffffff';
-         ctx.strokeStyle = '#000';
-         ctx.lineWidth = 2;
-         ctx.beginPath();
-         if (node.isGym) {
-           ctx.moveTo(px, py - r*1.3); ctx.lineTo(px + r*1.3, py); ctx.lineTo(px, py + r*1.3); ctx.lineTo(px - r*1.3, py); ctx.closePath();
-         } else {
-           ctx.arc(px, py, r, 0, Math.PI * 2);
-         }
-         ctx.fill();
-         ctx.stroke();
-         ctx.shadowBlur = 0;
+        const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
+        for (let y = startY; y < endY; y++) {
+          for (let x = startX; x < endX; x++) {
+            const idx = y * width + x;
+            const bId = biomes[idx];
+            if (viewType === 'elevation') {
+              const val = cells[idx];
+              const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
+              mctx.fillStyle = val < 0.3 ? `rgb(0,0,${colorVal})` : `rgb(${colorVal},${colorVal},${colorVal})`;
+            } else {
+              mctx.fillStyle = biomeColorById.get(bId) || '#000';
+            }
+            mctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+          }
+        }
 
-         // Rótulo
-         ctx.fillStyle = '#fff';
-         ctx. font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
-         ctx.textAlign = 'center';
-         ctx.lineWidth = 3;
-         ctx.strokeStyle = '#000';
-         ctx.strokeText(node.name, px, py - r - 6);
-         ctx.fillText(node.name, px, py - r - 6);
-       }
-     }
+        if (overlayPaths && paths) {
+          mctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
+          mctx.lineWidth = Math.max(1.5, tileW * 0.45);
+          mctx.lineJoin = 'round';
+          mctx.lineCap = 'round';
+          for (const path of paths) {
+            mctx.beginPath();
+            path.forEach((p, i) => {
+              const px = (p.x + 0.5) * tileW;
+              const py = (p.y + 0.5) * tileH;
+              if (i === 0) mctx.moveTo(px, py);
+              else mctx.lineTo(px, py);
+            });
+            mctx.stroke();
+          }
+        }
 
-     // PASS 3: CURVAS DE NÍVEL (Bordas de elevação)
-     if (overlayContours) {
-       ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)'; // Branco translúcido para as curvas
-       ctx.lineWidth = 1;
-       for (let y = startY; y < endY; y++) {
-         for (let x = startX; x < endX; x++) {
-           const h = elevationToStep(cells[y * width + x]);
-           
-           // Borda Direita
-           if (x < width - 1) {
-             const hr = elevationToStep(cells[y * width + (x + 1)]);
-             if (h !== hr) {
-               ctx.beginPath();
-               ctx.moveTo((x + 1) * tileW, y * tileH);
-               ctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
-               ctx.stroke();
-             }
-           }
-           
-           // Borda Inferior
-           if (y < height - 1) {
-             const hd = elevationToStep(cells[(y + 1) * width + x]);
-             if (h !== hd) {
-               ctx.beginPath();
-               ctx.moveTo(x * tileW, (y + 1) * tileH);
-               ctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
-               ctx.stroke();
-             }
-           }
-         }
-       }
-     }
+        if (overlayGraph && graph) {
+          for (const node of graph.nodes) {
+            const px = (node.x + 0.5) * tileW;
+            const py = (node.y + 0.5) * tileH;
+            const r = Math.max(4, tileW * 0.75);
+            mctx.shadowBlur = 6;
+            mctx.shadowColor = 'rgba(0,0,0,0.8)';
+            mctx.fillStyle = node.isGym ? '#ff2222' : '#ffffff';
+            mctx.strokeStyle = '#000';
+            mctx.lineWidth = 2;
+            mctx.beginPath();
+            if (node.isGym) {
+              mctx.moveTo(px, py - r * 1.3);
+              mctx.lineTo(px + r * 1.3, py);
+              mctx.lineTo(px, py + r * 1.3);
+              mctx.lineTo(px - r * 1.3, py);
+              mctx.closePath();
+            } else {
+              mctx.arc(px, py, r, 0, Math.PI * 2);
+            }
+            mctx.fill();
+            mctx.stroke();
+            mctx.shadowBlur = 0;
+            mctx.fillStyle = '#fff';
+            mctx.font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
+            mctx.textAlign = 'center';
+            mctx.lineWidth = 3;
+            mctx.strokeStyle = '#000';
+            mctx.strokeText(node.name, px, py - r - 6);
+            mctx.fillText(node.name, px, py - r - 6);
+          }
+        }
+
+        if (overlayContours) {
+          mctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+          mctx.lineWidth = 1;
+          for (let y = startY; y < endY; y++) {
+            for (let x = startX; x < endX; x++) {
+              const hStep = elevationToStep(cells[y * width + x]);
+              if (x < width - 1) {
+                const hr = elevationToStep(cells[y * width + (x + 1)]);
+                if (hStep !== hr) {
+                  mctx.beginPath();
+                  mctx.moveTo((x + 1) * tileW, y * tileH);
+                  mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+                  mctx.stroke();
+                }
+              }
+              if (y < height - 1) {
+                const hd = elevationToStep(cells[(y + 1) * width + x]);
+                if (hStep !== hd) {
+                  mctx.beginPath();
+                  mctx.moveTo(x * tileW, (y + 1) * tileH);
+                  mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+                  mctx.stroke();
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (mapOverviewCacheCanvas) {
+      ctx.drawImage(mapOverviewCacheCanvas, 0, 0);
+    }
   } else {
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;

@@ -75,6 +75,7 @@ const btnSettings = document.getElementById('btnSettings');
 const settingsModal = document.getElementById('settingsModal');
 const btnApplySettings = document.getElementById('btnApplySettings');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
+const btnExportWorldSettings = document.getElementById('btnExportWorldSettings');
 const btnBackToMap = document.getElementById('btnBackToMap');
 const playFpsEl = document.getElementById('play-fps');
 
@@ -159,9 +160,26 @@ function stopGameLoop() {
 }
 
 function run() {
+  // Keep map-mode canvas dimensions in sync before generating/rendering.
+  // Without this, first generation can use stale canvas size until a mode switch.
+  resizeCanvas();
   currentData = generate(seedInput.value, currentConfig);
   resetWildPokemonManager();
   updateView();
+}
+
+function downloadJsonFile(filename, payload) {
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
 
 // Ouvintes para os botões de Fase 5
@@ -296,15 +314,23 @@ btnBackToMap.addEventListener('click', () => {
 });
 
 function resizeCanvas() {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
   if (appMode === 'play') {
     const wrap = document.querySelector('.map-wrap');
     const w = Math.max(1, Math.floor(wrap.clientWidth || window.innerWidth));
     const h = Math.max(1, Math.floor(wrap.clientHeight || window.innerHeight));
-    canvas.width = w;
-    canvas.height = h;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    canvas.width = Math.max(1, Math.floor(w * dpr));
+    canvas.height = Math.max(1, Math.floor(h * dpr));
   } else {
-    canvas.width = 512;
-    canvas.height = 512;
+    const wrap = document.querySelector('.map-wrap');
+    const cssW = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
+    const cssH = cssW; // overview square map
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    canvas.width = Math.max(1, Math.floor(cssW * dpr));
+    canvas.height = Math.max(1, Math.floor(cssH * dpr));
   }
 }
 
@@ -1198,6 +1224,18 @@ btnSettings.addEventListener('click', () => {
 
 btnCloseSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
 
+if (btnExportWorldSettings) {
+  btnExportWorldSettings.addEventListener('click', () => {
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      config: currentConfig
+    };
+    const safeSeed = String(seedInput.value || 'world').replace(/[^\w-]+/g, '_');
+    downloadJsonFile(`world-settings-${safeSeed}.json`, exportData);
+  });
+}
+
 btnApplySettings.addEventListener('click', () => {
   currentConfig = {
     waterLevel: parseInt(document.getElementById('cfgWaterLevel').value) / 100,
@@ -1257,19 +1295,7 @@ if (btnExport) {
       config: currentConfig
     };
 
-    const jsonStr = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `pkmn-config-${exportData.seed}.json`;
-    document.body.appendChild(a);
-    a.click();
-    
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    downloadJsonFile(`pkmn-config-${exportData.seed}.json`, exportData);
     
     const originalContent = infoBar.innerHTML;
     infoBar.innerHTML = "<b style='color:#00ff00'>JSON EXPORTADO COM SUCESSO!</b>";
