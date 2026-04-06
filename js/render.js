@@ -66,6 +66,10 @@ export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
 const playChunkMap = new Map();
 let lastDataForCache = null;
 let lastTileWForCache = 0;
+let minimapBaseCacheCanvas = null;
+let minimapBaseCacheData = null;
+let minimapBaseCacheW = 0;
+let minimapBaseCacheH = 0;
 
 export async function loadTilesetImages() {
   const sources = [
@@ -933,16 +937,44 @@ function renderMinimap(canvas, data, player) {
   const h = canvas.height;
   ctx.imageSmoothingEnabled = false;
   if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, w, h);
-  const tileW = w / data.width, tileH = h / data.height;
-  for (let y = 0; y < data.height; y++) {
-    for (let x = 0; x < data.width; x++) {
-      const idx = y * data.width + x, bId = data.biomes[idx];
-      ctx.fillStyle = Object.values(BIOMES).find(b => b.id === bId)?.color || '#000';
-      ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+
+  const needsRebuild =
+    !minimapBaseCacheCanvas ||
+    minimapBaseCacheData !== data ||
+    minimapBaseCacheW !== w ||
+    minimapBaseCacheH !== h;
+
+  if (needsRebuild) {
+    minimapBaseCacheCanvas = document.createElement('canvas');
+    minimapBaseCacheCanvas.width = w;
+    minimapBaseCacheCanvas.height = h;
+    minimapBaseCacheData = data;
+    minimapBaseCacheW = w;
+    minimapBaseCacheH = h;
+
+    const bctx = minimapBaseCacheCanvas.getContext('2d');
+    if (!bctx) return;
+    bctx.imageSmoothingEnabled = false;
+    if (bctx.webkitImageSmoothingEnabled !== undefined) bctx.webkitImageSmoothingEnabled = false;
+    bctx.fillStyle = '#111';
+    bctx.fillRect(0, 0, w, h);
+
+    const tileWb = w / data.width;
+    const tileHb = h / data.height;
+    const colorByBiomeId = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
+    for (let y = 0; y < data.height; y++) {
+      for (let x = 0; x < data.width; x++) {
+        const idx = y * data.width + x;
+        const bId = data.biomes[idx];
+        bctx.fillStyle = colorByBiomeId.get(bId) || '#000';
+        bctx.fillRect(Math.floor(x * tileWb), Math.floor(y * tileHb), Math.ceil(tileWb), Math.ceil(tileHb));
+      }
     }
   }
+
+  ctx.drawImage(minimapBaseCacheCanvas, 0, 0);
+
+  const tileW = w / data.width, tileH = h / data.height;
   const macroPx = player.x / CHUNK_SIZE, macroPy = player.y / CHUNK_SIZE;
   ctx.fillStyle = '#ff0000'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2); ctx.fill(); ctx.stroke();
