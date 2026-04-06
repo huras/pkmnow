@@ -1,3 +1,5 @@
+import { getWindPhaseOffset } from './perlin-wind.js';
+
 /**
  * AnimationRenderer
  * Gesto de frames pré-renderizados para balanço de vegetação (Vento).
@@ -58,9 +60,9 @@ export const AnimationRenderer = {
      * @param {number} my Posição Y (world)
      */
     getFrameIndex(time, mx, my) {
-        // Mesmo offset das árvores para sincronizar o "mar de vegetação"
-        const offset = (mx * 0.3 + my * 0.7);
-        const wave = Math.sin(time * 2.0 + offset);
+        // Fase por célula: Perlin (escala baixa) + cache em perlin-wind.js — não recalcula todo frame.
+        const phase = getWindPhaseOffset(mx, my);
+        const wave = Math.sin(time * 2.0 + phase);
         
         // Mapeia Seno (-1 a 1) para índice (0, 1, 2)
         if (wave < -0.33) return 0; // Esquerda

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "exportedAt": "2026-04-06T17:09:00.136Z",
+  "config": {
+    "waterLevel": 0.21,
+    "elevationScale": 24,
+    "fbmOctaves": 3,
+    "fbmPersistence": 0.5,
+    "elevationDetailOctaves": 2,
+    "elevationDetailPersistence": 0.5,
+    "elevationDetailStrength": 0.034,
+    "temperatureScale": 60,
+    "moistureScale": 28,
+    "desertMoisture": 0.38,
+    "forestMoisture": 0.58,
+    "anomalyScale": 32,
+    "cityCount": 22,
+    "gymCount": 10,
+    "extraEdges": 3
+  }
+}

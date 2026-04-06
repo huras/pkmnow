@@ -1238,20 +1238,22 @@ if (btnExportWorldSettings) {
 
 btnApplySettings.addEventListener('click', () => {
   currentConfig = {
-    waterLevel: parseInt(document.getElementById('cfgWaterLevel').value) / 100,
-    elevationScale: parseInt(document.getElementById('cfgElevation').value),
+    ...DEFAULT_CONFIG,
+    ...currentConfig,
+    waterLevel: parseInt(document.getElementById('cfgWaterLevel').value, 10) / 100,
+    elevationScale: parseInt(document.getElementById('cfgElevation').value, 10),
     elevationDetailOctaves: parseInt(document.getElementById('cfgElevationDetailOctaves').value, 10),
     elevationDetailStrength:
       parseInt(document.getElementById('cfgElevationDetailStrength').value, 10) / 1000,
-    elevationDetailPersistence: currentConfig.elevationDetailPersistence ?? DEFAULT_CONFIG.elevationDetailPersistence,
-    temperatureScale: parseInt(document.getElementById('cfgTemperature').value),
-    moistureScale: parseInt(document.getElementById('cfgMoisture').value),
-    desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value) / 100,
-    forestMoisture: parseInt(document.getElementById('cfgForestMoisture').value) / 100,
-    anomalyScale: parseInt(document.getElementById('cfgAnomaly').value),
-    cityCount: parseInt(document.getElementById('cfgCities').value),
-    gymCount: parseInt(document.getElementById('cfgGyms').value),
-    extraEdges: currentConfig.extraEdges
+    elevationDetailPersistence:
+      currentConfig.elevationDetailPersistence ?? DEFAULT_CONFIG.elevationDetailPersistence,
+    temperatureScale: parseInt(document.getElementById('cfgTemperature').value, 10),
+    moistureScale: parseInt(document.getElementById('cfgMoisture').value, 10),
+    desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value, 10) / 100,
+    forestMoisture: parseInt(document.getElementById('cfgForestMoisture').value, 10) / 100,
+    anomalyScale: parseInt(document.getElementById('cfgAnomaly').value, 10),
+    cityCount: parseInt(document.getElementById('cfgCities').value, 10),
+    gymCount: parseInt(document.getElementById('cfgGyms').value, 10)
   };
   settingsModal.classList.add('hidden');
   run();

@@ -6,6 +6,28 @@ import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
  */
 export const TessellationEngine = {
     /**
+     * Required role names by terrain tessellation type.
+     */
+    getRequiredRolesByType(typeName) {
+        if (typeName === 'conc-conv-a' || typeName === 'conc-conv-b' || typeName === 'conc-conv-c') {
+            return ['OUT_NW', 'EDGE_N', 'OUT_NE', 'EDGE_W', 'CENTER', 'EDGE_E', 'OUT_SW', 'EDGE_S', 'OUT_SE', 'IN_NE', 'IN_NW', 'IN_SE', 'IN_SW'];
+        }
+        if (typeName === 'conc-conv-d') {
+            return ['OUT_NW', 'EDGE_N', 'OUT_NE', 'EDGE_W', 'CENTER', 'EDGE_E', 'OUT_SW', 'EDGE_S', 'OUT_SE'];
+        }
+        if (typeName === 'extentable-vertical-three-piece-a') {
+            return ['TOP_EXTREMITY', 'SEAMLESS_CENTER', 'BOTTOM_EXTREMITY'];
+        }
+        if (typeName === 'extentable-horizontal-three-piece-a') {
+            return ['LEFT_EXTREMITY', 'SEAMLESS_CENTER', 'RIGHT_EXTREMITY'];
+        }
+        if (typeName === 'seamless-horizontal-single-piece-a' || typeName === 'seamless-vertical-single-piece-a') {
+            return ['SEAMLESS_TILE'];
+        }
+        return [];
+    },
+
+    /**
      * Get all available terrain set names.
      */
     getTerrainSetNames() {
@@ -40,6 +62,51 @@ export const TessellationEngine = {
         const set = this.getTerrainSet(setName);
         if (!set) return null;
         return set.roles[role] || null;
+    },
+
+    /**
+     * Validate one terrain set role mapping.
+     * Returns a normalized report used by UI/render warnings.
+     */
+    validateTerrainSet(name) {
+        const set = this.getTerrainSet(name);
+        if (!set) {
+            return {
+                name,
+                isValid: false,
+                missingRoles: [],
+                unknownRoles: [],
+                error: 'set_not_found'
+            };
+        }
+
+        const requiredRoles = this.getRequiredRolesByType(set.type);
+        const roles = set.roles || {};
+        const roleNames = Object.keys(roles);
+        const missingRoles = requiredRoles.filter((role) => roles[role] == null);
+        const unknownRoles = roleNames.filter((role) => !requiredRoles.includes(role));
+
+        return {
+            name,
+            type: set.type,
+            isValid: missingRoles.length === 0,
+            missingRoles,
+            unknownRoles
+        };
+    },
+
+    /**
+     * Validate all terrain sets and collect only problematic entries.
+     */
+    validateAllTerrainSets() {
+        const reports = [];
+        for (const setName of Object.keys(TERRAIN_SETS)) {
+            const report = this.validateTerrainSet(setName);
+            if (!report.isValid || report.unknownRoles.length > 0) {
+                reports.push(report);
+            }
+        }
+        return reports;
     },
 
     /**

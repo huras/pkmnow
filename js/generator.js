@@ -7,20 +7,23 @@ import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
 
 export const DEFAULT_CONFIG = {
-  waterLevel: 0.38,
+  waterLevel: 0.21,
   elevationScale: 24,
   /** Oitavas de ruído fractal para mapas macro (Elevation, Temp, Moisture). */
   fbmOctaves: 3,
   fbmPersistence: 0.5,
-  /** Detalhe extra exclusivo da elevação (opcional, p/ pequenas variações locais). */
+  /** Oitavas FBM extra só na elevação (sliders “detalhe” no modal). 0 = desliga camada extra. */
+  elevationDetailOctaves: 2,
+  elevationDetailPersistence: 0.5,
+  /** Força do detalhe (valor/1000 no UI; somado à elevação base antes dos biomas). */
   elevationDetailStrength: 0.034,
-  temperatureScale: 32,
+  temperatureScale: 60,
   moistureScale: 28,
   desertMoisture: 0.38,
   forestMoisture: 0.58,
   anomalyScale: 32,
-  cityCount: 14,
-  gymCount: 8,
+  cityCount: 22,
+  gymCount: 10,
   extraEdges: 3
 };
 
@@ -123,6 +126,19 @@ export function generate(seedInput, customConfig = {}) {
   
   // Mapas de Ruído Fractal (FBM)
   const elevation = generateFBMMap(rng, width, height, config.elevationScale, config.fbmOctaves, config.fbmPersistence);
+
+  const detOct = Math.max(0, Math.min(5, config.elevationDetailOctaves ?? 0));
+  const detStr = config.elevationDetailStrength ?? 0;
+  if (detOct > 0 && detStr > 0) {
+    const detScale = Math.max(2, Math.round(config.elevationScale / 2));
+    const detPers = config.elevationDetailPersistence ?? 0.5;
+    const detail = generateFBMMap(rng, width, height, detScale, detOct + 1, detPers);
+    for (let i = 0; i < width * height; i++) {
+      let v = elevation[i] + detStr * ((detail[i] - 0.5) * 2);
+      elevation[i] = v < 0 ? 0 : v > 1 ? 1 : v;
+    }
+  }
+
   const temperature = generateFBMMap(rng, width, height, config.temperatureScale, config.fbmOctaves, config.fbmPersistence);
   const moisture = generateFBMMap(rng, width, height, config.moistureScale, config.fbmOctaves, config.fbmPersistence);
   const anomaly = generateFBMMap(rng, width, height, config.anomalyScale, 4, 0.5); // Mais oitavas para bordas orgânicas

@@ -11,7 +11,8 @@ import {
   BIOME_TO_TERRAIN,
   BIOME_TO_FOLIAGE,
   FOLIAGE_DENSITY_THRESHOLD,
-  isLakeLotusFoliageTerrainSet
+  isLakeLotusFoliageTerrainSet,
+  usesPoolAutotileMaskForFoliage
 } from './biome-tiles.js';
 
 /**
@@ -157,12 +158,18 @@ export function getFoliageOverlayTileId(mx, my, data) {
 
   if (!isFoliageSafeAt(my, mx)) return null;
 
+  const isPoolTile = (r, c) => {
+    const t = getMicroTile(c, r, data);
+    return !!(t && t.heightStep === level && t.biomeId === biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
+  };
+  const landForRole = usesPoolAutotileMaskForFoliage(foliageSetName) ? isPoolTile : isFoliageSafeAt;
+
   const fRole = getRoleForCell(
     my,
     mx,
     data.height * CHUNK_SIZE,
     data.width * CHUNK_SIZE,
-    isFoliageSafeAt,
+    landForRole,
     foliageSet.type
   );
   return foliageSet.roles[fRole] ?? foliageSet.roles.CENTER ?? foliageSet.centerId ?? null;

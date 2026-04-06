@@ -13,7 +13,8 @@ import {
   TREE_NOISE_SCALE,
   FOLIAGE_NOISE_SCALE,
   scatterHasWindSway,
-  lakeLotusGrassInteriorAllowed
+  lakeLotusGrassInteriorAllowed,
+  usesPoolAutotileMaskForFoliage
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
@@ -72,6 +73,7 @@ let minimapBaseCacheW = 0;
 let minimapBaseCacheH = 0;
 let mapOverviewCacheCanvas = null;
 let mapOverviewCacheKey = '';
+let didWarnTerrainSetRoles = false;
 
 export async function loadTilesetImages() {
   const sources = [
@@ -119,6 +121,14 @@ export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx || !data) return;
 
+  if (!didWarnTerrainSetRoles) {
+    const terrainRoleProblems = TessellationEngine.validateAllTerrainSets();
+    if (terrainRoleProblems.length > 0) {
+      console.warn('[Tessellation] Terrain sets with missing/unknown roles:', terrainRoleProblems);
+    }
+    didWarnTerrainSetRoles = true;
+  }
+
   const { width, height, cells, biomes, paths } = data;
   const cw = canvas.width;
   const ch = canvas.height;
@@ -159,8 +169,11 @@ export function render(canvas, data, options = {}) {
   }
 
   if (appMode === 'map') {
+    // Incluir config na chave: mesma seed + parâmetros diferentes deve invalidar o cache (antes só seed+view).
+    const configSig = data.config != null ? JSON.stringify(data.config) : '';
     const mapCacheKey = [
       data.seed,
+      configSig,
       width,
       height,
       cw,
@@ -1182,7 +1195,14 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
                   const imgPath = TessellationEngine.getImagePath(foliageSet.file);
                   const img = imageCache.get(imgPath);
                   const fCols = imgPath.includes('caves') ? 50 : 57;
-                  const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isFoliageSafeAt, foliageSet.type);
+                  const isFoliagePoolTile = (r, c) => {
+                    const t = getCachedTile(c, r);
+                    return !!(t && t.heightStep === level && t.biomeId === tile.biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
+                  };
+                  const landForFoliageRole = usesPoolAutotileMaskForFoliage(foliageSetName)
+                    ? isFoliagePoolTile
+                    : isFoliageSafeAt;
+                  const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, landForFoliageRole, foliageSet.type);
                   const fTileId = (foliageSet.roles[fRole] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId);
                   if (img && fTileId != null) {
                     octx.drawImage(img, (fTileId % fCols) * 16, Math.floor(fTileId / fCols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);

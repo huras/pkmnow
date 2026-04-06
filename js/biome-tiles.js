@@ -229,6 +229,16 @@ export function isLakeLotusFoliageTerrainSet(name) {
 }
 
 /**
+ * Folhagem desenhada como “poça” (lava / lago roxo): o autotile deve usar vizinhos com densidade ≥ limiar
+ * como “land”, não o mesmo predicado estrito do planalto 3×3 — senão bordas do pool ficam com EDGE/OUT errados.
+ * O desenho continua gated por planalto 3×3 em `render.js` / `getFoliageOverlayTileId`.
+ */
+export function usesPoolAutotileMaskForFoliage(foliageSetName) {
+  if (foliageSetName === 'lava-lake-dirt') return true;
+  return isLakeLotusFoliageTerrainSet(foliageSetName);
+}
+
+/**
  * @param {(col: number, row: number) => object | null | undefined} getTile - mesmo contrato que getMicroTile(mx, my): (col, row)
  * @returns {null | boolean} null = bioma não usa regra de lago; usar gate de altura; true/false = interior CENTER do lago
  */
@@ -251,7 +261,11 @@ export function lakeLotusGrassInteriorAllowed(mx, my, tile, microRows, microCols
     return true;
   };
   if (!isFoliageSafeAt(my, mx)) return false;
-  const fRole = getRoleForCell(my, mx, microRows, microCols, isFoliageSafeAt, foliageSet.type);
+  const isPoolTile = (r, c) => {
+    const t = getTile(c, r);
+    return !!(t && t.heightStep === level && t.biomeId === biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
+  };
+  const fRole = getRoleForCell(my, mx, microRows, microCols, isPoolTile, foliageSet.type);
   return fRole === 'CENTER';
 }
 
