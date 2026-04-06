@@ -129,13 +129,43 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     if (!needed.has(k)) entitiesByKey.delete(k);
   }
 
+  /** @type {Map<number, Set<number>>} biomeId -> used encounter indexes in current window */
+  const usedPickIndexesByBiome = new Map();
+  for (const ent of entitiesByKey.values()) {
+    if (typeof ent.biomeId !== 'number' || typeof ent.pickIndex !== 'number') continue;
+    let set = usedPickIndexesByBiome.get(ent.biomeId);
+    if (!set) {
+      set = new Set();
+      usedPickIndexesByBiome.set(ent.biomeId, set);
+    }
+    set.add(ent.pickIndex);
+  }
+
   for (const k of needed) {
     if (entitiesByKey.has(k)) continue;
 
     const [mx, my] = k.split(',').map(Number);
     const biomeId = data.biomes[my * w + mx];
     const pool = getEncounters(biomeId);
-    const pick = seededHashInt(mx, my, data.seed ^ SALT_SPAWN) % pool.length;
+    const basePick = seededHashInt(mx, my, data.seed ^ SALT_SPAWN) % pool.length;
+    let pick = basePick;
+    if (pool.length > 1) {
+      let used = usedPickIndexesByBiome.get(biomeId);
+      if (!used) {
+        used = new Set();
+        usedPickIndexesByBiome.set(biomeId, used);
+      }
+      if (used.has(pick)) {
+        for (let i = 0; i < pool.length; i++) {
+          if (!used.has(i)) {
+            pick = i;
+            break;
+          }
+        }
+      }
+      used.add(pick);
+    }
+
     const dex = encounterNameToDex(pool[pick]);
     if (dex == null) continue;
 
@@ -148,6 +178,8 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       key: k,
       macroX: mx,
       macroY: my,
+      biomeId,
+      pickIndex: pick,
       centerX,
       centerY,
       x: centerX + jx * 5,

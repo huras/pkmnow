@@ -11,6 +11,6 @@ export const PMD_MON_SHEET = {
   frameW: 32,
   frameH: 40,
   /** Same scale as player Gengar in render.js */
-  scale: 2.1,
+  scale: 2.5,
   pivotYFrac: 0.48
 };
