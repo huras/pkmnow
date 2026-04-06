@@ -154,15 +154,30 @@ export function generate(seedInput, customConfig = {}) {
     gymCount: config.gymCount,
     margin: 2,
     extraEdges: config.extraEdges,
+    waterLevel: config.waterLevel,
   });
 
-  // Centralidade
+  // Centralidade + ordem de rotas: conexões mais curtas primeiro (tie-break: mais importantes)
   const importanceMap = calculateImportance(graph.nodes, graph.edges);
-  const getEdgeKey = (u, v) => [u, v].sort((a,b) => a-b).join(',');
-  const sortedEdges = [...graph.edges].map(e => ({
-    ...e,
-    importance: importanceMap.get(getEdgeKey(e.u, e.v)) || 1
-  })).sort((a, b) => b.importance - a.importance);
+  const getEdgeKey = (u, v) => [u, v].sort((a, b) => a - b).join(',');
+  const edgeLenSq = (e) => {
+    const a = graph.nodes[e.u];
+    const b = graph.nodes[e.v];
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy;
+  };
+  const sortedEdges = [...graph.edges]
+    .map((e) => ({
+      ...e,
+      importance: importanceMap.get(getEdgeKey(e.u, e.v)) || 1,
+    }))
+    .sort((a, b) => {
+      const da = edgeLenSq(a);
+      const db = edgeLenSq(b);
+      if (da !== db) return da - db;
+      return b.importance - a.importance;
+    });
 
   // Nomes de Cidades
   const nextRng = () => rng.next();
@@ -171,12 +186,16 @@ export function generate(seedInput, customConfig = {}) {
     node.name = generateCityName(biomes[idx], nextRng);
   }
 
-  // Caminhos
+  // Caminhos: grelha espelha elevação até marcar estradas; A* reutiliza estradas (custo 0) e prefere cortar por cidades
   const workingCosts = new Float32Array(width * height);
+  workingCosts.set(elevation);
   const roadTraffic = new Uint8Array(width * height);
   const roadMasks = new Uint32Array(width * height);
   const cellImportance = new Uint16Array(width * height);
   const paths = [];
+
+  const cityKeys = new Set(graph.nodes.map((n) => n.y * width + n.x));
+  const roadKeys = new Set();
 
   let routeCount = 1;
 
@@ -187,14 +206,23 @@ export function generate(seedInput, customConfig = {}) {
     const waterCostBase = Math.max(5, 40 / (1 + (edge.importance - 1) * 0.15));
 
     const p = findPath(
-      startNode.x, startNode.y, 
-      endNode.x, endNode.y, 
-      width, height, 
-      workingCosts, 
+      startNode.x,
+      startNode.y,
+      endNode.x,
+      endNode.y,
+      width,
+      height,
+      workingCosts,
       waterCostBase,
-      elevation
+      elevation,
+      {
+        waterLevel: config.waterLevel,
+        roadKeys,
+        cityKeys,
+        cityThroughMultiplier: 0.35,
+      },
     );
-    
+
     if (p) {
       p.importance = edge.importance;
       p.name = generateRouteName(routeCount++);
@@ -205,7 +233,8 @@ export function generate(seedInput, customConfig = {}) {
         roadTraffic[idx]++;
         roadMasks[idx] |= pathBit;
         cellImportance[idx] = Math.max(cellImportance[idx], edge.importance);
-        workingCosts[idx] = 0.05; 
+        workingCosts[idx] = 0.05;
+        roadKeys.add(idx);
       }
     }
   }

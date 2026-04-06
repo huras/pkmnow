@@ -52,64 +52,86 @@ function edgeKey(u, v) {
   return u < v ? `${u},${v}` : `${v},${u}`;
 }
 
+/** Distância Manhattan mínima entre duas cidades (regra “≥ 5 tiles”). */
+const MIN_MANHATTAN_BETWEEN_CITIES = 5;
+
+function manhattanOkFromAll(x, y, existing) {
+  for (const n of existing) {
+    if (Math.abs(n.x - x) + Math.abs(n.y - y) < MIN_MANHATTAN_BETWEEN_CITIES) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
- * Coloca cidades em células de TERRA, respeitando distância mínima.
+ * Coloca cidades em células de terra, com Manhattan ≥ 5 entre pares (com fallbacks).
  * @param {{ next: () => number }} rng
  * @param {number} gridW
  * @param {number} gridH
  * @param {number} count
  * @param {number} margin
- * @param {Float32Array} terrainCells
+ * @param {Float32Array} terrainCells - elevação; terra se ≥ waterLevel
+ * @param {number} [waterLevel=0.38] - alinhado ao gerador (água abaixo disto)
  * @returns {GraphNode[]}
  */
-export function placeCityNodes(rng, gridW, gridH, count, margin, terrainCells) {
+export function placeCityNodes(rng, gridW, gridH, count, margin, terrainCells, waterLevel = 0.38) {
   const nodes = [];
   const spanW = Math.max(1, gridW - 2 * margin);
   const spanH = Math.max(1, gridH - 2 * margin);
-  
-  // Distância mínima desejada (raio de exclusão)
-  const minDistSq = 5 * 5; 
+
+  const isLandAt = (x, y) => {
+    const idx = y * gridW + x;
+    return terrainCells[idx] >= waterLevel;
+  };
 
   for (let id = 0; id < count; id++) {
     let bestX = -1;
     let bestY = -1;
     let placed = false;
 
-    // Tenta 500 vezes achar um lugar bom (terra + longe o suficiente)
     for (let attempt = 0; attempt < 500 && !placed; attempt++) {
       const x = margin + Math.floor(rng.next() * spanW);
       const y = margin + Math.floor(rng.next() * spanH);
-      const idx = y * gridW + x;
-      
-      // Regra 1: Tem que ser terra (v > 0.3)
-      if (terrainCells[idx] < 0.3) continue;
-
-      // Regra 2: Distância mínima de outras cidades
-      let tooClose = false;
-      for (const other of nodes) {
-        if (distSq({x, y}, other) < minDistSq) {
-          tooClose = true;
-          break;
-        }
-      }
-      if (tooClose) continue;
-
+      if (!isLandAt(x, y)) continue;
+      if (!manhattanOkFromAll(x, y, nodes)) continue;
       bestX = x;
       bestY = y;
       placed = true;
     }
 
-    // Fallback: se falhar, tenta achar QUALQUER lugar de terra livre (mesmo perto)
+    if (!placed) {
+      for (let yy = margin; yy < gridH - margin && !placed; yy++) {
+        for (let xx = margin; xx < gridW - margin && !placed; xx++) {
+          if (!isLandAt(xx, yy)) continue;
+          if (!manhattanOkFromAll(xx, yy, nodes)) continue;
+          bestX = xx;
+          bestY = yy;
+          placed = true;
+        }
+      }
+    }
+
     if (!placed) {
       for (let attempt = 0; attempt < 200 && !placed; attempt++) {
         const x = margin + Math.floor(rng.next() * spanW);
         const y = margin + Math.floor(rng.next() * spanH);
-        const idx = y * gridW + x;
-        if (terrainCells[idx] >= 0.3) {
-          // Só checa se não está na MESMA célula
-          if (!nodes.some(n => n.x === x && n.y === y)) {
-            bestX = x;
-            bestY = y;
+        if (!isLandAt(x, y)) continue;
+        if (!nodes.some((n) => n.x === x && n.y === y)) {
+          bestX = x;
+          bestY = y;
+          placed = true;
+        }
+      }
+    }
+
+    if (!placed) {
+      for (let yy = margin; yy < gridH - margin && !placed; yy++) {
+        for (let xx = margin; xx < gridW - margin && !placed; xx++) {
+          if (!isLandAt(xx, yy)) continue;
+          if (!nodes.some((n) => n.x === xx && n.y === yy)) {
+            bestX = xx;
+            bestY = yy;
             placed = true;
           }
         }
@@ -249,7 +271,7 @@ export function repairConnectivity(nodes, edges) {
  * @param {number} gridW
  * @param {number} gridH
  * @param {Float32Array} terrainCells
- * @param {{ cityCount?: number, gymCount?: number, margin?: number, extraEdges?: number }} [opts]
+ * @param {{ cityCount?: number, gymCount?: number, margin?: number, extraEdges?: number, waterLevel?: number }} [opts]
  * @returns {{ nodes: GraphNode[], edges: GraphEdge[], connected: boolean }}
  */
 export function generateWorldGraph(rng, gridW, gridH, terrainCells, opts = {}) {
@@ -257,9 +279,10 @@ export function generateWorldGraph(rng, gridW, gridH, terrainCells, opts = {}) {
   const cityCount = opts.cityCount ?? 14;
   const gymCount = opts.gymCount ?? 8;
   const extraEdges = opts.extraEdges ?? 3;
+  const waterLevel = opts.waterLevel ?? 0.38;
 
-  // 1. Posicionamento inteligente (Terra + Distância)
-  const nodes = placeCityNodes(rng, gridW, gridH, cityCount, margin, terrainCells);
+  // 1. Posicionamento: terra (elevação) + Manhattan ≥ 5 entre cidades
+  const nodes = placeCityNodes(rng, gridW, gridH, cityCount, margin, terrainCells, waterLevel);
   
   // 2. Atribuição de Ginásios (8 Gyms, o resto Towns)
   // Sorteia índices únicos para serem ginásios
