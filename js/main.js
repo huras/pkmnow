@@ -171,28 +171,11 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 // Hover para debug de célula (Estilo Civilization HUD)
 let lastHoverTile = null;
+let lastMapHoverRenderTs = 0;
+const MAP_HOVER_MIN_INTERVAL_MS = 33; // ~30 Hz cap for map-mode hover redraw
 
-canvas.addEventListener('mousemove', (e) => {
+function renderMapHoverDetails(gx, gy) {
   if (!currentData) return;
-
-  const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  if (appMode === 'play') {
-    const tileW = 40, tileH = 40;
-    const vx = player.visualX ?? player.x;
-    const vy = player.visualY ?? player.y;
-    const mx = Math.floor((mouseX - canvas.width/2)/tileW + vx + 0.5);
-    const my = Math.floor((mouseY - canvas.height/2)/tileH + vy + 0.5);
-    lastHoverTile = { x: mx, y: my };
-    return; // O loop de animação vai cuidar do render(canvas, ...)
-  }
-
-  // Escala para coordenadas de grid (Modo Mapa)
-  const gx = Math.floor((mouseX / rect.width) * currentData.width);
-  const gy = Math.floor((mouseY / rect.height) * currentData.height);
-  lastHoverTile = { x: gx, y: gy };
 
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     const idx = gy * currentData.width + gx;
@@ -241,9 +224,36 @@ canvas.addEventListener('mousemove', (e) => {
     
     render(canvas, currentData, { hover: { x: gx, y: gy }, settings: getSettings() });
   } else {
-    // infoBar.textContent = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
     updateView();
   }
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!currentData) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if (appMode === 'play') {
+    const tileW = 40, tileH = 40;
+    const vx = player.visualX ?? player.x;
+    const vy = player.visualY ?? player.y;
+    const mx = Math.floor((mouseX - canvas.width/2)/tileW + vx + 0.5);
+    const my = Math.floor((mouseY - canvas.height/2)/tileH + vy + 0.5);
+    lastHoverTile = { x: mx, y: my };
+    return; // O loop de animação vai cuidar do render(canvas, ...)
+  }
+
+  // Escala para coordenadas de grid (Modo Mapa)
+  const gx = Math.floor((mouseX / rect.width) * currentData.width);
+  const gy = Math.floor((mouseY / rect.height) * currentData.height);
+  if (lastHoverTile && lastHoverTile.x === gx && lastHoverTile.y === gy) return;
+  lastHoverTile = { x: gx, y: gy };
+  const now = performance.now();
+  if (now - lastMapHoverRenderTs < MAP_HOVER_MIN_INTERVAL_MS) return;
+  lastMapHoverRenderTs = now;
+  renderMapHoverDetails(gx, gy);
 });
 
 canvas.addEventListener('mouseleave', () => {

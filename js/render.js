@@ -652,6 +652,20 @@ export function render(canvas, data, options = {}) {
         snapPx(wcx - pmdPivotX), snapPx(wcy - pmdPivotY),
         snapPx(pmdDw), snapPx(pmdDh)
       );
+
+      // Wild grass overlay strip (same depth cue idea used for player).
+      const wmx = Math.floor(we.x);
+      const wmy = Math.floor(we.y);
+      if (wmx >= startX && wmx < endX && wmy >= startY && wmy < endY) {
+        const wTile = getCached(wmx, wmy);
+        if (passesAbovePlayerTileGate(wmx, wmy, wTile)) {
+          const wtw = Math.ceil(tileW);
+          const wth = Math.ceil(tileH);
+          const wtx = Math.floor(wmx * tileW);
+          const wty = Math.floor(wmy * tileH);
+          drawGrass5aForCell(wmx, wmy, wTile, wtw, wth, wtx, wty, 'playerTopOverlay');
+        }
+      }
     }
 
     // PASS 4: PLAYER (after grass, before canopies)

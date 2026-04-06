@@ -8,14 +8,16 @@ import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
 
 /** Janela 3×3 de overview tiles (macro) em torno do player. */
-export const WILD_WINDOW_RADIUS = 1;
+export const WILD_WINDOW_RADIUS = 2;
 
 const SALT_SPAWN = 0x574c4450;
 
 /** Raio de vagueio em coordenadas micro (~meio overview tile). */
-const WANDER_RADIUS = CHUNK_SIZE * 0.42;
-const WANDER_REPICK_MIN = 0.35;
-const WANDER_REPICK_EXTRA = 1.1;
+const WANDER_RADIUS = CHUNK_SIZE * 1.26; // ~3x
+const WANDER_MOVE_MIN = 0.45;
+const WANDER_MOVE_EXTRA = 1.2;
+const WANDER_IDLE_MIN = 0.35;
+const WANDER_IDLE_EXTRA = 1.0;
 const MAX_SPEED = 1.65;
 
 const DIRECTION_ROW_MAP = {
@@ -63,11 +65,33 @@ function advanceWildPokemonAnim(entity, dt) {
 }
 
 function updateWildMotion(entity, dt) {
+  if ((entity.idlePauseTimer || 0) > 0) {
+    entity.idlePauseTimer -= dt;
+    entity.vx = 0;
+    entity.vy = 0;
+    if (entity.idlePauseTimer < 0) entity.idlePauseTimer = 0;
+  }
+
+  if ((entity.idlePauseTimer || 0) > 0) {
+    entity.animMoving = false;
+    return;
+  }
+
   entity.wanderTimer -= dt;
   if (entity.wanderTimer <= 0) {
-    entity.wanderTimer = WANDER_REPICK_MIN + Math.random() * WANDER_REPICK_EXTRA;
+    // Interleave move bursts with small idle pauses.
+    if (Math.random() < 0.34) {
+      entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
+      entity.wanderTimer = 0;
+      entity.vx = 0;
+      entity.vy = 0;
+      entity.animMoving = false;
+      return;
+    }
+
+    entity.wanderTimer = WANDER_MOVE_MIN + Math.random() * WANDER_MOVE_EXTRA;
     const ang = Math.random() * Math.PI * 2;
-    const sp = 0.25 + Math.random() * MAX_SPEED * 0.85;
+    const sp = 0.18 + Math.random() * MAX_SPEED * 0.82;
     entity.vx = Math.cos(ang) * sp;
     entity.vy = Math.sin(ang) * sp;
   }
@@ -194,6 +218,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       idleTimer: 0,
       _walkPhase: 0,
       wanderTimer: 0,
+      idlePauseTimer: 0,
       animMoving: false
     };
     entitiesByKey.set(k, entity);
