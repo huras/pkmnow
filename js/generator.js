@@ -118,8 +118,8 @@ export function generate(seedInput, customConfig = {}) {
   const config = { ...DEFAULT_CONFIG, ...customConfig };
   const seedSnapshot = normalizeSeed(seedInput);
   const rng = createRng(seedSnapshot);
-  const width = 128;
-  const height = 128;
+  const width = 256;
+  const height = 256;
   
   // Mapas de Ruído Fractal (FBM)
   const elevation = generateFBMMap(rng, width, height, config.elevationScale, config.fbmOctaves, config.fbmPersistence);
