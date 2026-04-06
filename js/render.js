@@ -18,6 +18,11 @@ import {
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
+import { imageCache } from './image-cache.js';
+import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
+import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
+import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
 /** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
 const VEG_MULTITILE_OVERLAP_PX = 1;
@@ -61,8 +66,6 @@ export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
 const playChunkMap = new Map();
 let lastDataForCache = null;
 let lastTileWForCache = 0;
-
-export const imageCache = new Map();
 
 export async function loadTilesetImages() {
   const sources = [
@@ -582,6 +585,71 @@ export function render(canvas, data, options = {}) {
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
     });
 
+    // PASS 3.5: wild Pokémon (3×3 overview window; mesma folha PMD que o player)
+    const wildList = getWildPokemonEntities();
+    wildList.sort((a, b) => a.y - b.y);
+    const pmdScale = PMD_MON_SHEET.scale;
+
+    /** Resolve frame size/cols using AnimData.xml metadata first, then image fallback. */
+    const resolvePmdFrameSpec = (sheet, isMoving, dexId) => {
+      const meta = getDexAnimMeta(dexId);
+      const modeMeta = isMoving ? meta?.walk : meta?.idle;
+      const fallbackCols = isMoving ? 4 : 8;
+      const animCols = modeMeta?.durations?.length || fallbackCols;
+      const sw = Math.max(
+        1,
+        Number(modeMeta?.frameWidth) ||
+          Math.floor((sheet.naturalWidth || PMD_MON_SHEET.frameW * animCols) / animCols)
+      );
+      const sh = Math.max(
+        1,
+        Number(modeMeta?.frameHeight) ||
+          Math.floor((sheet.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8)
+      );
+      return { sw, sh, animCols };
+    };
+
+    const gengarMeta = getDexAnimMeta(94);
+    const gengarRefH = Number(gengarMeta?.idle?.frameHeight) || PMD_MON_SHEET.frameH;
+
+    const getSpeciesScaleFactor = (dexId) => {
+      const meta = getDexAnimMeta(dexId);
+      const refH = Number(meta?.idle?.frameHeight) || Number(meta?.walk?.frameHeight) || PMD_MON_SHEET.frameH;
+      return Math.max(0.35, refH / gengarRefH);
+    };
+
+    for (const we of wildList) {
+      const { walk: wWalk, idle: wIdle } = getResolvedSheets(imageCache, we.dexId);
+      if (!wWalk || !wIdle) continue;
+      const wSheet = we.animMoving ? wWalk : wIdle;
+      const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpec(wSheet, !!we.animMoving, we.dexId);
+      // Rule-of-three scaling with Gengar as reference = 1.0.
+      // Example: Onix (104h) vs Gengar (40h) => factor 2.6.
+      const speciesFactor = getSpeciesScaleFactor(we.dexId);
+      const normalizedScale = pmdScale * (PMD_MON_SHEET.frameH / pmdSh);
+      const finalScale = normalizedScale * speciesFactor;
+      const pmdDw = pmdSw * finalScale;
+      const pmdDh = pmdSh * finalScale;
+      const pmdPivotX = pmdDw * 0.5;
+      const pmdPivotY = pmdDh * PMD_MON_SHEET.pivotYFrac;
+      const wCol = (we.animFrame ?? 0) % animCols;
+      const wRow = we.animRow ?? 0;
+      const wsx = wCol * pmdSw;
+      const wsy = wRow * pmdSh;
+      const wcx = snapPx((we.x + 0.5) * tileW);
+      const wcy = snapPx((we.y + 0.5) * tileH);
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(wcx, wcy, tileW * 0.38, tileH * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.drawImage(
+        wSheet,
+        wsx, wsy, pmdSw, pmdSh,
+        snapPx(wcx - pmdPivotX), snapPx(wcy - pmdPivotY),
+        snapPx(pmdDw), snapPx(pmdDh)
+      );
+    }
+
     // PASS 4: PLAYER (after grass, before canopies)
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
@@ -593,8 +661,8 @@ export function render(canvas, data, options = {}) {
       const isMoving = player.moving;
       const sheet = isMoving ? gengarWalk : gengarIdle;
 
-      const sw = 32; // Gengar PMD: 32x40
-      const sh = 40;
+      const sw = PMD_MON_SHEET.frameW; // Gengar PMD: 32x40
+      const sh = PMD_MON_SHEET.frameH;
 
       const frameCol = player.animFrame ?? 0;
       const frameRow = player.animRow ?? 0;
@@ -602,15 +670,15 @@ export function render(canvas, data, options = {}) {
       const sx = frameCol * sw;
       const sy = frameRow * sh;
 
-      // Gengar Scale: 2.5x to feel robust (80x100)
-      const gengarScale = 2.5;
+      // Global PMD scale (shared with wild baseline)
+      const gengarScale = PMD_MON_SHEET.scale;
       const dw = sw * gengarScale;
       const dh = sh * gengarScale;
 
       // Pivot Científico: Gengar #094 é "baixo" no sprite de 40px.
       // Ajustado para 0.48 para trazer o corpo 1 tile (40px) para baixo.
       const pivotX = dw * 0.5;
-      const pivotY = dh * 0.48; // Grounding recalibrado (Original: 0.84)
+      const pivotY = dh * PMD_MON_SHEET.pivotYFrac; // Grounding recalibrado (Original: 0.84)
 
       // Sombra Científica: ShadowSize 2 (aproximadamente 28px no motor original)
       // Escalado: 1.4 * 2.5 = 3.5. Ajustado visualmente para 0.5 do tile.

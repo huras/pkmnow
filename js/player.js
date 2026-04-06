@@ -1,5 +1,6 @@
 import { CHUNK_SIZE } from './chunking.js';
 import { canWalkMicroTile } from './walkability.js';
+import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 
 const MOVE_DURATION = 0.15; // segundos para andar 1 tile (estilo Pokémon)
 
@@ -73,14 +74,6 @@ export function tryMovePlayer(dx, dy, data) {
   return false;
 }
 
-/**
- * Tabela de durações de animação baseada no AnimData.xml do Gengar (#0094)
- */
-const GENGAR_ANIMS = {
-  Idle: [40, 4, 3, 3, 3, 3, 3, 4], // Frame 0 é a boca fechada (longo)
-  Walk: [8, 10, 8, 10]
-};
-
 /** Idle column index for the long “waiting” pose (frame 0 — first entry in Idle sequence). Used e.g. for grass-in-front overlay. */
 export const PLAYER_IDLE_WAITING_FRAME_INDEX = 0;
 
@@ -111,7 +104,7 @@ export function updatePlayer(dt, multiplier = 1) {
     player.visualY = player.fromY + (player.y - player.fromY) * t;
 
     // Gengar Walk: 4 frames baseados em ticks [8, 10, 8, 10] => Total 36 ticks
-    const seq = GENGAR_ANIMS.Walk;
+    const seq = PMD_DEFAULT_MON_ANIMS.Walk;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
     
     // Sincronizamos o progresso de movimento (0-1) com o ciclo de 36 ticks
@@ -132,7 +125,7 @@ export function updatePlayer(dt, multiplier = 1) {
     
     // Gengar Idle Scientífico: Ticks reais do AnimData.xml
     player.idleTimer += ticks;
-    const seq = GENGAR_ANIMS.Idle;
+    const seq = PMD_DEFAULT_MON_ANIMS.Idle;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
     const loopTick = player.idleTimer % totalTicks;
     

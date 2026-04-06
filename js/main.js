@@ -1,5 +1,10 @@
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
+import {
+  resetWildPokemonManager,
+  syncWildPokemonWindow,
+  updateWildPokemon
+} from './wild-pokemon/wild-pokemon-manager.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
@@ -106,6 +111,13 @@ function gameLoop(timestamp) {
   const speedMultiplier = heldKeys.has('shift') ? 7 : 0.5;
   updatePlayer(dt, speedMultiplier);
 
+  if (currentData && appMode === 'play') {
+    const pvx = player.visualX ?? player.x;
+    const pvy = player.visualY ?? player.y;
+    syncWildPokemonWindow(currentData, pvx, pvy);
+    updateWildPokemon(dt, currentData);
+  }
+
   // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo
   if (!player.moving && currentData) {
     let dx = 0, dy = 0;
@@ -148,6 +160,7 @@ function stopGameLoop() {
 
 function run() {
   currentData = generate(seedInput.value, currentConfig);
+  resetWildPokemonManager();
   updateView();
 }
 
@@ -238,6 +251,7 @@ canvas.addEventListener('mouseleave', () => {
 });
 
 function enterPlayMode(gx, gy) {
+  resetWildPokemonManager();
   setPlayerPos(gx * CHUNK_SIZE + CHUNK_SIZE / 2, gy * CHUNK_SIZE + CHUNK_SIZE / 2);
   appMode = 'play';
   btnExport.classList.add('hidden');

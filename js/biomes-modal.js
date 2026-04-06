@@ -16,7 +16,7 @@ import {
 } from './biome-tiles.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
-import { imageCache } from './render.js';
+import { imageCache } from './image-cache.js';
 import { parseShape, getRoleForCell } from './tessellation-logic.js';
 
 export class BiomesModal {
