@@ -1,0 +1,251 @@
+.lab-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 3rem;
+}
+
+.lab-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #33333c;
+}
+
+.lab-top h1 {
+  font-size: 1.15rem;
+  margin: 0;
+  flex: 1 1 200px;
+}
+
+.lab-top a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.lab-top a:hover {
+  text-decoration: underline;
+}
+
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.lab-global {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid #33333c;
+  margin-bottom: 1rem;
+}
+
+.lab-global label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.lab-global input[type='range'] {
+  width: 100%;
+}
+
+.lab-global .val {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.lab-filter {
+  width: 100%;
+  max-width: 360px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid #33333c;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.lab-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.lab-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #33333c;
+  border-radius: 8px;
+}
+
+.lab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.lab-table th,
+.lab-table td {
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #2a2a32;
+  vertical-align: middle;
+}
+
+.lab-preview-td {
+  vertical-align: top;
+}
+
+.lab-preview-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  width: 224px;
+  max-width: 100%;
+}
+
+.lab-preview-pokemon-scale {
+  width: 100%;
+  height: 1.1rem;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: var(--accent, #6b9fff);
+}
+
+.lab-table th {
+  background: #222228;
+  color: var(--muted);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.lab-table tr:hover td {
+  background: rgba(107, 159, 255, 0.06);
+}
+
+.lab-preview-wrap {
+  position: relative;
+  width: 224px;
+  height: 222px;
+  overflow: hidden;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #0a0a0c;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+  user-select: none;
+}
+
+.lab-preview-wrap:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent, #6b9fff);
+}
+
+.lab-preview-wrap--dragging {
+  cursor: grabbing;
+}
+
+.lab-preview-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.lab-preview {
+  display: block;
+  width: 224px;
+  height: 222px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #0a0a0c;
+  border: none;
+  border-radius: 0;
+}
+
+.lab-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+.lab-btn {
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #2a2a32;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.lab-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+.lab-btn-primary {
+  background: #2d3d5c;
+  border-color: var(--accent);
+}
+
+.lab-expand-row td {
+  background: #18181c;
+  padding: 0.75rem;
+}
+
+.lab-expand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.lab-mode-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.lab-mode-block label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.lab-mode-block input[type='number'],
+.lab-mode-block input[type='text'] {
+  width: 100%;
+  max-width: 100%;
+  padding: 0.35rem 0.45rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #33333c;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.lab-toggle {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.hidden {
+  display: none !important;
+}

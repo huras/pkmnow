@@ -125,6 +125,19 @@ export const TessellationEngine = {
     },
 
     /**
+     * Colunas da folha (células 16×16) para um TERRAIN_SET.
+     * Opcional: `sheetCols` no JSON. Senão caves=50, resto 57.
+     */
+    getTerrainSheetCols(terrainSet) {
+        if (!terrainSet || typeof terrainSet !== 'object') return 57;
+        const sc = terrainSet.sheetCols;
+        if (Number.isFinite(sc) && sc > 0) return Math.floor(sc);
+        const path = this.getImagePath(terrainSet.file);
+        if (path.includes('caves')) return 50;
+        return 57;
+    },
+
+    /**
      * Utility to get 13-role grid layout (3x5 or similar) for UI.
      * Returns an array of rows, where each row is an array of roles.
      */

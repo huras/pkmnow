@@ -1,0 +1,11 @@
+{
+  "name": "experimento-gerador-regiao-pkmn",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:palettes": "node scripts/bake-terrain-palettes.mjs"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

@@ -181,3 +181,9 @@ export function encounterNameToDex(encounterName) {
 export function padDex3(dex) {
   return String(Math.max(1, Math.min(151, dex))).padStart(3, '0');
 }
+
+/** @param {number} dex 1..151 */
+export function getGen1SpeciesName(dex) {
+  const d = Math.max(1, Math.min(151, Number(dex) || 1));
+  return GEN1_LINES[d - 1] || `Species ${d}`;
+}

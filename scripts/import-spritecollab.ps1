@@ -94,14 +94,41 @@ function Read-AnimMetadata {
   $animNodes = @($xml.SelectNodes("//Anim"))
   if ($animNodes.Count -eq 0) { return $null }
 
-  $idleInfo = $null
-  $walkInfo = $null
+  # Anim nodes with explicit FrameWidth / Durations
+  $byName = @{}
   foreach ($node in $animNodes) {
     $info = Get-AnimInfo -AnimNode $node
-    if ($null -eq $info) { continue }
-    if ($info.name -eq "Idle") { $idleInfo = $info }
-    elseif ($info.name -eq "Walk") { $walkInfo = $info }
+    if ($null -ne $info) {
+      $byName[$info.name] = $info
+    }
   }
+
+  # Idle (and others) often use <CopyOf>Walk</CopyOf> with no inline frames — resolve from source anim.
+  foreach ($node in $animNodes) {
+    $nameNode = $node.SelectSingleNode("Name")
+    $copyNode = $node.SelectSingleNode("CopyOf")
+    if ($null -eq $nameNode -or $null -eq $copyNode) { continue }
+    $animName = [string]$nameNode.InnerText
+    $refName = [string]$copyNode.InnerText
+    if ([string]::IsNullOrWhiteSpace($animName) -or [string]::IsNullOrWhiteSpace($refName)) { continue }
+    if ($byName.ContainsKey($animName)) { continue }
+    $src = $null
+    if ($byName.ContainsKey($refName)) {
+      $src = $byName[$refName]
+    }
+    if ($null -eq $src) { continue }
+    $byName[$animName] = @{
+      name       = $animName
+      frameWidth = $src.frameWidth
+      frameHeight = $src.frameHeight
+      durations  = @($src.durations)
+    }
+  }
+
+  $idleInfo = $null
+  $walkInfo = $null
+  if ($byName.ContainsKey("Idle")) { $idleInfo = $byName["Idle"] }
+  if ($byName.ContainsKey("Walk")) { $walkInfo = $byName["Walk"] }
   if ($null -eq $idleInfo -and $null -eq $walkInfo) {
     return $null
   }
@@ -153,14 +180,18 @@ for ($dex = 1; $dex -le 151; $dex++) {
 
   $walkSource = Resolve-AnimFile -SpeciesRoot $speciesRoot -AnimFileName "Walk-Anim.png"
   $idleSource = Resolve-AnimFile -SpeciesRoot $speciesRoot -AnimFileName "Idle-Anim.png"
+  # Muitas espécies só têm Walk-Anim.png; no AnimData o Idle é <CopyOf>Walk</CopyOf> — usa a mesma folha.
+  if ($walkSource -and -not $idleSource) {
+    $idleSource = $walkSource
+  }
+  elseif ($idleSource -and -not $walkSource) {
+    $walkSource = $idleSource
+  }
   $animDataPath = Join-Path $speciesRoot "AnimData.xml"
   $animMeta = Read-AnimMetadata -AnimDataPath $animDataPath
 
-  if (-not $walkSource -or -not $idleSource) {
-    $parts = @()
-    if (-not $walkSource) { $parts += "walk" }
-    if (-not $idleSource) { $parts += "idle" }
-    $missing += "${dex3} (missing $($parts -join '+'))"
+  if (-not $walkSource -and -not $idleSource) {
+    $missing += "${dex3} (missing walk+idle png)"
     continue
   }
 

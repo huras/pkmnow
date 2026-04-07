@@ -239,25 +239,6 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  24
                          }
             },
-    "050":  {
-                "idle":  {
-                             "frameHeight":  24,
-                             "durations":  [
-                                               16,
-                                               16
-                                           ],
-                             "frameWidth":  24
-                         },
-                "walk":  {
-                             "frameHeight":  40,
-                             "durations":  [
-                                               8,
-                                               8,
-                                               8
-                                           ],
-                             "frameWidth":  40
-                         }
-            },
     "039":  {
                 "idle":  {
                              "frameHeight":  32,
@@ -1809,25 +1790,18 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  32
                          }
             },
-    "142":  {
+    "050":  {
                 "idle":  {
-                             "frameHeight":  64,
+                             "frameHeight":  24,
                              "durations":  [
-                                               8,
-                                               8,
-                                               8,
-                                               8,
-                                               8,
-                                               8,
-                                               8,
-                                               8
+                                               16,
+                                               16
                                            ],
-                             "frameWidth":  40
+                             "frameWidth":  24
                          },
                 "walk":  {
-                             "frameHeight":  64,
+                             "frameHeight":  40,
                              "durations":  [
-                                               8,
                                                8,
                                                8,
                                                8
@@ -1901,6 +1875,30 @@ export const PMD_ANIM_METADATA = {
                                                12
                                            ],
                              "frameWidth":  32
+                         }
+            },
+    "005":  {
+                "idle":  {
+                             "frameHeight":  56,
+                             "durations":  [
+                                               40,
+                                               2,
+                                               3,
+                                               3,
+                                               3,
+                                               2
+                                           ],
+                             "frameWidth":  32
+                         },
+                "walk":  {
+                             "frameHeight":  32,
+                             "durations":  [
+                                               8,
+                                               10,
+                                               8,
+                                               10
+                                           ],
+                             "frameWidth":  24
                          }
             },
     "029":  {
@@ -2069,6 +2067,34 @@ export const PMD_ANIM_METADATA = {
                                                12
                                            ],
                              "frameWidth":  32
+                         }
+            },
+    "148":  {
+                "idle":  {
+                             "frameHeight":  56,
+                             "durations":  [
+                                               8,
+                                               6,
+                                               6,
+                                               8,
+                                               6,
+                                               6,
+                                               6
+                                           ],
+                             "frameWidth":  48
+                         },
+                "walk":  {
+                             "frameHeight":  56,
+                             "durations":  [
+                                               8,
+                                               6,
+                                               6,
+                                               8,
+                                               6,
+                                               6,
+                                               6
+                                           ],
+                             "frameWidth":  48
                          }
             },
     "047":  {
@@ -2310,26 +2336,25 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  32
                          }
             },
-    "016":  {
+    "031":  {
                 "idle":  {
                              "frameHeight":  40,
                              "durations":  [
-                                               30,
-                                               4,
-                                               4,
-                                               4,
-                                               4
+                                               20,
+                                               6,
+                                               6,
+                                               6,
+                                               12
                                            ],
-                             "frameWidth":  24
+                             "frameWidth":  32
                          },
                 "walk":  {
-                             "frameHeight":  32,
+                             "frameHeight":  40,
                              "durations":  [
-                                               6,
-                                               4,
-                                               4,
-                                               4,
-                                               4
+                                               8,
+                                               10,
+                                               8,
+                                               10
                                            ],
                              "frameWidth":  32
                          }
@@ -2593,20 +2618,18 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  32
                          }
             },
-    "031":  {
+    "111":  {
                 "idle":  {
-                             "frameHeight":  40,
+                             "frameHeight":  32,
                              "durations":  [
+                                               40,
                                                20,
-                                               6,
-                                               6,
-                                               6,
-                                               12
+                                               15
                                            ],
-                             "frameWidth":  32
+                             "frameWidth":  40
                          },
                 "walk":  {
-                             "frameHeight":  40,
+                             "frameHeight":  32,
                              "durations":  [
                                                8,
                                                10,
@@ -2997,27 +3020,6 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  40
                          }
             },
-    "111":  {
-                "idle":  {
-                             "frameHeight":  32,
-                             "durations":  [
-                                               40,
-                                               20,
-                                               15
-                                           ],
-                             "frameWidth":  40
-                         },
-                "walk":  {
-                             "frameHeight":  32,
-                             "durations":  [
-                                               8,
-                                               10,
-                                               8,
-                                               10
-                                           ],
-                             "frameWidth":  32
-                         }
-            },
     "038":  {
                 "idle":  {
                              "frameHeight":  40,
@@ -3212,28 +3214,26 @@ export const PMD_ANIM_METADATA = {
                              "frameWidth":  32
                          }
             },
-    "005":  {
+    "015":  {
                 "idle":  {
-                             "frameHeight":  56,
+                             "frameHeight":  48,
                              "durations":  [
-                                               40,
-                                               2,
-                                               3,
-                                               3,
-                                               3,
-                                               2
+                                               4,
+                                               4,
+                                               4,
+                                               4
                                            ],
                              "frameWidth":  32
                          },
                 "walk":  {
-                             "frameHeight":  32,
+                             "frameHeight":  48,
                              "durations":  [
-                                               8,
-                                               10,
-                                               8,
-                                               10
+                                               4,
+                                               4,
+                                               4,
+                                               4
                                            ],
-                             "frameWidth":  24
+                             "frameWidth":  32
                          }
             },
     "046":  {
@@ -3256,6 +3256,32 @@ export const PMD_ANIM_METADATA = {
                                                8
                                            ],
                              "frameWidth":  32
+                         }
+            },
+    "142":  {
+                "idle":  {
+                             "frameHeight":  64,
+                             "durations":  [
+                                               8,
+                                               8,
+                                               8,
+                                               8,
+                                               8,
+                                               8,
+                                               8,
+                                               8
+                                           ],
+                             "frameWidth":  40
+                         },
+                "walk":  {
+                             "frameHeight":  64,
+                             "durations":  [
+                                               8,
+                                               8,
+                                               8,
+                                               8
+                                           ],
+                             "frameWidth":  40
                          }
             },
     "150":  {
@@ -3284,6 +3310,30 @@ export const PMD_ANIM_METADATA = {
                                                6
                                            ],
                              "frameWidth":  48
+                         }
+            },
+    "016":  {
+                "idle":  {
+                             "frameHeight":  40,
+                             "durations":  [
+                                               30,
+                                               4,
+                                               4,
+                                               4,
+                                               4
+                                           ],
+                             "frameWidth":  24
+                         },
+                "walk":  {
+                             "frameHeight":  32,
+                             "durations":  [
+                                               6,
+                                               4,
+                                               4,
+                                               4,
+                                               4
+                                           ],
+                             "frameWidth":  32
                          }
             },
     "056":  {

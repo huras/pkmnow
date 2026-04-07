@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab — animações PMD (Gen 1)</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/pokemon-anim-lab.css" />
+  </head>
+  <body>
+    <div class="lab-page">
+      <div class="lab-top">
+        <a href="index.html">← Voltar ao gerador</a>
+        <h1>Lab — Pokémon Gen 1 (idle / walk, escalas e parâmetros)</h1>
+        <div class="lab-actions">
+          <button type="button" id="btnExport" class="lab-btn lab-btn-primary">Exportar JSON (tudo)</button>
+          <input type="file" id="fileImport" class="hidden" accept=".json,application/json" />
+          <button type="button" id="btnImport" class="lab-btn">Importar JSON</button>
+        </div>
+      </div>
+
+      <p class="lab-status" id="labStatus">A carregar imagens…</p>
+
+      <section class="lab-global" id="labGlobal">
+        <label>
+          PMD global — scale (render)
+          <input type="range" id="gScale" min="1" max="5" step="0.05" value="2.5" />
+          <span class="val" id="gScaleVal"></span>
+        </label>
+        <label>
+          PMD global — frameW (referência Gengar)
+          <input type="range" id="gFrameW" min="16" max="64" step="1" value="32" />
+          <span class="val" id="gFrameWVal"></span>
+        </label>
+        <label>
+          PMD global — frameH (referência Gengar)
+          <input type="range" id="gFrameH" min="16" max="96" step="1" value="40" />
+          <span class="val" id="gFrameHVal"></span>
+        </label>
+        <label>
+          PMD global — pivotYFrac (chão)
+          <input type="range" id="gPivot" min="0.2" max="0.95" step="0.01" value="0.48" />
+          <span class="val" id="gPivotVal"></span>
+        </label>
+        <label>
+          Fallback idle ticks (csv, 60 ticks/s)
+          <input type="text" id="gIdleTicks" spellcheck="false" />
+        </label>
+        <label>
+          Fallback walk ticks (csv)
+          <input type="text" id="gWalkTicks" spellcheck="false" />
+        </label>
+      </section>
+
+      <input type="search" id="labFilter" class="lab-filter" placeholder="Filtrar por # ou nome…" autocomplete="off" />
+
+      <div class="lab-table-wrap">
+        <table class="lab-table" id="labTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Nome</th>
+              <th>Idle</th>
+              <th>Walk</th>
+              <th class="lab-mono">escala final*</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="labTbody"></tbody>
+        </table>
+      </div>
+
+      <p class="lab-mono" style="margin-top: 1rem; color: var(--muted); font-size: 0.72rem">
+        Previews: terreno 11×11 tessela <strong>Floresta</strong> (ilha núcleo 7×7 + margem), base <code>Palette grassy — light</code> + pele <code>jogador light-grass</code> + árvore <code>broadleaf</code> (pivô entre as bases, na linha central à esquerda) — Pokémon por cima para escala.
+        <br />
+        * Escala: <code>finalScale</code> como <code>render.js</code> (wild), 16px lab vs 40px jogo; pré-visualização com pivô no <strong>centro do sprite</strong> no tile central da grelha 11×11 (no jogo wild usa <code>pivotYFrac</code>). Gengar #094 = ref. de altura.
+      </p>
+    </div>
+    <script type="module" src="js/pokemon-anim-lab.js"></script>
+  </body>
+</html>

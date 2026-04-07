@@ -5,27 +5,32 @@ import { TERRAIN_SETS } from './tessellation-data.js';
 /**
  * Mapeamento entre nossos IDs de Bioma e as chaves do TERRAIN_SETS no tessellation-data.js.
  */
+/**
+ * Base do terreno por bioma.
+ * Biomas com grama: base solo `grassy-terrain.png` + paletas (terrain-palette-grassy.js); folhagem jogador em cima.
+ * Resto: folhas solo conc-conv-a 5×3 — `terrain-palette-base.js` (uma PNG por paleta).
+ */
 export const BIOME_TO_TERRAIN = {
-  [BIOMES.OCEAN.id]: "Borda com grama lago-de-agua-doce-grass",
-  [BIOMES.BEACH.id]: "Dirty sandy",
-  [BIOMES.DESERT.id]: "Yellow Dirty sandy",
-  [BIOMES.GRASSLAND.id]: "Dirty grassy",
-  [BIOMES.FOREST.id]: "Dirty light-grass",
-  [BIOMES.TAIGA.id]: "Dirty light-grass",
+  [BIOMES.OCEAN.id]: "Palette base — lake shore",
+  [BIOMES.BEACH.id]: "Palette base — sand",
+  [BIOMES.DESERT.id]: "Palette base — sand",
+  [BIOMES.GRASSLAND.id]: "Palette grassy — field",
+  [BIOMES.FOREST.id]: "Palette grassy — light",
+  [BIOMES.TAIGA.id]: "Palette grassy — light",
   [BIOMES.TUNDRA.id]: "Dirty snowy",
   [BIOMES.SNOW.id]: "Dirty snowy",
-  [BIOMES.ICE.id]: "Dirty snowy",
-  [BIOMES.SAVANNA.id]: "Yellow Dirty sandy",
-  [BIOMES.JUNGLE.id]: "Dirty super-healthy-light-grass",
-  [BIOMES.MOUNTAIN.id]: "Rocky rock",
-  [BIOMES.PEAK.id]: "Rocky snowy",
-  [BIOMES.VOLCANO.id]: "rocky-volcano",
-  [BIOMES.GHOST_WOODS.id]: "Dirty super-healthy-light-grass",
-  [BIOMES.ARCANE.id]: "altura Pedra Roxa",
+  [BIOMES.ICE.id]: "Palette base — ice",
+  [BIOMES.SAVANNA.id]: "Palette base — sand",
+  [BIOMES.JUNGLE.id]: "Palette grassy — lush",
+  [BIOMES.MOUNTAIN.id]: "Palette base — rock",
+  [BIOMES.PEAK.id]: "Palette base — snow",
+  [BIOMES.VOLCANO.id]: "Palette base — volcano",
+  [BIOMES.GHOST_WOODS.id]: "Palette grassy — lush",
+  [BIOMES.ARCANE.id]: "Palette base — arcane",
   [BIOMES.CITY.id]: "detailed-small-bricks-pavement",
   [BIOMES.CITY_STREET.id]: "road",
-  [BIOMES.TOWN.id]: "Dirty grassy",
-  [BIOMES.TOWN_STREET.id]: "Yellow Dirty sandy",
+  [BIOMES.TOWN.id]: "Palette grassy — field",
+  [BIOMES.TOWN_STREET.id]: "Palette base — sand",
 };
 
 /**
@@ -137,7 +142,7 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.CITY.id]: null,
   [BIOMES.CITY_STREET.id]: "cemented-pavement",
   [BIOMES.TOWN.id]: "jogador sandy",
-  [BIOMES.TOWN_STREET.id]: "jogador light-grass",
+  [BIOMES.TOWN_STREET.id]: "jogador sandy",
 };
 
 /**

@@ -1,4 +1,7 @@
 // Auto-generated from docs/regras-de-tesselação.md via scripts/fix-tsx.js
+import { PALETTE_BASE_TERRAIN_SETS } from './terrain-palette-base.js';
+import { PALETTE_GRASSY_TERRAIN_SETS } from './terrain-palette-grassy.js';
+
 export const TERRAIN_SETS = {
   "altura Terra Marrom": {
     "type": "conc-conv-c",
@@ -160,46 +163,6 @@ export const TERRAIN_SETS = {
       "IN_NW": 916
     }
   },
-  "Dirty light-grass": {
-    "type": "conc-conv-a",
-    "centerId": 861,
-    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "roles": {
-      "OUT_NW": 803,
-      "EDGE_N": 804,
-      "OUT_NE": 805,
-      "EDGE_W": 860,
-      "CENTER": 861,
-      "EDGE_E": 862,
-      "IN_SE": 863,
-      "IN_SW": 864,
-      "OUT_SW": 917,
-      "EDGE_S": 918,
-      "OUT_SE": 919,
-      "IN_NE": 920,
-      "IN_NW": 921
-    }
-  },
-  "Dirty super-healthy-light-grass": {
-    "type": "conc-conv-a",
-    "centerId": 867,
-    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "roles": {
-      "OUT_NW": 994,
-      "EDGE_N": 995,
-      "OUT_NE": 996,
-      "EDGE_W": 1051,
-      "CENTER": 1052,
-      "EDGE_E": 1053,
-      "IN_SE": 1054,
-      "IN_SW": 1055,
-      "OUT_SW": 1108,
-      "EDGE_S": 1109,
-      "OUT_SE": 1110,
-      "IN_NE": 1111,
-      "IN_NW": 1112
-    }
-  },
   "Dirty sandy": {
     "type": "conc-conv-a",
     "centerId": 871,
@@ -262,26 +225,6 @@ export const TERRAIN_SETS = {
       "IN_SE": 587, "IN_SW": 588,
       "OUT_SW": 634, "EDGE_S": 635, "OUT_SE": 636,
       "IN_NE": 637, "IN_NW": 638
-    }
-  },
-  "Dirty grassy": {
-    "type": "conc-conv-a",
-    "centerId": 881,
-    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "roles": {
-      "OUT_NW": 823,
-      "EDGE_N": 824,
-      "OUT_NE": 825,
-      "EDGE_W": 880,
-      "CENTER": 881,
-      "EDGE_E": 882,
-      "IN_SE": 883,
-      "IN_SW": 884,
-      "OUT_SW": 937,
-      "EDGE_S": 938,
-      "OUT_SE": 939,
-      "IN_NE": 940,
-      "IN_NW": 941
     }
   },
   "Yellow Dirty yellow-dirt": {
@@ -3133,3 +3076,7 @@ TERRAIN_SETS["stair-ns"] = {
   "file": "tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png",
   "roles": { "SEAMLESS_TILE": 370 }
 };
+
+// Terrenos base em folhas solo 5×3 (conc-conv-a) — terrain-palette-base.js, terrain-palette-grassy.js
+Object.assign(TERRAIN_SETS, PALETTE_BASE_TERRAIN_SETS);
+Object.assign(TERRAIN_SETS, PALETTE_GRASSY_TERRAIN_SETS);

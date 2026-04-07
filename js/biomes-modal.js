@@ -224,7 +224,7 @@ export class BiomesModal {
     const img = imageCache.get(imgPath);
     if (!img) return;
 
-    const sheetCols = imgPath.includes('caves') ? 50 : 57;
+    const sheetCols = TessellationEngine.getTerrainSheetCols(set);
     ctx.imageSmoothingEnabled = false;
 
     // Define uma máscara de "Ilha Orgânica" 7x7

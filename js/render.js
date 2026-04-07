@@ -20,6 +20,8 @@ import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foli
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
+import { PALETTE_BASE_IMAGE_PATHS } from './terrain-palette-base.js';
+import { PALETTE_GRASSY_IMAGE_PATHS } from './terrain-palette-grassy.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
@@ -79,6 +81,8 @@ export async function loadTilesetImages() {
   const sources = [
     'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
     'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
+    ...PALETTE_BASE_IMAGE_PATHS,
+    ...PALETTE_GRASSY_IMAGE_PATHS,
     'tilesets/PokemonCenter.png',
     'tilesets/gengar_walk.png',
     'tilesets/gengar_idle.png'
@@ -92,7 +96,13 @@ export async function loadTilesetImages() {
         imageCache.set(src, img);
         resolve(img);
       };
-      img.onerror = reject;
+      img.onerror = () => {
+        if (src.startsWith('tilesets/palettes/') || src === 'tilesets/rocky-terrain.png') {
+          resolve(null);
+        } else {
+          reject(new Error(`Failed to load ${src}`));
+        }
+      };
       img.src = src;
     });
   });
@@ -114,7 +124,7 @@ export async function loadTilesetImages() {
     })
   );
 
-  return Promise.all(promises);
+  await Promise.all(promises);
 }
 
 export function render(canvas, data, options = {}) {
@@ -641,6 +651,25 @@ export function render(canvas, data, options = {}) {
       return { sw, sh, animCols };
     };
 
+    /** Canonical PMD frame box per species (prefer idle), used to keep visual scale stable across idle/walk. */
+    const resolveCanonicalPmdBox = (wIdle, wWalk, dexId) => {
+      const meta = getDexAnimMeta(dexId);
+      const idleCols = meta?.idle?.durations?.length || 8;
+      const walkCols = meta?.walk?.durations?.length || 4;
+      const idleW = Number(meta?.idle?.frameWidth) ||
+        Math.floor(((wIdle?.naturalWidth || PMD_MON_SHEET.frameW * idleCols) / idleCols));
+      const idleH = Number(meta?.idle?.frameHeight) ||
+        Math.floor(((wIdle?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
+      const walkW = Number(meta?.walk?.frameWidth) ||
+        Math.floor(((wWalk?.naturalWidth || PMD_MON_SHEET.frameW * walkCols) / walkCols));
+      const walkH = Number(meta?.walk?.frameHeight) ||
+        Math.floor(((wWalk?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
+
+      const canonicalW = Math.max(1, idleW || walkW || PMD_MON_SHEET.frameW);
+      const canonicalH = Math.max(1, idleH || walkH || PMD_MON_SHEET.frameH);
+      return { canonicalW, canonicalH };
+    };
+
     const gengarMeta = getDexAnimMeta(94);
     const gengarRefH = Number(gengarMeta?.idle?.frameHeight) || PMD_MON_SHEET.frameH;
 
@@ -655,13 +684,14 @@ export function render(canvas, data, options = {}) {
       if (!wWalk || !wIdle) continue;
       const wSheet = we.animMoving ? wWalk : wIdle;
       const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpec(wSheet, !!we.animMoving, we.dexId);
+      const { canonicalW, canonicalH } = resolveCanonicalPmdBox(wIdle, wWalk, we.dexId);
       // Rule-of-three scaling with Gengar as reference = 1.0.
       // Example: Onix (104h) vs Gengar (40h) => factor 2.6.
       const speciesFactor = getSpeciesScaleFactor(we.dexId);
-      const normalizedScale = pmdScale * (PMD_MON_SHEET.frameH / pmdSh);
+      const normalizedScale = pmdScale * (PMD_MON_SHEET.frameH / canonicalH);
       const finalScale = normalizedScale * speciesFactor;
-      const pmdDw = pmdSw * finalScale;
-      const pmdDh = pmdSh * finalScale;
+      const pmdDw = canonicalW * finalScale;
+      const pmdDh = canonicalH * finalScale;
       const pmdPivotX = pmdDw * 0.5;
       const pmdPivotY = pmdDh * PMD_MON_SHEET.pivotYFrac;
       const wCol = (we.animFrame ?? 0) % animCols;
@@ -1114,7 +1144,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       const imgPath = TessellationEngine.getImagePath(biomeSet.file);
       const img = imageCache.get(imgPath);
       if (!img) continue;
-      const cols = imgPath.includes('caves') ? TCOLS_CAVES_BAKE : TCOLS_NATURE_BAKE;
+      const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
       const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
       const role = getRoleForCell(my, mx, microHBake, microWBake, isAtOrAbove, biomeSet.type);
       const tileId = biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId;
@@ -1147,7 +1177,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         if (biomeSet) {
           const imgPath = TessellationEngine.getImagePath(biomeSet.file);
           const img = imageCache.get(imgPath);
-          const cols = imgPath.includes('caves') ? 50 : 57;
+          const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
           let role;
           if (tile.heightStep > level) {
             if (level !== tile.heightStep - 1) role = null;
@@ -1194,7 +1224,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
                 if (isFoliageSafeAt(my, mx)) {
                   const imgPath = TessellationEngine.getImagePath(foliageSet.file);
                   const img = imageCache.get(imgPath);
-                  const fCols = imgPath.includes('caves') ? 50 : 57;
+                  const fCols = TessellationEngine.getTerrainSheetCols(foliageSet);
                   const isFoliagePoolTile = (r, c) => {
                     const t = getCachedTile(c, r);
                     return !!(t && t.heightStep === level && t.biomeId === tile.biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
@@ -1220,7 +1250,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
           if (roadSet) {
             const imgPath = TessellationEngine.getImagePath(roadSet.file);
             const img = imageCache.get(imgPath);
-            const cols = imgPath.includes('caves') ? 50 : 57;
+            const cols = TessellationEngine.getTerrainSheetCols(roadSet);
             const isAtOrAboveRoad = (r, c) => {
               const t = getCachedTile(c, r);
               return (t?.heightStep ?? -99) >= level && t?.isRoad && !t?.roadFeature?.startsWith('stair');
@@ -1240,7 +1270,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             const imgPath = TessellationEngine.getImagePath(stairSet.file);
             const img = imageCache.get(imgPath);
             if (img) {
-              const cols = imgPath.includes('caves') ? 50 : 57;
+              const cols = TessellationEngine.getTerrainSheetCols(stairSet);
               const isAtOrAboveStair = (r, c) => {
                 const t = getCachedTile(c, r);
                 return (t?.heightStep ?? -99) >= tile.heightStep && t?.isRoad && t?.roadFeature === tile.roadFeature;

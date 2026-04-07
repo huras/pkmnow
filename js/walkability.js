@@ -24,6 +24,9 @@ export function getTerrainSetWalkKind(name) {
   if (name.startsWith('Borda com ')) return null;
   if (name.startsWith('purples ')) return null;
   if (name.startsWith('jogador ')) return 'terrain-foliage';
+  /** Solo conc-conv-a (`terrain-palette-base.js`), mesma lógica que Rocky/Dirty: base caminhável. */
+  if (name.startsWith('Palette base')) return 'layer-base';
+  if (name.startsWith('Palette grassy')) return 'layer-base';
   if (
     name.startsWith('Dirty ') ||
     name.startsWith('Yellow Dirty ') ||
