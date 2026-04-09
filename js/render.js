@@ -20,7 +20,12 @@ import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foli
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
-import { PALETTE_BASE_IMAGE_PATHS } from './terrain-palette-base.js';
+import {
+  PALETTE_BASE_IMAGE_PATHS,
+  paletteBaseSlugFromTerrainSetName,
+  paletteBaseTransitionImageRelPath,
+  allPaletteBaseTransitionImagePaths
+} from './terrain-palette-base.js';
 import { PALETTE_GRASSY_IMAGE_PATHS } from './terrain-palette-grassy.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
@@ -83,6 +88,7 @@ export async function loadTilesetImages() {
     'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
     ...PALETTE_BASE_IMAGE_PATHS,
     ...PALETTE_GRASSY_IMAGE_PATHS,
+    ...allPaletteBaseTransitionImagePaths(),
     'tilesets/PokemonCenter.png',
     'tilesets/gengar_walk.png',
     'tilesets/gengar_idle.png'
@@ -1052,6 +1058,39 @@ function renderMinimap(canvas, data, player) {
   ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2); ctx.fill(); ctx.stroke();
 }
 
+/** Vizinho cardinal à mesma altura com outra paleta rocky-style (não grama / Dirty / cidade). */
+function firstDifferingPaletteBaseNeighborSlug(mx, my, surfaceLevel, getCachedTile, selfSlug) {
+  const offsets = [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0]
+  ];
+  for (const [dx, dy] of offsets) {
+    const t = getCachedTile(mx + dx, my + dy);
+    if (!t || t.heightStep !== surfaceLevel) continue;
+    const nSet = BIOME_TO_TERRAIN[t.biomeId] || 'grass';
+    const nSlug = paletteBaseSlugFromTerrainSetName(nSet);
+    if (nSlug && nSlug !== selfSlug) return nSlug;
+  }
+  return null;
+}
+
+/** Mesmo role/tileId; troca só a folha se existir PNG trans/ para o par de paletas. */
+function imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, surfaceLevel, getCachedTile) {
+  const defaultPath = TessellationEngine.getImagePath(biomeSet.file);
+  let img = imageCache.get(defaultPath);
+  const selfSlug = paletteBaseSlugFromTerrainSetName(biomeSetName);
+  if (selfSlug == null) return img;
+  const otherSlug = firstDifferingPaletteBaseNeighborSlug(mx, my, surfaceLevel, getCachedTile, selfSlug);
+  if (!otherSlug) return img;
+  const tRel = paletteBaseTransitionImageRelPath(selfSlug, otherSlug);
+  const tPath = TessellationEngine.getImagePath(tRel);
+  const tImg = imageCache.get(tPath);
+  if (tImg?.complete && (tImg.naturalWidth || tImg.width)) return tImg;
+  return img;
+}
+
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
  */
@@ -1141,8 +1180,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
       const biomeSet = TERRAIN_SETS[biomeSetName];
       if (!biomeSet) continue;
-      const imgPath = TessellationEngine.getImagePath(biomeSet.file);
-      const img = imageCache.get(imgPath);
+      const img = imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, tile.heightStep, getCachedTile);
       if (!img) continue;
       const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
       const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
@@ -1175,8 +1213,11 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
         const biomeSet = TERRAIN_SETS[biomeSetName];
         if (biomeSet) {
-          const imgPath = TessellationEngine.getImagePath(biomeSet.file);
-          const img = imageCache.get(imgPath);
+          const defaultPath = TessellationEngine.getImagePath(biomeSet.file);
+          let img = imageCache.get(defaultPath);
+          if (tile.heightStep === level) {
+            img = imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, level, getCachedTile);
+          }
           const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
           let role;
           if (tile.heightStep > level) {

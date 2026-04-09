@@ -137,3 +137,64 @@ export const PALETTE_BASE_TERRAIN_SETS = {
 };
 
 export const PALETTE_BASE_IMAGE_PATHS = Object.values(PALETTE_BASE_TERRAIN_SETS).map((s) => s.file);
+
+const PALETTE_BASE_NAME_TO_SLUG = new Map();
+for (const [name, def] of Object.entries(PALETTE_BASE_TERRAIN_SETS)) {
+  const f = def.file;
+  if (f.includes('rocky-terrain')) PALETTE_BASE_NAME_TO_SLUG.set(name, 'rock');
+  else {
+    const m = f.match(/\/base-([\w-]+)\.png$/);
+    if (m) PALETTE_BASE_NAME_TO_SLUG.set(name, m[1]);
+  }
+}
+
+/** Slug rocky-style (null para grama, Dirty *, cidade, etc.). */
+export function paletteBaseSlugFromTerrainSetName(setName) {
+  return PALETTE_BASE_NAME_TO_SLUG.get(setName) ?? null;
+}
+
+/** Par ordenado → ficheiro em `tilesets/palettes/trans/` (média RGBA bake-time). */
+export function paletteBaseTransitionImageRelPath(slugA, slugB) {
+  const [a, b] = slugA < slugB ? [slugA, slugB] : [slugB, slugA];
+  return `tilesets/palettes/trans/base-${a}--${b}.png`;
+}
+
+function sourceRelPathForPaletteBaseSlug(slug) {
+  for (const def of Object.values(PALETTE_BASE_TERRAIN_SETS)) {
+    const f = def.file;
+    if (slug === 'rock' && f.includes('rocky-terrain')) return f;
+    const m = f.match(/\/base-([\w-]+)\.png$/);
+    if (m && m[1] === slug) return f;
+  }
+  throw new Error(`Unknown palette base slug: ${slug}`);
+}
+
+/** Lista para preload; gerar com `npm run build:palettes`. */
+export function allPaletteBaseTransitionImagePaths() {
+  const slugs = [...new Set(PALETTE_BASE_NAME_TO_SLUG.values())].sort();
+  const out = [];
+  for (let i = 0; i < slugs.length; i++) {
+    for (let j = i + 1; j < slugs.length; j++) {
+      out.push(paletteBaseTransitionImageRelPath(slugs[i], slugs[j]));
+    }
+  }
+  return out;
+}
+
+/** Jobs para o bake Node (lê PNGs já assados, escreve trans/). */
+export function getPaletteBaseTransitionBakeJobs() {
+  const slugs = [...new Set(PALETTE_BASE_NAME_TO_SLUG.values())].sort();
+  const jobs = [];
+  for (let i = 0; i < slugs.length; i++) {
+    for (let j = i + 1; j < slugs.length; j++) {
+      const a = slugs[i];
+      const b = slugs[j];
+      jobs.push({
+        pathA: sourceRelPathForPaletteBaseSlug(a),
+        pathB: sourceRelPathForPaletteBaseSlug(b),
+        outFile: paletteBaseTransitionImageRelPath(a, b)
+      });
+    }
+  }
+  return jobs;
+}

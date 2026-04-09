@@ -1,5 +1,6 @@
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
+import { TessellationEngine } from './tessellation-engine.js';
 import {
   resetWildPokemonManager,
   syncWildPokemonWindow,
@@ -24,7 +25,7 @@ import {
   PROC_SALT_CRYSTAL
 } from './tessellation-logic.js';
 import {
-  BIOME_TO_TERRAIN, BIOME_VEGETATION,
+  BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE, BIOME_VEGETATION,
   GRASS_TILES, TREE_TILES,
   getGrassVariant, getTreeType,
   TREE_DENSITY_THRESHOLD,
@@ -61,6 +62,100 @@ const OBJECT_TILE_FLAGS_BY_ID = (() => {
 function getObjectTileFlags(tileId) {
   if (tileId == null) return null;
   return OBJECT_TILE_FLAGS_BY_ID.get(tileId) ?? null;
+}
+
+/** Ordem igual a GlobeTileDetailDebug (tile-detail-app): NW→SE + centro. */
+const TILE_DEBUG_DIRS_3X3 = [
+  { dx: -1, dy: -1, label: 'NW' },
+  { dx: 0, dy: -1, label: 'N' },
+  { dx: 1, dy: -1, label: 'NE' },
+  { dx: -1, dy: 0, label: 'W' },
+  { dx: 0, dy: 0, label: 'C' },
+  { dx: 1, dy: 0, label: 'E' },
+  { dx: -1, dy: 1, label: 'SW' },
+  { dx: 0, dy: 1, label: 'S' },
+  { dx: 1, dy: 1, label: 'SE' }
+];
+
+function terrainSetNameForMicroTile(tile) {
+  if (!tile) return 'grass';
+  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
+  return setName;
+}
+
+/** Papel + sprite local do terreno base na altura de superfície `surfaceLevel` (mesma regra que render/walk). */
+function computeTerrainRoleAndSprite(mx, my, data, surfaceLevel) {
+  const tile = getMicroTile(mx, my, data);
+  if (!tile) return { setName: null, set: null, role: null, spriteId: null };
+  const setName = terrainSetNameForMicroTile(tile);
+  const set = TERRAIN_SETS[setName];
+  if (!set) return { setName, set: null, role: null, spriteId: null };
+  const H = data.height * CHUNK_SIZE;
+  const W = data.width * CHUNK_SIZE;
+  const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= surfaceLevel;
+  const role = getRoleForCell(my, mx, H, W, isAtOrAbove, set.type);
+  const spriteId =
+    set.roles[role] ??
+    set.roles.CENTER ??
+    set.roles.SEAMLESS_CENTER ??
+    set.roles.SEAMLESS_TILE ??
+    set.centerId ??
+    null;
+  return { setName, set, role, spriteId };
+}
+
+function roleNameForSpriteIdInSet(set, tileId) {
+  if (!set?.roles || tileId == null) return '—';
+  for (const [k, v] of Object.entries(set.roles)) {
+    if (v === tileId) return k;
+  }
+  return '—';
+}
+
+/** Ícone 16×16 a partir do TERRAIN_SET (inclui paletas rocky/grassy). */
+function terrainSheetSpriteIconHtml(set, tileId) {
+  if (tileId == null || !set) return '';
+  const path = TessellationEngine.getImagePath(set.file);
+  const cols = TessellationEngine.getTerrainSheetCols(set);
+  const sx = (tileId % cols) * 16;
+  const sy = Math.floor(tileId / cols) * 16;
+  return `<div class="sprite-icon" style="background-image:url('${path}');background-position:-${sx}px -${sy}px"></div>`;
+}
+
+function natureSpriteIconHtml(tileId) {
+  if (tileId == null) return '';
+  const path = 'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png';
+  const cols = 57;
+  const sx = (tileId % cols) * 16;
+  const sy = Math.floor(tileId / cols) * 16;
+  return `<div class="sprite-icon" style="background-image:url('${path}');background-position:-${sx}px -${sy}px"></div>`;
+}
+
+function refreshPlayModeInfoBar() {
+  if (!infoBar || !currentData || appMode !== 'play') return;
+  const mx = Math.floor(player.x);
+  const my = Math.floor(player.y);
+  const tile = getMicroTile(mx, my, currentData);
+  const bId = tile.biomeId;
+  const bio = Object.values(BIOMES).find((b) => b.id === bId);
+  const encounters = getEncounters(bId);
+  let prefix = '';
+  const macroX = Math.floor(player.x / CHUNK_SIZE);
+  const macroY = Math.floor(player.y / CHUNK_SIZE);
+  if (currentData.graph) {
+    const city = currentData.graph.nodes.find(
+      (n) => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1
+    );
+    if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
+  }
+  if (!prefix && currentData.paths) {
+    const activePath = currentData.paths.find((p) => p.some((c) => c.x === macroX && c.y === macroY));
+    if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
+  }
+  const baseAt = computeTerrainRoleAndSprite(mx, my, currentData, tile.heightStep);
+  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}</span>`;
+  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
 }
 
 const canvas = document.getElementById('map');
@@ -117,6 +212,7 @@ function gameLoop(timestamp) {
     const pvy = player.visualY ?? player.y;
     syncWildPokemonWindow(currentData, pvx, pvy);
     updateWildPokemon(dt, currentData);
+    refreshPlayModeInfoBar();
   }
 
   // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo
@@ -411,17 +507,107 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
   const isMacroValid = gx >= 0 && gx < data.width && gy >= 0 && gy < data.height;
   if (isMacroValid) macroIdx = gy * data.width + gx;
 
-  const centerSpriteId = (() => {
-    let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-    if (tile.isRoad) {
-      setName = tile.roadFeature || 'road';
+  const baseAt = computeTerrainRoleAndSprite(mx, my, data, tile.heightStep);
+  const centerSpriteId = baseAt.spriteId;
+
+  const debugLayers = [];
+  if (baseAt.set && centerSpriteId != null) {
+    debugLayers.push({
+      layer: 'base',
+      terrainSetName: baseAt.setName,
+      tileIndex: centerSpriteId,
+      role: baseAt.role,
+      terrainRole: `${baseAt.setName} / ${baseAt.role ?? '—'}`
+    });
+  }
+  if (foliageOverlayIdDbg != null) {
+    const fName = BIOME_TO_FOLIAGE[tile.biomeId];
+    const fSet = fName ? TERRAIN_SETS[fName] : null;
+    const fRole = fSet ? roleNameForSpriteIdInSet(fSet, foliageOverlayIdDbg) : '—';
+    debugLayers.push({
+      layer: 'foliage',
+      terrainSetName: fName || '—',
+      tileIndex: foliageOverlayIdDbg,
+      role: fRole,
+      terrainRole: fName ? `${fName} / ${fRole}` : '—'
+    });
+  }
+
+  const heightLevels3x3 = TILE_DEBUG_DIRS_3X3.map(({ dx, dy, label }) => {
+    const nx = mx + dx;
+    const ny = my + dy;
+    const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
+    const bN = Object.values(BIOMES).find((b) => b.id === t.biomeId);
+    return { label, nx, ny, h: t.heightStep, biome: bN?.name ?? '—' };
+  });
+
+  const neighborsDetail = TILE_DEBUG_DIRS_3X3.map(({ dx, dy, label }) => {
+    const nx = mx + dx;
+    const ny = my + dy;
+    const t = getMicroTile(nx, ny, data);
+    if (!t) {
+      return {
+        label,
+        nx,
+        ny,
+        elev: null,
+        biome: '—',
+        role: '—',
+        tileInfo: '—',
+        terrainSetName: null,
+        spriteId: null
+      };
     }
-    const set = TERRAIN_SETS[setName];
-    if (!set) return null;
-    const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
-    const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
-    return set.roles[role] ?? set.roles['CENTER'] ?? set.centerId;
-  })();
+    const bN = Object.values(BIOMES).find((b) => b.id === t.biomeId);
+    const nb = computeTerrainRoleAndSprite(nx, ny, data, t.heightStep);
+    const tileInfo =
+      nb.set && nb.spriteId != null ? `ID ${nb.spriteId} → ${nb.setName} / ${nb.role ?? '—'}` : '—';
+    return {
+      label,
+      nx,
+      ny,
+      elev: t.heightStep,
+      biome: bN?.name ?? '—',
+      role: nb.role ?? '—',
+      tileInfo,
+      terrainSetName: nb.setName,
+      spriteId: nb.spriteId
+    };
+  });
+
+  const cellDebug = {
+    elevation: tile.heightStep,
+    biome: biome?.name ?? '—',
+    expectedRole: baseAt.role ?? (tile.heightStep < 1 ? 'base' : null),
+    baseTerrainSetName: baseAt.setName
+  };
+
+  const telemetry = {
+    tx: mx,
+    ty: my,
+    cell: {
+      elevation: cellDebug.elevation,
+      biome: cellDebug.biome,
+      expectedRole: cellDebug.expectedRole
+    },
+    layers: debugLayers.map((L) => ({
+      layer: L.layer,
+      terrainSetName: L.terrainSetName,
+      tileIndex: L.tileIndex,
+      role: L.role,
+      terrainRole: L.terrainRole
+    })),
+    heightLevels3x3,
+    neighbors: neighborsDetail.map((n) => ({
+      label: n.label,
+      nx: n.nx,
+      ny: n.ny,
+      elev: n.elev,
+      biome: n.biome,
+      role: n.role,
+      tileInfo: n.tileInfo
+    }))
+  };
 
   const scatterPass2 = analyzeScatterPass2Base(mx, my, data);
 
@@ -555,6 +741,26 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
     return { activeSprites: sprites, scatterContinuation };
   })();
 
+  const overlayDebugLayers = activeSprites.flatMap((s) =>
+    (s.ids || []).map((id) => ({
+      layer: 'overlay',
+      terrainSetName: null,
+      sourceSheet: 'nature',
+      tileIndex: id,
+      role: s.type,
+      terrainRole: `${s.type} / sprite`
+    }))
+  );
+  const allDebugLayers = [...debugLayers, ...overlayDebugLayers];
+  telemetry.layers = allDebugLayers.map((L) => ({
+    layer: L.layer,
+    terrainSetName: L.terrainSetName,
+    sourceSheet: L.sourceSheet,
+    tileIndex: L.tileIndex,
+    role: L.role,
+    terrainRole: L.terrainRole
+  }));
+
   const nearbyFormalTrees = [];
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
@@ -657,6 +863,11 @@ function buildPlayModeTileDebugInfo(mx, my, data) {
 
   return {
     coord: { mx, my, gx, gy },
+    cell: cellDebug,
+    layers: allDebugLayers,
+    heightLevels3x3,
+    neighborsDetail,
+    telemetry,
     macro: {
       elevation: isMacroValid ? data.cells[macroIdx]?.toFixed(3) : 'N/A',
       temperature: isMacroValid && data.temperature ? data.temperature[macroIdx]?.toFixed(3) : 'N/A',
@@ -833,6 +1044,12 @@ function formatObjectSetsFlags(f) {
 
 function openDebugModal(info) {
   lastDebugInfo = info;
+  const escDbg = (s) =>
+    String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
   const coll = info.collision;
   const overlayRows = coll && coll.overlays && coll.overlays.length
     ? coll.overlays.map((o) => {
@@ -840,6 +1057,103 @@ function openDebugModal(info) {
         return `<tr><th style="vertical-align:top">${o.type}</th><td style="font-size:0.78rem;line-height:1.35">${cells}</td></tr>`;
       }).join('')
     : '<tr><th>Overlays</th><td>—</td></tr>';
+
+  const baseSetForPreview =
+    info.cell?.baseTerrainSetName != null ? TERRAIN_SETS[info.cell.baseTerrainSetName] : null;
+  const baseIconTerrain =
+    baseSetForPreview && info.terrain.spriteId != null
+      ? terrainSheetSpriteIconHtml(baseSetForPreview, info.terrain.spriteId)
+      : '';
+  const layerIconHtml = (L) => {
+    if (L?.tileIndex == null) return '';
+    const s = L?.terrainSetName ? TERRAIN_SETS[L.terrainSetName] : null;
+    if (s) return terrainSheetSpriteIconHtml(s, L.tileIndex);
+    if (L?.sourceSheet === 'nature') return natureSpriteIconHtml(L.tileIndex);
+    return '';
+  };
+
+  const heroStack =
+    (info.layers || [])
+      .map((L) => {
+        return layerIconHtml(L);
+      })
+      .join('') || '<span style="color:#888">—</span>';
+
+  const heroAndCellHtml =
+    info.cell != null
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-hero-preview">
+        <div class="tile-debug-sprite-stack tile-debug-hero-stack">${heroStack}</div>
+        <div>
+          <div class="tile-debug-hero-label">Elevation ${escDbg(info.cell.elevation)} · ${escDbg(info.cell.biome)}</div>
+          <div style="font-size:11px;color:#9898a8;margin-top:2px">Role: ${escDbg(info.cell.expectedRole ?? '—')}</div>
+        </div>
+      </div>
+      <div class="tile-debug-section-title">Cell</div>
+      <table class="tile-debug-table"><tbody>
+        <tr><th>Elevation</th><td>${escDbg(String(info.cell.elevation))}</td></tr>
+        <tr><th>Biome</th><td>${escDbg(info.cell.biome)}</td></tr>
+        <tr><th>Expected role</th><td>${escDbg(info.cell.expectedRole ?? '—')}</td></tr>
+        <tr><th>Base terrain set</th><td style="font-size:0.75rem">${escDbg(info.cell.baseTerrainSetName ?? '—')}</td></tr>
+      </tbody></table>
+    </div>`
+      : '';
+
+  const layersTableHtml =
+    info.layers && info.layers.length
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Layers &amp; sprites at this tile</div>
+      <table class="tile-debug-table"><thead><tr><th>Sprite</th><th>Layer</th><th>Tile index</th><th>Terrain / role</th></tr></thead><tbody>
+      ${info.layers
+        .map((L) => {
+          const spr = layerIconHtml(L) || '—';
+          return `<tr><td>${spr}</td><td>${escDbg(L.layer)}</td><td>${L.tileIndex != null ? L.tileIndex : '—'}</td><td style="font-size:0.76rem">${escDbg(L.terrainRole)}</td></tr>`;
+        })
+        .join('')}
+      </tbody></table>
+    </div>`
+      : '';
+
+  const heightGridHtml =
+    info.heightLevels3x3 && currentData
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Height levels (3×3)</div>
+      <div class="tile-debug-grid-3x3">
+      ${info.heightLevels3x3
+        .map((c) => {
+          const isC = c.label === 'C';
+          const t = getMicroTile(c.nx, c.ny, currentData);
+          let mini = '';
+          if (t) {
+            const nb = computeTerrainRoleAndSprite(c.nx, c.ny, currentData, t.heightStep);
+            if (nb.set && nb.spriteId != null) mini = `<div class="tile-debug-mini-sprites">${terrainSheetSpriteIconHtml(nb.set, nb.spriteId)}</div>`;
+          }
+          return `<div class="tile-debug-cell${isC ? ' center' : ''}"><span class="cell-label">${escDbg(c.label)} (${c.nx},${c.ny})</span>H=${c.h} · ${escDbg(c.biome)}${mini}</div>`;
+        })
+        .join('')}
+      </div>
+    </div>`
+      : '';
+
+  const neighborsTableHtml =
+    info.neighborsDetail && info.neighborsDetail.length
+      ? `<div class="tile-debug-section">
+      <div class="tile-debug-section-title">Neighbors detail (elevation, biome, role, sprite)</div>
+      <table class="tile-debug-table"><thead><tr><th>Sprite</th><th>Pos</th><th>Elev</th><th>Biome</th><th>Role</th><th>Tile</th></tr></thead><tbody>
+      ${info.neighborsDetail
+        .map((n) => {
+          const s = n.terrainSetName ? TERRAIN_SETS[n.terrainSetName] : null;
+          const spr =
+            s && n.spriteId != null
+              ? `<span class="tile-debug-sprite-stack">${terrainSheetSpriteIconHtml(s, n.spriteId)}</span>`
+              : '—';
+          const el = n.elev != null ? String(n.elev) : '—';
+          return `<tr><td>${spr}</td><td>${escDbg(n.label)} (${n.nx},${n.ny})</td><td>${el}</td><td>${escDbg(n.biome)}</td><td>${escDbg(n.role)}</td><td style="font-size:0.74rem">${escDbg(n.tileInfo)}</td></tr>`;
+        })
+        .join('')}
+      </tbody></table>
+    </div>`
+      : '';
 
   const terrainHtml = `
     <div class="tile-debug-section">
@@ -852,8 +1166,8 @@ function openDebugModal(info) {
           <tr><th>Road / City</th><td>${info.terrain.isRoad ? 'Yes' : 'No'} / ${info.terrain.isCity ? 'Yes' : 'No'}</td></tr>
           <tr><th>Base Sprite ID</th><td>
              <div style="display:flex; align-items:center; gap:8px;">
-               ${info.terrain.spriteId !== null ? info.terrain.spriteId : 'N/A'} 
-               ${info.terrain.spriteId !== null ? `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(info.terrain.spriteId % 57)*16}px -${Math.floor(info.terrain.spriteId / 57)*16}px;"></div>` : ''}
+               ${info.terrain.spriteId !== null ? info.terrain.spriteId : 'N/A'}
+               ${baseIconTerrain}
              </div>
           </td></tr>
         </tbody>
@@ -973,12 +1287,6 @@ function openDebugModal(info) {
       </table>
     </div>`
       : '';
-
-  const escDbg = (s) =>
-    String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
 
   const pe = info.proceduralEntities;
   const proceduralHtml = pe
@@ -1118,6 +1426,10 @@ function openDebugModal(info) {
   `;
 
   debugContent.innerHTML =
+    heroAndCellHtml +
+    layersTableHtml +
+    heightGridHtml +
+    neighborsTableHtml +
     terrainHtml +
     collisionHtml +
     surroundHtml +
@@ -1166,27 +1478,7 @@ window.addEventListener('keydown', (e) => {
         tryMovePlayer(dx, dy, currentData);
       }
 
-      // Atualiza HUD
-      if (currentData) {
-        const tile = getMicroTile(player.x, player.y, currentData);
-        const bId = tile.biomeId;
-        const encounters = getEncounters(bId);
-        let prefix = "";
-        
-        const macroX = Math.floor(player.x / CHUNK_SIZE);
-        const macroY = Math.floor(player.y / CHUNK_SIZE);
-
-        if (currentData.graph) {
-           const city = currentData.graph.nodes.find(n => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1);
-           if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
-        }
-        if (!prefix && currentData.paths) {
-           const activePath = currentData.paths.find(p => p.some(c => c.x === macroX && c.y === macroY));
-           if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
-        }
-        
-        infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${Object.values(BIOMES).find(b=>b.id===bId).name} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>`;
-      }
+      if (currentData) refreshPlayModeInfoBar();
     }
     
     if (e.key === 'Escape') {
