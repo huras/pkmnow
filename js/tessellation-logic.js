@@ -3,15 +3,56 @@
  * Lógica pura de cálculo de papéis (roles) para a tesselação de 13-roles.
  */
 
+/** Folhas solo 5×3 (IN_* / EDGE_*): suavizar buracos minúsculos na máscara. */
+function isConcConvThreeByThreeStyle(setType) {
+  return setType === 'conc-conv-a' || setType === 'conc-conv-b' || setType === 'conc-conv-c';
+}
+
+/**
+ * Trata células “não-terra” que são só ruído 1×1 ou bloco 2×2 cercado por terra como terra
+ * para o autotile 3×3 — evita IN_* / EDGE_* espúrios (altura, chunk, máscara de folhagem).
+ */
+export function landPredicateFillSmallNoiseHoles(r, c, isLandRaw) {
+  const L = (rr, cc) => !!isLandRaw(rr, cc);
+  if (L(r, c)) return true;
+
+  const n = L(r - 1, c);
+  const s = L(r + 1, c);
+  const w = L(r, c - 1);
+  const e = L(r, c + 1);
+  if (n && s && w && e) return true;
+
+  for (let r0 = r - 1; r0 <= r; r0++) {
+    for (let c0 = c - 1; c0 <= c; c0++) {
+      if (L(r0, c0) || L(r0 + 1, c0) || L(r0, c0 + 1) || L(r0 + 1, c0 + 1)) continue;
+      const ringOk =
+        L(r0 - 1, c0) &&
+        L(r0 - 1, c0 + 1) &&
+        L(r0 + 2, c0) &&
+        L(r0 + 2, c0 + 1) &&
+        L(r0, c0 - 1) &&
+        L(r0 + 1, c0 - 1) &&
+        L(r0, c0 + 2) &&
+        L(r0 + 1, c0 + 2);
+      if (ringOk) return true;
+    }
+  }
+  return false;
+}
+
 export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
   if (setType === 'seamless-horizontal-single-piece-a' || setType === 'seamless-vertical-single-piece-a') {
     return 'SEAMLESS_TILE';
   }
 
-  const n  = isLandAtFunc(r - 1, c);
-  const s  = isLandAtFunc(r + 1, c);
-  const w  = isLandAtFunc(r, c - 1);
-  const e  = isLandAtFunc(r, c + 1);
+  const landAt = isConcConvThreeByThreeStyle(setType)
+    ? (rr, cc) => landPredicateFillSmallNoiseHoles(rr, cc, isLandAtFunc)
+    : isLandAtFunc;
+
+  const n  = landAt(r - 1, c);
+  const s  = landAt(r + 1, c);
+  const w  = landAt(r, c - 1);
+  const e  = landAt(r, c + 1);
 
   if (setType === 'extentable-vertical-three-piece-a') {
     if (!n) return 'TOP_EXTREMITY';
@@ -24,10 +65,10 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
     return 'SEAMLESS_CENTER';
   }
 
-  const nw = isLandAtFunc(r - 1, c - 1);
-  const ne = isLandAtFunc(r - 1, c + 1);
-  const sw = isLandAtFunc(r + 1, c - 1);
-  const se = isLandAtFunc(r + 1, c + 1);
+  const nw = landAt(r - 1, c - 1);
+  const ne = landAt(r - 1, c + 1);
+  const sw = landAt(r + 1, c - 1);
+  const se = landAt(r + 1, c + 1);
 
   // Todos os 4 vizinhos cardinais são terra
   if (n && s && w && e) {
