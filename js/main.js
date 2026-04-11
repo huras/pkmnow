@@ -211,7 +211,7 @@ function gameLoop(timestamp) {
     const pvx = player.visualX ?? player.x;
     const pvy = player.visualY ?? player.y;
     syncWildPokemonWindow(currentData, pvx, pvy);
-    updateWildPokemon(dt, currentData);
+    updateWildPokemon(dt, currentData, pvx, pvy);
     refreshPlayModeInfoBar();
   }
 

@@ -6,6 +6,8 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
+import { canWalkMicroTile } from '../walkability.js';
+import { getSpeciesBehavior } from './pokemon-behavior.js';
 
 /** Janela 3×3 de overview tiles (macro) em torno do player. */
 export const WILD_WINDOW_RADIUS = 2;
@@ -64,59 +66,157 @@ function advanceWildPokemonAnim(entity, dt) {
   }
 }
 
-function updateWildMotion(entity, dt) {
-  if ((entity.idlePauseTimer || 0) > 0) {
-    entity.idlePauseTimer -= dt;
-    entity.vx = 0;
-    entity.vy = 0;
-    if (entity.idlePauseTimer < 0) entity.idlePauseTimer = 0;
+function updateWildMotion(entity, dt, data, playerX, playerY) {
+  const beh = entity.behavior;
+  const dxP = entity.x - playerX;
+  const dyP = entity.y - playerY;
+  const distP = Math.hypot(dxP, dyP);
+
+  // Player Awareness State Machine
+  if (distP < beh.alertRadius) {
+    if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
+      entity.aiState = 'flee';
+      const nx = dxP / distP;
+      const ny = dyP / distP;
+      entity.vx = nx * beh.fleeSpeed;
+      entity.vy = ny * beh.fleeSpeed;
+      entity.wanderTimer = 0;
+      entity.idlePauseTimer = 0;
+    } else if (beh.archetype === 'aggressive') {
+      entity.aiState = 'approach';
+      if (distP > beh.stopDist) {
+        const nx = -dxP / distP;
+        const ny = -dyP / distP;
+        entity.vx = nx * beh.approachSpeed;
+        entity.vy = ny * beh.approachSpeed;
+      } else {
+        entity.vx = 0;
+        entity.vy = 0;
+      }
+      entity.wanderTimer = 0;
+      entity.idlePauseTimer = 0;
+    } else if (beh.archetype === 'neutral') {
+      if (entity.aiState !== 'alert') {
+        entity.aiState = 'alert';
+        entity.alertTimer = 1.0 + Math.random(); // stare for 1-2s
+        entity.vx = 0;
+        entity.vy = 0;
+      }
+    }
+  } else if (distP >= beh.alertRadius * 1.5) {
+    entity.aiState = 'wander';
   }
 
-  if ((entity.idlePauseTimer || 0) > 0) {
+  // Handle alert/stare state
+  if (entity.aiState === 'alert') {
+    entity.alertTimer -= dt;
+    if (entity.alertTimer <= 0) {
+      entity.aiState = 'wander';
+    }
+    // Face player
+    if (Math.abs(dxP) > Math.abs(dyP)) {
+      entity.facing = dxP > 0 ? 'left' : 'right';
+    } else {
+      entity.facing = dyP > 0 ? 'up' : 'down';
+    }
     entity.animMoving = false;
     return;
   }
 
-  entity.wanderTimer -= dt;
-  if (entity.wanderTimer <= 0) {
-    // Interleave move bursts with small idle pauses.
-    if (Math.random() < 0.34) {
-      entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
-      entity.wanderTimer = 0;
+  // Handle wander state locomotion
+  if (entity.aiState === 'wander') {
+    if ((entity.idlePauseTimer || 0) > 0) {
+      entity.idlePauseTimer -= dt;
       entity.vx = 0;
       entity.vy = 0;
+      if (entity.idlePauseTimer < 0) entity.idlePauseTimer = 0;
+    }
+
+    if ((entity.idlePauseTimer || 0) > 0) {
       entity.animMoving = false;
       return;
     }
 
-    entity.wanderTimer = WANDER_MOVE_MIN + Math.random() * WANDER_MOVE_EXTRA;
-    const ang = Math.random() * Math.PI * 2;
-    const sp = 0.18 + Math.random() * MAX_SPEED * 0.82;
-    entity.vx = Math.cos(ang) * sp;
-    entity.vy = Math.sin(ang) * sp;
+    entity.wanderTimer -= dt;
+    if (entity.wanderTimer <= 0) {
+      if (Math.random() < 0.34) {
+        entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
+        entity.wanderTimer = 0;
+        entity.vx = 0;
+        entity.vy = 0;
+        entity.animMoving = false;
+        return;
+      }
+
+      entity.wanderTimer = WANDER_MOVE_MIN + Math.random() * WANDER_MOVE_EXTRA;
+      const baseAng = Math.random() * Math.PI * 2;
+      const sp = 0.18 + Math.random() * MAX_SPEED * 0.82;
+      
+      let bestVx = Math.cos(baseAng) * sp;
+      let bestVy = Math.sin(baseAng) * sp;
+      
+      // Try 4 orthogonal directions from base angle to find walkable path
+      for (let i = 0; i < 4; i++) {
+        const a = baseAng + (Math.PI / 2) * i;
+        const tvx = Math.cos(a) * sp;
+        const tvy = Math.sin(a) * sp;
+        if (canWalkMicroTile(entity.x + tvx * 0.5, entity.y + tvy * 0.5, data)) {
+          bestVx = tvx;
+          bestVy = tvy;
+          break;
+        }
+      }
+      entity.vx = bestVx;
+      entity.vy = bestVy;
+    }
   }
 
-  entity.x += entity.vx * dt;
-  entity.y += entity.vy * dt;
+  // Apply velocity speculatively with terrain bounds checking
+  const nx = entity.x + entity.vx * dt;
+  const ny = entity.y + entity.vy * dt;
+  
+  if (!canWalkMicroTile(nx, ny, data)) {
+    entity.vx = 0;
+    entity.vy = 0;
+    entity.wanderTimer = 0; // rethink next frame
+  } else {
+    entity.x = nx;
+    entity.y = ny;
+  }
 
+  // Clamp wander radius
   const dx = entity.x - entity.centerX;
   const dy = entity.y - entity.centerY;
   const dist = Math.hypot(dx, dy);
   if (dist > WANDER_RADIUS && dist > 1e-6) {
-    const nx = dx / dist;
-    const ny = dy / dist;
-    entity.x = entity.centerX + nx * WANDER_RADIUS;
-    entity.y = entity.centerY + ny * WANDER_RADIUS;
-    const dot = entity.vx * nx + entity.vy * ny;
+    const nxc = dx / dist;
+    const nyc = dy / dist;
+    const clampedX = entity.centerX + nxc * WANDER_RADIUS;
+    const clampedY = entity.centerY + nyc * WANDER_RADIUS;
+    
+    if (canWalkMicroTile(clampedX, clampedY, data)) {
+      entity.x = clampedX;
+      entity.y = clampedY;
+    }
+    
+    const dot = entity.vx * nxc + entity.vy * nyc;
     if (dot > 0) {
-      entity.vx -= nx * dot * 1.75;
-      entity.vy -= ny * dot * 1.75;
+      entity.vx -= nxc * dot * 1.75;
+      entity.vy -= nyc * dot * 1.75;
     }
   }
 
+  // Update facing and animation state
   const spd = Math.hypot(entity.vx, entity.vy);
   entity.animMoving = spd > 0.1;
-  if (spd > 0.06) {
+
+  if (entity.aiState === 'approach' && distP <= beh.stopDist) {
+    if (Math.abs(dxP) > Math.abs(dyP)) {
+      entity.facing = dxP > 0 ? 'left' : 'right';
+    } else {
+      entity.facing = dyP > 0 ? 'up' : 'down';
+    }
+  } else if (spd > 0.06) {
     if (Math.abs(entity.vx) > Math.abs(entity.vy)) {
       entity.facing = entity.vx > 0 ? 'right' : 'left';
     } else {
@@ -198,6 +298,27 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const jx = (seededHashInt(mx + 31, my + 11, data.seed) % 1000) / 1000 - 0.5;
     const jy = (seededHashInt(mx + 71, my + 3, data.seed) % 1000) / 1000 - 0.5;
 
+    let spawnX = centerX + jx * 5;
+    let spawnY = centerY + jy * 5;
+    
+    // Attempt to snap to nearest walkable tile if initial spawn is blocked
+    if (!canWalkMicroTile(spawnX, spawnY, data)) {
+      let found = false;
+      for (let r = 1; r <= 3; r++) {
+        for (let a = 0; a < 8; a++) {
+          const cx = spawnX + Math.cos((a * Math.PI) / 4) * r;
+          const cy = spawnY + Math.sin((a * Math.PI) / 4) * r;
+          if (canWalkMicroTile(cx, cy, data)) {
+            spawnX = cx;
+            spawnY = cy;
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+    }
+
     const entity = {
       key: k,
       macroX: mx,
@@ -206,8 +327,8 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       pickIndex: pick,
       centerX,
       centerY,
-      x: centerX + jx * 5,
-      y: centerY + jy * 5,
+      x: spawnX,
+      y: spawnY,
       vx: 0,
       vy: 0,
       dexId: dex,
@@ -219,17 +340,20 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       _walkPhase: 0,
       wanderTimer: 0,
       idlePauseTimer: 0,
-      animMoving: false
+      animMoving: false,
+      behavior: getSpeciesBehavior(dex),
+      aiState: 'wander',
+      alertTimer: 0
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
   }
 }
 
-export function updateWildPokemon(dt, data) {
+export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
   for (const e of entitiesByKey.values()) {
-    updateWildMotion(e, dt);
+    updateWildMotion(e, dt, data, playerX, playerY);
     advanceWildPokemonAnim(e, dt);
   }
 }
