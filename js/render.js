@@ -635,10 +635,9 @@ export function render(canvas, data, options = {}) {
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
     });
 
-    // PASS 3.5: wild Pokémon (3×3 overview window; mesma folha PMD que o player)
+    // PASS 3.5: Sorted Entities pass (Player + Wild Pokémon)
     const wildList = getWildPokemonEntities();
-    wildList.sort((a, b) => a.y - b.y);
-    const pmdScale = PMD_MON_SHEET.scale;
+    const renderItems = [];
 
     /** Resolve frame size/cols using AnimData.xml metadata first, then image fallback. */
     const resolvePmdFrameSpec = (sheet, isMoving, dexId) => {
@@ -662,16 +661,14 @@ export function render(canvas, data, options = {}) {
     /** Canonical PMD frame box per species used to keep visual scale stable across idle/walk padding differences. */
     const resolveCanonicalPmdH = (wIdle, wWalk, dexId) => {
       const meta = getDexAnimMeta(dexId);
-      const idleCols = meta?.idle?.durations?.length || 8;
-      const walkCols = meta?.walk?.durations?.length || 4;
       const idleH = Number(meta?.idle?.frameHeight) ||
         Math.floor(((wIdle?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
       const walkH = Number(meta?.walk?.frameHeight) ||
         Math.floor(((wWalk?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
-
       return Math.max(1, idleH || walkH || PMD_MON_SHEET.frameH);
     };
 
+    // --- Collect Wild entities ---
     for (const we of wildList) {
       const { walk: wWalk, idle: wIdle } = getResolvedSheets(imageCache, we.dexId);
       if (!wWalk || !wIdle) continue;
@@ -679,164 +676,135 @@ export function render(canvas, data, options = {}) {
 
       const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpec(wSheet, !!we.animMoving, we.dexId);
       const canonicalH = resolveCanonicalPmdH(wIdle, wWalk, we.dexId);
-
-      // Use the direct tile height defined in the heights database
       const targetHeightTiles = POKEMON_HEIGHTS[we.dexId] || 1.1;
       const targetHeightPx = targetHeightTiles * tileH;
-
       const finalScale = targetHeightPx / canonicalH;
 
-      // Explicitly scale the actual source frame dims to prevent stretch distortion
       const pmdDw = pmdSw * finalScale;
       const pmdDh = pmdSh * finalScale;
       const pmdPivotX = pmdDw * 0.5;
       const pmdPivotY = pmdDh * PMD_MON_SHEET.pivotYFrac;
-      const wCol = (we.animFrame ?? 0) % animCols;
-      const wRow = we.animRow ?? 0;
-      const wsx = wCol * pmdSw;
-      const wsy = wRow * pmdSh;
-      const wcx = snapPx((we.x + 0.5) * tileW);
-      const wcy = snapPx((we.y + 0.5) * tileH);
 
+      renderItems.push({
+        type: 'wild',
+        y: we.y, // raw world Y for sorting
+        x: we.x,
+        cx: snapPx((we.x + 0.5) * tileW),
+        cy: snapPx((we.y + 0.5) * tileH),
+        sheet: wSheet,
+        sx: ((we.animFrame ?? 0) % animCols) * pmdSw,
+        sy: (we.animRow ?? 0) * pmdSh,
+        sw: pmdSw,
+        sh: pmdSh,
+        dw: pmdDw,
+        dh: pmdDh,
+        pivotX: pmdPivotX,
+        pivotY: pmdPivotY,
+        spawnPhase: we.spawnPhase ?? 1,
+        spawnType: we.spawnType,
+        emotion: (we.emotionType !== null && typeof we.emotionType === 'number') ? {
+          type: we.emotionType,
+          age: we.emotionAge
+        } : null,
+        targetHeightTiles
+      });
+    }
+
+    // --- Collect Player ---
+    const isPlayerMoving = player.moving;
+    const playerDex = player.dexId || 94;
+    const { walk: pWalk, idle: pIdle } = getResolvedSheets(imageCache, playerDex);
+    const pSheet = isPlayerMoving ? pWalk : pIdle;
+
+    if (pSheet) {
+      const { sw, sh } = resolvePmdFrameSpec(pSheet, isPlayerMoving, playerDex);
+      const canonicalH = resolveCanonicalPmdH(pIdle, pWalk, playerDex);
+      const targetHeightTiles = POKEMON_HEIGHTS[playerDex] || 1.1;
+      const targetHeightPx = targetHeightTiles * tileH;
+      const finalScale = targetHeightPx / canonicalH;
+
+      const dw = sw * finalScale;
+      const dh = sh * finalScale;
+
+      renderItems.push({
+        type: 'player',
+        y: vy, // visualY for sorting
+        x: vx,
+        cx: snapPx((vx + 0.5) * tileW),
+        cy: snapPx((vy + 0.5) * tileH),
+        sheet: pSheet,
+        sx: (player.animFrame ?? 0) * sw,
+        sy: (player.animRow ?? 0) * sh,
+        sw: sw,
+        sh: sh,
+        dw: dw,
+        dh: dh,
+        pivotX: dw * 0.5,
+        pivotY: dh * PMD_MON_SHEET.pivotYFrac,
+        targetHeightTiles
+      });
+    }
+
+    // --- SORT BY Y ---
+    renderItems.sort((a, b) => a.y - b.y);
+
+    // --- DRAW PASS ---
+    for (const item of renderItems) {
       ctx.save();
-      const phase = we.spawnPhase ?? 1;
-      ctx.globalAlpha = phase;
-
-      let spawnYOffset = 0;
-      if (we.spawnType === 'sky') {
-        spawnYOffset = (1 - phase) * (-4 * tileH);
-      } else if (we.spawnType === 'water') {
-        spawnYOffset = (1 - phase) * (0.8 * tileH);
-      } else {
-        // Land/Grass default: subtle rise
-        spawnYOffset = (1 - phase) * (0.2 * tileH);
+      if (item.type === 'wild') {
+        ctx.globalAlpha = item.spawnPhase;
       }
 
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      let spawnYOffset = 0;
+      if (item.type === 'wild' && item.spawnPhase < 1) {
+        if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
+        else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
+        else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+      }
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.ellipse(wcx, wcy + (we.spawnType === 'sky' ? 0 : spawnYOffset), tileW * 0.38, tileH * 0.1, 0, 0, Math.PI * 2);
+      // Adjust shadow size by creature height
+      const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
+      ctx.ellipse(item.cx, item.cy + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
       ctx.fill();
 
+      // Sprite
       ctx.drawImage(
-        wSheet,
-        wsx, wsy, pmdSw, pmdSh,
-        snapPx(wcx - pmdPivotX), snapPx(wcy - pmdPivotY + spawnYOffset),
-        snapPx(pmdDw), snapPx(pmdDh)
+        item.sheet,
+        item.sx, item.sy, item.sw, item.sh,
+        snapPx(item.cx - item.pivotX), snapPx(item.cy - item.pivotY + spawnYOffset),
+        snapPx(item.dw), snapPx(item.dh)
       );
       ctx.restore();
 
-      // Wild grass overlay strip (same depth cue idea used for player).
-      const wmx = Math.floor(we.x);
-      const wmy = Math.floor(we.y);
-      if (wmx >= startX && wmx < endX && wmy >= startY && wmy < endY) {
-        const wTile = getCached(wmx, wmy);
-        if (passesAbovePlayerTileGate(wmx, wmy, wTile)) {
-          const wtw = Math.ceil(tileW);
-          const wth = Math.ceil(tileH);
-          const wtx = Math.floor(wmx * tileW);
-          const wty = Math.floor(wmy * tileH);
-          drawGrass5aForCell(wmx, wmy, wTile, wtw, wth, wtx, wty, 'playerTopOverlay');
+      // Terrain / Grass Depth Cue (Deferred Overlay)
+      const targetMx = Math.floor(item.x);
+      const targetMy = Math.floor(item.y);
+      if (targetMx >= startX && targetMx < endX && targetMy >= startY && targetMy < endY) {
+        const t = getCached(targetMx, targetMy);
+        if (passesAbovePlayerTileGate(targetMx, targetMy, t)) {
+          drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
         }
       }
 
-      // 🎈 Emotion Balloon Overlay
-      if (we.emotionType !== null && (typeof we.emotionType === 'number')) {
+      // 🎈 Emotion Balloon
+      if (item.emotion) {
         const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
         if (emoImg && emoImg.naturalWidth) {
           const eCols = 8, eRows = 10;
           const eSw = Math.floor(emoImg.naturalWidth / eCols);
           const eSh = Math.floor(emoImg.naturalHeight / eRows);
-
-          // Animate linearly over 0.8s
-          const animDur = 0.8;
-          let progress = we.emotionAge / animDur;
-          if (progress > 1.0) progress = 1.0;
-
-          const frameIndex = Math.min(eCols - 1, Math.floor(progress * eCols));
-          const sx = frameIndex * eSw;
-          const sy = we.emotionType * eSh;
-
-          // Hover slightly above the creature's head
-          const drawW = eSw * 1.25 * (tileW / 32);
-          const drawH = eSh * 1.25 * (tileW / 32);
-          const px = snapPx(wcx - drawW * 0.5);
-          // top of sprite = wcy - pmdPivotY; offset it UP by ~80% of drawH
-          const py = snapPx(wcy - pmdPivotY - drawH * 0.8);
-
-          ctx.drawImage(emoImg, sx, sy, eSw, eSh, px, py, Math.ceil(drawW), Math.ceil(drawH));
+          const progress = Math.min(1.0, item.emotion.age / 0.8);
+          const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
+          
+          const dW = eSw * 1.25 * (tileW / 32);
+          const dH = eSh * 1.25 * (tileW / 32);
+          const px = snapPx(item.cx - dW * 0.5);
+          const py = snapPx(item.cy - item.pivotY - dH * 0.8);
+          ctx.drawImage(emoImg, fIdx * eSw, item.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
         }
-      }
-    }
-
-    // PASS 4: PLAYER (after grass, before canopies)
-    const pcx = snapPx((vx + 0.5) * tileW);
-    const pcy = snapPx((vy + 0.5) * tileH);
-    const isMoving = player.moving;
-    const dex = player.dexId || 94;
-    const { walk: sheetWalk, idle: sheetIdle } = getResolvedSheets(imageCache, dex);
-    const sheet = isMoving ? sheetWalk : sheetIdle;
-
-    if (sheet) {
-      const meta = getDexAnimMeta(dex);
-      const mode = isMoving ? 'walk' : 'idle';
-      const sw = meta?.[mode]?.frameWidth || PMD_MON_SHEET.frameW; 
-      const sh = meta?.[mode]?.frameHeight || PMD_MON_SHEET.frameH;
-
-      const frameCol = player.animFrame ?? 0;
-      const frameRow = player.animRow ?? 0;
-
-      const sx = frameCol * sw;
-      const sy = frameRow * sh;
-
-      // Scale based on the heights table for consistency
-      const targetHeightTiles = POKEMON_HEIGHTS[dex] || 1.1; 
-      const targetHeightPx = targetHeightTiles * tileH;
-      const finalScale = targetHeightPx / sh;
-
-      const dw = sw * finalScale;
-      const dh = sh * finalScale;
-
-      const pivotX = dw * 0.5;
-      const pivotY = dh * PMD_MON_SHEET.pivotYFrac;
-
-      // Sombra
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      ctx.beginPath();
-      ctx.ellipse(pcx, pcy, tileW * 0.45 * (targetHeightTiles / 3.5 + 0.5), tileH * 0.12, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw Sprite
-      ctx.drawImage(
-        sheet,
-        sx, sy, sw, sh,
-        snapPx(pcx - pivotX), snapPx(pcy - pivotY),
-        snapPx(dw), snapPx(dh)
-      );
-    } else {
-      const protImg = imageCache.get('tilesets/protagonist.png');
-      if (protImg) {
-        const sw = 16, sh = 32;
-        const frame = player.animFrame ?? 1;
-        const sx = (frame % 3) * sw;
-        const sy = Math.floor(frame / 3) * sh;
-        const scale = tileW / sw;
-        const dw = sw * scale;
-        const dh = sh * scale;
-        const pivotX = dw * 0.5;
-        const pivotY = dh * 0.9;
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(pcx, pcy, tileW * 0.25, tileH * 0.1, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.drawImage(
-          protImg,
-          sx, sy, sw, sh,
-          snapPx(pcx - pivotX), snapPx(pcy - pivotY),
-          snapPx(dw), snapPx(dh)
-        );
-      } else {
-        // Fallback
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH * 0.3, tileW * 0.3, tileH * 0.15, 0, 0, Math.PI * 2); ctx.fill();
       }
     }
 

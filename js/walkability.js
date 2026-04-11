@@ -56,22 +56,21 @@ export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   for (const [name, set] of Object.entries(TERRAIN_SETS)) {
     const walkKind = getTerrainSetWalkKind(name);
     if (walkKind) {
+      const isConnector = name.includes('stair-') || name.includes('-bridge');
+      
       if (set.centerId != null) s.add(set.centerId);
-      for (const id of Object.values(set.roles || {})) {
-        s.add(id);
+      for (const [role, id] of Object.entries(set.roles || {})) {
+        // Connectors are walkable on all roles. Standard ground blocks on EDGE/IN_ roles.
+        const isBlockingRole = role.startsWith('EDGE_') || role.startsWith('IN_');
+        if (isConnector || !isBlockingRole) {
+          s.add(id);
+        }
       }
     } else if (name.includes('lake') || name.startsWith('Borda com ') || name.startsWith('purples ')) {
       // No caso de lagos/lava/oceanos, as bordas EXTERNAS (OUT_*) são terra, logo caminháveis.
       // CENTER (água/lava) e EDGE (beira do precipício/água) continuam bloqueados.
       for (const [role, id] of Object.entries(set.roles || {})) {
         if (role.startsWith('OUT_')) s.add(id);
-      }
-    } else if (name.startsWith('altura ')) {
-      // Para conjuntos de altura, permitimos caminhar em TUDO (Centro e Bordas).
-      // Isso desativa a colisão de "paredão" por enquanto, como solicitado.
-      if (set.centerId != null) s.add(set.centerId);
-      for (const id of Object.values(set.roles || {})) {
-        s.add(id);
       }
     }
   }
@@ -288,6 +287,11 @@ export function isPropBlocking(mx, my, data) {
         const itemKey = items[Math.floor(seededHash(sx, sy, data.seed + 222) * items.length)];
         const objSet = OBJECT_SETS[itemKey];
         if (objSet) {
+           // Skip collision for aesthetic-only foliage (grass, flowers, etc.)
+           const k = itemKey.toLowerCase();
+           const isSolid = k.includes('tree') || k.includes('rock') || k.includes('crystal') || k.includes('cactus') || k.includes('broadleaf') || k.includes('palm');
+           if (!isSolid) continue;
+
            const { cols, rows } = parseShape(objSet.shape);
            if (mx >= sx && mx < sx + cols && my >= sy && my < sy + rows) {
               return true;
