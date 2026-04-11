@@ -6,6 +6,9 @@ import {
   syncWildPokemonWindow,
   updateWildPokemon
 } from './wild-pokemon/wild-pokemon-manager.js';
+import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
+import { CharacterSelector } from './ui/character-selector.js';
+import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
@@ -1608,7 +1611,14 @@ seedInput.addEventListener('keydown', (e) => {
 });
 
 // Execução inicial com pré-carregamento de ativos
-loadTilesetImages().then(() => {
+loadTilesetImages().then(async () => {
   new BiomesModal(); // Inicializa o explorador de biomas
+  
+  // Character Selector UI initialization
+  new CharacterSelector('character-selector-container');
+  
+  // Preload player species sheets
+  await ensurePokemonSheetsLoaded(imageCache, player.dexId);
+  
   run();
 });

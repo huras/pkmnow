@@ -29,7 +29,7 @@ import {
 } from './terrain-palette-base.js';
 import { PALETTE_GRASSY_IMAGE_PATHS } from './terrain-palette-grassy.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
-import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
@@ -771,16 +771,16 @@ export function render(canvas, data, options = {}) {
     // PASS 4: PLAYER (after grass, before canopies)
     const pcx = snapPx((vx + 0.5) * tileW);
     const pcy = snapPx((vy + 0.5) * tileH);
+    const isMoving = player.moving;
+    const dex = player.dexId || 94;
+    const { walk: sheetWalk, idle: sheetIdle } = getResolvedSheets(imageCache, dex);
+    const sheet = isMoving ? sheetWalk : sheetIdle;
 
-    const gengarWalk = imageCache.get('tilesets/gengar_walk.png');
-    const gengarIdle = imageCache.get('tilesets/gengar_idle.png');
-
-    if (gengarWalk && gengarIdle) {
-      const isMoving = player.moving;
-      const sheet = isMoving ? gengarWalk : gengarIdle;
-
-      const sw = PMD_MON_SHEET.frameW; // Gengar PMD: 32x40
-      const sh = PMD_MON_SHEET.frameH;
+    if (sheet) {
+      const meta = getDexAnimMeta(dex);
+      const mode = isMoving ? 'walk' : 'idle';
+      const sw = meta?.[mode]?.frameWidth || PMD_MON_SHEET.frameW; 
+      const sh = meta?.[mode]?.frameHeight || PMD_MON_SHEET.frameH;
 
       const frameCol = player.animFrame ?? 0;
       const frameRow = player.animRow ?? 0;
@@ -789,23 +789,20 @@ export function render(canvas, data, options = {}) {
       const sy = frameRow * sh;
 
       // Scale based on the heights table for consistency
-      const targetHeightTiles = POKEMON_HEIGHTS[94] || 1.1; 
+      const targetHeightTiles = POKEMON_HEIGHTS[dex] || 1.1; 
       const targetHeightPx = targetHeightTiles * tileH;
       const finalScale = targetHeightPx / sh;
 
       const dw = sw * finalScale;
       const dh = sh * finalScale;
 
-      // Pivot Científico: Gengar #094 é "baixo" no sprite de 40px.
-      // Ajustado para 0.48 para trazer o corpo 1 tile (40px) para baixo.
       const pivotX = dw * 0.5;
-      const pivotY = dh * PMD_MON_SHEET.pivotYFrac; // Grounding recalibrado (Original: 0.84)
+      const pivotY = dh * PMD_MON_SHEET.pivotYFrac;
 
-      // Sombra Científica: ShadowSize 2 (aproximadamente 28px no motor original)
-      // Escalado: 1.4 * 2.5 = 3.5. Ajustado visualmente para 0.5 do tile.
+      // Sombra
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath();
-      ctx.ellipse(pcx, pcy, tileW * 0.45, tileH * 0.12, 0, 0, Math.PI * 2);
+      ctx.ellipse(pcx, pcy, tileW * 0.45 * (targetHeightTiles / 3.5 + 0.5), tileH * 0.12, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Draw Sprite

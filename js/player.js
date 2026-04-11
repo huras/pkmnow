@@ -1,8 +1,12 @@
 import { CHUNK_SIZE } from './chunking.js';
 import { canWalkMicroTile } from './walkability.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
+import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
 const MOVE_DURATION = 0.15; // segundos para andar 1 tile (estilo Pokémon)
+
+const SAVED_DEX_KEY = 'pkmn_player_dex_id';
+const initialDex = parseInt(localStorage.getItem(SAVED_DEX_KEY)) || 94;
 
 export const player = {
   x: 0,         // posição lógica (tile)
@@ -17,8 +21,14 @@ export const player = {
   animRow: 0,
   animFrame: 0,
   idleTimer: 0,
-  moveTimer: 0
+  moveTimer: 0,
+  dexId: initialDex
 };
+
+export function setPlayerSpecies(dexId) {
+  player.dexId = dexId;
+  localStorage.setItem(SAVED_DEX_KEY, dexId);
+}
 
 export function setPlayerPos(x, y) {
   player.x = Math.floor(x);
@@ -103,11 +113,12 @@ export function updatePlayer(dt, multiplier = 1) {
     player.visualX = player.fromX + (player.x - player.fromX) * t;
     player.visualY = player.fromY + (player.y - player.fromY) * t;
 
-    // Gengar Walk: 4 frames baseados em ticks [8, 10, 8, 10] => Total 36 ticks
-    const seq = PMD_DEFAULT_MON_ANIMS.Walk;
+    // Fetch dynamic animation sequence from metadata
+    const meta = getDexAnimMeta(player.dexId);
+    const seq = meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
     
-    // Sincronizamos o progresso de movimento (0-1) com o ciclo de 36 ticks
+    // Synchronize movement progress with anim cycle
     const currentTick = t * totalTicks;
     let accumulated = 0;
     player.animFrame = 0;
@@ -123,10 +134,11 @@ export function updatePlayer(dt, multiplier = 1) {
     player.visualX = player.x;
     player.visualY = player.y;
     
-    // Gengar Idle Scientífico: Ticks reais do AnimData.xml
-    player.idleTimer += ticks;
-    const seq = PMD_DEFAULT_MON_ANIMS.Idle;
+    const meta = getDexAnimMeta(player.dexId);
+    const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
+    
+    player.idleTimer += ticks;
     const loopTick = player.idleTimer % totalTicks;
     
     let accumulated = 0;

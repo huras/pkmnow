@@ -4,15 +4,19 @@
  * Exclui penhascos (altura), água/lava (Borda com…), lago roxo: ver bloco em `canWalkMicroTile` (overlay vs sem overlay).
  */
 
-import { TERRAIN_SETS } from './tessellation-data.js';
-import { CHUNK_SIZE, getMicroTile } from './chunking.js';
-import { getRoleForCell, isTerrainInnerCornerRole } from './tessellation-logic.js';
+import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { CHUNK_SIZE, getMicroTile, foliageDensity } from './chunking.js';
+import { getRoleForCell, isTerrainInnerCornerRole, seededHash, parseShape } from './tessellation-logic.js';
 import {
   BIOME_TO_TERRAIN,
   BIOME_TO_FOLIAGE,
   FOLIAGE_DENSITY_THRESHOLD,
   isLakeLotusFoliageTerrainSet,
-  usesPoolAutotileMaskForFoliage
+  usesPoolAutotileMaskForFoliage,
+  getTreeType,
+  TREE_DENSITY_THRESHOLD,
+  TREE_NOISE_SCALE,
+  BIOME_VEGETATION
 } from './biome-tiles.js';
 
 /**
@@ -231,23 +235,77 @@ export function getLakeLotusFoliageWalkRole(mx, my, data) {
   );
 }
 
+
+/**
+ * Detects if a tile is blocked by a "prop" (Tree, Scatter object, or Building core).
+ */
+export function isPropBlocking(mx, my, data) {
+  const tile = getMicroTile(mx, my, data);
+  if (!tile) return true;
+
+  // 1. Urban Building Collision
+  if (tile.urbanBuilding) {
+    const { ox, oy, type } = tile.urbanBuilding;
+    const dx = mx - ox;
+    const dy = my - oy;
+    // Basic "Core" collision for building footprints
+    if (type.includes('pokecenter')) {
+        if (dy >= 3 && dy <= 5) return true; // Foundation rows
+    } else { // Mart or House
+        if (dy >= 2 && dy <= 4) return true;
+    }
+  }
+
+  // 2. Formal Tree Collision (2x1 base)
+  const isFormalRoot = (tx, ty) => {
+    const t = getMicroTile(tx, ty, data);
+    if (!t) return false;
+    const tt = getTreeType(t.biomeId, tx, ty, data.seed);
+    return !!tt && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+  };
+  
+  // Check if this tile or its left neighbor is a tree root
+  if (isFormalRoot(mx, my) || isFormalRoot(mx - 1, my)) {
+     // Check if it's a flat center tile (height consistency)
+     const set = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+     if (set) {
+        const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
+        const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, set.type);
+        if (role === 'CENTER') return true;
+     }
+  }
+
+  // 3. Scatter Decoration Collision
+  // Scan small area NW to see if an object root covers this tile
+  for (let sy = my; sy >= my - 3; sy--) {
+    for (let sx = mx; sx >= mx - 3; sx--) {
+      if (sx < 0 || sy < 0) continue;
+      const sTile = getMicroTile(sx, sy, data);
+      if (!sTile || sTile.isRoad || sTile.isCity) continue;
+      if (foliageDensity(sx, sy, data.seed + 111, 2.5) > 0.82) {
+        const items = BIOME_VEGETATION[sTile.biomeId] || [];
+        if (items.length === 0) continue;
+        const itemKey = items[Math.floor(seededHash(sx, sy, data.seed + 222) * items.length)];
+        const objSet = OBJECT_SETS[itemKey];
+        if (objSet) {
+           const { cols, rows } = parseShape(objSet.shape);
+           if (mx >= sx && mx < sx + cols && my >= sy && my < sy + rows) {
+              return true;
+           }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * Colisão em grelha: um único tile micro por amostra.
- *
- * **Célula:** `mx = floor(x)`, `my = floor(y)` (coords em tiles micro do mundo).
- * `tryMovePlayer` chama isto com `(nx, ny)` inteiros (destino); não há hitbox contínua durante o tween.
- *
- * **Ordem de decisão (primeiro falhanço bloqueia):**
- * 1. Fora do mapa → não.
- * 2. Sprite do **terreno base** em `(mx,my)` (`getBaseTerrainSpriteId`) deve estar em `WALKABLE_SURFACE_TERRAIN_TILE_IDS`.
- * 3. **Lago/lava (overlay visível):** se `getFoliageOverlayTileId` devolver ID em `FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS` → não. Lago roxo: qualquer tile do set (CENTER, EDGE, IN, OUT).
- * 4. **Lago roxo sem overlay:** `getLakeLotusFoliageWalkRole` + `isPurpleLakePoolWalkBlockingRole` → bloqueia **CENTER** e cantos **IN_NE/NW/SE/SW**; **OUT_*** e **EDGE_*** são quina/borda seca → sim.
- * 5. Caso contrário → sim.
- *
  * @param {number} x - tile micro (pode ser fracionário; usa floor)
  * @param {number} y
  * @param {object} data
- * @param {number | null | undefined} cachedFoliageOverlayId - se já calculaste com `getFoliageOverlayTileId`, passa aqui para evitar trabalho duplicado (ex.: painel de debug).
+ * @param {number | null | undefined} cachedFoliageOverlayId - opcional
  */
 export function canWalkMicroTile(x, y, data, cachedFoliageOverlayId) {
   const mx = Math.floor(x);
@@ -268,6 +326,40 @@ export function canWalkMicroTile(x, y, data, cachedFoliageOverlayId) {
   if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
     return false;
   }
+
+  // Block trees/props
+  if (isPropBlocking(mx, my, data)) return false;
+
+  return true;
+}
+
+/**
+ * Specialty walkability for Wild Pokémon: Allows swimming but blocks props/cliffs.
+ */
+export function canWildPokemonWalkMicroTile(x, y, data) {
+  const mx = Math.floor(x);
+  const my = Math.floor(y);
+  if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
+    return false;
+  }
+  
+  const tile = getMicroTile(mx, my, data);
+  if (!tile) return false;
+
+  // 1. Basic Terrain / Cliff Check
+  // Note: We bypass isBaseTerrainSpriteWalkable because that blocks water.
+  // We only block cliffs (names starting with 'altura') or borders.
+  const sid = getBaseTerrainSpriteId(mx, my, data);
+  if (sid === null) return false;
+  
+  // Custom check for Wild: strictly allow water/lava centers, but block cliffs
+  // We check the terrain set name for "altura"
+  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
+  if (setName.startsWith('altura ')) return false;
+
+  // 2. Prop Blocking (Trees, buildings, etc)
+  if (isPropBlocking(mx, my, data)) return false;
 
   return true;
 }

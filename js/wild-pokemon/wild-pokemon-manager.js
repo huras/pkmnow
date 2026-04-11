@@ -6,7 +6,7 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
-import { canWalkMicroTile, getFoliageOverlayTileId, getLakeLotusFoliageWalkRole } from '../walkability.js';
+import { canWalkMicroTile, canWildPokemonWalkMicroTile, getFoliageOverlayTileId, getLakeLotusFoliageWalkRole } from '../walkability.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 
 const SKY_SPECIES = new Set([
@@ -120,25 +120,26 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (distP < beh.alertRadius) {
     if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
-      const nx = dxP / distP;
-      const ny = dyP / distP;
-      entity.vx = nx * beh.fleeSpeed;
-      entity.vy = ny * beh.fleeSpeed;
+      // Basic collision-aware steering: move away from player
+      const angToPlayer = Math.atan2(dyP, dxP);
+      const fleeAng = angToPlayer; // Straight away
+      steerTowardAngle(entity, fleeAng, beh.fleeSpeed, data);
+      
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
+      entity.targetX = null;
     } else if (beh.archetype === 'aggressive') {
       entity.aiState = 'approach';
       if (distP > beh.stopDist) {
-        const nx = -dxP / distP;
-        const ny = -dyP / distP;
-        entity.vx = nx * beh.approachSpeed;
-        entity.vy = ny * beh.approachSpeed;
+        const approachAng = Math.atan2(-dyP, -dxP); // Straight toward
+        steerTowardAngle(entity, approachAng, beh.approachSpeed, data);
       } else {
         entity.vx = 0;
         entity.vy = 0;
       }
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
+      entity.targetX = null;
     } else if (beh.archetype === 'neutral') {
       if (entity.aiState !== 'alert') {
         entity.aiState = 'alert';
@@ -193,8 +194,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
 
-  // Handle wander state locomotion
-  if (entity.aiState === 'wander') {
+    if (entity.aiState === 'wander') {
     if ((entity.idlePauseTimer || 0) > 0) {
       entity.idlePauseTimer -= dt;
       entity.vx = 0;
@@ -207,53 +207,60 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       return;
     }
 
-    entity.wanderTimer -= dt;
-    if (entity.wanderTimer <= 0) {
-      if (Math.random() < 0.34) {
-        entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
-        entity.wanderTimer = 0;
-        entity.vx = 0;
-        entity.vy = 0;
-        entity.animMoving = false;
-
-        // Random chance to be happy when idling!
-        if (Math.random() < 0.15 && entity.emotionType === null) {
-          setEmotion(entity, Math.random() < 0.5 ? 2 : 3, false); // ♪ or ♥
-        }
-        return;
-      }
-
-      entity.wanderTimer = WANDER_MOVE_MIN + Math.random() * WANDER_MOVE_EXTRA;
-      const baseAng = Math.random() * Math.PI * 2;
-      const sp = 0.18 + Math.random() * MAX_SPEED * 0.82;
-
-      let bestVx = Math.cos(baseAng) * sp;
-      let bestVy = Math.sin(baseAng) * sp;
-
-      // Try 4 orthogonal directions from base angle to find walkable path
-      for (let i = 0; i < 4; i++) {
-        const a = baseAng + (Math.PI / 2) * i;
-        const tvx = Math.cos(a) * sp;
-        const tvy = Math.sin(a) * sp;
-        if (canWalkMicroTile(entity.x + tvx * 0.5, entity.y + tvy * 0.5, data)) {
-          bestVx = tvx;
-          bestVy = tvy;
+    // Waypoint Logic: Pick a target and walk toward it
+    if (entity.targetX === null || entity.targetY === null) {
+      // Pick a random destination within WANDER_RADIUS that is walkable
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = Math.random() * WANDER_RADIUS;
+        const tx = entity.centerX + Math.cos(ang) * dist;
+        const ty = entity.centerY + Math.sin(ang) * dist;
+        if (canWildPokemonWalkMicroTile(tx, ty, data)) {
+          entity.targetX = tx;
+          entity.targetY = ty;
           break;
         }
       }
-      entity.vx = bestVx;
-      entity.vy = bestVy;
+      // If we couldn't find a destination, pause
+      if (entity.targetX === null) {
+        entity.idlePauseTimer = 1.0;
+        return;
+      }
     }
+
+    // Move toward target
+    const dxT = entity.targetX - entity.x;
+    const dyT = entity.targetY - entity.y;
+    const distT = Math.hypot(dxT, dyT);
+
+    if (distT < 0.2) {
+      // Reached destination!
+      entity.targetX = null;
+      entity.targetY = null;
+      entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
+      entity.vx = 0;
+      entity.vy = 0;
+      entity.animMoving = false;
+      
+      if (Math.random() < 0.15 && entity.emotionType === null) {
+        setEmotion(entity, Math.random() < 0.5 ? 2 : 3, false); // ♪ or ♥
+      }
+      return;
+    }
+
+    // Greedy steering toward target
+    const moveAng = Math.atan2(dyT, dxT);
+    steerTowardAngle(entity, moveAng, MAX_SPEED * 0.45, data);
   }
 
   // Apply velocity speculatively with terrain bounds checking
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
 
-  if (!canWalkMicroTile(nx, ny, data)) {
+  if (!canWildPokemonWalkMicroTile(nx, ny, data)) {
     entity.vx = 0;
     entity.vy = 0;
-    entity.wanderTimer = 0; // rethink next frame
+    entity.targetX = null;
 
     // Path blocked during locomotion -> Frustration/scribbles
     if (entity.aiState === 'wander' || entity.aiState === 'flee') {
@@ -263,6 +270,8 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.x = nx;
     entity.y = ny;
   }
+
+
 
   // Clamp wander radius
   const dx = entity.x - entity.centerX;
@@ -274,11 +283,12 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const clampedX = entity.centerX + nxc * WANDER_RADIUS;
     const clampedY = entity.centerY + nyc * WANDER_RADIUS;
 
-    if (canWalkMicroTile(clampedX, clampedY, data)) {
+    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data)) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
-
+    
+    entity.targetX = null; // Turn around
     const dot = entity.vx * nxc + entity.vy * nyc;
     if (dot > 0) {
       entity.vx -= nxc * dot * 1.75;
@@ -303,6 +313,35 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.facing = entity.vy > 0 ? 'down' : 'up';
     }
   }
+}
+
+/**
+ * Helper to steer toward an angle while avoiding obstacles.
+ */
+function steerTowardAngle(entity, targetAng, speed, data) {
+  // Try preferred direction first, then sweep neighbors
+  const angles = [
+    targetAng,
+    targetAng + Math.PI / 4,
+    targetAng - Math.PI / 4,
+    targetAng + Math.PI / 2,
+    targetAng - Math.PI / 2,
+  ];
+
+  for (const ang of angles) {
+    const vx = Math.cos(ang) * speed;
+    const vy = Math.sin(ang) * speed;
+    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.1, entity.y + vy * 0.1, data)) {
+      entity.vx = vx;
+      entity.vy = vy;
+      return;
+    }
+  }
+  
+  // Stuck? Just stop and rethink
+  entity.vx = 0;
+  entity.vy = 0;
+  entity.targetX = null; // Forces new waypoint
 }
 
 /**
@@ -387,14 +426,15 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     let spawnX = centerX + jx * 5;
     let spawnY = centerY + jy * 5;
 
-    // Attempt to snap to nearest walkable tile if initial spawn is blocked
-    if (!canWalkMicroTile(spawnX, spawnY, data)) {
+    // Attempt to find a valid walkable tile for wild pokemon (allows water/lava, blocks trees/cliffs)
+    if (!canWildPokemonWalkMicroTile(spawnX, spawnY, data)) {
       let found = false;
-      for (let r = 1; r <= 3; r++) {
+      // Search in expanding squares/circles
+      for (let r = 1; r <= 5; r++) { // Increased radius to 5
         for (let a = 0; a < 8; a++) {
           const cx = spawnX + Math.cos((a * Math.PI) / 4) * r;
           const cy = spawnY + Math.sin((a * Math.PI) / 4) * r;
-          if (canWalkMicroTile(cx, cy, data)) {
+          if (canWildPokemonWalkMicroTile(cx, cy, data)) {
             spawnX = cx;
             spawnY = cy;
             found = true;
@@ -403,6 +443,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         }
         if (found) break;
       }
+      if (!found) continue; // Skip spawning in this chunk if it's completely blocked (e.g. dense building/cliff)
     }
 
     // Determine Spawn Animation Type
@@ -455,7 +496,10 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       // SPAWN STATE
       spawnPhase: 0,
       isDespawning: false,
-      spawnType
+      spawnType,
+      // PATHFINDING
+      targetX: null,
+      targetY: null
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
