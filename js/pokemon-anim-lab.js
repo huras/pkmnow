@@ -12,6 +12,7 @@ import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell } from './tessellation-logic.js';
 import { loadTilesetImages } from './render.js';
+import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 
 const GEN1_COUNT = 151;
 
@@ -163,17 +164,28 @@ function setupLabPreviewZoomPan() {
   );
 
   tbody.addEventListener('input', (e) => {
-    const slider = e.target.closest?.('.lab-preview-pokemon-scale');
+    const slider = e.target.closest?.('.lab-preview-pokemon-height');
     if (!slider || !tbody.contains(slider)) return;
-    const stack = slider.closest('.lab-preview-stack');
-    const wrap = stack?.querySelector('.lab-preview-wrap');
-    if (!wrap) return;
-    const raw = parseFloat(slider.value);
-    if (!Number.isFinite(raw)) return;
-    const s = getLabPreviewViewState(wrap);
-    const v = Math.min(LAB_PREVIEW_POKEMON_SCALE_MAX, Math.max(LAB_PREVIEW_POKEMON_SCALE_MIN, raw));
-    s.pokemonLabScale = v;
-    if (Math.abs(v - raw) > 1e-6) slider.value = String(v);
+    const dexKey = slider.dataset.dex;
+    if (!dexKey) return;
+    
+    const val = parseFloat(slider.value);
+    if (!Number.isFinite(val)) return;
+    
+    // Update live state height
+    state.species[dexKey].tileHeight = val;
+    
+    // Update all sliders for this species in the row
+    const row = slider.closest('tr');
+    if (row) {
+      row.querySelectorAll(`.lab-preview-pokemon-height[data-dex="${dexKey}"]`).forEach(s => {
+        if (s !== slider) s.value = String(val);
+      });
+      row.querySelectorAll(`.lab-height-display[data-height-for="${dexKey}"]`).forEach(d => {
+        d.textContent = `${val.toFixed(1)} Tiles`;
+      });
+    }
+    updateScaleCell(dexKey);
   });
 
   const onDocPointerMove = (e) => {
@@ -388,29 +400,28 @@ function buildLabSceneBackdrop() {
   labSceneBackdrop = c;
 }
 
-function computeLabPokemonDraw(dexKey, mode, labPokemonScaleMul = 1) {
+function computeLabPokemonDraw(dexKey, mode) {
   const st = state.species[dexKey];
   const g = state.global;
-  const mul =
-    Number.isFinite(labPokemonScaleMul) && labPokemonScaleMul > 0 ? labPokemonScaleMul : 1;
+  
   if (!st) {
-    const dw = 24 * mul;
-    const dh = 30 * mul;
+    const dw = 24;
+    const dh = 30;
     return { dw, dh, pivotX: dw * 0.5, pivotY: dh * 0.5 };
   }
+
   const spec = mode === 'walk' ? st.walk : st.idle;
-  const gengar = state.species[padDex3(94)];
-  const gengarRefH = Math.max(1, gengar?.idle?.frameHeight || g.frameH);
-  const refH = Math.max(1, st.idle?.frameHeight || st.walk?.frameHeight || g.frameH);
-  const speciesFactor = Math.max(0.35, refH / gengarRefH);
-  const canonicalW = Math.max(1, st.idle?.frameWidth || st.walk?.frameWidth || spec.frameWidth);
+  const targetHeightTiles = st.tileHeight || 1.1;
+  const targetHeightPx = targetHeightTiles * PLAY_TILE_PX;
+
   const canonicalH = Math.max(1, st.idle?.frameHeight || st.walk?.frameHeight || spec.frameHeight);
-  const normalizedScale = g.scale * (g.frameH / canonicalH);
+  
   const mult = Number(st.displayScaleMultiplier);
   const m = Number.isFinite(mult) && mult > 0 ? mult : 1;
-  const finalScale = normalizedScale * speciesFactor * m * mul;
-  const worldDw = canonicalW * finalScale;
-  const worldDh = canonicalH * finalScale;
+  const finalScale = (targetHeightPx / canonicalH) * m;
+
+  const worldDw = (spec.frameWidth || 32) * finalScale;
+  const worldDh = (spec.frameHeight || 32) * finalScale;
   const k = LAB_TILE / PLAY_TILE_PX;
   const dw = worldDw * k;
   const dh = worldDh * k;
@@ -446,9 +457,11 @@ function defaultSpeciesEntry(dex) {
   const key = padDex3(dex);
   const meta = PMD_ANIM_METADATA[key];
   const name = getGen1SpeciesName(dex);
+  const tHeight = POKEMON_HEIGHTS[dex] || 1.1;
   if (meta?.idle && meta?.walk) {
     return {
       name,
+      tileHeight: tHeight,
       displayScaleMultiplier: 1,
       idle: deepClone(meta.idle),
       walk: deepClone(meta.walk)
@@ -456,6 +469,7 @@ function defaultSpeciesEntry(dex) {
   }
   return {
     name,
+    tileHeight: tHeight,
     displayScaleMultiplier: 1,
     idle: {
       frameWidth: PMD_MON_SHEET.frameW,
@@ -515,17 +529,16 @@ function canonicalBox(st) {
 function computeDisplayedFinalScale(state, dexKey) {
   const st = state.species[dexKey];
   if (!st) return 0;
-  const g = state.global;
-  const gengar = state.species[padDex3(94)];
-  const gengarRefH = Math.max(1, gengar?.idle?.frameHeight || g.frameH);
-  const refH = Math.max(1, st.idle?.frameHeight || st.walk?.frameHeight || g.frameH);
-  const speciesFactor = Math.max(0.35, refH / gengarRefH);
+  const targetHeightTiles = st.tileHeight || 1.1;
+  const targetHeightPx = targetHeightTiles * PLAY_TILE_PX;
+
   const { canonicalH } = canonicalBox(st);
   const ch = Math.max(1, canonicalH);
-  const normalizedScale = g.scale * (g.frameH / ch);
+  
   const mult = Number(st.displayScaleMultiplier);
   const m = Number.isFinite(mult) && mult > 0 ? mult : 1;
-  return normalizedScale * speciesFactor * m;
+  
+  return (targetHeightPx / ch) * m;
 }
 
 let state = buildInitialState();
@@ -630,7 +643,8 @@ function buildTable() {
               <canvas class="lab-preview" width="${LAB_PREVIEW_W}" height="${LAB_PREVIEW_H}" data-preview="1" data-dex="${d}" data-mode="idle" aria-label="Idle ${st.name}"></canvas>
             </div>
           </div>
-          <input type="range" class="lab-preview-pokemon-scale" min="${LAB_PREVIEW_POKEMON_SCALE_MIN}" max="${LAB_PREVIEW_POKEMON_SCALE_MAX}" step="0.05" value="1" aria-label="Escala Pokémon (só sprite) idle — ${escapeHtml(st.name)}" />
+          <div class="lab-height-display" data-height-for="${key}">${st.tileHeight.toFixed(1)} Tiles</div>
+          <input type="range" class="lab-preview-pokemon-height" min="0.5" max="15.0" step="0.1" value="${st.tileHeight}" data-dex="${key}" aria-label="Tile Height — ${escapeHtml(st.name)}" />
         </div>
       </td>
       <td class="lab-preview-td">
@@ -640,7 +654,8 @@ function buildTable() {
               <canvas class="lab-preview" width="${LAB_PREVIEW_W}" height="${LAB_PREVIEW_H}" data-preview="1" data-dex="${d}" data-mode="walk" aria-label="Walk ${st.name}"></canvas>
             </div>
           </div>
-          <input type="range" class="lab-preview-pokemon-scale" min="${LAB_PREVIEW_POKEMON_SCALE_MIN}" max="${LAB_PREVIEW_POKEMON_SCALE_MAX}" step="0.05" value="1" aria-label="Escala Pokémon (só sprite) walk — ${escapeHtml(st.name)}" />
+          <div class="lab-height-display" data-height-for="${key}">${st.tileHeight.toFixed(1)} Tiles</div>
+          <input type="range" class="lab-preview-pokemon-height" min="0.5" max="15.0" step="0.1" value="${st.tileHeight}" data-dex="${key}" aria-label="Tile Height — ${escapeHtml(st.name)}" />
         </div>
       </td>
       <td class="lab-mono" data-scale-for="${key}">${fScale.toFixed(3)}</td>
@@ -740,10 +755,7 @@ function drawPreviewCanvas(canvas, dexNum, mode, timeSec) {
   const sy = row * fh;
 
   const { playerAnchorX: pcx, playerAnchorY: pcy } = getLabPatchLayout();
-
-  const wrap = canvas.closest('.lab-preview-wrap');
-  const labPokemonMul = wrap ? getLabPreviewViewState(wrap).pokemonLabScale : 1;
-  const { dw, dh, pivotX, pivotY } = computeLabPokemonDraw(key, mode, labPokemonMul);
+  const { dw, dh, pivotX, pivotY } = computeLabPokemonDraw(key, mode);
   ctx.drawImage(
     sheet,
     sx,

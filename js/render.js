@@ -20,6 +20,7 @@ import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foli
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
+import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import {
   PALETTE_BASE_IMAGE_PATHS,
   paletteBaseSlugFromTerrainSetName,
@@ -152,7 +153,7 @@ export function render(canvas, data, options = {}) {
   const graph = data.graph;
 
   const appMode = options.settings?.appMode || 'map';
-  const player = options.settings?.player || {x:0, y:0};
+  const player = options.settings?.player || { x: 0, y: 0 };
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -648,57 +649,46 @@ export function render(canvas, data, options = {}) {
       const sw = Math.max(
         1,
         Number(modeMeta?.frameWidth) ||
-          Math.floor((sheet.naturalWidth || PMD_MON_SHEET.frameW * animCols) / animCols)
+        Math.floor((sheet.naturalWidth || PMD_MON_SHEET.frameW * animCols) / animCols)
       );
       const sh = Math.max(
         1,
         Number(modeMeta?.frameHeight) ||
-          Math.floor((sheet.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8)
+        Math.floor((sheet.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8)
       );
       return { sw, sh, animCols };
     };
 
-    /** Canonical PMD frame box per species (prefer idle), used to keep visual scale stable across idle/walk. */
-    const resolveCanonicalPmdBox = (wIdle, wWalk, dexId) => {
+    /** Canonical PMD frame box per species used to keep visual scale stable across idle/walk padding differences. */
+    const resolveCanonicalPmdH = (wIdle, wWalk, dexId) => {
       const meta = getDexAnimMeta(dexId);
       const idleCols = meta?.idle?.durations?.length || 8;
       const walkCols = meta?.walk?.durations?.length || 4;
-      const idleW = Number(meta?.idle?.frameWidth) ||
-        Math.floor(((wIdle?.naturalWidth || PMD_MON_SHEET.frameW * idleCols) / idleCols));
       const idleH = Number(meta?.idle?.frameHeight) ||
         Math.floor(((wIdle?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
-      const walkW = Number(meta?.walk?.frameWidth) ||
-        Math.floor(((wWalk?.naturalWidth || PMD_MON_SHEET.frameW * walkCols) / walkCols));
       const walkH = Number(meta?.walk?.frameHeight) ||
         Math.floor(((wWalk?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
 
-      const canonicalW = Math.max(1, idleW || walkW || PMD_MON_SHEET.frameW);
-      const canonicalH = Math.max(1, idleH || walkH || PMD_MON_SHEET.frameH);
-      return { canonicalW, canonicalH };
-    };
-
-    const gengarMeta = getDexAnimMeta(94);
-    const gengarRefH = Number(gengarMeta?.idle?.frameHeight) || PMD_MON_SHEET.frameH;
-
-    const getSpeciesScaleFactor = (dexId) => {
-      const meta = getDexAnimMeta(dexId);
-      const refH = Number(meta?.idle?.frameHeight) || Number(meta?.walk?.frameHeight) || PMD_MON_SHEET.frameH;
-      return Math.max(0.35, refH / gengarRefH);
+      return Math.max(1, idleH || walkH || PMD_MON_SHEET.frameH);
     };
 
     for (const we of wildList) {
       const { walk: wWalk, idle: wIdle } = getResolvedSheets(imageCache, we.dexId);
       if (!wWalk || !wIdle) continue;
       const wSheet = we.animMoving ? wWalk : wIdle;
+
       const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpec(wSheet, !!we.animMoving, we.dexId);
-      const { canonicalW, canonicalH } = resolveCanonicalPmdBox(wIdle, wWalk, we.dexId);
-      // Rule-of-three scaling with Gengar as reference = 1.0.
-      // Example: Onix (104h) vs Gengar (40h) => factor 2.6.
-      const speciesFactor = getSpeciesScaleFactor(we.dexId);
-      const normalizedScale = pmdScale * (PMD_MON_SHEET.frameH / canonicalH);
-      const finalScale = normalizedScale * speciesFactor;
-      const pmdDw = canonicalW * finalScale;
-      const pmdDh = canonicalH * finalScale;
+      const canonicalH = resolveCanonicalPmdH(wIdle, wWalk, we.dexId);
+
+      // Use the direct tile height defined in the heights database
+      const targetHeightTiles = POKEMON_HEIGHTS[we.dexId] || 1.1;
+      const targetHeightPx = targetHeightTiles * tileH;
+
+      const finalScale = targetHeightPx / canonicalH;
+
+      // Explicitly scale the actual source frame dims to prevent stretch distortion
+      const pmdDw = pmdSw * finalScale;
+      const pmdDh = pmdSh * finalScale;
       const pmdPivotX = pmdDw * 0.5;
       const pmdPivotY = pmdDh * PMD_MON_SHEET.pivotYFrac;
       const wCol = (we.animFrame ?? 0) % animCols;
@@ -739,18 +729,18 @@ export function render(canvas, data, options = {}) {
           const eCols = 8, eRows = 10;
           const eSw = Math.floor(emoImg.naturalWidth / eCols);
           const eSh = Math.floor(emoImg.naturalHeight / eRows);
-          
+
           // Animate linearly over 0.8s
           const animDur = 0.8;
           let progress = we.emotionAge / animDur;
           if (progress > 1.0) progress = 1.0;
-          
+
           const frameIndex = Math.min(eCols - 1, Math.floor(progress * eCols));
           const sx = frameIndex * eSw;
           const sy = we.emotionType * eSh;
-          
+
           // Hover slightly above the creature's head
-          const drawW = eSw * 1.25 * (tileW / 32); 
+          const drawW = eSw * 1.25 * (tileW / 32);
           const drawH = eSh * 1.25 * (tileW / 32);
           const px = snapPx(wcx - drawW * 0.5);
           // top of sprite = wcy - pmdPivotY; offset it UP by ~80% of drawH
@@ -781,10 +771,13 @@ export function render(canvas, data, options = {}) {
       const sx = frameCol * sw;
       const sy = frameRow * sh;
 
-      // Global PMD scale (shared with wild baseline)
-      const gengarScale = PMD_MON_SHEET.scale;
-      const dw = sw * gengarScale;
-      const dh = sh * gengarScale;
+      // Scale based on the heights table for consistency
+      const targetHeightTiles = POKEMON_HEIGHTS[94] || 1.1; 
+      const targetHeightPx = targetHeightTiles * tileH;
+      const finalScale = targetHeightPx / sh;
+
+      const dw = sw * finalScale;
+      const dh = sh * finalScale;
 
       // Pivot Científico: Gengar #094 é "baixo" no sprite de 40px.
       // Ajustado para 0.48 para trazer o corpo 1 tile (40px) para baixo.
@@ -829,7 +822,7 @@ export function render(canvas, data, options = {}) {
         );
       } else {
         // Fallback
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH*0.3, tileW*0.3, tileH*0.15, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(pcx, pcy + tileH * 0.3, tileW * 0.3, tileH * 0.15, 0, 0, Math.PI * 2); ctx.fill();
       }
     }
 
@@ -841,10 +834,10 @@ export function render(canvas, data, options = {}) {
       const my = overlayMy + dy;
       if (mx < 0 || my < 0 || mx >= microW || my >= microH) continue;
       if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
-      
+
       const isEw = (dx === 1 && dy === 0) || (dx === -1 && dy === 0);
       if (isEw && !shouldDrawPlayerOverlay) continue;
-      
+
       const tile = getCached(mx, my);
       if (!passesAbovePlayerTileGate(mx, my, tile)) continue;
       const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
@@ -1131,7 +1124,7 @@ function renderMinimap(canvas, data, player) {
   const tileW = w / data.width, tileH = h / data.height;
   const macroPx = player.x / CHUNK_SIZE, macroPy = player.y / CHUNK_SIZE;
   ctx.fillStyle = '#ff0000'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW*2), 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW * 2), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 }
 
 /** Vizinho cardinal à mesma altura com outra paleta rocky-style (não grama / Dirty / cidade). */
@@ -1235,7 +1228,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
     for (let mx = startX; mx < endX; mx++) {
       const tile = getCachedTile(mx, my);
       if (!tile) continue;
-      
+
       // FALLBACK: Draw biome background color first
       const biome = Object.values(BIOMES).find(b => b.id === tile.biomeId);
       if (biome) {
@@ -1305,7 +1298,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
           }
           const tileId = role ? (biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId) : null;
           if (img && tileId != null) {
-            octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+            octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
           }
         }
 
@@ -1318,9 +1311,9 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             // "CLEAN ROADS" logic: Only allow grass-based foliage under road/stairs (block sand/rocky/orange/volcano)
             let allowFoliage = true;
             if (tile.isRoad) {
-                const lowName = foliageSetName.toLowerCase();
-                const isGrassFoliage = lowName.includes('grass'); 
-                if (!isGrassFoliage) allowFoliage = false;
+              const lowName = foliageSetName.toLowerCase();
+              const isGrassFoliage = lowName.includes('grass');
+              if (!isGrassFoliage) allowFoliage = false;
             }
 
             if (allowFoliage) {
@@ -1375,7 +1368,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveRoad, roadSet.type);
             const tileId = role ? (roadSet.roles[role] ?? roadSet.roles['CENTER'] ?? roadSet.centerId) : null;
             if (img && tileId != null) {
-              octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+              octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
             }
           }
         }
@@ -1395,7 +1388,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
               const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveStair, stairSet.type);
               const tileId = role ? (stairSet.roles[role] ?? stairSet.roles['CENTER'] ?? stairSet.centerId) : null;
               if (tileId != null) {
-                octx.drawImage(img,(tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
+                octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
               }
             }
           }
@@ -1447,7 +1440,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
   for (let myScan = startY - 4; myScan < endY; myScan++) {
     for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
       if (mxScan < 0 || myScan < 0 || mxScan >= data.width * CHUNK_SIZE || myScan >= data.height * CHUNK_SIZE) continue;
-      
+
       const tile = getCachedTile(mxScan, myScan);
       if (!tile || tile.heightStep < 1) continue;
 
@@ -1464,7 +1457,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
         if (roleOrig === 'CENTER') {
           const rx = mxScan + 1;
           const hRight = getCachedTile(rx, myScan)?.heightStep;
-          
+
           if (hRight === tile.heightStep) {
             const ids = TREE_TILES[treeType];
             if (ids) {
@@ -1484,125 +1477,125 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
       // 2. Scatter Objects
       if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.urbanBuilding) {
         const isFormalNeighbor = (tx, ty) =>
-           !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-        
+          !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+
         if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
-           if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getCachedTile(c, r), validOriginMemo)) {
-              const items = BIOME_VEGETATION[tile.biomeId] || [];
-              const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
-              const objSet = OBJECT_SETS[itemKey];
-              if (objSet) {
-                const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
-                const { cols, rows } = parseShape(objSet.shape);
+          if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getCachedTile(c, r), validOriginMemo)) {
+            const items = BIOME_VEGETATION[tile.biomeId] || [];
+            const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            const objSet = OBJECT_SETS[itemKey];
+            if (objSet) {
+              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+              const { cols, rows } = parseShape(objSet.shape);
 
-                // Suppression rule: No grass under this scatter footprint
-                for (let dy = 0; dy < rows; dy++) {
-                   for (let dx = 0; dx < cols; dx++) {
-                      const fx = mxScan + dx;
-                      const fy = myScan + dy;
-                      if (fx >= startX && fx < endX && fy >= startY && fy < endY) {
-                         suppressedSet.add(`${fx % PLAY_CHUNK_SIZE},${fy % PLAY_CHUNK_SIZE}`);
-                      }
-                   }
+              // Suppression rule: No grass under this scatter footprint
+              for (let dy = 0; dy < rows; dy++) {
+                for (let dx = 0; dx < cols; dx++) {
+                  const fx = mxScan + dx;
+                  const fy = myScan + dy;
+                  if (fx >= startX && fx < endX && fy >= startY && fy < endY) {
+                    suppressedSet.add(`${fx % PLAY_CHUNK_SIZE},${fy % PLAY_CHUNK_SIZE}`);
+                  }
                 }
+              }
 
-                if (base?.ids?.length) {
-                  for (let idx = 0; idx < base.ids.length; idx++) {
-                    const ox = idx % cols;
-                    const oy = Math.floor(idx / cols);
-                    const tx = mxScan + ox;
-                    const ty = myScan + oy;
-                    
-                    // Fragment within current chunk bounds?
-                    if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-                       const destTile = getCachedTile(tx, ty);
-                       if (destTile?.heightStep === tile.heightStep) {
-                          let allowDest = true;
-                          if (ox > 0) {
-                             const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
-                             if (setForRole) {
-                                const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-                                const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
-                                allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
-                             }
-                          } else {
-                             const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-                             if (setForRole) {
-                                const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-                                if (getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') allowDest = false;
-                             }
-                          }
+              if (base?.ids?.length) {
+                for (let idx = 0; idx < base.ids.length; idx++) {
+                  const ox = idx % cols;
+                  const oy = Math.floor(idx / cols);
+                  const tx = mxScan + ox;
+                  const ty = myScan + oy;
 
-                          if (allowDest) {
-                             drawScatterBaseFromObjectSet(
-                               objSet,
-                               base.ids[idx],
-                               (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
-                               (ty - startY) * tileH
-                             );
-                          }
-                       }
+                  // Fragment within current chunk bounds?
+                  if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
+                    const destTile = getCachedTile(tx, ty);
+                    if (destTile?.heightStep === tile.heightStep) {
+                      let allowDest = true;
+                      if (ox > 0) {
+                        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
+                        if (setForRole) {
+                          const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
+                          const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+                          allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
+                        }
+                      } else {
+                        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+                        if (setForRole) {
+                          const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
+                          if (getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') allowDest = false;
+                        }
+                      }
+
+                      if (allowDest) {
+                        drawScatterBaseFromObjectSet(
+                          objSet,
+                          base.ids[idx],
+                          (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
+                          (ty - startY) * tileH
+                        );
+                      }
                     }
                   }
                 }
               }
-           }
+            }
+          }
         }
       }
-       // 3. Urban Buildings (Deterministic CORE)
-       if (tile.urbanBuilding && mxScan === tile.urbanBuilding.ox && myScan === tile.urbanBuilding.oy) {
-          const objSet = OBJECT_SETS[tile.urbanBuilding.type];
-          if (objSet) {
-             const img = imageCache.get(objSet.file);
-             if (img) {
-                const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
-                const pcCols = 15, natureCols = 57;
-                const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
+      // 3. Urban Buildings (Deterministic CORE)
+      if (tile.urbanBuilding && mxScan === tile.urbanBuilding.ox && myScan === tile.urbanBuilding.oy) {
+        const objSet = OBJECT_SETS[tile.urbanBuilding.type];
+        if (objSet) {
+          const img = imageCache.get(objSet.file);
+          if (img) {
+            const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
+            const pcCols = 15, natureCols = 57;
+            const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
 
-                for (let r = 0; r < rowsObj; r++) {
-                   for (let c = 0; c < colsObj; c++) {
-                      const rx = mxScan + c, ry = myScan + r;
-                      if (rx < startX || rx >= endX || ry < startY || ry >= endY) continue;
+            for (let r = 0; r < rowsObj; r++) {
+              for (let c = 0; c < colsObj; c++) {
+                const rx = mxScan + c, ry = myScan + r;
+                if (rx < startX || rx >= endX || ry < startY || ry >= endY) continue;
 
-                      let isCore = tile.urbanBuilding.type.includes('pokecenter') ? (r >= 3) : (r >= 2);
-                      if (isCore) {
-                         let drawId = null;
-                         if (tile.urbanBuilding.type.includes('pokecenter')) {
-                            if (r === 3) drawId = 45 + c;
-                            else if (r === 4) drawId = 60 + c;
-                            else if (r === 5) drawId = (c === 2) ? 77 : 75 + c;
-                         } else if (tile.urbanBuilding.type.includes('mart')) {
-                            if (r === 2) drawId = 50 + c;
-                            else if (r === 3) drawId = 65 + c;
-                            else if (r === 4) drawId = (c === 1) ? 81 : 80 + c;
-                         } else { // House
-                            if (r === 2) drawId = 120 + c;
-                            else if (r === 3) drawId = 135 + c;
-                            else if (r === 4) drawId = (c === 1) ? 151 : 150 + c;
-                         }
+                let isCore = tile.urbanBuilding.type.includes('pokecenter') ? (r >= 3) : (r >= 2);
+                if (isCore) {
+                  let drawId = null;
+                  if (tile.urbanBuilding.type.includes('pokecenter')) {
+                    if (r === 3) drawId = 45 + c;
+                    else if (r === 4) drawId = 60 + c;
+                    else if (r === 5) drawId = (c === 2) ? 77 : 75 + c;
+                  } else if (tile.urbanBuilding.type.includes('mart')) {
+                    if (r === 2) drawId = 50 + c;
+                    else if (r === 3) drawId = 65 + c;
+                    else if (r === 4) drawId = (c === 1) ? 81 : 80 + c;
+                  } else { // House
+                    if (r === 2) drawId = 120 + c;
+                    else if (r === 3) drawId = 135 + c;
+                    else if (r === 4) drawId = (c === 1) ? 151 : 150 + c;
+                  }
 
-                         if (drawId != null) {
-                            const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
-                            octx.drawImage(img, sx, sy, 16, 16, Math.round((rx - startX) * tileW), Math.round((ry - startY) * tileH), twNat, thNat);
-                         }
-                      }
-                   }
+                  if (drawId != null) {
+                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
+                    octx.drawImage(img, sx, sy, 16, 16, Math.round((rx - startX) * tileW), Math.round((ry - startY) * tileH), twNat, thNat);
+                  }
                 }
-             }
+              }
+            }
           }
-       }
+        }
+      }
     }
   }
 
   // PASS 3: CLUMP SUPPRESSION (Suppress grass clumps where noise is high, avoiding dense overlap)
   for (let my = startY; my < endY; my++) {
     for (let mx = startX; mx < endX; mx++) {
-       const t = getCachedTile(mx, my);
-       if (!t || t.isRoad || t.isCity) continue;
-       if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
-       if (foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
-          suppressedSet.add(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`);
-       }
+      const t = getCachedTile(mx, my);
+      if (!t || t.isRoad || t.isCity) continue;
+      if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
+      if (foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+        suppressedSet.add(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`);
+      }
     }
   }
 
