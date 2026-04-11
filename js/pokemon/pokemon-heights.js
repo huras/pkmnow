@@ -1,5 +1,5 @@
 export const POKEMON_HEIGHTS = {
-  1: 2.5,   // Bulbasaur
+  1: 2.1,   // Bulbasaur
   2: 3.5,   // Ivysaur
   3: 3.5,   // Venusaur
   4: 2.5,   // Charmander
@@ -8,22 +8,22 @@ export const POKEMON_HEIGHTS = {
   7: 2.5,   // Squirtle
   8: 3.5,   // Wartortle
   9: 3.5,   // Blastoise
-  10: 2.5,  // Caterpie
-  11: 2.5,  // Metapod
+  10: 2.0,  // Caterpie
+  11: 2.1,  // Metapod
   12: 5.0,  // Butterfree
   13: 2.5,  // Weedle
   14: 2.5,  // Kakuna
   15: 3,  // Beedrill
-  16: 2.5,  // Pidgey
+  16: 2.0,  // Pidgey
   17: 3.2,  // Pidgeotto
   18: 3.7,  // Pidgeot
-  19: 2.0,  // Rattata
+  19: 1.6,  // Rattata
   20: 3.5,  // Raticate
   21: 2.5,  // Spearow
   22: 4.7,  // Fearow
   23: 2.5,  // Ekans
   24: 3.5,  // Arbok
-  25: 2.5,  // Pikachu
+  25: 2.9,  // Pikachu
   26: 3.5,  // Raichu
   27: 2.5,  // Sandshrew
   28: 3.5,  // Sandslash
@@ -41,7 +41,7 @@ export const POKEMON_HEIGHTS = {
   40: 3.5,  // Wigglytuff
   41: 3.7,  // Zubat
   42: 4.1,  // Golbat
-  43: 2.4,  // Oddish
+  43: 2.0,  // Oddish
   44: 2.1,  // Gloom
   45: 3.5,  // Vileplume
   46: 1.5,  // Paras
@@ -67,12 +67,12 @@ export const POKEMON_HEIGHTS = {
   66: 2.5,  // Machop
   67: 3.5,  // Machoke
   68: 3.5,  // Machamp
-  69: 2.5,  // Bellsprout
+  69: 2.15,  // Bellsprout
   70: 3.1,  // Weepinbell
   71: 5.7,  // Victreebel
   72: 2.5,  // Tentacool
   73: 7.9,  // Tentacruel
-  74: 2.1,  // Geodude
+  74: 1.7,  // Geodude
   75: 5.1,  // Graveler
   76: 5.2,  // Golem
   77: 2.6,  // Ponyta
@@ -92,8 +92,8 @@ export const POKEMON_HEIGHTS = {
   91: 4.3,  // Cloyster
   92: 2.5,  // Gastly
   93: 3.5,  // Haunter
-  94: 3.5,  // Gengar
-  95: 11,  // Onix
+  94: 3.1,  // Gengar
+  95: 9,  // Onix
   96: 3.1,  // Drowzee
   97: 3.5,  // Hypno
   98: 2.5,  // Krabby
@@ -126,7 +126,7 @@ export const POKEMON_HEIGHTS = {
   125: 3.5, // Electabuzz
   126: 3.5, // Magmar
   127: 3.5, // Pinsir
-  128: 4.2, // Tauros
+  128: 3.4, // Tauros
   129: 2.5, // Magikarp
   130: 12, // Gyarados
   131: 3.5, // Lapras
@@ -142,9 +142,9 @@ export const POKEMON_HEIGHTS = {
   141: 3.5, // Kabutops
   142: 6, // Aerodactyl
   143: 6, // Snorlax
-  144: 6, // Articuno
-  145: 6, // Zapdos
-  146: 6, // Moltres
+  144: 7, // Articuno
+  145: 7, // Zapdos
+  146: 7, // Moltres
   147: 2.5, // Dratini
   148: 3.5, // Dragonair
   149: 4.2, // Dragonite

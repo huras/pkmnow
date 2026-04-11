@@ -6,8 +6,22 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
-import { canWalkMicroTile } from '../walkability.js';
+import { canWalkMicroTile, getFoliageOverlayTileId, getLakeLotusFoliageWalkRole } from '../walkability.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
+
+const SKY_SPECIES = new Set([
+  6,   // Charizard
+  12,  // Butterfree
+  15,  // Beedrill
+  16, 17, 18, // Pidgey line
+  21, 22, // Spearow line
+  41, 42, // Zubat line
+  49,  // Venomoth
+  92, 93, 94, // Gengar line (ghosts float)
+  142, // Aerodactyl
+  144, 145, 146, // Birds
+  149  // Dragonite
+]);
 
 /** Janela 3×3 de overview tiles (macro) em torno do player. */
 export const WILD_WINDOW_RADIUS = 2;
@@ -137,6 +151,14 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.aiState = 'wander';
   }
 
+  // Pokémon that are still spawning or already despawning ignore interactions
+  if ((entity.spawnPhase ?? 1) < 0.5 || entity.isDespawning) {
+    entity.vx = 0;
+    entity.vy = 0;
+    entity.animMoving = false;
+    return;
+  }
+
   // Handle emotion triggers on state transition
   if (prevState !== entity.aiState) {
     if (entity.aiState === 'flee') {
@@ -193,7 +215,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vx = 0;
         entity.vy = 0;
         entity.animMoving = false;
-        
+
         // Random chance to be happy when idling!
         if (Math.random() < 0.15 && entity.emotionType === null) {
           setEmotion(entity, Math.random() < 0.5 ? 2 : 3, false); // ♪ or ♥
@@ -204,10 +226,10 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.wanderTimer = WANDER_MOVE_MIN + Math.random() * WANDER_MOVE_EXTRA;
       const baseAng = Math.random() * Math.PI * 2;
       const sp = 0.18 + Math.random() * MAX_SPEED * 0.82;
-      
+
       let bestVx = Math.cos(baseAng) * sp;
       let bestVy = Math.sin(baseAng) * sp;
-      
+
       // Try 4 orthogonal directions from base angle to find walkable path
       for (let i = 0; i < 4; i++) {
         const a = baseAng + (Math.PI / 2) * i;
@@ -227,12 +249,12 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   // Apply velocity speculatively with terrain bounds checking
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
-  
+
   if (!canWalkMicroTile(nx, ny, data)) {
     entity.vx = 0;
     entity.vy = 0;
     entity.wanderTimer = 0; // rethink next frame
-    
+
     // Path blocked during locomotion -> Frustration/scribbles
     if (entity.aiState === 'wander' || entity.aiState === 'flee') {
       setEmotion(entity, 6, false); // 💬
@@ -251,12 +273,12 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const nyc = dy / dist;
     const clampedX = entity.centerX + nxc * WANDER_RADIUS;
     const clampedY = entity.centerY + nyc * WANDER_RADIUS;
-    
+
     if (canWalkMicroTile(clampedX, clampedY, data)) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
-    
+
     const dot = entity.vx * nxc + entity.vy * nyc;
     if (dot > 0) {
       entity.vx -= nxc * dot * 1.75;
@@ -307,8 +329,10 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     }
   }
 
-  for (const k of entitiesByKey.keys()) {
-    if (!needed.has(k)) entitiesByKey.delete(k);
+  for (const [k, ent] of entitiesByKey.entries()) {
+    if (!needed.has(k)) {
+      ent.isDespawning = true;
+    }
   }
 
   /** @type {Map<number, Set<number>>} biomeId -> used encounter indexes in current window */
@@ -324,7 +348,11 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
   }
 
   for (const k of needed) {
-    if (entitiesByKey.has(k)) continue;
+    const existing = entitiesByKey.get(k);
+    if (existing) {
+      existing.isDespawning = false; // Restore if it was about to vanish
+      continue;
+    }
 
     const [mx, my] = k.split(',').map(Number);
     const biomeId = data.biomes[my * w + mx];
@@ -358,7 +386,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
 
     let spawnX = centerX + jx * 5;
     let spawnY = centerY + jy * 5;
-    
+
     // Attempt to snap to nearest walkable tile if initial spawn is blocked
     if (!canWalkMicroTile(spawnX, spawnY, data)) {
       let found = false;
@@ -374,6 +402,22 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
           }
         }
         if (found) break;
+      }
+    }
+
+    // Determine Spawn Animation Type
+    let spawnType = 'land';
+    if (SKY_SPECIES.has(dex)) {
+      spawnType = 'sky';
+    } else {
+      const overlayId = getFoliageOverlayTileId(Math.floor(spawnX), Math.floor(spawnY), data);
+      const lakeRole = getLakeLotusFoliageWalkRole(Math.floor(spawnX), Math.floor(spawnY), data);
+
+      const isWater = (overlayId !== null) || (lakeRole !== null);
+      if (isWater) {
+        spawnType = 'water';
+      } else if (overlayId !== null) { // If not water but has overlay, it's likely grass/foliage
+        spawnType = 'grass';
       }
     }
 
@@ -407,7 +451,11 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       alertTimer: 0,
       emotionType: spawnSleep ? 9 : null, // 9 = Zzz
       emotionAge: 0,
-      emotionPersist: spawnSleep // Sleep persists until woken
+      emotionPersist: spawnSleep, // Sleep persists until woken
+      // SPAWN STATE
+      spawnPhase: 0,
+      isDespawning: false,
+      spawnType
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
@@ -416,10 +464,28 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
 
 export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
-  for (const e of entitiesByKey.values()) {
+  const toDelete = [];
+  for (const [k, e] of entitiesByKey.entries()) {
+    const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
+    const isCloseEnough = distToPlayer < 24;
+
+    // Transition spawn phase
+    if (e.isDespawning) {
+      // Faster despawn to clean up quickly
+      e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - dt * 2.0);
+      if (e.spawnPhase <= 0) toDelete.push(k);
+    } else {
+      // Only start the spawn animation when the player is relatively close (within view distance)
+      if (isCloseEnough || e.spawnPhase > 0) {
+        // Slower spawn (approx 1.4s) for better visual impact
+        e.spawnPhase = Math.min(1, (e.spawnPhase ?? 0) + dt * 0.7);
+      }
+    }
+
     updateWildMotion(e, dt, data, playerX, playerY);
     advanceWildPokemonAnim(e, dt);
   }
+  for (const k of toDelete) entitiesByKey.delete(k);
 }
 
 export function getWildPokemonEntities() {

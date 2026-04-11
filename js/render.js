@@ -697,16 +697,33 @@ export function render(canvas, data, options = {}) {
       const wsy = wRow * pmdSh;
       const wcx = snapPx((we.x + 0.5) * tileW);
       const wcy = snapPx((we.y + 0.5) * tileH);
+
+      ctx.save();
+      const phase = we.spawnPhase ?? 1;
+      ctx.globalAlpha = phase;
+
+      let spawnYOffset = 0;
+      if (we.spawnType === 'sky') {
+        spawnYOffset = (1 - phase) * (-4 * tileH);
+      } else if (we.spawnType === 'water') {
+        spawnYOffset = (1 - phase) * (0.8 * tileH);
+      } else {
+        // Land/Grass default: subtle rise
+        spawnYOffset = (1 - phase) * (0.2 * tileH);
+      }
+
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
       ctx.beginPath();
-      ctx.ellipse(wcx, wcy, tileW * 0.38, tileH * 0.1, 0, 0, Math.PI * 2);
+      ctx.ellipse(wcx, wcy + (we.spawnType === 'sky' ? 0 : spawnYOffset), tileW * 0.38, tileH * 0.1, 0, 0, Math.PI * 2);
       ctx.fill();
+
       ctx.drawImage(
         wSheet,
         wsx, wsy, pmdSw, pmdSh,
-        snapPx(wcx - pmdPivotX), snapPx(wcy - pmdPivotY),
+        snapPx(wcx - pmdPivotX), snapPx(wcy - pmdPivotY + spawnYOffset),
         snapPx(pmdDw), snapPx(pmdDh)
       );
+      ctx.restore();
 
       // Wild grass overlay strip (same depth cue idea used for player).
       const wmx = Math.floor(we.x);
