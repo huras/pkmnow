@@ -91,7 +91,8 @@ export async function loadTilesetImages() {
     ...allPaletteBaseTransitionImagePaths(),
     'tilesets/PokemonCenter.png',
     'tilesets/gengar_walk.png',
-    'tilesets/gengar_idle.png'
+    'tilesets/gengar_idle.png',
+    'tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png'
   ];
 
   const promises = sources.map((src) => {
@@ -728,6 +729,34 @@ export function render(canvas, data, options = {}) {
           const wtx = Math.floor(wmx * tileW);
           const wty = Math.floor(wmy * tileH);
           drawGrass5aForCell(wmx, wmy, wTile, wtw, wth, wtx, wty, 'playerTopOverlay');
+        }
+      }
+
+      // 🎈 Emotion Balloon Overlay
+      if (we.emotionType !== null && (typeof we.emotionType === 'number')) {
+        const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
+        if (emoImg && emoImg.naturalWidth) {
+          const eCols = 8, eRows = 10;
+          const eSw = Math.floor(emoImg.naturalWidth / eCols);
+          const eSh = Math.floor(emoImg.naturalHeight / eRows);
+          
+          // Animate linearly over 0.8s
+          const animDur = 0.8;
+          let progress = we.emotionAge / animDur;
+          if (progress > 1.0) progress = 1.0;
+          
+          const frameIndex = Math.min(eCols - 1, Math.floor(progress * eCols));
+          const sx = frameIndex * eSw;
+          const sy = we.emotionType * eSh;
+          
+          // Hover slightly above the creature's head
+          const drawW = eSw * 1.25 * (tileW / 32); 
+          const drawH = eSh * 1.25 * (tileW / 32);
+          const px = snapPx(wcx - drawW * 0.5);
+          // top of sprite = wcy - pmdPivotY; offset it UP by ~80% of drawH
+          const py = snapPx(wcy - pmdPivotY - drawH * 0.8);
+
+          ctx.drawImage(emoImg, sx, sy, eSw, eSh, px, py, Math.ceil(drawW), Math.ceil(drawH));
         }
       }
     }

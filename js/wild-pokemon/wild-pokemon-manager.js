@@ -64,6 +64,23 @@ function advanceWildPokemonAnim(entity, dt) {
     const loopTick = entity.idleTimer % total;
     entity.animFrame = pickAnimFrame(seq, loopTick);
   }
+
+  // Handle emotion balloon animation timer
+  if (entity.emotionType !== null) {
+    entity.emotionAge += dt;
+    // If not persistent, the balloon vanishes after completing its animation (1.0s to be safe)
+    if (!entity.emotionPersist && entity.emotionAge > 1.2) {
+      entity.emotionType = null;
+    }
+  }
+}
+
+function setEmotion(entity, type, persist = false) {
+  // Prevent spamming the same emotion if already active
+  if (entity.emotionType === type && entity.emotionAge < 2.0) return;
+  entity.emotionType = type;
+  entity.emotionAge = 0;
+  entity.emotionPersist = persist;
 }
 
 function updateWildMotion(entity, dt, data, playerX, playerY) {
@@ -71,6 +88,19 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
   const distP = Math.hypot(dxP, dyP);
+
+  const prevState = entity.aiState;
+
+  // Wake up sleepers!
+  if (entity.aiState === 'sleep') {
+    if (distP < beh.alertRadius) {
+      entity.aiState = 'alert';
+      entity.alertTimer = 1.0;
+      setEmotion(entity, 0, true); // !
+      entity.animMoving = false;
+    }
+    return; // Don't wander while sleeping
+  }
 
   // Player Awareness State Machine
   if (distP < beh.alertRadius) {
@@ -103,8 +133,26 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vy = 0;
       }
     }
-  } else if (distP >= beh.alertRadius * 1.5) {
+  } else if (distP >= beh.alertRadius * 1.5 && entity.aiState !== 'sleep') {
     entity.aiState = 'wander';
+  }
+
+  // Handle emotion triggers on state transition
+  if (prevState !== entity.aiState) {
+    if (entity.aiState === 'flee') {
+      setEmotion(entity, 5, true); // Sweat drop 💧 while fully fleeing
+    } else if (entity.aiState === 'approach') {
+      setEmotion(entity, 4, true); // Angry 💢
+    } else if (entity.aiState === 'alert') {
+      setEmotion(entity, 0, true); // Exclamation ! (holds while staring)
+    } else if (entity.aiState === 'wander' && prevState !== 'sleep') {
+      setEmotion(entity, 1, false); // Question ? (lost track)
+    }
+  }
+
+  // Check if staring too long (almost done)
+  if (entity.aiState === 'alert' && entity.alertTimer < 0.3 && entity.emotionType === 0) {
+    setEmotion(entity, 7, false); // Ellipsis ...
   }
 
   // Handle alert/stare state
@@ -145,6 +193,11 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vx = 0;
         entity.vy = 0;
         entity.animMoving = false;
+        
+        // Random chance to be happy when idling!
+        if (Math.random() < 0.15 && entity.emotionType === null) {
+          setEmotion(entity, Math.random() < 0.5 ? 2 : 3, false); // ♪ or ♥
+        }
         return;
       }
 
@@ -179,6 +232,11 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.vx = 0;
     entity.vy = 0;
     entity.wanderTimer = 0; // rethink next frame
+    
+    // Path blocked during locomotion -> Frustration/scribbles
+    if (entity.aiState === 'wander' || entity.aiState === 'flee') {
+      setEmotion(entity, 6, false); // 💬
+    }
   } else {
     entity.x = nx;
     entity.y = ny;
@@ -319,6 +377,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       }
     }
 
+    // 15% chance to spawn sleeping (if they don't immediately wake up)
+    const spawnSleep = Math.random() < 0.15;
+
     const entity = {
       key: k,
       macroX: mx,
@@ -342,8 +403,11 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       idlePauseTimer: 0,
       animMoving: false,
       behavior: getSpeciesBehavior(dex),
-      aiState: 'wander',
-      alertTimer: 0
+      aiState: spawnSleep ? 'sleep' : 'wander',
+      alertTimer: 0,
+      emotionType: spawnSleep ? 9 : null, // 9 = Zzz
+      emotionAge: 0,
+      emotionPersist: spawnSleep // Sleep persists until woken
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
