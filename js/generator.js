@@ -5,6 +5,7 @@ import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
 import { applyMorphologicalCleanup } from './tessellation-logic.js';
 import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
+import { buildCityLayouts } from './city-layout.js';
 
 export const DEFAULT_CONFIG = {
   waterLevel: 0.21,
@@ -255,6 +256,9 @@ export function generate(seedInput, customConfig = {}) {
     }
   }
 
+  // City layouts (pre-computed building positions, inner-city paths, terracing)
+  const cityData = buildCityLayouts(graph, { width, height, cells: elevation, seed: seedSnapshot, config }, seedSnapshot);
+
   // Landmarks
   const landmarks = placeLandmarks(nextRng, width, height, biomes, anomaly, graph);
 
@@ -275,6 +279,7 @@ export function generate(seedInput, customConfig = {}) {
     roadMasks,
     cellImportance,
     landmarks,
+    cityData,
     config
   };
 }

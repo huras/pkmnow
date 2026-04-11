@@ -3002,13 +3002,15 @@ TERRAIN_SETS["cemented-pavement"] = {
   }
 };
 TERRAIN_SETS["detailed-small-bricks-pavement"] = {
-  "type": "conc-conv-d",
+  "type": "conc-conv-a",
   "centerId": 2629,
   "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
   "roles": {
     "OUT_NW": 2571, "EDGE_N": 2572, "OUT_NE": 2573,
     "EDGE_W": 2628, "CENTER": 2629, "EDGE_E": 2630,
-    "OUT_SW": 2685, "EDGE_S": 2686, "OUT_SE": 2687
+    "IN_SE": 2631, "IN_SW": 2632,
+    "OUT_SW": 2685, "EDGE_S": 2686, "OUT_SE": 2687,
+    "IN_NE": 2688, "IN_NW": 2689
   }
 };
 TERRAIN_SETS["cidade chao"] = TERRAIN_SETS["detailed-small-bricks-pavement"];

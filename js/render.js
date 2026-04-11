@@ -936,37 +936,84 @@ export function render(canvas, data, options = {}) {
         }
       }
 
+      // ── Urban building rendering (Pokémon Center / Mart / Houses) ──
+      // Uses PokemonCenter.png tileset (15 cols × 16px tiles)
       if (tile.urbanBuilding && mx === tile.urbanBuilding.ox && my === tile.urbanBuilding.oy) {
-        const objSet = OBJECT_SETS[tile.urbanBuilding.type];
-        if (objSet) {
-          const img = imageCache.get(objSet.file);
-          if (img) {
-            const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
-            const pcCols = 15, natureCols = 57;
-            const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
+        const pcImg = imageCache.get('tilesets/PokemonCenter.png');
+        if (pcImg) {
+          const PC_COLS = 15;
+          const bType = tile.urbanBuilding.type;
 
-            for (let r = 0; r < rowsObj; r++) {
-              for (let c = 0; c < colsObj; c++) {
-                const isRoof = tile.urbanBuilding.type.includes('pokecenter') ? (r < 3) : (r < 2);
-                if (isRoof) {
-                  let drawId = null;
-                  if (tile.urbanBuilding.type.includes('pokecenter')) {
-                    if (r === 0) drawId = 0 + c;
-                    else if (r === 1) drawId = 15 + c;
-                    else if (r === 2) drawId = 30 + c;
-                  } else if (tile.urbanBuilding.type.includes('mart')) {
-                    if (r === 0) drawId = 20 + c;
-                    else if (r === 1) drawId = 35 + c;
-                  } else {
-                    if (r === 0) drawId = 90 + c;
-                    else if (r === 1) drawId = 105 + c;
-                  }
-                  if (drawId != null) {
-                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
-                    ctx.drawImage(img, sx, sy, 16, 16, snapPx((mx + c) * tileW), snapPx((my + r) * tileH), tw, th);
-                  }
-                }
-              }
+          // Sprite ID grids (local IDs in PokemonCenter.tsx, 15 cols)
+          let roofIds, bodyIds, bCols, roofRows, bodyRows;
+
+          if (bType === 'pokecenter') {
+            bCols = 5;
+            roofRows = 3;
+            bodyRows = 3;
+            roofIds = [
+              [0, 1, 2, 3, 4],
+              [15, 16, 17, 18, 19],
+              [30, 31, 32, 33, 34],
+            ];
+            bodyIds = [
+              [45, 46, 47, 48, 49],
+              [60, 61, 62, 63, 64],
+              [75, 76, 77, 78, 79],
+            ];
+          } else if (bType === 'pokemart') {
+            bCols = 4;
+            roofRows = 2;
+            bodyRows = 3;
+            roofIds = [
+              [20, 21, 22, 23],
+              [35, 36, 37, 38],
+            ];
+            bodyIds = [
+              [50, 51, 52, 53],
+              [65, 66, 67, 68],
+              [80, 81, 82, 83],
+            ];
+          } else {
+            // Red house variants
+            const varIdx = tile.urbanBuilding.variantIndex ?? 0;
+            const RED_HOUSE_BASE_IDS = [90, 94, 98, 165, 169];
+            const baseId = RED_HOUSE_BASE_IDS[varIdx % RED_HOUSE_BASE_IDS.length];
+            bCols = 4;
+            roofRows = 2;
+            bodyRows = 3;
+            roofIds = [];
+            bodyIds = [];
+            for (let r = 0; r < roofRows; r++) {
+              const row = [];
+              for (let c = 0; c < bCols; c++) row.push(baseId + r * PC_COLS + c);
+              roofIds.push(row);
+            }
+            for (let r = 0; r < bodyRows; r++) {
+              const row = [];
+              for (let c = 0; c < bCols; c++) row.push(baseId + (roofRows + r) * PC_COLS + c);
+              bodyIds.push(row);
+            }
+          }
+
+          // Draw body (below-player depth, but we're in PASS 5b which is above)
+          // Body is drawn at the building's lower rows
+          const totalRows = roofRows + bodyRows;
+          // Draw all rows (body + roof) — roofs render on top automatically
+          for (let r = 0; r < totalRows; r++) {
+            const ids = r < roofRows ? roofIds[r] : bodyIds[r - roofRows];
+            if (!ids) continue;
+            for (let c = 0; c < bCols; c++) {
+              const drawId = ids[c];
+              if (drawId == null) continue;
+              const sx = (drawId % PC_COLS) * 16;
+              const sy = Math.floor(drawId / PC_COLS) * 16;
+              ctx.drawImage(
+                pcImg, sx, sy, 16, 16,
+                snapPx((mx + c) * tileW),
+                snapPx((my + r) * tileH),
+                tw, th
+              );
             }
           }
         }
