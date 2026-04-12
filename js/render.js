@@ -23,7 +23,10 @@ import {
   formalTreeTrunkOverlapsMicroCell,
   getFormalTreeTrunkWorldXSpan,
   scatterTreeTrunkOverlapsMicroCell,
-  getScatterTreeTrunkWorldSpanIfOrigin
+  getScatterTreeTrunkWorldSpanIfOrigin,
+  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
+  scatterNonTreeSolidCircleOverlapsMicroCell,
+  getScatterNonTreeVegetationCircleWorldSpanIfOrigin
 } from './walkability.js';
 import { validScatterOriginMicro } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
@@ -820,13 +823,17 @@ export function render(canvas, data, options = {}) {
           const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
           const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
           const scatterTrunk = scatterTreeTrunkOverlapsMicroCell(mx, my, data);
+          const scatterSolidCircle =
+            EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER && scatterNonTreeSolidCircleOverlapsMicroCell(mx, my, data);
           if (!feetOk) {
             ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
             ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
-          } else if (formalTrunk || scatterTrunk) {
+          } else if (formalTrunk || scatterTrunk || scatterSolidCircle) {
             ctx.fillStyle = formalTrunk
               ? 'rgba(90, 220, 255, 0.26)'
-              : 'rgba(180, 120, 255, 0.24)';
+              : scatterTrunk
+                ? 'rgba(180, 120, 255, 0.24)'
+                : 'rgba(100, 200, 255, 0.22)';
             ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
           }
         }
@@ -868,6 +875,29 @@ export function render(canvas, data, options = {}) {
           ctx.beginPath();
           ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
+        }
+      }
+
+      if (EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) {
+        const scatterSolidMemo = new Map();
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.88)';
+        ctx.lineWidth = 2;
+        for (let oxN = ox0 - 8; oxN < ox1 + 2; oxN++) {
+          if (oxN < 0 || oxN >= microWColOv) continue;
+          const yOrigMaxN = Math.min(microHColOv - 1, oy1 + 3);
+          for (let oyN = Math.max(0, oy0 - 10); oyN <= yOrigMaxN; oyN++) {
+            const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(oxN, oyN, data, scatterSolidMemo);
+            if (!nspan) continue;
+            const cr = nspan.radius;
+            if (nspan.cx + cr <= ox0 || nspan.cx - cr >= ox1 || nspan.cy + cr <= oy0 || nspan.cy - cr >= oy1) continue;
+            const pxCx = snapPx(nspan.cx * tileW);
+            const pxCy = snapPx(nspan.cy * tileH);
+            const rx = Math.max(1, cr * tileW);
+            const ry = Math.max(1, cr * tileH);
+            ctx.beginPath();
+            ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
       }
 
@@ -948,21 +978,42 @@ export function render(canvas, data, options = {}) {
         ctx.restore();
       }
     } else if (detailColliderDbg?.kind === 'scatter-solid') {
-      const twS = Math.ceil(tileW);
-      const thS = Math.ceil(tileH);
-      const x0 = detailColliderDbg.ox0;
-      const y0 = detailColliderDbg.oy0;
-      const cols = detailColliderDbg.cols ?? 1;
-      const rows = detailColliderDbg.rows ?? 1;
       ctx.save();
-      ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(
-        snapPx(x0 * tileW),
-        snapPx(y0 * tileH),
-        Math.max(1, cols * twS - 1),
-        Math.max(1, rows * thS - 1)
-      );
+      if (EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) {
+        const solidMemo = new Map();
+        const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(
+          detailColliderDbg.ox0,
+          detailColliderDbg.oy0,
+          data,
+          solidMemo
+        );
+        if (nspan) {
+          ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
+          ctx.lineWidth = 3;
+          const pxCx = snapPx(nspan.cx * tileW);
+          const pxCy = snapPx(nspan.cy * tileH);
+          const rx = Math.max(2, nspan.radius * tileW);
+          const ry = Math.max(2, nspan.radius * tileH);
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      } else {
+        const twS = Math.ceil(tileW);
+        const thS = Math.ceil(tileH);
+        const x0 = detailColliderDbg.ox0;
+        const y0 = detailColliderDbg.oy0;
+        const cols = detailColliderDbg.cols ?? 1;
+        const rows = detailColliderDbg.rows ?? 1;
+        ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+          snapPx(x0 * tileW),
+          snapPx(y0 * tileH),
+          Math.max(1, cols * twS - 1),
+          Math.max(1, rows * thS - 1)
+        );
+      }
       ctx.restore();
     } else if (detailColliderDbg?.kind === 'grass') {
       const twG = Math.ceil(tileW);

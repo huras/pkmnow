@@ -5,6 +5,8 @@ import {
   didFormalTreeSpawnAtRoot,
   getFormalTreeTrunkWorldXSpan,
   getScatterTreeTrunkWorldSpanIfOrigin,
+  getScatterNonTreeVegetationCircleWorldSpanIfOrigin,
+  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
   formalTreeTrunkBlocksWorldPoint,
   scatterTreeTrunkBlocksWorldPoint,
   formalTreeTrunkOverlapsMicroCell,
@@ -94,6 +96,11 @@ export function buildPlayModeDetailDebugPayload(mx, my, data) {
         }))
       };
     }
+    const circleMemo = new Map();
+    const experimentCircleSpan =
+      EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER
+        ? getScatterNonTreeVegetationCircleWorldSpanIfOrigin(highlight.ox0, highlight.oy0, data, circleMemo)
+        : null;
     scatterSolidCollider = {
       originMicro: { mx: highlight.ox0, my: highlight.oy0 },
       idHex: highlight.idHex,
@@ -106,6 +113,8 @@ export function buildPlayModeDetailDebugPayload(mx, my, data) {
         mxMaxExclusive: highlight.ox0 + highlight.cols,
         myMaxExclusive: highlight.oy0 + highlight.rows
       },
+      experimentScatterSolidCircleCollider: EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
+      circleSpanWorld: experimentCircleSpan,
       objectSetSummary
     };
   }

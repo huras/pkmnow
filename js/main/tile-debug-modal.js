@@ -487,6 +487,10 @@ export function openDetailDebugModal(payload) {
          <tr><th>Item key</th><td><code>${escDbg(payload.scatterCollider.itemKey ?? '—')}</code></td></tr>
          <tr><th>Scatter trunk span</th><td><code>${escDbg(JSON.stringify(payload.scatterCollider.trunkSpanWorld))}</code></td></tr>`;
 
+  const solidCircleRow =
+    payload.scatterSolidCollider?.circleSpanWorld == null
+      ? ''
+      : `<tr><th>Circle collider (experiment)</th><td><code>${escDbg(JSON.stringify(payload.scatterSolidCollider.circleSpanWorld))}</code></td></tr>`;
   const solidRows =
     payload.scatterSolidCollider == null
       ? ''
@@ -494,7 +498,11 @@ export function openDetailDebugModal(payload) {
          <tr><th>Origin</th><td>[${payload.scatterSolidCollider.originMicro.mx}, ${payload.scatterSolidCollider.originMicro.my}]</td></tr>
          <tr><th>Footprint</th><td>${payload.scatterSolidCollider.cols}×${payload.scatterSolidCollider.rows} micro</td></tr>
          <tr><th>Item key</th><td><code>${escDbg(payload.scatterSolidCollider.itemKey ?? '—')}</code></td></tr>
-         <tr><th>microFootprint</th><td><code>${escDbg(JSON.stringify(payload.scatterSolidCollider.microFootprint))}</code></td></tr>`;
+         <tr><th>microFootprint</th><td><code>${escDbg(JSON.stringify(payload.scatterSolidCollider.microFootprint))}</code></td></tr>
+         <tr><th>experimentScatterSolidCircleCollider</th><td>${
+           payload.scatterSolidCollider.experimentScatterSolidCircleCollider ? 'yes' : 'no'
+         }</td></tr>
+         ${solidCircleRow}`;
 
   const grassRows =
     payload.grassDetail == null

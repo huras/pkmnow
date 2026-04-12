@@ -1,10 +1,14 @@
 /**
- * Circle-vs-tree-trunk resolution: push feet center out of trunk circles (MTD),
+ * Circle-vs-trunk resolution: push feet center out of trunk circles (MTD),
  * then remove velocity into the contact normal (slide), matching the flow in
  * H:/cursor/25D-collision-detection (separate + resolve along normal, no bounce).
  *
- * Performance: gather trunk circles once per resolve (tight window in walkability),
- * skip entirely when feet cannot interact with any listed trunk, iterate only that small list.
+ * Circles include formal trees, scatter **trees**, and (when
+ * `EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER`) scatter non-tree solids (rocks/crystals/etc.)
+ * from `gatherTreeTrunkCirclesNearWorldPoint`.
+ *
+ * Performance: gather once per resolve (tight window in walkability),
+ * skip entirely when feet cannot interact with any listed circle, iterate only that small list.
  */
 
 import { gatherTreeTrunkCirclesNearWorldPoint } from './walkability.js';
