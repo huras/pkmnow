@@ -112,9 +112,9 @@ function slideVelocityVsTrunkListAtFeet(feetX, feetY, radius, vx, vy, circles) {
  * @returns {{ x: number, y: number, vx: number, vy: number }}
  */
 export function resolvePivotWithFeetVsTreeTrunks(pivotX, pivotY, feetDx, feetDy, bodyRadius, vx, vy, data) {
-  // Pivot lives at (pivot + 0.5) in micro-tile space (matches render); deltas from getPmdFeetDeltaWorldTiles are from that point.
+  // Same Y as shadow / sprite pivot base (`pivot + 0.5`); horizontal uses feetDx only (dy not applied — matches canWalk).
   const fx0 = pivotX + 0.5 + feetDx;
-  const fy0 = pivotY + 0.5 + feetDy;
+  const fy0 = pivotY + 0.5;
   const circles = gatherTreeTrunkCirclesNearWorldPoint(fx0, fy0, data);
   if (circles.length === 0 || !feetMayInteractWithCircles(fx0, fy0, bodyRadius, circles)) {
     return { x: pivotX, y: pivotY, vx, vy };

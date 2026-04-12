@@ -463,7 +463,8 @@ export function render(canvas, data, options = {}) {
               treeType,
               originX: mxScan,
               originY: myScan,
-              y: myScan + 0.9, // Sorting pivot at base
+              y: myScan + 0.9, // debug / marker; depth uses canopy pivot
+              sortY: myScan + 1, // matches formal canopy translate Y: originY*tileH + tileH
               biomeId: t.biomeId
             });
           }
@@ -487,7 +488,8 @@ export function render(canvas, data, options = {}) {
                    objSet,
                    originX: mxScan,
                    originY: myScan,
-                   y: myScan + rows - 0.1,
+                   y: myScan + rows - 0.1, // debug / marker; depth uses canopy pivot
+                   sortY: myScan + 1, // matches scatter tops translate: originY*tileH + tileH
                    cols,
                    rows
                  });
@@ -528,8 +530,10 @@ export function render(canvas, data, options = {}) {
 
       renderItems.push({
         type: 'wild',
-        y: we.y, // raw world Y for sorting
+        y: we.y,
         x: we.x,
+        /** Depth sort: world pivot Y (tile center), not logical cell — matches sprite anchor vs props. */
+        sortY: we.y + 0.5,
         dexId: we.dexId,
         animMoving: !!we.animMoving,
         cx: snapPx((we.x + 0.5) * tileW),
@@ -571,8 +575,10 @@ export function render(canvas, data, options = {}) {
 
       renderItems.push({
         type: 'player',
-        y: vy, // visualY for sorting
+        y: vy,
         x: vx,
+        /** Depth sort: world pivot Y (tile center), not logical cell. */
+        sortY: vy + 0.5,
         dexId: playerDex,
         animMoving: isPlayerMoving,
         cx: snapPx((vx + 0.5) * tileW),
@@ -590,8 +596,8 @@ export function render(canvas, data, options = {}) {
       });
     }
 
-    // --- SORT BY Y ---
-    renderItems.sort((a, b) => a.y - b.y);
+    // --- SORT BY Y (`sortY`: pivot — Pokémon vy+0.5; formal + scatter canopy originY+1 per translate; else `y`) ---
+    renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
 
       // --- DRAW PASS ---
     for (const item of renderItems) {

@@ -51,7 +51,8 @@ export function resolveCanonicalPmdH(wIdle, wWalk, dexId) {
  * which is independent of `tileH`.
  *
  * Horizontal: pivot is sheet center (`dw/2`); no lateral offset for collision.
- * World feet = `(tileX + 0.5 + dx, tileY + 0.5 + dy)` — same +0.5 as render pivot; do not add deltas to raw tile indices.
+ * Visual foot line is south of the render pivot by `dy` tiles; **walk/collider/trunks** use the pivot row center
+ * on Y (`tileY + 0.5`) so samples match shadow + `cy` base (not double-shifted south).
  *
  * @param {Map<string, HTMLImageElement>} imageCache
  * @param {number} dexId
@@ -71,7 +72,8 @@ export function getPmdFeetDeltaWorldTiles(imageCache, dexId, isMoving) {
 }
 
 /**
- * Micro-tile world position of the foot probe (same convention as `canWalk` / trunk gather).
+ * Micro-tile world position for Pokémon **walk / collider / trunk** probes: tile center on Y (shadow + pivot),
+ * tile center + horizontal `dx` on X. Does **not** add PMD `dy` (foot line) so Y stays aligned with render.
  * @param {number} pivotCellX — stored logical X (same as `player.x` / wild `entity.x`; render pivot is at `x+0.5`).
  * @param {number} pivotCellY
  * @param {Map<string, HTMLImageElement>} imageCache
@@ -80,6 +82,6 @@ export function getPmdFeetDeltaWorldTiles(imageCache, dexId, isMoving) {
  * @returns {{ x: number, y: number }}
  */
 export function worldFeetFromPivotCell(pivotCellX, pivotCellY, imageCache, dexId, isMoving) {
-  const { dx, dy } = getPmdFeetDeltaWorldTiles(imageCache, dexId, isMoving);
-  return { x: pivotCellX + 0.5 + dx, y: pivotCellY + 0.5 + dy };
+  const { dx } = getPmdFeetDeltaWorldTiles(imageCache, dexId, isMoving);
+  return { x: pivotCellX + 0.5 + dx, y: pivotCellY + 0.5 };
 }

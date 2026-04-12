@@ -618,7 +618,7 @@ export function isPropBlocking(mx, my, data) {
 
 /**
  * Colisão em grelha: amostra em espaço contínuo (micro-tiles). Use o mesmo ponto dos pés que o jogo:
- * `worldFeetFromPivotCell` (pivot em `(célula+0.5)` + delta PMD) — props/vegetação/cristais/troncos usam este `x,y`.
+ * `worldFeetFromPivotCell` (centro do tile em Y como pivot/sombra; X com `dx` PMD se houver) — props/vegetação/cristais/troncos usam este `x,y`.
  * @param {number} x - World micro X (ex.: pés)
  * @param {number} y - World micro Y
  * @param {object} data
