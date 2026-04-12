@@ -475,11 +475,11 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
  * Scatter trunk as a **circle** in micro-tile space (center on trunk row center, radius = old half-strip width).
  * @returns {{ left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number } | null}
  */
-export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo = null) {
+export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
   const microW = data.width * CHUNK_SIZE;
   const microH = data.height * CHUNK_SIZE;
   const seed = data.seed;
-  const getT = (x, y) => getMicroTile(x, y, data);
+  const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
 
   const nTile = getT(ox0, oy0);
@@ -521,11 +521,11 @@ export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo 
  * (rocks, crystals, small cactus, …): trunk row + horizontal span on that row, circle radius from width.
  * @returns {{ left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number } | null}
  */
-export function getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, originMemo = null) {
+export function getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
   const microW = data.width * CHUNK_SIZE;
   const microH = data.height * CHUNK_SIZE;
   const seed = data.seed;
-  const getT = (x, y) => getMicroTile(x, y, data);
+  const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
 
   const nTile = getT(ox0, oy0);

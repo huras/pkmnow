@@ -136,7 +136,7 @@ export function registerPlayKeyboard(api) {
       const dir = keyToDir(e.key);
       if (dir) {
         heldKeys.add(dir);
-        if (getCurrentData()) refreshPlayModeInfoBar();
+        if (getCurrentData()) refreshPlayModeInfoBar(true);
       }
 
       if (e.key === ' ') {

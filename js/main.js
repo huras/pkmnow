@@ -64,10 +64,24 @@ configureTileDebugModal({
   debugContent
 });
 
-function refreshPlayModeInfoBar() {
+let lastHudTileKey = '';
+let lastHudMs = 0;
+const HUD_MIN_INTERVAL_MS = 100;
+
+/** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
+function refreshPlayModeInfoBar(force = false) {
   if (!infoBar || !currentData || appMode !== 'play') return;
   const mx = Math.floor(player.x);
   const my = Math.floor(player.y);
+  const key = `${mx},${my}`;
+  const now = performance.now();
+  if (!force) {
+    const sameTile = key === lastHudTileKey;
+    if (sameTile && now - lastHudMs < HUD_MIN_INTERVAL_MS) return;
+  }
+  lastHudTileKey = key;
+  lastHudMs = now;
+
   const tile = getMicroTile(mx, my, currentData);
   const bId = tile.biomeId;
   const bio = Object.values(BIOMES).find((b) => b.id === bId);
@@ -138,6 +152,7 @@ installPlayContextMenu({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,
   updateView,
+  refreshPlayModeInfoBar,
   openDebugModal,
   openDetailDebugModal,
   buildPlayModeTileDebugInfo,

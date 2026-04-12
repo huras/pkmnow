@@ -19,7 +19,8 @@ import { setPlayerPos } from '../player.js';
  *   btnPlayCtxClearDetailCollider: HTMLElement | null,
  *   getPlayDetailColliderHighlight: () => object | null,
  *   setPlayDetailColliderHighlight: (v: object | null) => void,
- *   getPlayer: () => import('../player.js').player
+ *   getPlayer: () => import('../player.js').player,
+ *   refreshPlayModeInfoBar?: (force?: boolean) => void
  * }} opts
  */
 export function installPlayContextMenu(opts) {
@@ -28,6 +29,7 @@ export function installPlayContextMenu(opts) {
     getAppMode,
     getCurrentData,
     updateView,
+    refreshPlayModeInfoBar,
     openDebugModal,
     openDetailDebugModal,
     buildPlayModeTileDebugInfo,
@@ -123,6 +125,7 @@ export function installPlayContextMenu(opts) {
       const { mx, my } = playContextPending;
       setPlayerPos(mx, my);
       closePlayContextMenu();
+      refreshPlayModeInfoBar?.(true);
       updateView();
     });
   }

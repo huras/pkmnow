@@ -50,6 +50,7 @@ import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
+import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
 
 import './render/render-debug-hotkeys.js';
 
@@ -194,6 +195,25 @@ export function render(canvas, data, options = {}) {
     for (let my = startY; my < endY; my++) {
       for (let mx = startX; mx < endX; mx++) {
         getCached(mx, my);
+      }
+    }
+
+    const showPlayCollidersEarly = options.settings?.showPlayColliders || window.debugColliders;
+    if (showPlayCollidersEarly) {
+      const COLL_OVERLAY_RAD = 18;
+      const pCol = options.settings?.player;
+      const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
+      const cy = pCol ? Math.floor(pCol.y) : startY + Math.floor((endY - startY) / 2);
+      const microWPre = width * CHUNK_SIZE;
+      const microHPre = height * CHUNK_SIZE;
+      const ox0p = Math.max(0, Math.max(startX, cx - COLL_OVERLAY_RAD) - 10);
+      const ox1p = Math.min(microWPre, Math.min(endX, cx + COLL_OVERLAY_RAD + 1) + 10);
+      const oy0p = Math.max(0, Math.max(startY, cy - COLL_OVERLAY_RAD) - 12);
+      const oy1p = Math.min(microHPre, Math.min(endY, cy + COLL_OVERLAY_RAD + 1) + 12);
+      for (let my = oy0p; my < oy1p; my++) {
+        for (let mx = ox0p; mx < ox1p; mx++) {
+          getCached(mx, my);
+        }
       }
     }
 
@@ -679,20 +699,25 @@ export function render(canvas, data, options = {}) {
               }
             });
           }
-          // Draw Top (Canopy)
+          // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
           if (topPart) {
-            const angle = scatterHasWindSway(itemKey) ? Math.sin(time * 2.5 + originX * 0.3 + originY * 0.7) * 0.04 : 0;
-            const topRows = Math.ceil(topPart.ids.length / cols);
-            ctx.save();
-            ctx.translate(snapPx(originX * tileW + (cols * tileW) / 2), snapPx(originY * tileH + tileH));
-            ctx.rotate(angle);
-            topPart.ids.forEach((id, idx) => {
-              const ox = idx % cols, oy = Math.floor(idx / cols);
-              const drawY = -(topRows - oy + 1) * tileH + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
-              const lx = (ox * tileW) - (cols * tileW) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
-              ctx.drawImage(img, (id % atlasCols) * 16, Math.floor(id / atlasCols) * 16, 16, 16, snapPx(lx), snapPx(drawY), Math.ceil(tileW), Math.ceil(tileH));
-            });
-            ctx.restore();
+            const wind = scatterHasWindSway(itemKey);
+            const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+              time,
+              itemKey,
+              originX,
+              originY,
+              topPart,
+              cols,
+              img,
+              atlasCols,
+              tileW,
+              tileH,
+              wind
+            );
+            const px = snapPx(originX * tileW + (cols * tileW) / 2);
+            const py = snapPx(originY * tileH + tileH);
+            ctx.drawImage(scCan, px - scOx, py - scOy);
           }
         }
       } else if (item.type === 'tree') {
@@ -703,20 +728,22 @@ export function render(canvas, data, options = {}) {
           drawTile16(ids.base[0], originX * tileW, originY * tileH);
           drawTile16(ids.base[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
           
-          // Draw Top (Canopy)
+          // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
           if (ids.top) {
-            const angle = Math.sin(time * 1.5 + seededHash(originX, originY, data.seed + 9999) * Math.PI * 2) * 0.04;
-            const tops = ids.top, canopyCols = 2, canopyRows = Math.ceil(tops.length / canopyCols);
-            ctx.save();
-            ctx.translate(snapPx(originX * tileW + tileW), snapPx(originY * tileH + tileH));
-            ctx.rotate(angle);
-            tops.forEach((id, i) => {
-              const ox = i % canopyCols, row = Math.floor(i / canopyCols);
-              const drawY = -(row + canopyRows) * tileH + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
-              const lx = ox === 0 ? -tileW : -VEG_MULTITILE_OVERLAP_PX;
-              ctx.drawImage(natureImg, (id % TCOLS_NATURE) * 16, Math.floor(id / TCOLS_NATURE) * 16, 16, 16, snapPx(lx), snapPx(drawY), Math.ceil(tileW), Math.ceil(tileH));
-            });
-            ctx.restore();
+            const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+              time,
+              treeType,
+              originX,
+              originY,
+              ids.top,
+              natureImg,
+              TCOLS_NATURE,
+              tileW,
+              tileH
+            );
+            const px = snapPx(originX * tileW + tileW);
+            const py = snapPx(originY * tileH + tileH);
+            ctx.drawImage(ftCan, px - ftOx, py - ftOy);
           }
         }
       } else if (item.type === 'building') {
@@ -864,7 +891,7 @@ export function render(canvas, data, options = {}) {
         if (oxS < 0 || oxS >= microWColOv) continue;
         const yOrigMax = Math.min(microHColOv - 1, oy1 + 3);
         for (let oyS = Math.max(0, oy0 - 10); oyS <= yOrigMax; oyS++) {
-          const sspan = getScatterTreeTrunkWorldSpanIfOrigin(oxS, oyS, data, scatterTrunkMemo);
+          const sspan = getScatterTreeTrunkWorldSpanIfOrigin(oxS, oyS, data, scatterTrunkMemo, getCached);
           if (!sspan) continue;
           const cr = sspan.radius;
           if (sspan.cx + cr <= ox0 || sspan.cx - cr >= ox1 || sspan.cy + cr <= oy0 || sspan.cy - cr >= oy1) continue;
@@ -886,7 +913,7 @@ export function render(canvas, data, options = {}) {
           if (oxN < 0 || oxN >= microWColOv) continue;
           const yOrigMaxN = Math.min(microHColOv - 1, oy1 + 3);
           for (let oyN = Math.max(0, oy0 - 10); oyN <= yOrigMaxN; oyN++) {
-            const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(oxN, oyN, data, scatterSolidMemo);
+            const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(oxN, oyN, data, scatterSolidMemo, getCached);
             if (!nspan) continue;
             const cr = nspan.radius;
             if (nspan.cx + cr <= ox0 || nspan.cx - cr >= ox1 || nspan.cy + cr <= oy0 || nspan.cy - cr >= oy1) continue;
@@ -963,7 +990,7 @@ export function render(canvas, data, options = {}) {
       }
     } else if (detailColliderDbg?.kind === 'scatter-tree') {
       const treeMemo = new Map();
-      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(detailColliderDbg.ox0, detailColliderDbg.oy0, data, treeMemo);
+      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(detailColliderDbg.ox0, detailColliderDbg.oy0, data, treeMemo, getCached);
       if (sspan) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 190, 95, 0.98)';
@@ -985,7 +1012,8 @@ export function render(canvas, data, options = {}) {
           detailColliderDbg.ox0,
           detailColliderDbg.oy0,
           data,
-          solidMemo
+          solidMemo,
+          getCached
         );
         if (nspan) {
           ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
