@@ -39,7 +39,7 @@ export const POKEMON_HEIGHTS = {
   38: 3.5,  // Ninetales
   39: 2.1,  // Jigglypuff
   40: 3.5,  // Wigglytuff
-  41: 3.7,  // Zubat
+  41: 2.7,  // Zubat
   42: 4.1,  // Golbat
   43: 2.0,  // Oddish
   44: 2.1,  // Gloom
@@ -64,7 +64,7 @@ export const POKEMON_HEIGHTS = {
   63: 2.5,  // Abra
   64: 3.5,  // Kadabra
   65: 4,  // Alakazam
-  66: 2.5,  // Machop
+  66: 2.2,  // Machop
   67: 3.5,  // Machoke
   68: 3.5,  // Machamp
   69: 2.15,  // Bellsprout
@@ -72,7 +72,7 @@ export const POKEMON_HEIGHTS = {
   71: 5.7,  // Victreebel
   72: 2.5,  // Tentacool
   73: 7.9,  // Tentacruel
-  74: 1.7,  // Geodude
+  74: 1.3,  // Geodude
   75: 5.1,  // Graveler
   76: 5.2,  // Golem
   77: 2.6,  // Ponyta

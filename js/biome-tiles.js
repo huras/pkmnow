@@ -72,6 +72,14 @@ export function scatterHasWindSway(itemKey) {
   return true;
 }
 
+/**
+ * Scatter com pedra/cristal deve ter sorting no eixo Y com o player.
+ */
+export function isSortableScatter(itemKey) {
+  const k = String(itemKey).toLowerCase();
+  return k.includes('crystal') || k.includes('rock') || k.includes('cactus');
+}
+
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====
 // Estes são tile IDs locais no tileset flurmimons_nature (57 colunas, 16px)
 

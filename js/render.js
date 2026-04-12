@@ -14,9 +14,11 @@ import {
   FOLIAGE_NOISE_SCALE,
   scatterHasWindSway,
   lakeLotusGrassInteriorAllowed,
-  usesPoolAutotileMaskForFoliage
+  usesPoolAutotileMaskForFoliage,
+  isSortableScatter
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
+import { isPropBlocking } from './walkability.js';
 import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
@@ -638,7 +640,69 @@ export function render(canvas, data, options = {}) {
     // PASS 3.5: Sorted Entities pass (Player + Wild Pokémon)
     const wildList = getWildPokemonEntities();
     const renderItems = [];
+    
+    // --- Collect Sortable Objects (Scatter, Trees, Buildings) ---
+    for (let myScan = startY - 4; myScan < endY; myScan++) {
+      for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
+        if (mxScan < 0 || myScan < 0 || mxScan >= width * CHUNK_SIZE || myScan >= height * CHUNK_SIZE) continue;
+        const t = getCached(mxScan, myScan);
+        if (!t || t.heightStep < 1) continue;
 
+        // 1. Formal Trees
+        const treeType = getTreeType(t.biomeId, mxScan, myScan, data.seed);
+        if (treeType && (mxScan + myScan) % 3 === 0 && foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
+          if (getCached(mxScan + 1, myScan)?.heightStep === t.heightStep) {
+            renderItems.push({
+              type: 'tree',
+              treeType,
+              originX: mxScan,
+              originY: myScan,
+              y: myScan + 0.9, // Sorting pivot at base
+              biomeId: t.biomeId
+            });
+          }
+        }
+        
+        // 2. Scatter / Decoration
+        if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !t.isRoad && !t.urbanBuilding) {
+          const items = BIOME_VEGETATION[t.biomeId] || [];
+          if (items.length > 0) {
+            const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            const isSortable = isSortableScatter(itemKey);
+            // Even if not "sortable" (like grass), we check for "tops" that need sorting
+            const objSet = OBJECT_SETS[itemKey];
+            if (objSet && validScatterOriginMicro(mxScan, myScan, data.seed, width * CHUNK_SIZE, height * CHUNK_SIZE, (c, r) => getCached(c, r))) {
+               const { cols, rows } = parseShape(objSet.shape);
+               const hasTop = objSet.parts.some(p => p.role === 'top' || p.role === 'tops');
+               if (isSortable || hasTop) {
+                 renderItems.push({
+                   type: 'scatter',
+                   itemKey,
+                   objSet,
+                   originX: mxScan,
+                   originY: myScan,
+                   y: myScan + rows - 0.1,
+                   cols,
+                   rows
+                 });
+               }
+            }
+          }
+        }
+
+        // 3. Urban Buildings (Roofs / Core parts that need sorting)
+        if (t.urbanBuilding && mxScan === t.urbanBuilding.ox && myScan === t.urbanBuilding.oy) {
+           renderItems.push({
+             type: 'building',
+             bData: t.urbanBuilding,
+             originX: mxScan,
+             originY: myScan,
+             y: myScan + (t.urbanBuilding.type === 'pokecenter' ? 5.9 : 4.9)
+           });
+        }
+      }
+    }
+    
     /** Resolve frame size/cols using AnimData.xml metadata first, then image fallback. */
     const resolvePmdFrameSpec = (sheet, isMoving, dexId) => {
       const meta = getDexAnimMeta(dexId);
@@ -748,64 +812,162 @@ export function render(canvas, data, options = {}) {
     // --- SORT BY Y ---
     renderItems.sort((a, b) => a.y - b.y);
 
-    // --- DRAW PASS ---
+      // --- DRAW PASS ---
     for (const item of renderItems) {
       ctx.save();
-      if (item.type === 'wild') {
-        ctx.globalAlpha = item.spawnPhase;
+      
+      if (item.type === 'wild' || item.type === 'player') {
+        if (item.type === 'wild') {
+          ctx.globalAlpha = item.spawnPhase;
+        }
+
+        let spawnYOffset = 0;
+        if (item.type === 'wild' && item.spawnPhase < 1) {
+          if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
+          else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
+          else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+        }
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
+        ctx.ellipse(item.cx, item.cy + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Sprite
+        ctx.drawImage(
+          item.sheet,
+          item.sx, item.sy, item.sw, item.sh,
+          snapPx(item.cx - item.pivotX), snapPx(item.cy - item.pivotY + spawnYOffset),
+          snapPx(item.dw), snapPx(item.dh)
+        );
+        // 🎈 Emotion Balloon
+        if (item.emotion) {
+          const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
+          if (emoImg && emoImg.naturalWidth) {
+            const eCols = 8, eRows = 10;
+            const eSw = Math.floor(emoImg.naturalWidth / eCols);
+            const eSh = Math.floor(emoImg.naturalHeight / eRows);
+            const progress = Math.min(1.0, item.emotion.age / 0.8);
+            const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
+            const dW = eSw * 1.25 * (tileW / 32);
+            const dH = eSh * 1.25 * (tileW / 32);
+            const px = snapPx(item.cx - dW * 0.5);
+            const py = snapPx(item.cy + spawnYOffset - item.pivotY - dH * 0.8);
+            ctx.drawImage(emoImg, fIdx * eSw, item.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
+          }
+        }
+
+        // Terrain / Grass Depth Cue (Deferred Overlay)
+        const targetMx = Math.floor(item.x);
+        const targetMy = Math.floor(item.y);
+        if (targetMx >= startX && targetMx < endX && targetMy >= startY && targetMy < endY) {
+          const t = getCached(targetMx, targetMy);
+          if (passesAbovePlayerTileGate(targetMx, targetMy, t)) {
+            drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
+          }
+        }
+      } else if (item.type === 'scatter') {
+        const { objSet, originX, originY, cols, itemKey } = item;
+        const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+        const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
+        const { img, cols: atlasCols } = atlasFromObjectSet(objSet);
+        
+        if (img) {
+          // Draw Base (if sortable)
+          if (base?.ids && isSortableScatter(itemKey)) {
+            base.ids.forEach((id, idx) => {
+              const ox = idx % cols;
+              const oy = Math.floor(idx / cols);
+              const tx = originX + ox;
+              const ty = originY + oy;
+              const dt = getCached(tx, ty);
+              if (dt && dt.heightStep === getCached(originX, originY).heightStep) {
+                 ctx.drawImage(img, (id % atlasCols) * 16, Math.floor(id / atlasCols) * 16, 16, 16, snapPx(tx * tileW), snapPx(ty * tileH), Math.ceil(tileW), Math.ceil(tileH));
+              }
+            });
+          }
+          // Draw Top (Canopy)
+          if (topPart) {
+            const angle = scatterHasWindSway(itemKey) ? Math.sin(time * 2.5 + originX * 0.3 + originY * 0.7) * 0.04 : 0;
+            const topRows = Math.ceil(topPart.ids.length / cols);
+            ctx.save();
+            ctx.translate(snapPx(originX * tileW + (cols * tileW) / 2), snapPx(originY * tileH + tileH));
+            ctx.rotate(angle);
+            topPart.ids.forEach((id, idx) => {
+              const ox = idx % cols, oy = Math.floor(idx / cols);
+              const drawY = -(topRows - oy + 1) * tileH + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
+              const lx = (ox * tileW) - (cols * tileW) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
+              ctx.drawImage(img, (id % atlasCols) * 16, Math.floor(id / atlasCols) * 16, 16, 16, snapPx(lx), snapPx(drawY), Math.ceil(tileW), Math.ceil(tileH));
+            });
+            ctx.restore();
+          }
+        }
+      } else if (item.type === 'tree') {
+        const { treeType, originX, originY } = item;
+        const ids = TREE_TILES[treeType];
+        if (ids) {
+          // Draw Base (skipped in bake)
+          drawTile16(ids.base[0], originX * tileW, originY * tileH);
+          drawTile16(ids.base[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
+          
+          // Draw Top (Canopy)
+          if (ids.top) {
+            const angle = Math.sin(time * 1.5 + seededHash(originX, originY, data.seed + 9999) * Math.PI * 2) * 0.04;
+            const tops = ids.top, canopyCols = 2, canopyRows = Math.ceil(tops.length / canopyCols);
+            ctx.save();
+            ctx.translate(snapPx(originX * tileW + tileW), snapPx(originY * tileH + tileH));
+            ctx.rotate(angle);
+            tops.forEach((id, i) => {
+              const ox = i % canopyCols, row = Math.floor(i / canopyCols);
+              const drawY = -(row + canopyRows) * tileH + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
+              const lx = ox === 0 ? -tileW : -VEG_MULTITILE_OVERLAP_PX;
+              ctx.drawImage(natureImg, (id % TCOLS_NATURE) * 16, Math.floor(id / TCOLS_NATURE) * 16, 16, 16, snapPx(lx), snapPx(drawY), Math.ceil(tileW), Math.ceil(tileH));
+            });
+            ctx.restore();
+          }
+        }
+      } else if (item.type === 'building') {
+        const { bData, originX, originY } = item;
+        const pcImg = imageCache.get('tilesets/PokemonCenter.png');
+        if (pcImg) {
+          const PC_COLS = 15;
+          let roofIds, bodyIds, bCols, roofRows, bodyRows;
+          if (bData.type === 'pokecenter') {
+            bCols = 5; roofRows = 3; bodyRows = 3;
+            roofIds = [[0,1,2,3,4],[15,16,17,18,19],[30,31,32,33,34]];
+            bodyIds = [[45,46,47,48,49],[60,61,62,63,64],[75,76,77,78,79]];
+          } else if (bData.type === 'pokemart') {
+            bCols = 4; roofRows = 2; bodyRows = 3;
+            roofIds = [[20,21,22,23],[35,36,37,38]];
+            bodyIds = [[50,51,52,53],[65,66,67,68],[80,81,82,83]];
+          } else {
+            const varIdx = bData.variantIndex ?? 0;
+            const RED_HOUSE_BASE_IDS = [90, 94, 98, 165, 169];
+            const baseId = RED_HOUSE_BASE_IDS[varIdx % RED_HOUSE_BASE_IDS.length];
+            bCols = 4; roofRows = 2; bodyRows = 3; roofIds = []; bodyIds = [];
+            for(let r=0; r<roofRows; r++){ let row=[]; for(let c=0; c<bCols; c++) row.push(baseId + r*PC_COLS + c); roofIds.push(row); }
+            for(let r=0; r<bodyRows; r++){ let row=[]; for(let c=0; c<bCols; c++) row.push(baseId + (roofRows+r)*PC_COLS + c); bodyIds.push(row); }
+          }
+          // Draw Body
+          bodyIds.forEach((row, r) => {
+            row.forEach((id, c) => {
+              const sx = (id % PC_COLS) * 16, sy = Math.floor(id / PC_COLS) * 16;
+              ctx.drawImage(pcImg, sx, sy, 16, 16, snapPx((originX+c)*tileW), snapPx((originY+roofRows+r)*tileH), Math.ceil(tileW), Math.ceil(tileH));
+            });
+          });
+          // Draw Roof
+          roofIds.forEach((row, r) => {
+            row.forEach((id, c) => {
+              const sx = (id % PC_COLS) * 16, sy = Math.floor(id / PC_COLS) * 16;
+              ctx.drawImage(pcImg, sx, sy, 16, 16, snapPx((originX+c)*tileW), snapPx((originY+r)*tileH), Math.ceil(tileW), Math.ceil(tileH));
+            });
+          });
+        }
       }
-
-      let spawnYOffset = 0;
-      if (item.type === 'wild' && item.spawnPhase < 1) {
-        if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
-        else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
-        else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
-      }
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';
-      ctx.beginPath();
-      // Adjust shadow size by creature height
-      const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
-      ctx.ellipse(item.cx, item.cy + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Sprite
-      ctx.drawImage(
-        item.sheet,
-        item.sx, item.sy, item.sw, item.sh,
-        snapPx(item.cx - item.pivotX), snapPx(item.cy - item.pivotY + spawnYOffset),
-        snapPx(item.dw), snapPx(item.dh)
-      );
       ctx.restore();
 
-      // Terrain / Grass Depth Cue (Deferred Overlay)
-      const targetMx = Math.floor(item.x);
-      const targetMy = Math.floor(item.y);
-      if (targetMx >= startX && targetMx < endX && targetMy >= startY && targetMy < endY) {
-        const t = getCached(targetMx, targetMy);
-        if (passesAbovePlayerTileGate(targetMx, targetMy, t)) {
-          drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
-        }
-      }
-
-      // 🎈 Emotion Balloon
-      if (item.emotion) {
-        const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
-        if (emoImg && emoImg.naturalWidth) {
-          const eCols = 8, eRows = 10;
-          const eSw = Math.floor(emoImg.naturalWidth / eCols);
-          const eSh = Math.floor(emoImg.naturalHeight / eRows);
-          const progress = Math.min(1.0, item.emotion.age / 0.8);
-          const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
-          
-          const dW = eSw * 1.25 * (tileW / 32);
-          const dH = eSh * 1.25 * (tileW / 32);
-          const px = snapPx(item.cx - dW * 0.5);
-          const py = snapPx(item.cy - item.pivotY - dH * 0.8);
-          ctx.drawImage(emoImg, fIdx * eSw, item.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
-        }
-      }
     }
 
     // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
@@ -845,184 +1007,44 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // PASS 5b: CANOPIES & roofs (scatter tops, formal tree tops, urban roofs) — over player
-    forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
-      const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-      if (
-        scatterItems.length > 0 &&
-        foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82 &&
-        !tile.isRoad &&
-        !tile.isCity
-      ) {
-        const itemKey = scatterItems[Math.floor(seededHash(mx, my, data.seed + 222) * scatterItems.length)];
-        const objSet = OBJECT_SETS[itemKey];
-        if (objSet) {
-          const { cols } = parseShape(objSet.shape);
-          const getT = (tx, ty) => getMicroTile(tx, ty, data);
-
-          if (
-            validScatterOriginMicro(
-              mx,
-              my,
-              data.seed,
-              width * CHUNK_SIZE,
-              height * CHUNK_SIZE,
-              getT
-            )
-          ) {
-            const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
-
-            if (topPart) {
-              const { img: scatterAtlasImg, cols: atlasCols } = atlasFromObjectSet(objSet);
-              if (scatterAtlasImg) {
-                const angle = scatterHasWindSway(itemKey)
-                  ? Math.sin(time * 2.5 + mx * 0.3 + my * 0.7) * 0.04
-                  : 0;
-                const topRows = Math.ceil(topPart.ids.length / cols);
-                ctx.save();
-                ctx.translate(snapPx(tx + (cols * tw) / 2), snapPx(ty + th));
-                ctx.rotate(angle);
-                topPart.ids.forEach((id, idx) => {
-                  const ox = idx % cols;
-                  const oy = Math.floor(idx / cols);
-                  const drawY = -(topRows - oy + 1) * th + (topRows - oy) * VEG_MULTITILE_OVERLAP_PX;
-                  const lx = (ox * tw) - (cols * tw) / 2 - ox * VEG_MULTITILE_OVERLAP_PX;
-                  ctx.drawImage(
-                    scatterAtlasImg,
-                    (id % atlasCols) * 16,
-                    Math.floor(id / atlasCols) * 16,
-                    16,
-                    16,
-                    snapPx(lx),
-                    snapPx(drawY),
-                    tw,
-                    th
-                  );
-                });
-                ctx.restore();
-              }
-            }
-          }
+    // --- DEBUG COLLIDERS (Toggled by 'C' key) ---
+    if (window.debugColliders) {
+      ctx.save();
+      // 1. Entities (Player + Wild)
+      for (const item of renderItems) {
+        if (item.type === 'player' || item.type === 'wild') {
+          ctx.strokeStyle = 'rgba(0, 255, 100, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          // Use GROUND_R like logic (simplified for viz)
+          const r = 0.32 * tileW; 
+          ctx.arc(item.cx, item.cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Position markers
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(item.cx - 2, item.cy - 2, 4, 4);
+        } else if (item.type === 'scatter' || item.type === 'tree') {
+          // Pivot point
+          ctx.fillStyle = '#f0f';
+          ctx.fillRect(item.originX * tileW + tileW/2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);
         }
       }
 
-      const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
-      if (treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-        const ids = TREE_TILES[treeType];
-        if (ids?.top?.length && getCached(mx + 1, my)?.heightStep === tile.heightStep) {
-          const angle = Math.sin(time * 1.5 + seededHash(mx, my, data.seed + 9999) * Math.PI * 2) * 0.04;
-          const tops = ids.top;
-          const n = tops.length;
-          const canopyCols = 2;
-          const canopyRows = Math.ceil(n / canopyCols);
-          ctx.save();
-          ctx.translate(snapPx(tx + tw), snapPx(ty + th));
-          ctx.rotate(angle);
-          for (let i = 0; i < n; i++) {
-            const id = tops[i];
-            const ox = i % canopyCols;
-            const row = Math.floor(i / canopyCols);
-            const drawY = -(row + canopyRows) * th + (row + 1) * VEG_MULTITILE_OVERLAP_PX;
-            const lx = ox === 0 ? -tw : -VEG_MULTITILE_OVERLAP_PX;
-            ctx.drawImage(
-              natureImg,
-              (id % TCOLS_NATURE) * 16,
-              Math.floor(id / TCOLS_NATURE) * 16,
-              16,
-              16,
-              snapPx(lx),
-              snapPx(drawY),
-              tw,
-              th
-            );
-          }
-          ctx.restore();
-        }
-      }
-
-      // ── Urban building rendering (Pokémon Center / Mart / Houses) ──
-      // Uses PokemonCenter.png tileset (15 cols × 16px tiles)
-      if (tile.urbanBuilding && mx === tile.urbanBuilding.ox && my === tile.urbanBuilding.oy) {
-        const pcImg = imageCache.get('tilesets/PokemonCenter.png');
-        if (pcImg) {
-          const PC_COLS = 15;
-          const bType = tile.urbanBuilding.type;
-
-          // Sprite ID grids (local IDs in PokemonCenter.tsx, 15 cols)
-          let roofIds, bodyIds, bCols, roofRows, bodyRows;
-
-          if (bType === 'pokecenter') {
-            bCols = 5;
-            roofRows = 3;
-            bodyRows = 3;
-            roofIds = [
-              [0, 1, 2, 3, 4],
-              [15, 16, 17, 18, 19],
-              [30, 31, 32, 33, 34],
-            ];
-            bodyIds = [
-              [45, 46, 47, 48, 49],
-              [60, 61, 62, 63, 64],
-              [75, 76, 77, 78, 79],
-            ];
-          } else if (bType === 'pokemart') {
-            bCols = 4;
-            roofRows = 2;
-            bodyRows = 3;
-            roofIds = [
-              [20, 21, 22, 23],
-              [35, 36, 37, 38],
-            ];
-            bodyIds = [
-              [50, 51, 52, 53],
-              [65, 66, 67, 68],
-              [80, 81, 82, 83],
-            ];
-          } else {
-            // Red house variants
-            const varIdx = tile.urbanBuilding.variantIndex ?? 0;
-            const RED_HOUSE_BASE_IDS = [90, 94, 98, 165, 169];
-            const baseId = RED_HOUSE_BASE_IDS[varIdx % RED_HOUSE_BASE_IDS.length];
-            bCols = 4;
-            roofRows = 2;
-            bodyRows = 3;
-            roofIds = [];
-            bodyIds = [];
-            for (let r = 0; r < roofRows; r++) {
-              const row = [];
-              for (let c = 0; c < bCols; c++) row.push(baseId + r * PC_COLS + c);
-              roofIds.push(row);
-            }
-            for (let r = 0; r < bodyRows; r++) {
-              const row = [];
-              for (let c = 0; c < bCols; c++) row.push(baseId + (roofRows + r) * PC_COLS + c);
-              bodyIds.push(row);
-            }
-          }
-
-          // Draw body (below-player depth, but we're in PASS 5b which is above)
-          // Body is drawn at the building's lower rows
-          const totalRows = roofRows + bodyRows;
-          // Draw all rows (body + roof) — roofs render on top automatically
-          for (let r = 0; r < totalRows; r++) {
-            const ids = r < roofRows ? roofIds[r] : bodyIds[r - roofRows];
-            if (!ids) continue;
-            for (let c = 0; c < bCols; c++) {
-              const drawId = ids[c];
-              if (drawId == null) continue;
-              const sx = (drawId % PC_COLS) * 16;
-              const sy = Math.floor(drawId / PC_COLS) * 16;
-              ctx.drawImage(
-                pcImg, sx, sy, 16, 16,
-                snapPx((mx + c) * tileW),
-                snapPx((my + r) * tileH),
-                tw, th
-              );
-            }
+      // 2. Tile Blocking (Props)
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+      ctx.lineWidth = 1;
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          if (isPropBlocking(mx, my, data)) {
+            ctx.strokeRect(mx * tileW + 2, my * tileH + 2, tileW - 4, tileH - 4);
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+            ctx.fillRect(mx * tileW + 2, my * tileH + 2, tileW - 4, tileH - 4);
           }
         }
       }
-    });
+      ctx.restore();
+    }
 
     // Indicador de colisão: círculo com diâmetro = 1 tile no centro da célula lógica (player.x, player.y).
     // É essa célula que o jogo trata como "onde estás" após um passo; canWalk(nx,ny) avalia o tile de destino da mesma forma (grelha, sem elipse contínua).
@@ -1058,6 +1080,14 @@ export function render(canvas, data, options = {}) {
   }
   ctx.restore();
 }
+
+/** Toggles debug colliders on/off */
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'c') {
+    window.debugColliders = !window.debugColliders;
+    console.log('[Debug] Colliders:', window.debugColliders);
+  }
+});
 
 function renderMinimap(canvas, data, player) {
   const ctx = canvas.getContext('2d');
@@ -1509,12 +1539,15 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
                       }
 
                       if (allowDest) {
-                        drawScatterBaseFromObjectSet(
-                          objSet,
-                          base.ids[idx],
-                          (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
-                          (ty - startY) * tileH
-                        );
+                        const isSortable = isSortableScatter(itemKey);
+                        if (!isSortable) {
+                          drawScatterBaseFromObjectSet(
+                            objSet,
+                            base.ids[idx],
+                            (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
+                            (ty - startY) * tileH
+                          );
+                        }
                       }
                     }
                   }
@@ -1524,48 +1557,10 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
           }
         }
       }
-      // 3. Urban Buildings (Deterministic CORE)
-      if (tile.urbanBuilding && mxScan === tile.urbanBuilding.ox && myScan === tile.urbanBuilding.oy) {
-        const objSet = OBJECT_SETS[tile.urbanBuilding.type];
-        if (objSet) {
-          const img = imageCache.get(objSet.file);
-          if (img) {
-            const [colsObj, rowsObj] = objSet.shape.split('x').map(Number);
-            const pcCols = 15, natureCols = 57;
-            const useCols = objSet.file.includes('PokemonCenter') ? pcCols : natureCols;
-
-            for (let r = 0; r < rowsObj; r++) {
-              for (let c = 0; c < colsObj; c++) {
-                const rx = mxScan + c, ry = myScan + r;
-                if (rx < startX || rx >= endX || ry < startY || ry >= endY) continue;
-
-                let isCore = tile.urbanBuilding.type.includes('pokecenter') ? (r >= 3) : (r >= 2);
-                if (isCore) {
-                  let drawId = null;
-                  if (tile.urbanBuilding.type.includes('pokecenter')) {
-                    if (r === 3) drawId = 45 + c;
-                    else if (r === 4) drawId = 60 + c;
-                    else if (r === 5) drawId = (c === 2) ? 77 : 75 + c;
-                  } else if (tile.urbanBuilding.type.includes('mart')) {
-                    if (r === 2) drawId = 50 + c;
-                    else if (r === 3) drawId = 65 + c;
-                    else if (r === 4) drawId = (c === 1) ? 81 : 80 + c;
-                  } else { // House
-                    if (r === 2) drawId = 120 + c;
-                    else if (r === 3) drawId = 135 + c;
-                    else if (r === 4) drawId = (c === 1) ? 151 : 150 + c;
-                  }
-
-                  if (drawId != null) {
-                    const sx = (drawId % useCols) * 16, sy = Math.floor(drawId / useCols) * 16;
-                    octx.drawImage(img, sx, sy, 16, 16, Math.round((rx - startX) * tileW), Math.round((ry - startY) * tileH), twNat, thNat);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+      // 3. Urban Buildings (Roofs / Core parts that are NOT baked if we want sorting)
+      // Note: We skip the core rows in bake if we want them to be part of renderItems sorting.
+      // But buildings are huge, usually we only need sorting for the bottom-most row.
+      // For now, let's skip the core rows in bake.
     }
   }
 

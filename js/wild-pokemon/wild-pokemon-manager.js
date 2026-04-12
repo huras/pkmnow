@@ -38,9 +38,13 @@ const MAX_SPEED = 1.65;
 
 const DIRECTION_ROW_MAP = {
   down: 0,
+  'down-right': 1,
   right: 2,
+  'up-right': 3,
   up: 4,
-  left: 6
+  'up-left': 5,
+  left: 6,
+  'down-left': 7
 };
 
 /** @type {Map<string, object>} */
@@ -184,12 +188,9 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     if (entity.alertTimer <= 0) {
       entity.aiState = 'wander';
     }
-    // Face player
-    if (Math.abs(dxP) > Math.abs(dyP)) {
-      entity.facing = dxP > 0 ? 'left' : 'right';
-    } else {
-      entity.facing = dyP > 0 ? 'up' : 'down';
-    }
+    // Face player (8 directions)
+    const ang = Math.atan2(-dyP, -dxP);
+    entity.facing = getFacingFromAngle(ang);
     entity.animMoving = false;
     return;
   }
@@ -301,18 +302,23 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   entity.animMoving = spd > 0.1;
 
   if (entity.aiState === 'approach' && distP <= beh.stopDist) {
-    if (Math.abs(dxP) > Math.abs(dyP)) {
-      entity.facing = dxP > 0 ? 'left' : 'right';
-    } else {
-      entity.facing = dyP > 0 ? 'up' : 'down';
-    }
+    const ang = Math.atan2(-dyP, -dxP);
+    entity.facing = getFacingFromAngle(ang);
   } else if (spd > 0.06) {
-    if (Math.abs(entity.vx) > Math.abs(entity.vy)) {
-      entity.facing = entity.vx > 0 ? 'right' : 'left';
-    } else {
-      entity.facing = entity.vy > 0 ? 'down' : 'up';
-    }
+    const ang = Math.atan2(entity.vy, entity.vx);
+    entity.facing = getFacingFromAngle(ang);
   }
+}
+
+function getFacingFromAngle(ang) {
+  // Quantize 360 degrees to 8 directions (45 deg increments)
+  // atan2 0 is Right, PI/2 is Down.
+  const deg = (ang * 180) / Math.PI;
+  // Normalize deg to -22.5..337.5 for easier quantization
+  const normalized = (deg + 360 + 22.5) % 360;
+  const index = Math.floor(normalized / 45);
+  const dirs = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
+  return dirs[index];
 }
 
 /**
@@ -331,9 +337,11 @@ function steerTowardAngle(entity, targetAng, speed, data) {
   for (const ang of angles) {
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
-    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.1, entity.y + vy * 0.1, data, entity.x, entity.y)) {
+    // Increased lookahead to avoid "shoveling" into props (radius-aware)
+    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y)) {
       entity.vx = vx;
       entity.vy = vy;
+      entity.stuckTimer = 0; // Clear stuck state on successful move
       return;
     }
   }
@@ -342,6 +350,7 @@ function steerTowardAngle(entity, targetAng, speed, data) {
   entity.vx = 0;
   entity.vy = 0;
   entity.targetX = null; // Forces new waypoint
+  entity.stuckTimer = (entity.stuckTimer || 0) + 1.0; // Increment stuck weight
 }
 
 /**

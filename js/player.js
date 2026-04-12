@@ -4,31 +4,35 @@ import { BIOME_TO_TERRAIN } from './biome-tiles.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
-const MOVE_DURATION = 0.15; // segundos para andar 1 tile (estilo Pokémon)
-const JUMP_DURATION = 0.35; // duração do salto (um pouco mais lento que o andar)
-const JUMP_PEAK = 0.55;    // altura máxima do salto em tiles
+const MAX_SPEED = 6.0;
+const ACCEL = 40.0;
+const FRICTION = 25.0;
+const GRAVITY = 45.0;
+const JUMP_IMPULSE = 14.5;
+const GROUND_R = 0.32; // Raio de colisão
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 const initialDex = parseInt(localStorage.getItem(SAVED_DEX_KEY)) || 94;
 
 export const player = {
-  x: 0,         // posição lógica (tile)
+  x: 0,
   y: 0,
-  visualX: 0,   // posição visual (interpolada)
+  visualX: 0,
   visualY: 0,
-  moving: false,
-  moveProgress: 0,
-  fromX: 0,
-  fromY: 0,
-  facing: 'down', // 'up' | 'down' | 'left' | 'right'
+  vx: 0,
+  vy: 0,
+  vz: 0,
+  z: 0,
+  inputX: 0,
+  inputY: 0,
+  facing: 'down',
   animRow: 0,
   animFrame: 0,
   idleTimer: 0,
-  moveTimer: 0,
+  totalDistMoved: 0,
   dexId: initialDex,
   jumping: false,
-  jumpProgress: 0,
-  z: 0
+  grounded: true
 };
 
 export function setPlayerSpecies(dexId) {
@@ -37,59 +41,75 @@ export function setPlayerSpecies(dexId) {
 }
 
 export function setPlayerPos(x, y) {
-  player.x = Math.floor(x);
-  player.y = Math.floor(y);
-  player.visualX = player.x;
-  player.visualY = player.y;
-  player.moving = false;
-  player.moveProgress = 0;
-  player.idleTimer = 0;
-  player.moveTimer = 0;
-  player.animFrame = 0;
-  player.jumping = false;
-  player.jumpProgress = 0;
+  player.x = x;
+  player.y = y;
+  player.visualX = x;
+  player.visualY = y;
+  player.vx = 0;
+  player.vy = 0;
+  player.vz = 0;
   player.z = 0;
+  player.grounded = true;
+  player.jumping = false;
+  player.totalDistMoved = 0;
+  player.animFrame = 0;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 }
 
-export function canWalk(x, y, data, srcX, srcY, cachedFoliageOverlayId) {
-  return canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId);
+export function canWalk(x, y, data, srcX, srcY, isAirborne = false) {
+  // 1. LOGICAL TRAVERSAL (The "Feet"):
+  // Se estiver no ar, o centro pode ignorar clifs. 
+  // Se estiver no chão, o centro DEVE obedecer às regras de altura (escadas, mesma altura, etc).
+  if (!isAirborne) {
+    if (!canWalkMicroTile(x, y, data, srcX, srcY, undefined, isAirborne)) {
+      return false;
+    }
+  } else {
+    // No ar, verificamos apenas se o centro não bateu em algo sólido (prop horizontal).
+    // canWalkMicroTile sem srcX/Y pula o check de altura.
+    if (!canWalkMicroTile(x, y, data, undefined, undefined, undefined, isAirborne)) {
+      return false;
+    }
+  }
+
+  // 2. PHYSICAL BODY (The "Corners"):
+  // O corpo físico só pára por obstáculos REAIS (paredes, árvores, casas).
+  // Ele NÃO liga para altura do chão (heightStep).
+  const points = [
+    { x: x - GROUND_R, y: y - GROUND_R },
+    { x: x + GROUND_R, y: y - GROUND_R },
+    { x: x - GROUND_R, y: y + GROUND_R },
+    { x: x + GROUND_R, y: y + GROUND_R }
+  ];
+
+  for (const p of points) {
+    const mx = Math.floor(p.x);
+    const my = Math.floor(p.y);
+    if (mx < 0 || my < 0 || mx >= data.width * CHUNK_SIZE || my >= data.height * CHUNK_SIZE) return false;
+
+    // Chamamos canWalkMicroTile SEM srcX/srcY para ignorar o check de "heightStepMismatch".
+    // Isso permite que um ombro do player sobreponha um tile de altura diferente sem travar.
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, isAirborne)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 const DIRECTION_ROW_MAP = {
   down: 0,
+  'down-right': 1,
   right: 2,
+  'up-right': 3,
   up: 4,
-  left: 6
+  'up-left': 5,
+  left: 6,
+  'down-left': 7
 };
 
-/**
- * Tenta iniciar um movimento. Retorna true se o movimento foi iniciado.
- */
+// tryMovePlayer is now handled directly by inputX/Y in the gameLoop
 export function tryMovePlayer(dx, dy, data) {
-  if (player.moving) return false;
-
-  // Direção do facing
-  if (dy < 0) player.facing = 'up';
-  else if (dy > 0) player.facing = 'down';
-  else if (dx < 0) player.facing = 'left';
-  else if (dx > 0) player.facing = 'right';
-
-  // Atualiza linha da animação (PMD Format)
-  player.animRow = DIRECTION_ROW_MAP[player.facing];
-
-  const nx = player.x + dx;
-  const ny = player.y + dy;
-  // Colisão: canWalkMicroTile(floor) num único tile; ver ordem em walkability.js → canWalkMicroTile
-  if (canWalk(nx, ny, data, player.x, player.y)) {
-    player.fromX = player.x;
-    player.fromY = player.y;
-    player.x = nx;
-    player.y = ny;
-    player.moving = true;
-    player.moveProgress = 0;
-    return true;
-  }
   return false;
 }
 
@@ -100,73 +120,10 @@ export function tryMovePlayer(dx, dy, data) {
  * - Se estiver no plano, faz apenas um pulinho (hop) no lugar para feedback visual.
  */
 export function tryJumpPlayer(data) {
-  if (player.moving || player.jumping) return false;
-
-  let dx = 0, dy = 0;
-  if (player.facing === 'up') dy = -1;
-  else if (player.facing === 'down') dy = 1;
-  else if (player.facing === 'left') dx = -1;
-  else if (player.facing === 'right') dx = 1;
-
-  const smx = Math.floor(player.x);
-  const smy = Math.floor(player.y);
-  
-  const nx1 = player.x + dx;
-  const ny1 = player.y + dy;
-  const nx2 = player.x + dx * 2;
-  const ny2 = player.y + dy * 2;
-  
-  const t0 = getMicroTile(smx, smy, data);
-  if (!t0) return false;
-
-  const t1 = (nx1 >= 0 && ny1 >= 0 && nx1 < data.width * CHUNK_SIZE && ny1 < data.height * CHUNK_SIZE) 
-    ? getMicroTile(nx1, ny1, data) : null;
-  const t2 = (nx2 >= 0 && ny2 >= 0 && nx2 < data.width * CHUNK_SIZE && ny2 < data.height * CHUNK_SIZE) 
-    ? getMicroTile(nx2, ny2, data) : null;
-
-  // CASO 1: Leap (2 tiles) - Saltando por cima de um muro
-  if (t1 && t2) {
-    const role1 = getMicroTileRole(nx1, ny1, data);
-    const isWallAt1 = WALL_ROLES.has(role1);
-    
-    // Se o tile adjacente é um muro e o tile depois dele tem +-1 de altura
-    if (isWallAt1 && Math.abs(t2.heightStep - t0.heightStep) === 1) {
-      if (canWalkMicroTile(nx2, ny2, data, undefined, undefined)) {
-        player.fromX = player.x;
-        player.fromY = player.y;
-        player.x = nx2;
-        player.y = ny2;
-        player.moving = true;
-        player.jumping = true;
-        player.jumpProgress = 0;
-        player.moveProgress = 0;
-        return true;
-      }
-    }
-  }
-
-  // CASO 2: Hop (1 tile) - Pulando um degrau direto (andável)
-  if (t1 && Math.abs(t1.heightStep - t0.heightStep) === 1) {
-    if (canWalkMicroTile(nx1, ny1, data, undefined, undefined)) {
-      player.fromX = player.x;
-      player.fromY = player.y;
-      player.x = nx1;
-      player.y = ny1;
-      player.moving = true;
-      player.jumping = true;
-      player.jumpProgress = 0;
-      player.moveProgress = 0;
-      return true;
-    }
-  }
-
-  // FLAT HOP: Small jump in place for visual feedback
-  player.fromX = player.x;
-  player.fromY = player.y;
-  player.moving = true;
+  if (!player.grounded) return false;
+  player.vz = JUMP_IMPULSE;
+  player.grounded = false;
   player.jumping = true;
-  player.jumpProgress = 0;
-  player.moveProgress = 0;
   return true;
 }
 
@@ -174,7 +131,7 @@ export function tryJumpPlayer(data) {
 export const PLAYER_IDLE_WAITING_FRAME_INDEX = 0;
 
 export function isPlayerIdleOnWaitingFrame() {
-  return !player.moving && player.animFrame === PLAYER_IDLE_WAITING_FRAME_INDEX;
+  return player.grounded && player.vx === 0 && player.vy === 0 && player.animFrame === PLAYER_IDLE_WAITING_FRAME_INDEX;
 }
 
 /**
@@ -182,44 +139,95 @@ export function isPlayerIdleOnWaitingFrame() {
  * @param {number} dt - delta time em segundos
  * @param {number} multiplier - multiplicador de velocidade (não afeta o tempo da animação interna do PMD)
  */
-export function updatePlayer(dt, multiplier = 1) {
-  player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
-  
-  // Ticks do motor PMD (60 ticks por segundo)
-  const ticks = dt * 60;
+export function updatePlayer(dt, data) {
+  const isAirborne = player.jumping || player.z > 0.05;
 
-  if (player.moving) {
-    const duration = player.jumping ? JUMP_DURATION : MOVE_DURATION;
-    player.moveProgress += (dt * multiplier) / duration;
-    if (player.moveProgress >= 1) {
-      player.moveProgress = 1;
-      player.moving = false;
+  // 1. Horizontal Input & Physics
+  if (player.inputX !== 0 || player.inputY !== 0) {
+    // Determine facing
+    if (player.inputX === 0 && player.inputY < 0) player.facing = 'up';
+    else if (player.inputX === 0 && player.inputY > 0) player.facing = 'down';
+    else if (player.inputX < 0 && player.inputY === 0) player.facing = 'left';
+    else if (player.inputX > 0 && player.inputY === 0) player.facing = 'right';
+    else if (player.inputX > 0 && player.inputY < 0) player.facing = 'up-right';
+    else if (player.inputX < 0 && player.inputY < 0) player.facing = 'up-left';
+    else if (player.inputX > 0 && player.inputY > 0) player.facing = 'down-right';
+    else if (player.inputX < 0 && player.inputY > 0) player.facing = 'down-left';
+
+    // Accelerate
+    player.vx += player.inputX * ACCEL * dt;
+    player.vy += player.inputY * ACCEL * dt;
+  } else {
+    // Friction
+    const spd = Math.hypot(player.vx, player.vy);
+    if (spd > 0) {
+       const drop = FRICTION * dt;
+       const newSpd = Math.max(0, spd - drop);
+       player.vx *= newSpd / spd;
+       player.vy *= newSpd / spd;
     }
+  }
 
-    const t = player.moveProgress;
-    player.visualX = player.fromX + (player.x - player.fromX) * t;
-    player.visualY = player.fromY + (player.y - player.fromY) * t;
+  // Clamp Speed
+  const inputMag = Math.hypot(player.inputX, player.inputY);
+  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag);
+  const spd = Math.hypot(player.vx, player.vy);
+  if (spd > currentMaxSpeed) {
+     player.vx *= currentMaxSpeed / spd;
+     player.vy *= currentMaxSpeed / spd;
+  }
 
-    if (player.jumping) {
-      player.jumpProgress = t;
-      // Parabola: sin(t * pi) gives a 0->1->0 curve over duration
-      player.z = Math.sin(t * Math.PI) * JUMP_PEAK;
-      
-      if (t >= 1) {
-        player.jumping = false;
-        player.z = 0;
-      }
+  // 2. Continuous Collision & Position Update (Sliding)
+  const nextX = player.x + player.vx * dt;
+  const nextY = player.y + player.vy * dt;
+
+  if (canWalk(nextX, nextY, data, player.x, player.y, isAirborne)) {
+    player.x = nextX;
+    player.y = nextY;
+  } else {
+    // Sliding Resolution: Try X then Y
+    if (canWalk(nextX, player.y, data, player.x, player.y, isAirborne)) {
+      player.x = nextX;
+      player.vy = 0;
+    } else if (canWalk(player.x, nextY, data, player.x, player.y, isAirborne)) {
+      player.y = nextY;
+      player.vx = 0;
     } else {
-      player.z = 0;
+      player.vx = 0;
+      player.vy = 0;
     }
+  }
 
-    // Fetch dynamic animation sequence from metadata
+  // 3. Vertical Physics (Jump)
+  if (!player.grounded) {
+     player.vz -= GRAVITY * dt;
+     player.z += player.vz * dt;
+
+     if (player.z <= 0) {
+        player.z = 0;
+        player.vz = 0;
+        player.grounded = true;
+        player.jumping = false;
+        // Ao aterrissar, não fazemos nada especial; o próximo frame de canWalk 
+        // usará player.x/y (já no novo tile) como src, então o check de altura passará.
+     }
+  }
+
+  // 4. Update Visual and Animation
+  player.visualX = player.x;
+  player.visualY = player.y;
+  player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
+
+  if (spd > 0.1 && player.grounded) {
+    player.totalDistMoved += spd * dt;
     const meta = getDexAnimMeta(player.dexId);
     const seq = meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
+
+    const walkDistanceCycle = 3.5; 
+    const animT = (player.totalDistMoved % walkDistanceCycle) / walkDistanceCycle;
+    const currentTick = animT * totalTicks;
     
-    // Synchronize movement progress with anim cycle
-    const currentTick = t * totalTicks;
     let accumulated = 0;
     player.animFrame = 0;
     for (let i = 0; i < seq.length; i++) {
@@ -231,16 +239,11 @@ export function updatePlayer(dt, multiplier = 1) {
     }
     player.idleTimer = 0;
   } else {
-    player.visualX = player.x;
-    player.visualY = player.y;
-    player.z = 0;
-    player.jumping = false;
-    
     const meta = getDexAnimMeta(player.dexId);
     const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
     
-    player.idleTimer += ticks;
+    player.idleTimer += dt * 60;
     const loopTick = player.idleTimer % totalTicks;
     
     let accumulated = 0;

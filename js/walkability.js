@@ -338,7 +338,7 @@ export function isPropBlocking(mx, my, data) {
  * @param {number} srcY - Source tile micro Y (optional, for height context)
  * @param {number | null | undefined} cachedFoliageOverlayId - optional
  */
-export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId) {
+export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId, isAirborne = false) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
@@ -366,16 +366,18 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId)
     }
   }
 
-  // 1.5 Role-Based Wall Block (Redundant but safe against ID-mapping errors)
-  const role = getMicroTileRole(mx, my, data);
-  if (WALL_ROLES.has(role)) return false;
+  // 1.5 Role-Based Wall Block
+  if (!isAirborne) {
+    const role = getMicroTileRole(mx, my, data);
+    if (WALL_ROLES.has(role)) return false;
+  }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  if (!isBaseTerrainSpriteWalkable(sid)) return false;
+  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) return false;
 
   const overlayId =
     cachedFoliageOverlayId === undefined ? getFoliageOverlayTileId(mx, my, data) : cachedFoliageOverlayId;
-  if (overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
+  if (!isAirborne && overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
     return false;
   }
 

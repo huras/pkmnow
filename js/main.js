@@ -187,7 +187,7 @@ function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
-  const overlayContours = document.getElementById('chkCurvas')?.checked ?? true;
+  const overlayContours = document.getElementById('chkCurvas')?.checked ?? false;
   return { viewType, overlayPaths, overlayGraph, overlayContours, appMode, player, time: gameTime };
 }
 
@@ -206,9 +206,30 @@ function gameLoop(timestamp) {
   lastTimestamp = timestamp;
   gameTime = timestamp / 1000;
 
-  // Smooth movement: walk half speed; Shift = run (2× the previous 5× multiplier → 10×)
-  const speedMultiplier = heldKeys.has('shift') ? 7 : 0.5;
-  updatePlayer(dt, speedMultiplier);
+  // 1. Calculate and normalize physical input vector
+  let inX = 0, inY = 0;
+  if (heldKeys.has('up')) inY -= 1;
+  if (heldKeys.has('down')) inY += 1;
+  if (heldKeys.has('left')) inX -= 1;
+  if (heldKeys.has('right')) inX += 1;
+
+  if (inX !== 0 && inY !== 0) {
+    const mag = Math.hypot(inX, inY);
+    inX /= mag;
+    inY /= mag;
+  }
+  
+  if (['play'].includes(appMode)) {
+    const runMult = heldKeys.has('shift') ? 2.0 : 1.0;
+    player.inputX = inX * runMult;
+    player.inputY = inY * runMult;
+  } else {
+    player.inputX = 0;
+    player.inputY = 0;
+  }
+
+  // 2. Physics & Visual Update
+  updatePlayer(dt, currentData);
 
   if (currentData && appMode === 'play') {
     const pvx = player.visualX ?? player.x;
@@ -216,18 +237,6 @@ function gameLoop(timestamp) {
     syncWildPokemonWindow(currentData, pvx, pvy);
     updateWildPokemon(dt, currentData, pvx, pvy);
     refreshPlayModeInfoBar();
-  }
-
-  // Se o player terminou de andar e uma tecla direcional contínua pressionada, anda de novo
-  if (!player.moving && currentData) {
-    let dx = 0, dy = 0;
-    if (heldKeys.has('up')) dy = -1;
-    else if (heldKeys.has('down')) dy = 1;
-    else if (heldKeys.has('left')) dx = -1;
-    else if (heldKeys.has('right')) dx = 1;
-    if (dx !== 0 || dy !== 0) {
-      tryMovePlayer(dx, dy, currentData);
-    }
   }
 
   const tFrameStart = performance.now();
@@ -1470,17 +1479,6 @@ window.addEventListener('keydown', (e) => {
     const dir = keyToDir(e.key);
     if (dir) {
       heldKeys.add(dir);
-
-      // Tenta iniciar movimento imediato se não está andando
-      if (!player.moving && currentData) {
-        let dx = 0, dy = 0;
-        if (dir === 'up') dy = -1;
-        else if (dir === 'down') dy = 1;
-        else if (dir === 'left') dx = -1;
-        else if (dir === 'right') dx = 1;
-        tryMovePlayer(dx, dy, currentData);
-      }
-
       if (currentData) refreshPlayModeInfoBar();
     }
     
