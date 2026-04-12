@@ -25,6 +25,12 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE
 } from './biome-tiles.js';
+import {
+  TRUNK_STRIP_WIDTH_FRAC,
+  FORMAL_TRUNK_BASE_WIDTH_TILES,
+  scatterSolidStemRadiusMultiplier,
+  scatterStemPhysicsPivotOffsetMicroTiles
+} from './scatter-collider-config.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -326,10 +332,6 @@ export function getLakeLotusFoliageWalkRole(mx, my, data) {
   );
 }
 
-/** Formal broadleaf base spans 2 micro tiles on X; trunk hitbox uses this fraction of that span (centered). */
-const FORMAL_TREE_BASE_WIDTH_TILES = 2;
-const FORMAL_TREE_TRUNK_WIDTH_FRAC = 0.3;
-
 /**
  * When true, rocks/crystals/small-cactus etc. use the same **narrow circle** logic as scatter trees
  * (grid cells in the footprint stay walkable; `gatherTreeTrunkCirclesNearWorldPoint` + slide resolve apply).
@@ -377,8 +379,8 @@ export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
  */
 export function getFormalTreeTrunkCircle(rootX, my, data) {
   if (!didFormalTreeSpawnAtRoot(rootX, my, data)) return null;
-  const r = (FORMAL_TREE_BASE_WIDTH_TILES * FORMAL_TREE_TRUNK_WIDTH_FRAC) / 2;
-  const cx = rootX + FORMAL_TREE_BASE_WIDTH_TILES / 2;
+  const r = (FORMAL_TRUNK_BASE_WIDTH_TILES * TRUNK_STRIP_WIDTH_FRAC) / 2;
+  const cx = rootX + FORMAL_TRUNK_BASE_WIDTH_TILES / 2;
   const cy = my + 0.5;
   return { cx, cy, r };
 }
@@ -533,8 +535,14 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
     trunkWidthTiles = cols;
   }
   if (kLower.includes('big-cactus')) trunkWidthTiles = 1;
-  const cy = trunkMy + 0.5;
-  const r = (trunkWidthTiles * FORMAL_TREE_TRUNK_WIDTH_FRAC) / 2;
+  let cy = trunkMy + 0.5;
+  let r = (trunkWidthTiles * TRUNK_STRIP_WIDTH_FRAC) / 2;
+  if (!isTree) {
+    r *= scatterSolidStemRadiusMultiplier(itemKey);
+  }
+  const pivot = scatterStemPhysicsPivotOffsetMicroTiles(itemKey);
+  cx += pivot.dx;
+  cy += pivot.dy;
   return {
     left: cx - r,
     right: cx + r,

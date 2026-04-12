@@ -107,10 +107,10 @@ export const POKEMON_HEIGHTS = {
   106: 3.2, // Hitmonlee
   107: 4.3, // Hitmonchan
   108: 3.5, // Lickitung
-  109: 4.0, // Koffing
-  110: 4.9, // Weezing
+  109: 3.2, // Koffing
+  110: 4.2, // Weezing
   111: 2.5, // Rhyhorn
-  112: 4.5, // Rhydon
+  112: 3.9, // Rhydon
   113: 3.5, // Chansey
   114: 2.6, // Tangela
   115: 4.7, // Kangaskhan
