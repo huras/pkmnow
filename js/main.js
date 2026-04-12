@@ -12,7 +12,7 @@ import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
-import { player, setPlayerPos, tryMovePlayer, updatePlayer, canWalk } from './player.js';
+import { player, setPlayerPos, tryMovePlayer, updatePlayer, tryJumpPlayer, canWalk } from './player.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import {
@@ -1482,6 +1482,10 @@ window.addEventListener('keydown', (e) => {
       }
 
       if (currentData) refreshPlayModeInfoBar();
+    }
+    
+    if (e.key === ' ') {
+      tryJumpPlayer(currentData);
     }
     
     if (e.key === 'Escape') {

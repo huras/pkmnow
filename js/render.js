@@ -690,7 +690,7 @@ export function render(canvas, data, options = {}) {
         y: we.y, // raw world Y for sorting
         x: we.x,
         cx: snapPx((we.x + 0.5) * tileW),
-        cy: snapPx((we.y + 0.5) * tileH),
+        cy: snapPx((we.y + 0.5) * tileH - (we.z || 0) * tileH),
         sheet: wSheet,
         sx: ((we.animFrame ?? 0) % animCols) * pmdSw,
         sy: (we.animRow ?? 0) * pmdSh,
@@ -731,7 +731,7 @@ export function render(canvas, data, options = {}) {
         y: vy, // visualY for sorting
         x: vx,
         cx: snapPx((vx + 0.5) * tileW),
-        cy: snapPx((vy + 0.5) * tileH),
+        cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
         sheet: pSheet,
         sx: (player.animFrame ?? 0) * sw,
         sy: (player.animRow ?? 0) * sh,

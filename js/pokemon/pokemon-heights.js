@@ -1,7 +1,7 @@
 export const POKEMON_HEIGHTS = {
   1: 2.1,   // Bulbasaur
-  2: 3.5,   // Ivysaur
-  3: 3.5,   // Venusaur
+  2: 2.2,   // Ivysaur
+  3: 2.5,   // Venusaur
   4: 2.5,   // Charmander
   5: 3.5,   // Charmeleon
   6: 3.5,   // Charizard

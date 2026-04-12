@@ -52,8 +52,18 @@ export function getTerrainSetWalkKind(name) {
   return null;
 }
 
+export const WALL_ROLES = new Set([
+  'EDGE_S', 'EDGE_W', 'EDGE_E', 
+  'IN_NW', 'IN_NE', 'IN_SW', 'IN_SE',
+  'OUT_NW', 'OUT_NE', 'OUT_SW', 'OUT_SE',
+  'OUT_S', 'OUT_W', 'OUT_E', 
+  'CORNER_S_W', 'CORNER_S_E'
+]);
+
 export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   const s = new Set();
+  const BLOCKED_ROLES = WALL_ROLES;
+
   for (const [name, set] of Object.entries(TERRAIN_SETS)) {
     const walkKind = getTerrainSetWalkKind(name);
     if (walkKind) {
@@ -61,15 +71,16 @@ export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
       
       if (set.centerId != null) s.add(set.centerId);
       for (const [role, id] of Object.entries(set.roles || {})) {
-        // Connectors are walkable on all roles. Standard ground blocks on EDGE/IN_ roles.
-        const isBlockingRole = role.startsWith('EDGE_') || role.startsWith('IN_');
-        if (isConnector || !isBlockingRole) {
+        // Connectors are walkable on all roles. 
+        // Standard ground blocks on "Wall" roles (South/West/East edges).
+        // Northern edges are kept walkable to allow standing at the brink.
+        const isWallRole = BLOCKED_ROLES.has(role);
+        if (isConnector || !isWallRole) {
           s.add(id);
         }
       }
     } else if (name.includes('lake') || name.startsWith('Borda com ') || name.startsWith('purples ')) {
-      // No caso de lagos/lava/oceanos, as bordas EXTERNAS (OUT_*) são terra, logo caminháveis.
-      // CENTER (água/lava) e EDGE (beira do precipício/água) continuam bloqueados.
+      // Water borders: OUT roles are ground, CENTER/EDGE are water/wall.
       for (const [role, id] of Object.entries(set.roles || {})) {
         if (role.startsWith('OUT_')) s.add(id);
       }
@@ -78,23 +89,25 @@ export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   return s;
 })();
 
-export function getBaseTerrainSpriteId(mx, my, data) {
+export function getMicroTileRole(mx, my, data) {
   const tile = getMicroTile(mx, my, data);
+  if (!tile) return null;
   let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-  if (tile.isRoad && tile.roadFeature) {
-    setName = tile.roadFeature;
-  }
+  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
   const set = TERRAIN_SETS[setName];
   if (!set) return null;
   const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
-  const role = getRoleForCell(
-    my,
-    mx,
-    data.height * CHUNK_SIZE,
-    data.width * CHUNK_SIZE,
-    isAtOrAbove,
-    set.type
-  );
+  return getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
+}
+
+export function getBaseTerrainSpriteId(mx, my, data) {
+  const tile = getMicroTile(mx, my, data);
+  if (!tile) return null;
+  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
+  const set = TERRAIN_SETS[setName];
+  if (!set) return null;
+  const role = getMicroTileRole(mx, my, data);
   return set.roles[role] ?? set.roles.CENTER ?? set.roles.SEAMLESS_CENTER ?? set.roles.SEAMLESS_TILE ?? set.centerId ?? null;
 }
 
@@ -352,6 +365,10 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId)
       }
     }
   }
+
+  // 1.5 Role-Based Wall Block (Redundant but safe against ID-mapping errors)
+  const role = getMicroTileRole(mx, my, data);
+  if (WALL_ROLES.has(role)) return false;
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
   if (!isBaseTerrainSpriteWalkable(sid)) return false;
