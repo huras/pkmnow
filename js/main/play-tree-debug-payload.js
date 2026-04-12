@@ -1,6 +1,6 @@
 import { buildPlayModeTileDebugInfo } from './play-tile-debug-info.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
-import { parseShape } from '../tessellation-logic.js';
+import { parseShape, proceduralEntityIdHex, PROC_SALT_GRASS_LAYER_TOP } from '../tessellation-logic.js';
 import {
   didFormalTreeSpawnAtRoot,
   getFormalTreeTrunkWorldXSpan,
@@ -13,12 +13,11 @@ import {
 } from '../walkability.js';
 
 /**
- * Compact bundle for debugging formal/scatter trees: sprites, Pass 2, and narrow-trunk colliders.
- * Paste into issues / Cursor.
+ * Compact bundle for debugging play “details” (trees, scatter props, grass): Pass 2, colliders, deterministic ids.
  */
-export function buildPlayModeTreeDebugPayload(mx, my, data) {
+export function buildPlayModeDetailDebugPayload(mx, my, data) {
   const tileInfo = buildPlayModeTileDebugInfo(mx, my, data);
-  const highlight = tileInfo.treeColliderHighlight;
+  const highlight = tileInfo.playDetailHighlight;
   const wx = mx + 0.5;
   const wy = my + 0.5;
 
@@ -31,17 +30,18 @@ export function buildPlayModeTreeDebugPayload(mx, my, data) {
   };
 
   let formalCollider = null;
-  if (highlight?.kind === 'formal') {
+  if (highlight?.kind === 'formal-tree') {
     formalCollider = {
       rootX: highlight.rootX,
       my: highlight.my,
+      idHex: highlight.idHex,
       didSpawnAtRoot: didFormalTreeSpawnAtRoot(highlight.rootX, highlight.my, data),
       trunkSpanWorld: getFormalTreeTrunkWorldXSpan(highlight.rootX, highlight.my, data)
     };
   }
 
   let scatterCollider = null;
-  if (highlight?.kind === 'scatter') {
+  if (highlight?.kind === 'scatter-tree') {
     const memo = new Map();
     const trunkSpanWorld = getScatterTreeTrunkWorldSpanIfOrigin(highlight.ox0, highlight.oy0, data, memo);
     const sp = tileInfo.vegetation.scatterPass2;
@@ -70,6 +70,7 @@ export function buildPlayModeTreeDebugPayload(mx, my, data) {
     }
     scatterCollider = {
       originMicro: { mx: highlight.ox0, my: highlight.oy0 },
+      idHex: highlight.idHex,
       trunkSpanWorld,
       trunkFootprintRowOYRel,
       itemKey,
@@ -77,16 +78,61 @@ export function buildPlayModeTreeDebugPayload(mx, my, data) {
     };
   }
 
+  let scatterSolidCollider = null;
+  if (highlight?.kind === 'scatter-solid') {
+    const objSet = OBJECT_SETS[highlight.itemKey];
+    let objectSetSummary = null;
+    if (objSet) {
+      objectSetSummary = {
+        itemKey: highlight.itemKey,
+        shape: objSet.shape,
+        rows: highlight.rows,
+        cols: highlight.cols,
+        parts: (objSet.parts || []).map((p) => ({
+          role: p.role,
+          ids: p.ids ? [...p.ids] : []
+        }))
+      };
+    }
+    scatterSolidCollider = {
+      originMicro: { mx: highlight.ox0, my: highlight.oy0 },
+      idHex: highlight.idHex,
+      itemKey: highlight.itemKey,
+      rows: highlight.rows,
+      cols: highlight.cols,
+      microFootprint: {
+        mxMin: highlight.ox0,
+        myMin: highlight.oy0,
+        mxMaxExclusive: highlight.ox0 + highlight.cols,
+        myMaxExclusive: highlight.oy0 + highlight.rows
+      },
+      objectSetSummary
+    };
+  }
+
+  let grassDetail = null;
+  if (highlight?.kind === 'grass') {
+    grassDetail = {
+      mx: highlight.mx,
+      my: highlight.my,
+      variant: highlight.variant,
+      idHexBase: highlight.idHex,
+      idHexTopLayer: proceduralEntityIdHex(data.seed, highlight.mx, highlight.my, PROC_SALT_GRASS_LAYER_TOP)
+    };
+  }
+
   return {
-    schema: 'play-tree-debug-v1',
+    schema: 'play-detail-debug-v1',
     purpose:
-      'Tree sprite, formal/scatter placement logic, and narrow-trunk collider data — paste into Cursor or a GitHub issue.',
+      'Play detail: formal/scatter trees, scatter solids (rocks/crystals/etc.), grass — Pass 2, colliders, deterministic procedural ids.',
     worldSeed: data.seed,
     coord: tileInfo.coord,
-    treeColliderHighlight: highlight,
+    detailHighlight: highlight,
     colliderWorldSamples,
     formalCollider,
     scatterCollider,
+    scatterSolidCollider,
+    grassDetail,
     logic: tileInfo.logic,
     vegetation: {
       noiseTrees: tileInfo.vegetation.noiseTrees,
@@ -110,4 +156,9 @@ export function buildPlayModeTreeDebugPayload(mx, my, data) {
     cell: tileInfo.cell,
     layers: tileInfo.layers
   };
+}
+
+/** @deprecated Use buildPlayModeDetailDebugPayload */
+export function buildPlayModeTreeDebugPayload(mx, my, data) {
+  return buildPlayModeDetailDebugPayload(mx, my, data);
 }

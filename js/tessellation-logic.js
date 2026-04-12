@@ -164,6 +164,8 @@ export function seededHashInt(x, y, seed) {
 
 /** Sales por “camada” para IDs estáveis não colidirem (grama vs scatter vs props). */
 export const PROC_SALT_GRASS_CELL = 3_010_033;
+/** Grama “top” overlay no mesmo micro — id distinto da base para estado/interação separável. */
+export const PROC_SALT_GRASS_LAYER_TOP = 3_010_034;
 export const PROC_SALT_SCATTER_CELL = 3_010_222;
 export const PROC_SALT_SCATTER_INSTANCE = 3_010_501;
 export const PROC_SALT_FORMAL_TREE_CELL = 3_015_555;

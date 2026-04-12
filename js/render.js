@@ -797,7 +797,7 @@ export function render(canvas, data, options = {}) {
 
     // --- Collider overlay (checkbox or C key): walkability tint + every nearby trunk stroke + entity radii.
     // "Inspect one tree" (context menu) only adds the yellow trunk highlight below + player feet circle here — not all trunks.
-    const treeColliderDbg = options.settings?.playTreeColliderHighlight;
+    const detailColliderDbg = options.settings?.playDetailColliderHighlight;
     const showFullColliderOverlay = options.settings?.showPlayColliders || window.debugColliders;
 
     if (showFullColliderOverlay) {
@@ -893,7 +893,7 @@ export function render(canvas, data, options = {}) {
         }
       }
       ctx.restore();
-    } else if (treeColliderDbg) {
+    } else if (detailColliderDbg) {
       ctx.save();
       for (const item of renderItems) {
         if (item.type === 'player' || item.type === 'wild') {
@@ -916,8 +916,8 @@ export function render(canvas, data, options = {}) {
       ctx.restore();
     }
 
-    if (treeColliderDbg?.kind === 'formal') {
-      const span = getFormalTreeTrunkWorldXSpan(treeColliderDbg.rootX, treeColliderDbg.my, data);
+    if (detailColliderDbg?.kind === 'formal-tree') {
+      const span = getFormalTreeTrunkWorldXSpan(detailColliderDbg.rootX, detailColliderDbg.my, data);
       if (span) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 210, 70, 0.98)';
@@ -931,9 +931,9 @@ export function render(canvas, data, options = {}) {
         ctx.stroke();
         ctx.restore();
       }
-    } else if (treeColliderDbg?.kind === 'scatter') {
+    } else if (detailColliderDbg?.kind === 'scatter-tree') {
       const treeMemo = new Map();
-      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(treeColliderDbg.ox0, treeColliderDbg.oy0, data, treeMemo);
+      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(detailColliderDbg.ox0, detailColliderDbg.oy0, data, treeMemo);
       if (sspan) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 190, 95, 0.98)';
@@ -947,6 +947,33 @@ export function render(canvas, data, options = {}) {
         ctx.stroke();
         ctx.restore();
       }
+    } else if (detailColliderDbg?.kind === 'scatter-solid') {
+      const twS = Math.ceil(tileW);
+      const thS = Math.ceil(tileH);
+      const x0 = detailColliderDbg.ox0;
+      const y0 = detailColliderDbg.oy0;
+      const cols = detailColliderDbg.cols ?? 1;
+      const rows = detailColliderDbg.rows ?? 1;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(
+        snapPx(x0 * tileW),
+        snapPx(y0 * tileH),
+        Math.max(1, cols * twS - 1),
+        Math.max(1, rows * thS - 1)
+      );
+      ctx.restore();
+    } else if (detailColliderDbg?.kind === 'grass') {
+      const twG = Math.ceil(tileW);
+      const thG = Math.ceil(tileH);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(140, 255, 160, 0.95)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(snapPx(detailColliderDbg.mx * tileW), snapPx(detailColliderDbg.my * tileH), twG, thG);
+      ctx.fillStyle = 'rgba(140, 255, 160, 0.12)';
+      ctx.fillRect(detailColliderDbg.mx * tileW, detailColliderDbg.my * tileH, twG, thG);
+      ctx.restore();
     }
 
     // Indicador de colisão: círculo com diâmetro = 1 tile no centro da célula lógica (player.x, player.y).

@@ -8,16 +8,16 @@ import {
 
 let lastDebugInfo = null;
 /** @type {object | null} */
-let lastTreeDebugInfo = null;
+let lastDetailDebugInfo = null;
 let getCurrentData = () => null;
 let debugModalEl = null;
 let debugContentEl = null;
 
 function setDebugModalCopyButtons(mode) {
   const btnTile = document.getElementById('tile-debug-copy-json');
-  const btnTree = document.getElementById('tile-debug-copy-tree-json');
-  if (btnTile) btnTile.classList.toggle('hidden', mode === 'tree');
-  if (btnTree) btnTree.classList.toggle('hidden', mode !== 'tree');
+  const btnDetail = document.getElementById('tile-debug-copy-detail-json');
+  if (btnTile) btnTile.classList.toggle('hidden', mode === 'detail');
+  if (btnDetail) btnDetail.classList.toggle('hidden', mode !== 'detail');
 }
 
 export function configureTileDebugModal(cfg) {
@@ -30,8 +30,13 @@ export function getLastTileDebugInfo() {
   return lastDebugInfo;
 }
 
+export function getLastDetailDebugInfo() {
+  return lastDetailDebugInfo;
+}
+
+/** @deprecated Use getLastDetailDebugInfo */
 export function getLastTreeDebugInfo() {
-  return lastTreeDebugInfo;
+  return lastDetailDebugInfo;
 }
 
 
@@ -42,7 +47,7 @@ export function formatObjectSetsFlags(f) {
 
 export function openDebugModal(info) {
   lastDebugInfo = info;
-  lastTreeDebugInfo = null;
+  lastDetailDebugInfo = null;
   setDebugModalCopyButtons('tile');
   const escDbg = (s) =>
     String(s)
@@ -446,13 +451,13 @@ export function openDebugModal(info) {
 }
 
 /**
- * Tree-focused debug view + JSON payload (`getLastTreeDebugInfo` for clipboard).
- * @param {object} payload - from `buildPlayModeTreeDebugPayload`
+ * Play “detail” debug (tree / scatter prop / grass) + JSON payload (`getLastDetailDebugInfo` for clipboard).
+ * @param {object} payload - from `buildPlayModeDetailDebugPayload`
  */
-export function openTreeDebugModal(payload) {
-  lastTreeDebugInfo = payload;
+export function openDetailDebugModal(payload) {
+  lastDetailDebugInfo = payload;
   lastDebugInfo = null;
-  setDebugModalCopyButtons('tree');
+  setDebugModalCopyButtons('detail');
 
   const escDbg = (s) =>
     String(s)
@@ -460,32 +465,50 @@ export function openTreeDebugModal(payload) {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-  const h = payload.treeColliderHighlight;
+  const h = payload.detailHighlight;
   const cw = payload.colliderWorldSamples;
   const hiRow =
     h == null
-      ? `<tr><th>Highlight</th><td><span style="color:#f88">No tree at this tile (use a tile with “Show tree collider” available).</span></td></tr>`
+      ? `<tr><th>Highlight</th><td><span style="color:#f88">No detail at this tile (use a tile where “View detail data…” is available).</span></td></tr>`
       : `<tr><th>Highlight</th><td><code>${escDbg(JSON.stringify(h))}</code></td></tr>`;
 
   const formalRows =
     payload.formalCollider == null
       ? ''
-      : `<tr><th>Formal trunk span</th><td><code>${escDbg(JSON.stringify(payload.formalCollider.trunkSpanWorld))}</code></td></tr>
+      : `<tr><th>Formal idHex</th><td><code>${escDbg(payload.formalCollider.idHex ?? '—')}</code></td></tr>
+         <tr><th>Formal trunk span</th><td><code>${escDbg(JSON.stringify(payload.formalCollider.trunkSpanWorld))}</code></td></tr>
          <tr><th>didSpawnAtRoot</th><td>${payload.formalCollider.didSpawnAtRoot ? 'yes' : 'no'}</td></tr>`;
 
   const scatterRows =
     payload.scatterCollider == null
       ? ''
-      : `<tr><th>Scatter origin</th><td>[${payload.scatterCollider.originMicro.mx}, ${payload.scatterCollider.originMicro.my}]</td></tr>
+      : `<tr><th>Scatter-tree idHex</th><td><code>${escDbg(payload.scatterCollider.idHex ?? '—')}</code></td></tr>
+         <tr><th>Scatter origin</th><td>[${payload.scatterCollider.originMicro.mx}, ${payload.scatterCollider.originMicro.my}]</td></tr>
          <tr><th>Item key</th><td><code>${escDbg(payload.scatterCollider.itemKey ?? '—')}</code></td></tr>
          <tr><th>Scatter trunk span</th><td><code>${escDbg(JSON.stringify(payload.scatterCollider.trunkSpanWorld))}</code></td></tr>`;
+
+  const solidRows =
+    payload.scatterSolidCollider == null
+      ? ''
+      : `<tr><th>Scatter-solid idHex</th><td><code>${escDbg(payload.scatterSolidCollider.idHex ?? '—')}</code></td></tr>
+         <tr><th>Origin</th><td>[${payload.scatterSolidCollider.originMicro.mx}, ${payload.scatterSolidCollider.originMicro.my}]</td></tr>
+         <tr><th>Footprint</th><td>${payload.scatterSolidCollider.cols}×${payload.scatterSolidCollider.rows} micro</td></tr>
+         <tr><th>Item key</th><td><code>${escDbg(payload.scatterSolidCollider.itemKey ?? '—')}</code></td></tr>
+         <tr><th>microFootprint</th><td><code>${escDbg(JSON.stringify(payload.scatterSolidCollider.microFootprint))}</code></td></tr>`;
+
+  const grassRows =
+    payload.grassDetail == null
+      ? ''
+      : `<tr><th>Grass variant</th><td><code>${escDbg(payload.grassDetail.variant ?? '—')}</code></td></tr>
+         <tr><th>idHex (base cell)</th><td><code>${escDbg(payload.grassDetail.idHexBase ?? '—')}</code></td></tr>
+         <tr><th>idHex (top layer)</th><td><code>${escDbg(payload.grassDetail.idHexTopLayer ?? '—')}</code></td></tr>`;
 
   const jsonRaw = JSON.stringify(payload, null, 2);
   const jsonEsc = escDbg(jsonRaw);
 
   debugContentEl.innerHTML = `
     <div class="tile-debug-section">
-      <div class="tile-debug-section-title">Tree — classification &amp; collider</div>
+      <div class="tile-debug-section-title">Detail — classification &amp; collider</div>
       <table class="tile-debug-table"><tbody>
         ${hiRow}
         <tr><th>World sample (center)</th><td><code>${escDbg(JSON.stringify(cw.tileCenter))}</code></td></tr>
@@ -495,6 +518,8 @@ export function openTreeDebugModal(payload) {
         <tr><th>scatterTrunkOverlapsThisCell</th><td>${cw.scatterTrunkOverlapsThisCell ? 'yes' : 'no'}</td></tr>
         ${formalRows}
         ${scatterRows}
+        ${solidRows}
+        ${grassRows}
       </tbody></table>
     </div>
     <div class="tile-debug-section">
@@ -510,7 +535,7 @@ export function openTreeDebugModal(payload) {
       </tbody></table>
     </div>
     <p style="font-size:0.74rem;color:#a8a8c0;margin:10px 0 6px;line-height:1.45">
-      Use <strong>Copy tree JSON</strong> in the header for the full payload (sprites, OBJECT_SET ids, collision, procedural ids).
+      Use <strong>Copy detail JSON</strong> in the header for the full payload (sprites, OBJECT_SET ids, collision, procedural ids).
     </p>
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:#bde;font-size:0.85rem">Preview JSON (truncated display — copy button has full file)</summary>
@@ -520,7 +545,12 @@ export function openTreeDebugModal(payload) {
 
   const titleEl = document.getElementById('tile-debug-title');
   if (titleEl) {
-    titleEl.textContent = `Tree debug · [${payload.coord?.mx ?? '?'}, ${payload.coord?.my ?? '?'}]`;
+    titleEl.textContent = `Detail debug · [${payload.coord?.mx ?? '?'}, ${payload.coord?.my ?? '?'}]`;
   }
   debugModalEl.classList.add('is-open');
+}
+
+/** @deprecated Use openDetailDebugModal */
+export function openTreeDebugModal(payload) {
+  openDetailDebugModal(payload);
 }

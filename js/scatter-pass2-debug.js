@@ -488,7 +488,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
 
 }
 
-function scatterItemKeyIsSolid(itemKey) {
+export function scatterItemKeyIsSolid(itemKey) {
   if (!itemKey) return false;
   const k = itemKey.toLowerCase();
   return (

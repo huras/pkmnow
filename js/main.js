@@ -13,11 +13,11 @@ import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
   configureTileDebugModal,
   getLastTileDebugInfo,
-  getLastTreeDebugInfo,
+  getLastDetailDebugInfo,
   openDebugModal,
-  openTreeDebugModal
+  openDetailDebugModal
 } from './main/tile-debug-modal.js';
-import { buildPlayModeTreeDebugPayload } from './main/play-tree-debug-payload.js';
+import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.js';
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
@@ -42,21 +42,21 @@ const playFpsEl = document.getElementById('play-fps');
 const playContextMenu = document.getElementById('play-context-menu');
 const btnPlayCtxTeleport = document.getElementById('play-ctx-teleport');
 const btnPlayCtxDebug = document.getElementById('play-ctx-debug');
-const btnPlayCtxViewTreeData = document.getElementById('play-ctx-view-tree-data');
-const btnPlayCtxShowTreeCollider = document.getElementById('play-ctx-show-tree-collider');
-const btnPlayCtxClearTreeCollider = document.getElementById('play-ctx-clear-tree-collider');
+const btnPlayCtxViewDetailData = document.getElementById('play-ctx-view-detail-data');
+const btnPlayCtxShowDetailCollider = document.getElementById('play-ctx-show-detail-collider');
+const btnPlayCtxClearDetailCollider = document.getElementById('play-ctx-clear-detail-collider');
 const debugModal = document.getElementById('tile-debug-modal');
 const debugContent = document.getElementById('tile-debug-content');
 const btnDebugClose = document.getElementById('tile-debug-close');
 const btnDebugCopy = document.getElementById('tile-debug-copy-json');
-const btnDebugCopyTree = document.getElementById('tile-debug-copy-tree-json');
+const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
 
 let currentData = null;
 let appMode = 'map';
 let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
-/** @type {{ kind: 'formal', rootX: number, my: number } | { kind: 'scatter', ox0: number, oy0: number } | null} */
-let playTreeColliderHighlight = null;
+/** @type {object | null} */
+let playDetailColliderHighlight = null;
 
 configureTileDebugModal({
   getCurrentData: () => currentData,
@@ -102,7 +102,7 @@ function getSettings() {
     overlayGraph,
     overlayContours,
     showPlayColliders,
-    playTreeColliderHighlight,
+    playDetailColliderHighlight,
     appMode,
     player,
     time: gameTime
@@ -139,18 +139,18 @@ installPlayContextMenu({
   getCurrentData: () => currentData,
   updateView,
   openDebugModal,
-  openTreeDebugModal,
+  openDetailDebugModal,
   buildPlayModeTileDebugInfo,
-  buildPlayModeTreeDebugPayload,
+  buildPlayModeDetailDebugPayload,
   playContextMenu,
   btnPlayCtxTeleport,
   btnPlayCtxDebug,
-  btnPlayCtxViewTreeData,
-  btnPlayCtxShowTreeCollider,
-  btnPlayCtxClearTreeCollider,
-  getPlayTreeColliderHighlight: () => playTreeColliderHighlight,
-  setPlayTreeColliderHighlight: (v) => {
-    playTreeColliderHighlight = v;
+  btnPlayCtxViewDetailData,
+  btnPlayCtxShowDetailCollider,
+  btnPlayCtxClearDetailCollider,
+  getPlayDetailColliderHighlight: () => playDetailColliderHighlight,
+  setPlayDetailColliderHighlight: (v) => {
+    playDetailColliderHighlight = v;
   },
   getPlayer: () => player
 });
@@ -160,7 +160,7 @@ function run() {
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   resetWildPokemonManager();
-  playTreeColliderHighlight = null;
+  playDetailColliderHighlight = null;
   updateView();
 }
 
@@ -248,7 +248,7 @@ btnBackToMap.addEventListener('click', () => {
   btnBackToMap.classList.add('hidden');
   minimap.classList.add('hidden');
   infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
-  playTreeColliderHighlight = null;
+  playDetailColliderHighlight = null;
 
   document.body.classList.remove('play-mode-active');
   document.querySelector('.app').classList.remove('play-mode-active');
@@ -318,15 +318,15 @@ if (btnDebugCopy) {
   });
 }
 
-if (btnDebugCopyTree) {
-  btnDebugCopyTree.addEventListener('click', () => {
-    const treePayload = getLastTreeDebugInfo();
-    if (treePayload) {
-      navigator.clipboard.writeText(JSON.stringify(treePayload, null, 2)).then(() => {
-        const oldText = btnDebugCopyTree.textContent;
-        btnDebugCopyTree.textContent = 'COPIED!';
+if (btnDebugCopyDetail) {
+  btnDebugCopyDetail.addEventListener('click', () => {
+    const detailPayload = getLastDetailDebugInfo();
+    if (detailPayload) {
+      navigator.clipboard.writeText(JSON.stringify(detailPayload, null, 2)).then(() => {
+        const oldText = btnDebugCopyDetail.textContent;
+        btnDebugCopyDetail.textContent = 'COPIED!';
         setTimeout(() => {
-          btnDebugCopyTree.textContent = oldText;
+          btnDebugCopyDetail.textContent = oldText;
         }, 2000);
       });
     }

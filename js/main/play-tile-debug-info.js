@@ -18,6 +18,7 @@ import {
   parseShape,
   proceduralEntityIdHex,
   PROC_SALT_GRASS_CELL,
+  PROC_SALT_GRASS_LAYER_TOP,
   PROC_SALT_SCATTER_CELL,
   PROC_SALT_SCATTER_INSTANCE,
   PROC_SALT_FORMAL_TREE_CELL,
@@ -206,7 +207,13 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
 
   const scatterPass2 = analyzeScatterPass2Base(mx, my, data);
 
-  const { activeSprites, scatterContinuation } = (() => {
+  const {
+    activeSprites,
+    scatterContinuation,
+    suppressGrassLikeRender,
+    isFormalOccupied,
+    occupiedByScatter
+  } = (() => {
     const sprites = [];
     let scatterContinuation = null;
     const treeType = getTreeType(tile.biomeId, mx, my, seed);
@@ -333,30 +340,98 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
         }
       }
     }
-    return { activeSprites: sprites, scatterContinuation };
+    return { activeSprites: sprites, scatterContinuation, suppressGrassLikeRender, isFormalOccupied, occupiedByScatter };
   })();
 
-  const treeColliderHighlight = (() => {
+  const scatterItemKeyHere =
+    (scatterPass2.pass2B.drawsHere && scatterPass2.pass2B.itemKey) ||
+    (scatterPass2.pass2C.drawsHere && scatterPass2.pass2C.match?.itemKey) ||
+    scatterContinuation?.itemKey ||
+    null;
+
+  const scatterRootMicro =
+    scatterContinuation?.originMicro ??
+    scatterPass2.pass2C.match?.originMicro ??
+    (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
+
+  const playDetailHighlight = (() => {
     if (didFormalTreeSpawnAtRoot(mx, my, data)) {
-      return { kind: 'formal', rootX: mx, my };
+      return {
+        kind: 'formal-tree',
+        rootX: mx,
+        my,
+        idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_FORMAL_TREE_CELL)
+      };
     }
     if (didFormalTreeSpawnAtRoot(mx - 1, my, data)) {
-      return { kind: 'formal', rootX: mx - 1, my };
+      return {
+        kind: 'formal-tree',
+        rootX: mx - 1,
+        my,
+        idHex: proceduralEntityIdHex(seed, mx - 1, my, PROC_SALT_FORMAL_TREE_CELL)
+      };
     }
-    if (!scatterPass2.pass2ScatterBaseWouldDrawHere) return null;
-    const itemKey =
-      (scatterPass2.pass2B.drawsHere && scatterPass2.pass2B.itemKey) ||
-      (scatterPass2.pass2C.drawsHere && scatterPass2.pass2C.match?.itemKey) ||
-      scatterContinuation?.itemKey ||
-      null;
-    if (!itemKey || !scatterItemKeyIsTree(itemKey)) return null;
-    const root =
-      scatterContinuation?.originMicro ??
-      scatterPass2.pass2C.match?.originMicro ??
-      (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
-    if (!root) return null;
-    return { kind: 'scatter', ox0: root.mx, oy0: root.my };
+    if (scatterPass2.pass2ScatterBaseWouldDrawHere && scatterItemKeyHere && scatterRootMicro) {
+      const idHex = proceduralEntityIdHex(seed, scatterRootMicro.mx, scatterRootMicro.my, PROC_SALT_SCATTER_INSTANCE);
+      if (scatterItemKeyIsTree(scatterItemKeyHere)) {
+        return {
+          kind: 'scatter-tree',
+          ox0: scatterRootMicro.mx,
+          oy0: scatterRootMicro.my,
+          itemKey: scatterItemKeyHere,
+          idHex
+        };
+      }
+      const objSetH = OBJECT_SETS[scatterItemKeyHere];
+      const shapeH = objSetH ? parseShape(objSetH.shape) : { rows: 1, cols: 1 };
+      return {
+        kind: 'scatter-solid',
+        ox0: scatterRootMicro.mx,
+        oy0: scatterRootMicro.my,
+        itemKey: scatterItemKeyHere,
+        rows: shapeH.rows,
+        cols: shapeH.cols,
+        idHex
+      };
+    }
+    if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45 && !suppressGrassLikeRender) {
+      const variant = getGrassVariant(tile.biomeId);
+      const tiles = GRASS_TILES[variant];
+      if (tiles) {
+        return {
+          kind: 'grass',
+          mx,
+          my,
+          variant,
+          idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_CELL)
+        };
+      }
+    }
+    return null;
   })();
+
+  const detailInstances = activeSprites.map((s) => {
+    const t = s.type;
+    if (t === 'formal-tree-base' || t === 'formal-tree-top') {
+      return {
+        type: t,
+        idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_FORMAL_TREE_CELL)
+      };
+    }
+    if (t.startsWith('scatter-') && scatterRootMicro) {
+      return {
+        type: t,
+        idHex: proceduralEntityIdHex(seed, scatterRootMicro.mx, scatterRootMicro.my, PROC_SALT_SCATTER_INSTANCE)
+      };
+    }
+    if (t.includes('grass-') && t.endsWith('-base')) {
+      return { type: t, idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_CELL) };
+    }
+    if (t.includes('grass-') && t.endsWith('-top')) {
+      return { type: t, idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_LAYER_TOP) };
+    }
+    return { type: t, idHex: null };
+  });
 
   const overlayDebugLayers = activeSprites.flatMap((s) =>
     (s.ids || []).map((id) => ({
@@ -454,15 +529,11 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
     (mx + my) % 3 === 0 &&
     fdTrees >= TREE_DENSITY_THRESHOLD;
 
-  const scatterRootMicro =
-    scatterContinuation?.originMicro ??
-    scatterPass2.pass2C.match?.originMicro ??
-    (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
-
   const proceduralEntities = {
     schemaNote:
-      'Hex = uint32 determinístico: seededHashInt(mx,my,worldSeed+kindSalt). Mesmo mundo+coords+sal → mesmo id (save, corte de árvore, minério esgotado, etc.). Scatter multi-tile: id na raiz micro (PROC_SALT_SCATTER_INSTANCE).',
+      'Hex = uint32 determinístico: seededHashInt(mx,my,worldSeed+kindSalt). Mesmo mundo+coords+sal → mesmo id (save, corte de árvore, minério esgotado, etc.). Scatter multi-tile: id na raiz micro (PROC_SALT_SCATTER_INSTANCE). Grama base vs topo: PROC_SALT_GRASS_CELL / PROC_SALT_GRASS_LAYER_TOP. Ver detailInstances (espelha activeSprites).',
     worldSeed: seed,
+    detailInstances,
     grassCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_CELL) },
     scatterCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_SCATTER_CELL) },
     rockCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_ROCK) },
@@ -547,6 +618,6 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
       })()
     },
     proceduralEntities,
-    treeColliderHighlight
+    playDetailHighlight
   };
 }
