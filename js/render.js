@@ -1,141 +1,58 @@
 import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
-import { getRoleForCell, seededHash, seededHashInt, parseShape, terrainRoleAllowsScatter2CContinuation } from './tessellation-logic.js';
+import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js';
 import { AnimationRenderer } from './animation-renderer.js';
 import {
-  BIOME_TO_TERRAIN, BIOME_VEGETATION,
-  BIOME_TO_FOLIAGE,
-  GRASS_TILES, TREE_TILES,
-  getGrassVariant, getTreeType, getGrassParams,
+  BIOME_TO_TERRAIN,
+  BIOME_VEGETATION,
+  GRASS_TILES,
+  TREE_TILES,
+  getGrassVariant,
+  getTreeType,
+  getGrassParams,
   TREE_DENSITY_THRESHOLD,
-  FOLIAGE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
-  FOLIAGE_NOISE_SCALE,
   scatterHasWindSway,
   lakeLotusGrassInteriorAllowed,
-  usesPoolAutotileMaskForFoliage,
   isSortableScatter
 } from './biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, LAND_STEPS, WATER_STEPS, foliageDensity, foliageType, elevationToStep } from './chunking.js';
+import { getMicroTile, CHUNK_SIZE, foliageDensity, foliageType } from './chunking.js';
 import { isPropBlocking } from './walkability.js';
-import { validScatterOriginMicro, buildScatterFootprintNoGrassSet } from './scatter-pass2-debug.js';
+import { validScatterOriginMicro } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
-import {
-  PALETTE_BASE_IMAGE_PATHS,
-  paletteBaseSlugFromTerrainSetName,
-  paletteBaseTransitionImageRelPath,
-  allPaletteBaseTransitionImagePaths
-} from './terrain-palette-base.js';
-import { PALETTE_GRASSY_IMAGE_PATHS } from './terrain-palette-grassy.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
-import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
-/** 1px de sobreposição tipo telhado entre células de vegetação >1×1 (empilhamento em Y; vizinhas em X onde há 2+ colunas) */
-const VEG_MULTITILE_OVERLAP_PX = 1;
+import {
+  PLAY_CHUNK_SIZE,
+  WATER_ANIM_SRC_W,
+  WATER_ANIM_SRC_H,
+  VEG_MULTITILE_OVERLAP_PX,
+  GRASS_DEFER_AROUND_PLAYER_DELTAS,
+  PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
+  PLAYER_TILE_GRASS_OVERLAY_ALPHA
+} from './render/render-constants.js';
+import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
+import { bakeChunk } from './render/play-chunk-bake.js';
+import { drawCachedMapOverview } from './render/map-overview-cache.js';
+import { renderMinimap } from './render/render-minimap.js';
 
-/** Máx. linhas (altura) de um objecto scatter em células micro — 2C/2A varrem origens (ox, oy) acima do tile. */
-const MAX_SCATTER_ROWS_PASS2 = 8;
+import './render/render-debug-hotkeys.js';
 
-/** Faixa vertical 16×(16×N) em tilesets/water-tile.png — animação de ondas no oceano (modo play). */
-const WATER_ANIM_SRC_W = 16;
-const WATER_ANIM_SRC_H = 16;
+export {
+  PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
+  PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC,
+  PLAYER_TILE_GRASS_OVERLAY_ALPHA
+} from './render/render-constants.js';
 
-/** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles.
- * Cada bloco é um canvas renderizado uma única vez e mantido em cache.
- * Isso elimina os picos de lag ao caminhar, pois apenas novos blocos pequenos são assados. */
-const PLAY_CHUNK_SIZE = 8;
+export { loadTilesetImages } from './render/load-tileset-images.js';
 
-/**
- * E / W / S / SE / SW from player tile (+y = south). S / SE / SW: full grass only after the sprite.
- * E / W: full grass in PASS 5a (under sprite) always; bottom-strip overlay after sprite on idle waiting frame only (player tile same).
- */
-const GRASS_DEFER_AROUND_PLAYER_DELTAS = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [1, 1],
-  [-1, 1],
-];
-
-/**
- * Player cell: fraction of each PASS 5a grass quad taken from the **bottom** of the sprite (ground-adjacent bar)
- * and the **bottom** of the on-screen quad — drawn after the sprite so it sits in front of the character.
- */
-export const PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC = 0.25;
-
-/** @deprecated Use PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC (same value). */
-export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
-
-/** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
-export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
-
-const playChunkMap = new Map();
-let lastDataForCache = null;
-let lastTileWForCache = 0;
-let minimapBaseCacheCanvas = null;
-let minimapBaseCacheData = null;
-let minimapBaseCacheW = 0;
-let minimapBaseCacheH = 0;
-let mapOverviewCacheCanvas = null;
-let mapOverviewCacheKey = '';
 let didWarnTerrainSetRoles = false;
-
-export async function loadTilesetImages() {
-  const sources = [
-    'tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png',
-    'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png',
-    ...PALETTE_BASE_IMAGE_PATHS,
-    ...PALETTE_GRASSY_IMAGE_PATHS,
-    ...allPaletteBaseTransitionImagePaths(),
-    'tilesets/PokemonCenter.png',
-    'tilesets/gengar_walk.png',
-    'tilesets/gengar_idle.png',
-    'tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png'
-  ];
-
-  const promises = sources.map((src) => {
-    if (imageCache.has(src)) return Promise.resolve(imageCache.get(src));
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        imageCache.set(src, img);
-        resolve(img);
-      };
-      img.onerror = () => {
-        if (src.startsWith('tilesets/palettes/') || src === 'tilesets/rocky-terrain.png') {
-          resolve(null);
-        } else {
-          reject(new Error(`Failed to load ${src}`));
-        }
-      };
-      img.src = src;
-    });
-  });
-
-  promises.push(
-    new Promise((resolve) => {
-      const src = 'tilesets/water-tile.png';
-      if (imageCache.has(src)) {
-        resolve();
-        return;
-      }
-      const img = new Image();
-      img.onload = () => {
-        imageCache.set(src, img);
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = src;
-    })
-  );
-
-  await Promise.all(promises);
-}
 
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -149,10 +66,9 @@ export function render(canvas, data, options = {}) {
     didWarnTerrainSetRoles = true;
   }
 
-  const { width, height, cells, biomes, paths } = data;
+  const { width, height } = data;
   const cw = canvas.width;
   const ch = canvas.height;
-  const graph = data.graph;
 
   const appMode = options.settings?.appMode || 'map';
   const player = options.settings?.player || { x: 0, y: 0 };
@@ -181,148 +97,33 @@ export function render(canvas, data, options = {}) {
     tileH = ch / height;
   }
 
-  // Invalida o cache global de blocos se os dados básicos (mapa ou escala) mudarem (agora com tileW definido)
-  if (appMode !== 'play' || data !== lastDataForCache || tileW !== lastTileWForCache) {
-    playChunkMap.clear();
-    lastDataForCache = data;
-    lastTileWForCache = tileW;
-  }
+  syncPlayChunkCache(data, tileW, appMode);
 
   if (appMode === 'map') {
-    // Incluir config na chave: mesma seed + parâmetros diferentes deve invalidar o cache (antes só seed+view).
-    const configSig = data.config != null ? JSON.stringify(data.config) : '';
-    const mapCacheKey = [
-      data.seed,
-      configSig,
-      width,
-      height,
+    drawCachedMapOverview(ctx, {
+      data,
       cw,
       ch,
       viewType,
-      overlayPaths ? 1 : 0,
-      overlayGraph ? 1 : 0,
-      overlayContours ? 1 : 0
-    ].join('|');
-
-    if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
-      mapOverviewCacheCanvas = document.createElement('canvas');
-      mapOverviewCacheCanvas.width = cw;
-      mapOverviewCacheCanvas.height = ch;
-      mapOverviewCacheKey = mapCacheKey;
-      const mctx = mapOverviewCacheCanvas.getContext('2d');
-      if (mctx) {
-        mctx.imageSmoothingEnabled = false;
-        if (mctx.webkitImageSmoothingEnabled !== undefined) mctx.webkitImageSmoothingEnabled = false;
-        mctx.fillStyle = '#111';
-        mctx.fillRect(0, 0, cw, ch);
-
-        const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            const idx = y * width + x;
-            const bId = biomes[idx];
-            if (viewType === 'elevation') {
-              const val = cells[idx];
-              const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
-              mctx.fillStyle = val < 0.3 ? `rgb(0,0,${colorVal})` : `rgb(${colorVal},${colorVal},${colorVal})`;
-            } else {
-              mctx.fillStyle = biomeColorById.get(bId) || '#000';
-            }
-            mctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
-          }
-        }
-
-        if (overlayPaths && paths) {
-          mctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
-          mctx.lineWidth = Math.max(1.5, tileW * 0.45);
-          mctx.lineJoin = 'round';
-          mctx.lineCap = 'round';
-          for (const path of paths) {
-            mctx.beginPath();
-            path.forEach((p, i) => {
-              const px = (p.x + 0.5) * tileW;
-              const py = (p.y + 0.5) * tileH;
-              if (i === 0) mctx.moveTo(px, py);
-              else mctx.lineTo(px, py);
-            });
-            mctx.stroke();
-          }
-        }
-
-        if (overlayGraph && graph) {
-          for (const node of graph.nodes) {
-            const px = (node.x + 0.5) * tileW;
-            const py = (node.y + 0.5) * tileH;
-            const r = Math.max(4, tileW * 0.75);
-            mctx.shadowBlur = 6;
-            mctx.shadowColor = 'rgba(0,0,0,0.8)';
-            mctx.fillStyle = node.isGym ? '#ff2222' : '#ffffff';
-            mctx.strokeStyle = '#000';
-            mctx.lineWidth = 2;
-            mctx.beginPath();
-            if (node.isGym) {
-              mctx.moveTo(px, py - r * 1.3);
-              mctx.lineTo(px + r * 1.3, py);
-              mctx.lineTo(px, py + r * 1.3);
-              mctx.lineTo(px - r * 1.3, py);
-              mctx.closePath();
-            } else {
-              mctx.arc(px, py, r, 0, Math.PI * 2);
-            }
-            mctx.fill();
-            mctx.stroke();
-            mctx.shadowBlur = 0;
-            mctx.fillStyle = '#fff';
-            mctx.font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
-            mctx.textAlign = 'center';
-            mctx.lineWidth = 3;
-            mctx.strokeStyle = '#000';
-            mctx.strokeText(node.name, px, py - r - 6);
-            mctx.fillText(node.name, px, py - r - 6);
-          }
-        }
-
-        if (overlayContours) {
-          mctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-          mctx.lineWidth = 1;
-          for (let y = startY; y < endY; y++) {
-            for (let x = startX; x < endX; x++) {
-              const hStep = elevationToStep(cells[y * width + x]);
-              if (x < width - 1) {
-                const hr = elevationToStep(cells[y * width + (x + 1)]);
-                if (hStep !== hr) {
-                  mctx.beginPath();
-                  mctx.moveTo((x + 1) * tileW, y * tileH);
-                  mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
-                  mctx.stroke();
-                }
-              }
-              if (y < height - 1) {
-                const hd = elevationToStep(cells[(y + 1) * width + x]);
-                if (hStep !== hd) {
-                  mctx.beginPath();
-                  mctx.moveTo(x * tileW, (y + 1) * tileH);
-                  mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
-                  mctx.stroke();
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (mapOverviewCacheCanvas) {
-      ctx.drawImage(mapOverviewCacheCanvas, 0, 0);
-    }
+      overlayPaths,
+      overlayGraph,
+      overlayContours,
+      startX,
+      startY,
+      endX,
+      endY
+    });
   } else {
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
 
-    const isMovingHorizontal = player.moving && (player.y === player.fromY);
-    const overlayMx = isMovingHorizontal ? player.fromX : Math.floor(vx);
-    const overlayMy = isMovingHorizontal ? player.fromY : Math.floor(vy);
+    /** Must match `updatePlayer`: walk sheet + walk frames only while grounded and moving. */
+    const isPlayerWalkingAnim =
+      !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+    const isMovingHorizontal = isPlayerWalkingAnim && Math.abs(player.vy ?? 0) < 0.05;
+    const overlayMx = Math.floor(vx);
+    const overlayMy = Math.floor(vy);
     const shouldDrawPlayerOverlay = isPlayerIdleOnWaitingFrame() || isMovingHorizontal;
 
     // Área visível em tiles (com pequena margem para tops de árvores)
@@ -388,7 +189,6 @@ export function render(canvas, data, options = {}) {
     }
 
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
-    const cavesImg = imageCache.get('tilesets/flurmimons_tileset___caves_by_flurmimon_dafqtdm.png');
     const TCOLS_NATURE = 57;
     const TCOLS_CAVES = 50;
 
@@ -775,13 +575,13 @@ export function render(canvas, data, options = {}) {
     }
 
     // --- Collect Player ---
-    const isPlayerMoving = player.moving;
+    const isPlayerMoving = isPlayerWalkingAnim;
     const playerDex = player.dexId || 94;
     const { walk: pWalk, idle: pIdle } = getResolvedSheets(imageCache, playerDex);
     const pSheet = isPlayerMoving ? pWalk : pIdle;
 
     if (pSheet) {
-      const { sw, sh } = resolvePmdFrameSpec(pSheet, isPlayerMoving, playerDex);
+      const { sw, sh, animCols } = resolvePmdFrameSpec(pSheet, isPlayerMoving, playerDex);
       const canonicalH = resolveCanonicalPmdH(pIdle, pWalk, playerDex);
       const targetHeightTiles = POKEMON_HEIGHTS[playerDex] || 1.1;
       const targetHeightPx = targetHeightTiles * tileH;
@@ -797,7 +597,7 @@ export function render(canvas, data, options = {}) {
         cx: snapPx((vx + 0.5) * tileW),
         cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
         sheet: pSheet,
-        sx: (player.animFrame ?? 0) * sw,
+        sx: ((player.animFrame ?? 0) % animCols) * sw,
         sy: (player.animRow ?? 0) * sh,
         sw: sw,
         sh: sh,
@@ -828,11 +628,12 @@ export function render(canvas, data, options = {}) {
           else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
         }
 
-        // Shadow
+        // Shadow (ground plane — do not follow jump z; cy is lifted with z for the sprite)
         ctx.fillStyle = 'rgba(0,0,0,0.22)';
         ctx.beginPath();
         const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
-        ctx.ellipse(item.cx, item.cy + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
+        const shadowCy = snapPx((item.y + 0.5) * tileH) + spawnYOffset;
+        ctx.ellipse(item.cx, shadowCy, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
         // Sprite
@@ -1075,506 +876,9 @@ export function render(canvas, data, options = {}) {
 
   if (options.hover) {
     const { x, y } = options.hover;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
     ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
   }
   ctx.restore();
-}
-
-/** Toggles debug colliders on/off */
-window.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() === 'c') {
-    window.debugColliders = !window.debugColliders;
-    console.log('[Debug] Colliders:', window.debugColliders);
-  }
-});
-
-function renderMinimap(canvas, data, player) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.imageSmoothingEnabled = false;
-  if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
-
-  const needsRebuild =
-    !minimapBaseCacheCanvas ||
-    minimapBaseCacheData !== data ||
-    minimapBaseCacheW !== w ||
-    minimapBaseCacheH !== h;
-
-  if (needsRebuild) {
-    minimapBaseCacheCanvas = document.createElement('canvas');
-    minimapBaseCacheCanvas.width = w;
-    minimapBaseCacheCanvas.height = h;
-    minimapBaseCacheData = data;
-    minimapBaseCacheW = w;
-    minimapBaseCacheH = h;
-
-    const bctx = minimapBaseCacheCanvas.getContext('2d');
-    if (!bctx) return;
-    bctx.imageSmoothingEnabled = false;
-    if (bctx.webkitImageSmoothingEnabled !== undefined) bctx.webkitImageSmoothingEnabled = false;
-    bctx.fillStyle = '#111';
-    bctx.fillRect(0, 0, w, h);
-
-    const tileWb = w / data.width;
-    const tileHb = h / data.height;
-    const colorByBiomeId = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
-    for (let y = 0; y < data.height; y++) {
-      for (let x = 0; x < data.width; x++) {
-        const idx = y * data.width + x;
-        const bId = data.biomes[idx];
-        bctx.fillStyle = colorByBiomeId.get(bId) || '#000';
-        bctx.fillRect(Math.floor(x * tileWb), Math.floor(y * tileHb), Math.ceil(tileWb), Math.ceil(tileHb));
-      }
-    }
-  }
-
-  ctx.drawImage(minimapBaseCacheCanvas, 0, 0);
-
-  const tileW = w / data.width, tileH = h / data.height;
-  const macroPx = player.x / CHUNK_SIZE, macroPy = player.y / CHUNK_SIZE;
-  ctx.fillStyle = '#ff0000'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc((macroPx + 0.5) * tileW, (macroPy + 0.5) * tileH, Math.max(3, tileW * 2), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-}
-
-/** Vizinho cardinal à mesma altura com outra paleta rocky-style (não grama / Dirty / cidade). */
-function firstDifferingPaletteBaseNeighborSlug(mx, my, surfaceLevel, getCachedTile, selfSlug) {
-  const offsets = [
-    [0, -1],
-    [0, 1],
-    [-1, 0],
-    [1, 0]
-  ];
-  for (const [dx, dy] of offsets) {
-    const t = getCachedTile(mx + dx, my + dy);
-    if (!t || t.heightStep !== surfaceLevel) continue;
-    const nSet = BIOME_TO_TERRAIN[t.biomeId] || 'grass';
-    const nSlug = paletteBaseSlugFromTerrainSetName(nSet);
-    if (nSlug && nSlug !== selfSlug) return nSlug;
-  }
-  return null;
-}
-
-/** Mesmo role/tileId; troca só a folha se existir PNG trans/ para o par de paletas. */
-function imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, surfaceLevel, getCachedTile) {
-  const defaultPath = TessellationEngine.getImagePath(biomeSet.file);
-  let img = imageCache.get(defaultPath);
-  const selfSlug = paletteBaseSlugFromTerrainSetName(biomeSetName);
-  if (selfSlug == null) return img;
-  const otherSlug = firstDifferingPaletteBaseNeighborSlug(mx, my, surfaceLevel, getCachedTile, selfSlug);
-  if (!otherSlug) return img;
-  const tRel = paletteBaseTransitionImageRelPath(selfSlug, otherSlug);
-  const tPath = TessellationEngine.getImagePath(tRel);
-  const tImg = imageCache.get(tPath);
-  if (tImg?.complete && (tImg.naturalWidth || tImg.width)) return tImg;
-  return img;
-}
-
-/**
- * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
- */
-function bakeChunk(cx, cy, data, tileW, tileH) {
-  const canvas = document.createElement('canvas');
-  const size = PLAY_CHUNK_SIZE * tileW;
-  canvas.width = Math.ceil(size);
-  canvas.height = Math.ceil(size);
-  const octx = canvas.getContext('2d');
-  octx.imageSmoothingEnabled = false;
-
-  const suppressedSet = new Set(); // Metadata for Pass 5a (Animated Grass) suppression
-
-  const startX = cx * PLAY_CHUNK_SIZE;
-  const startY = cy * PLAY_CHUNK_SIZE;
-  const endX = startX + PLAY_CHUNK_SIZE;
-  const endY = startY + PLAY_CHUNK_SIZE;
-
-  const twNat = Math.ceil(tileW);
-  const thNat = Math.ceil(tileH);
-  const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
-  const TCOLS_NATURE_BAKE = 57;
-  const TCOLS_CAVES_BAKE = 50;
-
-  const drawTile16 = (tileId, px, py) => {
-    if (!natureImg || tileId == null || tileId < 0) return;
-    const sx = (tileId % TCOLS_NATURE_BAKE) * 16;
-    const sy = Math.floor(tileId / TCOLS_NATURE_BAKE) * 16;
-    octx.drawImage(natureImg, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);
-  };
-
-  /** Bases scatter: OBJECT_SETS podem vir de nature ou caves — não usar sempre nature. */
-  const drawScatterBaseFromObjectSet = (objSet, tileId, px, py) => {
-    if (tileId == null || tileId < 0) return;
-    const path = TessellationEngine.getImagePath(objSet?.file);
-    const img = path ? imageCache.get(path) : null;
-    if (!img) return;
-    const cols = path.includes('caves') ? TCOLS_CAVES_BAKE : TCOLS_NATURE_BAKE;
-    const sx = (tileId % cols) * 16;
-    const sy = Math.floor(tileId / cols) * 16;
-    octx.drawImage(img, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);
-  };
-
-  octx.fillStyle = '#111';
-  octx.fillRect(0, 0, size, size);
-
-  // NOVO: Cache de metadados para evitar recálculos matemáticos (Otimização GIGANTE de FPS)
-  const tileCache = new Map();
-  const getCachedTile = (mx, my) => {
-    const key = (mx << 16) | (my & 0xFFFF); // Chave numérica rápida
-    if (tileCache.has(key)) return tileCache.get(key);
-    const t = getMicroTile(mx, my, data);
-    tileCache.set(key, t);
-    return t;
-  };
-
-  // Pré-aquecer o cache para a área do chunk + margem de segurança para vizinhos
-  for (let my = startY - 2; my < endY + 2; my++) {
-    for (let mx = startX - 2; mx < endX + 2; mx++) {
-      getCachedTile(mx, my);
-    }
-  }
-
-  // PASS 1: TERRAIN (Base + Height Layers)
-  for (let my = startY; my < endY; my++) {
-    for (let mx = startX; mx < endX; mx++) {
-      const tile = getCachedTile(mx, my);
-      if (!tile) continue;
-
-      // FALLBACK: Draw biome background color first
-      const biome = Object.values(BIOMES).find(b => b.id === tile.biomeId);
-      if (biome) {
-        octx.fillStyle = biome.color;
-        octx.fillRect(Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
-      }
-    }
-  }
-
-  const microHBake = data.height * CHUNK_SIZE;
-  const microWBake = data.width * CHUNK_SIZE;
-  // Água (heightStep < 1): o loop seguinte usa level ≥ 0 e `tile.heightStep < level` → estes tiles
-  // nunca eram desenhados, só a cor do PASS 1 (oceano sólido sem autotile).
-  for (let my = startY; my < endY; my++) {
-    for (let mx = startX; mx < endX; mx++) {
-      const tile = getCachedTile(mx, my);
-      if (!tile || tile.heightStep >= 1) continue;
-      const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-      const biomeSet = TERRAIN_SETS[biomeSetName];
-      if (!biomeSet) continue;
-      const img = imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, tile.heightStep, getCachedTile);
-      if (!img) continue;
-      const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
-      const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-      const role = getRoleForCell(my, mx, microHBake, microWBake, isAtOrAbove, biomeSet.type);
-      const tileId = biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId;
-      if (tileId == null) continue;
-      const sx = (tileId % cols) * 16;
-      const sy = Math.floor(tileId / cols) * 16;
-      octx.drawImage(
-        img,
-        sx,
-        sy,
-        16,
-        16,
-        Math.round((mx - startX) * tileW),
-        Math.round((my - startY) * tileH),
-        twNat,
-        thNat
-      );
-    }
-  }
-
-  for (let level = 0; level <= LAND_STEPS; level++) {
-    for (let my = startY; my < endY; my++) {
-      for (let mx = startX; mx < endX; mx++) {
-        const tile = getCachedTile(mx, my);
-        if (!tile || tile.heightStep < level) continue;
-
-        // 1.1 Render Base Layer (BIOME)
-        const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        const biomeSet = TERRAIN_SETS[biomeSetName];
-        if (biomeSet) {
-          const defaultPath = TessellationEngine.getImagePath(biomeSet.file);
-          let img = imageCache.get(defaultPath);
-          if (tile.heightStep === level) {
-            img = imageForPaletteBaseTerrainDraw(biomeSetName, biomeSet, mx, my, level, getCachedTile);
-          }
-          const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
-          let role;
-          if (tile.heightStep > level) {
-            if (level !== tile.heightStep - 1) role = null;
-            else role = 'CENTER';
-          } else {
-            const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
-            role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, biomeSet.type);
-          }
-          const tileId = role ? (biomeSet.roles[role] ?? biomeSet.roles['CENTER'] ?? biomeSet.centerId) : null;
-          if (img && tileId != null) {
-            octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
-          }
-        }
-
-        const isStair = tile.roadFeature?.startsWith('stair');
-
-        // 1.2 Render Terrain Foliage (Detail Skin) - MOVED BEFORE ROAD
-        if (tile.heightStep === level && tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD) {
-          const foliageSetName = BIOME_TO_FOLIAGE[tile.biomeId];
-          if (foliageSetName) {
-            // "CLEAN ROADS" logic: Only allow grass-based foliage under road/stairs (block sand/rocky/orange/volcano)
-            let allowFoliage = true;
-            if (tile.isRoad) {
-              const lowName = foliageSetName.toLowerCase();
-              const isGrassFoliage = lowName.includes('grass');
-              if (!isGrassFoliage) allowFoliage = false;
-            }
-
-            if (allowFoliage) {
-              const foliageSet = TERRAIN_SETS[foliageSetName];
-              if (foliageSet) {
-                const isFoliageSafeAt = (r, c) => {
-                  const t = getCachedTile(c, r);
-                  if (!t || t.heightStep !== level || t.biomeId !== tile.biomeId || t.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) return false;
-                  // If we are drawing under a road, neighbors must be at same height regardless of being road
-                  for (let dy = -1; dy <= 1; dy++) {
-                    for (let dx = -1; dx <= 1; dx++) {
-                      if (getCachedTile(c + dx, r + dy)?.heightStep !== level) return false;
-                    }
-                  }
-                  return true;
-                };
-
-                if (isFoliageSafeAt(my, mx)) {
-                  const imgPath = TessellationEngine.getImagePath(foliageSet.file);
-                  const img = imageCache.get(imgPath);
-                  const fCols = TessellationEngine.getTerrainSheetCols(foliageSet);
-                  const isFoliagePoolTile = (r, c) => {
-                    const t = getCachedTile(c, r);
-                    return !!(t && t.heightStep === level && t.biomeId === tile.biomeId && t.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD);
-                  };
-                  const landForFoliageRole = usesPoolAutotileMaskForFoliage(foliageSetName)
-                    ? isFoliagePoolTile
-                    : isFoliageSafeAt;
-                  const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, landForFoliageRole, foliageSet.type);
-                  const fTileId = (foliageSet.roles[fRole] ?? foliageSet.roles['CENTER'] ?? foliageSet.centerId);
-                  if (img && fTileId != null) {
-                    octx.drawImage(img, (fTileId % fCols) * 16, Math.floor(fTileId / fCols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // 1.3 Render Road Layer (Overlay only for NON-STAIRS)
-        if (tile.isRoad && !isStair) {
-          const roadSetName = tile.roadFeature || 'road';
-          const roadSet = TERRAIN_SETS[roadSetName];
-          if (roadSet) {
-            const imgPath = TessellationEngine.getImagePath(roadSet.file);
-            const img = imageCache.get(imgPath);
-            const cols = TessellationEngine.getTerrainSheetCols(roadSet);
-            const isAtOrAboveRoad = (r, c) => {
-              const t = getCachedTile(c, r);
-              return (t?.heightStep ?? -99) >= level && t?.isRoad && !t?.roadFeature?.startsWith('stair');
-            };
-            const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveRoad, roadSet.type);
-            const tileId = role ? (roadSet.roles[role] ?? roadSet.roles['CENTER'] ?? roadSet.centerId) : null;
-            if (img && tileId != null) {
-              octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
-            }
-          }
-        }
-
-        // 1.4 Render STAIRS (Top Overlay)
-        if (tile.isRoad && isStair) {
-          const stairSet = TERRAIN_SETS[tile.roadFeature];
-          if (stairSet) {
-            const imgPath = TessellationEngine.getImagePath(stairSet.file);
-            const img = imageCache.get(imgPath);
-            if (img) {
-              const cols = TessellationEngine.getTerrainSheetCols(stairSet);
-              const isAtOrAboveStair = (r, c) => {
-                const t = getCachedTile(c, r);
-                return (t?.heightStep ?? -99) >= tile.heightStep && t?.isRoad && t?.roadFeature === tile.roadFeature;
-              };
-              const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveStair, stairSet.type);
-              const tileId = role ? (stairSet.roles[role] ?? stairSet.roles['CENTER'] ?? stairSet.centerId) : null;
-              if (tileId != null) {
-                octx.drawImage(img, (tileId % cols) * 16, Math.floor(tileId / cols) * 16, 16, 16, Math.round((mx - startX) * tileW), Math.round((my - startY) * tileH), twNat, thNat);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-
-
-
-  /* 
-  // PASS 1.5: GRASS OVERLAY (Bases)
-  for (let my = startY; my < endY; my++) {
-    for (let mx = startX; mx < endX; mx++) {
-      const tile = getCachedTile(mx, my);
-      if (!tile || tile.heightStep < 1 || tile.isRoad || tile.isCity) continue;
-
-      const variant = getGrassVariant(tile.biomeId);
-      const tiles = GRASS_TILES[variant];
-      const { scale: gScale, threshold: gThreshold } = getGrassParams(tile.biomeId);
-      if (tiles && foliageDensity(mx, my, data.seed, gScale) >= gThreshold) {
-        // ENFORCE FLAT GROUND FOR GRASS (No grass on cliffs/edges)
-        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        if (setForRole) {
-           const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-           const microW = data.width * CHUNK_SIZE;
-           const microH = data.height * CHUNK_SIZE;
-           if (getRoleForCell(my, mx, microH, microW, checkAtOrAbove, setForRole.type) !== 'CENTER') continue;
-        }
-
-        // Exclusion check: don't draw grass if it's a formal tree root
-        const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
-        const isFT = !!treeType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-        const isFN = !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx-1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-        
-        if (!isFT && !isFN) {
-           let baseId = tiles.original;
-           if (baseId != null) drawTile16(baseId, (mx - startX) * tileW, (my - startY) * tileH);
-        }
-      }
-    }
-  }
-  */
-
-  // PASS 2: BASES (Halogened scan for multi-tile objects)
-  const validOriginMemo = new Map();
-  // Scan original position up to 4 tiles West and 4 tiles North (for 3x3 or larger spillover)
-  for (let myScan = startY - 4; myScan < endY; myScan++) {
-    for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
-      if (mxScan < 0 || myScan < 0 || mxScan >= data.width * CHUNK_SIZE || myScan >= data.height * CHUNK_SIZE) continue;
-
-      const tile = getCachedTile(mxScan, myScan);
-      if (!tile || tile.heightStep < 1) continue;
-
-      const treeType = getTreeType(tile.biomeId, mxScan, myScan, data.seed);
-      const isFormalRoot = (tx, ty) =>
-        !!treeType && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-
-      // 1. Formal Trees (2x1)
-      if (isFormalRoot(mxScan, myScan)) {
-        // STRICT HEIGHT CHECK: Formal trees only start on flat ground
-        const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-        const roleOrig = setRoot ? getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep, setRoot.type) : 'CENTER';
-
-        if (roleOrig === 'CENTER') {
-          const rx = mxScan + 1;
-          const hRight = getCachedTile(rx, myScan)?.heightStep;
-
-          if (hRight === tile.heightStep) {
-            const ids = TREE_TILES[treeType];
-            if (ids) {
-              // Part 0 (Left half)
-              if (mxScan >= startX && mxScan < endX && myScan >= startY && myScan < endY) {
-                drawTile16(ids.base[0], (mxScan - startX) * tileW, (myScan - startY) * tileH);
-              }
-              // Part 1 (Right half)
-              if (rx >= startX && rx < endX && myScan >= startY && myScan < endY) {
-                drawTile16(ids.base[1], (rx - startX) * tileW - VEG_MULTITILE_OVERLAP_PX, (myScan - startY) * tileH);
-              }
-            }
-          }
-        }
-      }
-
-      // 2. Scatter Objects
-      if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.urbanBuilding) {
-        const isFormalNeighbor = (tx, ty) =>
-          !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-
-        if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
-          if (validScatterOriginMicro(mxScan, myScan, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getCachedTile(c, r), validOriginMemo)) {
-            const items = BIOME_VEGETATION[tile.biomeId] || [];
-            const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
-            const objSet = OBJECT_SETS[itemKey];
-            if (objSet) {
-              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-              const { cols, rows } = parseShape(objSet.shape);
-
-              // Suppression rule: No grass under this scatter footprint
-              for (let dy = 0; dy < rows; dy++) {
-                for (let dx = 0; dx < cols; dx++) {
-                  const fx = mxScan + dx;
-                  const fy = myScan + dy;
-                  if (fx >= startX && fx < endX && fy >= startY && fy < endY) {
-                    suppressedSet.add(`${fx % PLAY_CHUNK_SIZE},${fy % PLAY_CHUNK_SIZE}`);
-                  }
-                }
-              }
-
-              if (base?.ids?.length) {
-                for (let idx = 0; idx < base.ids.length; idx++) {
-                  const ox = idx % cols;
-                  const oy = Math.floor(idx / cols);
-                  const tx = mxScan + ox;
-                  const ty = myScan + oy;
-
-                  // Fragment within current chunk bounds?
-                  if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-                    const destTile = getCachedTile(tx, ty);
-                    if (destTile?.heightStep === tile.heightStep) {
-                      let allowDest = true;
-                      if (ox > 0) {
-                        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
-                        if (setForRole) {
-                          const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-                          const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
-                          allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
-                        }
-                      } else {
-                        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-                        if (setForRole) {
-                          const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-                          if (getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') allowDest = false;
-                        }
-                      }
-
-                      if (allowDest) {
-                        const isSortable = isSortableScatter(itemKey);
-                        if (!isSortable) {
-                          drawScatterBaseFromObjectSet(
-                            objSet,
-                            base.ids[idx],
-                            (tx - startX) * tileW - (ox > 0 ? VEG_MULTITILE_OVERLAP_PX : 0),
-                            (ty - startY) * tileH
-                          );
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      // 3. Urban Buildings (Roofs / Core parts that are NOT baked if we want sorting)
-      // Note: We skip the core rows in bake if we want them to be part of renderItems sorting.
-      // But buildings are huge, usually we only need sorting for the bottom-most row.
-      // For now, let's skip the core rows in bake.
-    }
-  }
-
-  // PASS 3: CLUMP SUPPRESSION (Suppress grass clumps where noise is high, avoiding dense overlap)
-  for (let my = startY; my < endY; my++) {
-    for (let mx = startX; mx < endX; mx++) {
-      const t = getCachedTile(mx, my);
-      if (!t || t.isRoad || t.isCity) continue;
-      if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
-      if (foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
-        suppressedSet.add(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`);
-      }
-    }
-  }
-
-  return { canvas, suppressedSet };
 }

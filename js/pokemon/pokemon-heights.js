@@ -5,7 +5,7 @@ export const POKEMON_HEIGHTS = {
   4: 2.5,   // Charmander
   5: 3.5,   // Charmeleon
   6: 3.5,   // Charizard
-  7: 2.5,   // Squirtle
+  7: 2.0,   // Squirtle
   8: 3.5,   // Wartortle
   9: 3.5,   // Blastoise
   10: 2.0,  // Caterpie
@@ -128,7 +128,7 @@ export const POKEMON_HEIGHTS = {
   127: 3.5, // Pinsir
   128: 3.4, // Tauros
   129: 2.5, // Magikarp
-  130: 12, // Gyarados
+  130: 8, // Gyarados
   131: 3.5, // Lapras
   132: 2.0, // Ditto
   133: 2.5, // Eevee

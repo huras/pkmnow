@@ -1,139 +1,58 @@
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
-import { TessellationEngine } from './tessellation-engine.js';
-import {
-  resetWildPokemonManager,
-  syncWildPokemonWindow,
-  updateWildPokemon
-} from './wild-pokemon/wild-pokemon-manager.js';
+import { resetWildPokemonManager } from './wild-pokemon/wild-pokemon-manager.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
-import { player, setPlayerPos, tryMovePlayer, updatePlayer, tryJumpPlayer, canWalk } from './player.js';
-import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from './chunking.js';
-import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { player, setPlayerPos } from './player.js';
+import { CHUNK_SIZE, getMicroTile } from './chunking.js';
+import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
-  getRoleForCell,
-  seededHash,
-  parseShape,
-  proceduralEntityIdHex,
-  PROC_SALT_GRASS_CELL,
-  PROC_SALT_SCATTER_CELL,
-  PROC_SALT_SCATTER_INSTANCE,
-  PROC_SALT_FORMAL_TREE_CELL,
-  PROC_SALT_ROCK,
-  PROC_SALT_CRYSTAL
-} from './tessellation-logic.js';
-import {
-  BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE, BIOME_VEGETATION,
-  GRASS_TILES, TREE_TILES,
-  getGrassVariant, getTreeType,
-  TREE_DENSITY_THRESHOLD,
-  TREE_NOISE_SCALE
-} from './biome-tiles.js';
-import {
-  analyzeScatterPass2Base,
-  validScatterOriginMicro,
-  grassSuppressedByScatterFootprint
-} from './scatter-pass2-debug.js';
-import {
-  getTerrainSetWalkKind,
-  isBaseTerrainSpriteWalkable,
-  getFoliageOverlayTileId,
-  getLakeLotusFoliageWalkRole,
-  isPurpleLakePoolWalkBlockingRole,
-  FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS
-} from './walkability.js';
+  configureTileDebugModal,
+  getLastTileDebugInfo,
+  openDebugModal
+} from './main/tile-debug-modal.js';
+import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
+import { installPlayContextMenu } from './main/play-context-menu.js';
+import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 
-/** Tile id → walkable / abovePlayer (apenas OBJECT_SETS em tessellation-data.js) */
-const OBJECT_TILE_FLAGS_BY_ID = (() => {
-  const m = new Map();
-  for (const objSet of Object.values(OBJECT_SETS)) {
-    for (const part of objSet.parts || []) {
-      if (typeof part.walkable !== 'boolean' || typeof part.abovePlayer !== 'boolean') continue;
-      for (const id of part.ids || []) {
-        m.set(id, { walkable: part.walkable, abovePlayer: part.abovePlayer });
-      }
-    }
-  }
-  return m;
-})();
+const canvas = document.getElementById('map');
+const minimap = document.getElementById('minimap');
+const seedInput = document.getElementById('seed');
+const btnGenerate = document.getElementById('generate');
+const infoBar = document.getElementById('hud-info');
+const btnExport = document.getElementById('exportBtn');
+const btnImport = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+const btnSettings = document.getElementById('btnSettings');
+const settingsModal = document.getElementById('settingsModal');
+const btnApplySettings = document.getElementById('btnApplySettings');
+const btnCloseSettings = document.getElementById('btnCloseSettings');
+const btnExportWorldSettings = document.getElementById('btnExportWorldSettings');
+const btnBackToMap = document.getElementById('btnBackToMap');
+const playFpsEl = document.getElementById('play-fps');
+const playContextMenu = document.getElementById('play-context-menu');
+const btnPlayCtxTeleport = document.getElementById('play-ctx-teleport');
+const btnPlayCtxDebug = document.getElementById('play-ctx-debug');
+const debugModal = document.getElementById('tile-debug-modal');
+const debugContent = document.getElementById('tile-debug-content');
+const btnDebugClose = document.getElementById('tile-debug-close');
+const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 
-function getObjectTileFlags(tileId) {
-  if (tileId == null) return null;
-  return OBJECT_TILE_FLAGS_BY_ID.get(tileId) ?? null;
-}
+let currentData = null;
+let appMode = 'map';
+let currentConfig = { ...DEFAULT_CONFIG };
+let gameTime = 0;
 
-/** Ordem igual a GlobeTileDetailDebug (tile-detail-app): NW→SE + centro. */
-const TILE_DEBUG_DIRS_3X3 = [
-  { dx: -1, dy: -1, label: 'NW' },
-  { dx: 0, dy: -1, label: 'N' },
-  { dx: 1, dy: -1, label: 'NE' },
-  { dx: -1, dy: 0, label: 'W' },
-  { dx: 0, dy: 0, label: 'C' },
-  { dx: 1, dy: 0, label: 'E' },
-  { dx: -1, dy: 1, label: 'SW' },
-  { dx: 0, dy: 1, label: 'S' },
-  { dx: 1, dy: 1, label: 'SE' }
-];
-
-function terrainSetNameForMicroTile(tile) {
-  if (!tile) return 'grass';
-  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
-  return setName;
-}
-
-/** Papel + sprite local do terreno base na altura de superfície `surfaceLevel` (mesma regra que render/walk). */
-function computeTerrainRoleAndSprite(mx, my, data, surfaceLevel) {
-  const tile = getMicroTile(mx, my, data);
-  if (!tile) return { setName: null, set: null, role: null, spriteId: null };
-  const setName = terrainSetNameForMicroTile(tile);
-  const set = TERRAIN_SETS[setName];
-  if (!set) return { setName, set: null, role: null, spriteId: null };
-  const H = data.height * CHUNK_SIZE;
-  const W = data.width * CHUNK_SIZE;
-  const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= surfaceLevel;
-  const role = getRoleForCell(my, mx, H, W, isAtOrAbove, set.type);
-  const spriteId =
-    set.roles[role] ??
-    set.roles.CENTER ??
-    set.roles.SEAMLESS_CENTER ??
-    set.roles.SEAMLESS_TILE ??
-    set.centerId ??
-    null;
-  return { setName, set, role, spriteId };
-}
-
-function roleNameForSpriteIdInSet(set, tileId) {
-  if (!set?.roles || tileId == null) return '—';
-  for (const [k, v] of Object.entries(set.roles)) {
-    if (v === tileId) return k;
-  }
-  return '—';
-}
-
-/** Ícone 16×16 a partir do TERRAIN_SET (inclui paletas rocky/grassy). */
-function terrainSheetSpriteIconHtml(set, tileId) {
-  if (tileId == null || !set) return '';
-  const path = TessellationEngine.getImagePath(set.file);
-  const cols = TessellationEngine.getTerrainSheetCols(set);
-  const sx = (tileId % cols) * 16;
-  const sy = Math.floor(tileId / cols) * 16;
-  return `<div class="sprite-icon" style="background-image:url('${path}');background-position:-${sx}px -${sy}px"></div>`;
-}
-
-function natureSpriteIconHtml(tileId) {
-  if (tileId == null) return '';
-  const path = 'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png';
-  const cols = 57;
-  const sx = (tileId % cols) * 16;
-  const sy = Math.floor(tileId / cols) * 16;
-  return `<div class="sprite-icon" style="background-image:url('${path}');background-position:-${sx}px -${sy}px"></div>`;
-}
+configureTileDebugModal({
+  getCurrentData: () => currentData,
+  debugModal,
+  debugContent
+});
 
 function refreshPlayModeInfoBar() {
   if (!infoBar || !currentData || appMode !== 'play') return;
@@ -161,28 +80,6 @@ function refreshPlayModeInfoBar() {
   infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
 }
 
-const canvas = document.getElementById('map');
-const minimap = document.getElementById('minimap');
-const seedInput = document.getElementById('seed');
-const btnGenerate = document.getElementById('generate');
-const infoBar = document.getElementById('hud-info');
-const btnExport = document.getElementById('exportBtn');
-const btnImport = document.getElementById('importBtn');
-const importFile = document.getElementById('importFile');
-const btnSettings = document.getElementById('btnSettings');
-const settingsModal = document.getElementById('settingsModal');
-const btnApplySettings = document.getElementById('btnApplySettings');
-const btnCloseSettings = document.getElementById('btnCloseSettings');
-const btnExportWorldSettings = document.getElementById('btnExportWorldSettings');
-const btnBackToMap = document.getElementById('btnBackToMap');
-const playFpsEl = document.getElementById('play-fps');
-
-let currentData = null;
-let appMode = 'map'; // 'map' or 'play'
-let currentConfig = { ...DEFAULT_CONFIG };
-let gameTime = 0;
-let animFrameId = null;
-
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
@@ -195,81 +92,40 @@ function updateView() {
   if (currentData) render(canvas, currentData, { settings: getSettings(), hover: lastHoverTile });
 }
 
-// Animation loop (Play Mode only)
-let lastTimestamp = 0;
-/** Timestamps (performance.now) do fim de cada frame — FPS = quantos caem na última 1 s (mais fiel que 1/dt). */
-const playFpsSampleTimes = [];
-const heldKeys = new Set();
+const { startGameLoop, stopGameLoop } = createGameLoop({
+  getAppMode: () => appMode,
+  setGameTime: (t) => {
+    gameTime = t;
+  },
+  getCurrentData: () => currentData,
+  updateView,
+  refreshPlayModeInfoBar,
+  getPlayFpsEl: () => playFpsEl,
+  player
+});
 
-function gameLoop(timestamp) {
-  const dt = (timestamp - lastTimestamp) / 1000;
-  lastTimestamp = timestamp;
-  gameTime = timestamp / 1000;
+registerPlayKeyboard({
+  getAppMode: () => appMode,
+  getCurrentData: () => currentData,
+  refreshPlayModeInfoBar,
+  onEscapePlay: () => btnBackToMap.click(),
+  player
+});
 
-  // 1. Calculate and normalize physical input vector
-  let inX = 0, inY = 0;
-  if (heldKeys.has('up')) inY -= 1;
-  if (heldKeys.has('down')) inY += 1;
-  if (heldKeys.has('left')) inX -= 1;
-  if (heldKeys.has('right')) inX += 1;
-
-  if (inX !== 0 && inY !== 0) {
-    const mag = Math.hypot(inX, inY);
-    inX /= mag;
-    inY /= mag;
-  }
-  
-  if (['play'].includes(appMode)) {
-    const runMult = heldKeys.has('shift') ? 2.0 : 1.0;
-    player.inputX = inX * runMult;
-    player.inputY = inY * runMult;
-  } else {
-    player.inputX = 0;
-    player.inputY = 0;
-  }
-
-  // 2. Physics & Visual Update
-  updatePlayer(dt, currentData);
-
-  if (currentData && appMode === 'play') {
-    const pvx = player.visualX ?? player.x;
-    const pvy = player.visualY ?? player.y;
-    syncWildPokemonWindow(currentData, pvx, pvy);
-    updateWildPokemon(dt, currentData, pvx, pvy);
-    refreshPlayModeInfoBar();
-  }
-
-  const tFrameStart = performance.now();
-  updateView();
-  if (appMode === 'play' && playFpsEl) {
-    const tEnd = performance.now();
-    const frameMs = tEnd - tFrameStart;
-    playFpsSampleTimes.push(tEnd);
-    const cutoff = tEnd - 1000;
-    while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
-    const fps = playFpsSampleTimes.length;
-    playFpsEl.textContent = `${fps} FPS · ${frameMs.toFixed(1)} ms/frame`;
-  }
-  if (appMode === 'play') {
-    animFrameId = requestAnimationFrame(gameLoop);
-  }
-}
-
-function startGameLoop() {
-  if (animFrameId) cancelAnimationFrame(animFrameId);
-  animFrameId = requestAnimationFrame(gameLoop);
-}
-
-function stopGameLoop() {
-  if (animFrameId) {
-    cancelAnimationFrame(animFrameId);
-    animFrameId = null;
-  }
-}
+installPlayContextMenu({
+  canvas,
+  getAppMode: () => appMode,
+  getCurrentData: () => currentData,
+  updateView,
+  openDebugModal,
+  buildPlayModeTileDebugInfo,
+  playContextMenu,
+  btnPlayCtxTeleport,
+  btnPlayCtxDebug,
+  getPlayer: () => player
+});
 
 function run() {
-  // Keep map-mode canvas dimensions in sync before generating/rendering.
-  // Without this, first generation can use stale canvas size until a mode switch.
   resizeCanvas();
   currentData = generate(seedInput.value, currentConfig);
   resetWildPokemonManager();
@@ -290,69 +146,12 @@ function downloadJsonFile(filename, payload) {
   document.body.removeChild(a);
 }
 
-// Ouvintes para os botões de Fase 5
-document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEach(el => {
+document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEach((el) => {
   el.addEventListener('change', updateView);
 });
 
-// Hover para debug de célula (Estilo Civilization HUD)
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
-const MAP_HOVER_MIN_INTERVAL_MS = 33; // ~30 Hz cap for map-mode hover redraw
-
-function renderMapHoverDetails(gx, gy) {
-  if (!currentData) return;
-
-  if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
-    const idx = gy * currentData.width + gx;
-    const val = currentData.cells[idx];
-    const imp = currentData.cellImportance ? currentData.cellImportance[idx] : 0;
-    const traffic = currentData.roadTraffic ? currentData.roadTraffic[idx] : 0;
-    
-    // Procura se há cidade aqui
-    const city = currentData.graph.nodes.find(n => n.x === gx && n.y === gy);
-    // Procura se há rota (path) aqui (para a fase 4)
-    let routeName = '';
-    if (traffic > 0 && currentData.paths) {
-      const activePath = currentData.paths.find(p => p.some(cell => cell.x === gx && cell.y === gy));
-      if (activePath) routeName = activePath.name || `Rota (Importância ${activePath.importance})`;
-    }
-    
-    const temp = currentData.temperature ? currentData.temperature[idx] : 0;
-    const moist = currentData.moisture ? currentData.moisture[idx] : 0;
-    const bId = currentData.biomes ? currentData.biomes[idx] : 0;
-    const biome = Object.values(BIOMES).find(b => b.id === bId) || { name: 'Desconhecido' };
-    const anom = currentData.anomaly ? currentData.anomaly[idx] : 0;
-    const encounters = getEncounters(bId);
-    const encounterText = encounters.slice(0, 3).join(", ");
-    
-    // Procura se há landmark aqui
-    const landmark = currentData.landmarks ? currentData.landmarks.find(l => l.x === gx && l.y === gy) : null;
-
-    // Conteúdo formatado para o HUD FIXO
-    let mainInfo = '';
-    if (city) {
-      mainInfo = `<span style="color:#ff5b5b; font-weight:bold; margin-left:10px;">🏙️ ${city.name}</span>`;
-    } else if (landmark) {
-      mainInfo = `<span style="color:#00ffff; font-weight:bold; margin-left:10px;">✨ ${landmark.name}</span>`;
-    } else if (routeName) {
-      mainInfo = `<span style="color:#ffd700; font-weight:bold; margin-left:10px;">🛣️ ${routeName}</span>`;
-    }
-
-    infoBar.innerHTML = `
-      <span class="biome-name">${biome.name}</span>
-      <span><span class="label">Elev</span><b>${val.toFixed(2)}</b></span>
-      <span><span class="label">Temp</span><b>${temp.toFixed(2)}</b></span>
-      <span><span class="label">Humid</span><b>${moist.toFixed(2)}</b></span>
-      <span title="${encounters.join(', ')}"><span class="label">Eco</span><b style="color:#8ceda1">${encounterText}</b></span>
-      ${mainInfo}
-    `;
-    
-    render(canvas, currentData, { hover: { x: gx, y: gy }, settings: getSettings() });
-  } else {
-    updateView();
-  }
-}
 
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
@@ -362,16 +161,16 @@ canvas.addEventListener('mousemove', (e) => {
   const mouseY = e.clientY - rect.top;
 
   if (appMode === 'play') {
-    const tileW = 40, tileH = 40;
+    const tileW = 40;
+    const tileH = 40;
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
-    const mx = Math.floor((mouseX - canvas.width/2)/tileW + vx + 0.5);
-    const my = Math.floor((mouseY - canvas.height/2)/tileH + vy + 0.5);
+    const mx = Math.floor((mouseX - canvas.width / 2) / tileW + vx + 0.5);
+    const my = Math.floor((mouseY - canvas.height / 2) / tileH + vy + 0.5);
     lastHoverTile = { x: mx, y: my };
-    return; // O loop de animação vai cuidar do render(canvas, ...)
+    return;
   }
 
-  // Escala para coordenadas de grid (Modo Mapa)
   const gx = Math.floor((mouseX / rect.width) * currentData.width);
   const gy = Math.floor((mouseY / rect.height) * currentData.height);
   if (lastHoverTile && lastHoverTile.x === gx && lastHoverTile.y === gy) return;
@@ -379,7 +178,14 @@ canvas.addEventListener('mousemove', (e) => {
   const now = performance.now();
   if (now - lastMapHoverRenderTs < MAP_HOVER_MIN_INTERVAL_MS) return;
   lastMapHoverRenderTs = now;
-  renderMapHoverDetails(gx, gy);
+  renderMapHoverDetails(gx, gy, {
+    currentData,
+    infoBar,
+    canvas,
+    render,
+    getSettings,
+    updateView
+  });
 });
 
 canvas.addEventListener('mouseleave', () => {
@@ -397,10 +203,9 @@ function enterPlayMode(gx, gy) {
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
-  // Ativa Fullscreen UX
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
-  
+
   resizeCanvas();
   startGameLoop();
 }
@@ -410,9 +215,8 @@ btnBackToMap.addEventListener('click', () => {
   btnExport.classList.remove('hidden');
   btnBackToMap.classList.add('hidden');
   minimap.classList.add('hidden');
-  infoBar.innerHTML = "Mova o mouse sobre o mapa para ver os detalhes do terreno";
-  
-  // Desativa Fullscreen UX
+  infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+
   document.body.classList.remove('play-mode-active');
   document.querySelector('.app').classList.remove('play-mode-active');
 
@@ -434,7 +238,7 @@ function resizeCanvas() {
   } else {
     const wrap = document.querySelector('.map-wrap');
     const cssW = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
-    const cssH = cssW; // overview square map
+    const cssH = cssW;
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     canvas.width = Math.max(1, Math.floor(cssW * dpr));
@@ -444,592 +248,21 @@ function resizeCanvas() {
 
 window.addEventListener('resize', () => {
   if (currentData) {
-     resizeCanvas();
-     updateView();
+    resizeCanvas();
+    updateView();
   }
 });
 
-// Clique no mapa entra no modo play
 canvas.addEventListener('click', (e) => {
   if (!currentData || appMode !== 'map') return;
   const rect = canvas.getBoundingClientRect();
   const gx = Math.floor(((e.clientX - rect.left) / rect.width) * currentData.width);
   const gy = Math.floor(((e.clientY - rect.top) / rect.height) * currentData.height);
-  
+
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     enterPlayMode(gx, gy);
   }
 });
-
-function buildPlayModeTileDebugInfo(mx, my, data) {
-  const tile = getMicroTile(mx, my, data);
-  const biome = Object.values(BIOMES).find((b) => b.id === tile.biomeId);
-
-  const seed = data.seed;
-  const fdTrees = foliageDensity(mx, my, seed + 5555, TREE_NOISE_SCALE);
-  const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
-  const fdGrass = foliageDensity(mx, my, seed, 3);
-  const ft = foliageType(mx, my, seed);
-  const foliageOverlayIdDbg = getFoliageOverlayTileId(mx, my, data);
-  const lakeLotusWalkRoleDbg = getLakeLotusFoliageWalkRole(mx, my, data);
-
-  const surroundings = {
-    heightStep: [
-      [0, 0, 0],
-      [0, 0, 0],
-      [0, 0, 0]
-    ],
-    biome: [
-      ['', '', ''],
-      ['', '', ''],
-      ['', '', '']
-    ],
-    formals: [
-      [false, false, false],
-      [false, false, false],
-      [false, false, false]
-    ],
-    scatter: [
-      [false, false, false],
-      [false, false, false],
-      [false, false, false]
-    ]
-  };
-
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const nx = mx + dx;
-      const ny = my + dy;
-      const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
-      const bEnv = Object.values(BIOMES).find((b) => b.id === t.biomeId);
-      const fTrees = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
-      const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
-      const treeType = getTreeType(t.biomeId, nx, ny, seed);
-
-      surroundings.heightStep[dy + 1][dx + 1] = t.heightStep;
-      surroundings.biome[dy + 1][dx + 1] = bEnv ? bEnv.name : '???';
-      surroundings.formals[dy + 1][dx + 1] = !!treeType && (nx + ny) % 3 === 0 && fTrees >= TREE_DENSITY_THRESHOLD;
-      surroundings.scatter[dy + 1][dx + 1] = fScat > 0.82;
-    }
-  }
-
-  const gx = Math.floor(mx / CHUNK_SIZE);
-  const gy = Math.floor(my / CHUNK_SIZE);
-  let macroIdx = -1;
-  const isMacroValid = gx >= 0 && gx < data.width && gy >= 0 && gy < data.height;
-  if (isMacroValid) macroIdx = gy * data.width + gx;
-
-  const baseAt = computeTerrainRoleAndSprite(mx, my, data, tile.heightStep);
-  const centerSpriteId = baseAt.spriteId;
-
-  const debugLayers = [];
-  if (baseAt.set && centerSpriteId != null) {
-    debugLayers.push({
-      layer: 'base',
-      terrainSetName: baseAt.setName,
-      tileIndex: centerSpriteId,
-      role: baseAt.role,
-      terrainRole: `${baseAt.setName} / ${baseAt.role ?? '—'}`
-    });
-  }
-  if (foliageOverlayIdDbg != null) {
-    const fName = BIOME_TO_FOLIAGE[tile.biomeId];
-    const fSet = fName ? TERRAIN_SETS[fName] : null;
-    const fRole = fSet ? roleNameForSpriteIdInSet(fSet, foliageOverlayIdDbg) : '—';
-    debugLayers.push({
-      layer: 'foliage',
-      terrainSetName: fName || '—',
-      tileIndex: foliageOverlayIdDbg,
-      role: fRole,
-      terrainRole: fName ? `${fName} / ${fRole}` : '—'
-    });
-  }
-
-  const heightLevels3x3 = TILE_DEBUG_DIRS_3X3.map(({ dx, dy, label }) => {
-    const nx = mx + dx;
-    const ny = my + dy;
-    const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
-    const bN = Object.values(BIOMES).find((b) => b.id === t.biomeId);
-    return { label, nx, ny, h: t.heightStep, biome: bN?.name ?? '—' };
-  });
-
-  const neighborsDetail = TILE_DEBUG_DIRS_3X3.map(({ dx, dy, label }) => {
-    const nx = mx + dx;
-    const ny = my + dy;
-    const t = getMicroTile(nx, ny, data);
-    if (!t) {
-      return {
-        label,
-        nx,
-        ny,
-        elev: null,
-        biome: '—',
-        role: '—',
-        tileInfo: '—',
-        terrainSetName: null,
-        spriteId: null
-      };
-    }
-    const bN = Object.values(BIOMES).find((b) => b.id === t.biomeId);
-    const nb = computeTerrainRoleAndSprite(nx, ny, data, t.heightStep);
-    const tileInfo =
-      nb.set && nb.spriteId != null ? `ID ${nb.spriteId} → ${nb.setName} / ${nb.role ?? '—'}` : '—';
-    return {
-      label,
-      nx,
-      ny,
-      elev: t.heightStep,
-      biome: bN?.name ?? '—',
-      role: nb.role ?? '—',
-      tileInfo,
-      terrainSetName: nb.setName,
-      spriteId: nb.spriteId
-    };
-  });
-
-  const cellDebug = {
-    elevation: tile.heightStep,
-    biome: biome?.name ?? '—',
-    expectedRole: baseAt.role ?? (tile.heightStep < 1 ? 'base' : null),
-    baseTerrainSetName: baseAt.setName
-  };
-
-  const telemetry = {
-    tx: mx,
-    ty: my,
-    cell: {
-      elevation: cellDebug.elevation,
-      biome: cellDebug.biome,
-      expectedRole: cellDebug.expectedRole
-    },
-    layers: debugLayers.map((L) => ({
-      layer: L.layer,
-      terrainSetName: L.terrainSetName,
-      tileIndex: L.tileIndex,
-      role: L.role,
-      terrainRole: L.terrainRole
-    })),
-    heightLevels3x3,
-    neighbors: neighborsDetail.map((n) => ({
-      label: n.label,
-      nx: n.nx,
-      ny: n.ny,
-      elev: n.elev,
-      biome: n.biome,
-      role: n.role,
-      tileInfo: n.tileInfo
-    }))
-  };
-
-  const scatterPass2 = analyzeScatterPass2Base(mx, my, data);
-
-  const { activeSprites, scatterContinuation } = (() => {
-    const sprites = [];
-    let scatterContinuation = null;
-    const treeType = getTreeType(tile.biomeId, mx, my, seed);
-    const isFormalTree = !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
-    const isFormalNeighbor =
-      !!treeType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-    const isFormalOccupied = isFormalTree || isFormalNeighbor;
-
-    if (isFormalTree) {
-      const ids = TREE_TILES[treeType];
-      if (ids) sprites.push({ type: 'formal-tree-base', ids: ids.base }, { type: 'formal-tree-top', ids: ids.top });
-    }
-
-    let occupiedByScatter = false;
-    const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-    const microWDbg = data.width * CHUNK_SIZE;
-    const microHDbg = data.height * CHUNK_SIZE;
-    const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
-    const validOriginMemoDbg = new Map();
-    if (!tile.isRoad && !tile.isCity) {
-      const maxScatterRowsDbg = 8;
-      outerCont: for (let dox = 1; dox <= 3; dox++) {
-        const ox = mx - dox;
-        for (let oyDelta = 0; oyDelta < maxScatterRowsDbg; oyDelta++) {
-          const oy = my - oyDelta;
-          if (oy < 0 || oy >= microHDbg) break;
-          const nTile = getMicroTile(ox, oy, data);
-          if (
-            nTile &&
-            foliageDensity(ox, oy, seed + 111, 2.5) > 0.82 &&
-            !nTile.isRoad &&
-            validScatterOriginMicro(ox, oy, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
-          ) {
-            const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
-            if (itemsAtO.length === 0) continue;
-            const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, seed + 222) * itemsAtO.length)];
-            const nObjSet = OBJECT_SETS[nItemKey];
-            if (nObjSet) {
-              const { rows, cols } = parseShape(nObjSet.shape);
-              const doy = my - oy;
-              if (dox < cols && doy >= 0 && doy < rows) {
-                occupiedByScatter = true;
-                const base = nObjSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-                const top = nObjSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
-                scatterContinuation = {
-                  originMicro: { mx: ox, my: oy },
-                  columnIndexFromOrigin: dox,
-                  rowIndexFromOrigin: doy,
-                  itemKey: nItemKey,
-                  shape: nObjSet.shape,
-                  baseIds: base?.ids ?? null,
-                  topIds: top?.ids ?? null
-                };
-                break outerCont;
-              }
-            }
-          }
-        }
-      }
-
-      if (
-        scatterItems.length > 0 &&
-        !isFormalOccupied &&
-        !occupiedByScatter &&
-        fdScatter > 0.82 &&
-        validScatterOriginMicro(mx, my, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
-      ) {
-        const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
-        const objSet = OBJECT_SETS[itemKey];
-        if (objSet) {
-          const { cols } = parseShape(objSet.shape);
-          const treeTypeChk = getTreeType(tile.biomeId, mx, my, seed);
-          const formalAt = (txc, tyc) =>
-            (!!treeTypeChk &&
-              (txc + tyc) % 3 === 0 &&
-              foliageDensity(txc, tyc, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) ||
-            (!!treeTypeChk &&
-              (txc + tyc) % 3 === 1 &&
-              foliageDensity(txc - 1, tyc, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD);
-          const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-          let anyLeftCol = false;
-          if (base?.ids?.length) {
-            for (let idx = 0; idx < base.ids.length; idx++) {
-              if (idx % cols !== 0) continue;
-              const tyc = my + Math.floor(idx / cols);
-              if (!formalAt(mx, tyc)) anyLeftCol = true;
-            }
-          }
-          if (anyLeftCol) {
-            const top = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
-            if (base) sprites.push({ type: `scatter-${itemKey}-base`, ids: base.ids });
-            if (top) sprites.push({ type: `scatter-${itemKey}-top`, ids: top.ids });
-            occupiedByScatter = true;
-          }
-        }
-      }
-    }
-
-    const suppressGrassLikeRender =
-      grassSuppressedByScatterFootprint(mx, my, data, validOriginMemoDbg) ||
-      (scatterItems.length > 0 &&
-        !tile.isRoad &&
-        !tile.isCity &&
-        !isFormalOccupied &&
-        foliageDensity(mx, my, seed + 111, 2.5) > 0.82);
-
-    if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45 && !suppressGrassLikeRender) {
-      const variant = getGrassVariant(tile.biomeId);
-      const tiles = GRASS_TILES[variant];
-      if (tiles) {
-        const mainId =
-          variant === 'desert'
-            ? tiles.original
-            : variant === 'lotus'
-              ? ft < 0.5
-                ? tiles.original
-                : tiles.grass2 ?? tiles.original
-              : ft < 0.5
-                ? tiles.original
-                : tiles.grass2 || tiles.original;
-        sprites.push({ type: `grass-${variant}-base`, ids: [mainId] });
-        if (variant !== 'desert' && variant !== 'lotus' && tiles.originalTop && ft < 0.5) {
-          sprites.push({ type: `grass-${variant}-top`, ids: [tiles.originalTop] });
-        }
-      }
-    }
-    return { activeSprites: sprites, scatterContinuation };
-  })();
-
-  const overlayDebugLayers = activeSprites.flatMap((s) =>
-    (s.ids || []).map((id) => ({
-      layer: 'overlay',
-      terrainSetName: null,
-      sourceSheet: 'nature',
-      tileIndex: id,
-      role: s.type,
-      terrainRole: `${s.type} / sprite`
-    }))
-  );
-  const allDebugLayers = [...debugLayers, ...overlayDebugLayers];
-  telemetry.layers = allDebugLayers.map((L) => ({
-    layer: L.layer,
-    terrainSetName: L.terrainSetName,
-    sourceSheet: L.sourceSheet,
-    tileIndex: L.tileIndex,
-    role: L.role,
-    terrainRole: L.terrainRole
-  }));
-
-  const nearbyFormalTrees = [];
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const nx = mx + dx;
-      const ny = my + dy;
-      const t = getMicroTile(nx, ny, data);
-      if (!t) continue;
-      const tt = getTreeType(t.biomeId, nx, ny, seed);
-      const nNoise = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
-      const phaseRoot = !!tt && (nx + ny) % 3 === 0 && nNoise >= TREE_DENSITY_THRESHOLD;
-      if (!phaseRoot) continue;
-      const blockers = [];
-      if (t.heightStep < 1 || t.isRoad || t.isCity) {
-        blockers.push('altura/estrada/cidade');
-      } else {
-        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
-        if (setForRole) {
-          const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= t.heightStep;
-          const role = getRoleForCell(ny, nx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
-          if (role !== 'CENTER') blockers.push(`papel_terreno=${role}`);
-        }
-        const right = getMicroTile(nx + 1, ny, data);
-        if (!right || right.heightStep !== t.heightStep) blockers.push('direita_mesma_altura');
-      }
-      const pack = tt ? TREE_TILES[tt] : null;
-      nearbyFormalTrees.push({
-        micro: { mx: nx, my: ny },
-        offsetFromCenter: { dx, dy },
-        treeType: tt,
-        noiseTrees: Number(nNoise.toFixed(3)),
-        spriteBaseIds: pack?.base ?? null,
-        spriteTopIds: pack?.top ?? null,
-        rendererWouldDraw: blockers.length === 0,
-        blockers: blockers.length ? blockers : null
-      });
-    }
-  }
-
-  const dbgTreeType = getTreeType(tile.biomeId, mx, my, seed);
-  const dbgPhase = (mx + my) % 3;
-  const dbgWestRoot =
-    !!dbgTreeType &&
-    (mx - 1 + my) % 3 === 0 &&
-    foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-  const overlayHints = [];
-  if (scatterContinuation) {
-    overlayHints.push(
-      'Este tile pode ser coberto pela base/top de scatter com origem a Oeste — ver scatterContinuation (ids).'
-    );
-  }
-  if (activeSprites.length === 0) {
-    if (dbgPhase === 2) overlayHints.push('(mx+my)%3=2: tile nunca é raiz nem coluna direita da árvore formal 2-wide.');
-    if (dbgPhase === 1 && !dbgWestRoot) {
-      overlayHints.push(
-        `(mx+my)%3=1: seria “metade direita” só se Oeste fosse raiz com noise≥${TREE_DENSITY_THRESHOLD} — Oeste não qualifica.`
-      );
-    }
-    if (dbgPhase === 0 && fdTrees < TREE_DENSITY_THRESHOLD) {
-      overlayHints.push(`Fase raiz mas noiseTrees ${fdTrees.toFixed(3)} < ${TREE_DENSITY_THRESHOLD}.`);
-    }
-    if (fdGrass < 0.45) overlayHints.push(`noiseGrass ${fdGrass.toFixed(3)} < 0.45.`);
-    if (fdScatter <= 0.82 && !scatterContinuation) {
-      overlayHints.push(`noiseScatter ${fdScatter.toFixed(3)} ≤ 0.82 e sem continuação a partir do Oeste.`);
-    }
-  }
-  if (scatterContinuation && !scatterPass2.pass2C.drawsHere) {
-    overlayHints.push(
-      'Continuação geométrica (Oeste) presente, mas Pass 2 · 2C não pinta base aqui — ver scatterPass2.pass2C (westNeighborHint / razões).'
-    );
-  }
-
-  const isFormalTreeRoot =
-    !!getTreeType(tile.biomeId, mx, my, seed) &&
-    (mx + my) % 3 === 0 &&
-    fdTrees >= TREE_DENSITY_THRESHOLD;
-
-  const scatterRootMicro =
-    scatterContinuation?.originMicro ??
-    scatterPass2.pass2C.match?.originMicro ??
-    (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
-
-  const proceduralEntities = {
-    schemaNote:
-      'Hex = uint32 determinístico: seededHashInt(mx,my,worldSeed+kindSalt). Mesmo mundo+coords+sal → mesmo id (save, corte de árvore, minério esgotado, etc.). Scatter multi-tile: id na raiz micro (PROC_SALT_SCATTER_INSTANCE).',
-    worldSeed: seed,
-    grassCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_GRASS_CELL) },
-    scatterCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_SCATTER_CELL) },
-    rockCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_ROCK) },
-    crystalCell: { idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_CRYSTAL) },
-    formalTreeRoot: isFormalTreeRoot
-      ? { micro: { mx, my }, idHex: proceduralEntityIdHex(seed, mx, my, PROC_SALT_FORMAL_TREE_CELL) }
-      : null,
-    scatterInstance: scatterRootMicro
-      ? {
-          rootMicro: scatterRootMicro,
-          idHex: proceduralEntityIdHex(seed, scatterRootMicro.mx, scatterRootMicro.my, PROC_SALT_SCATTER_INSTANCE)
-        }
-      : null
-  };
-
-  return {
-    coord: { mx, my, gx, gy },
-    cell: cellDebug,
-    layers: allDebugLayers,
-    heightLevels3x3,
-    neighborsDetail,
-    telemetry,
-    macro: {
-      elevation: isMacroValid ? data.cells[macroIdx]?.toFixed(3) : 'N/A',
-      temperature: isMacroValid && data.temperature ? data.temperature[macroIdx]?.toFixed(3) : 'N/A',
-      moisture: isMacroValid && data.moisture ? data.moisture[macroIdx]?.toFixed(3) : 'N/A',
-      anomaly: isMacroValid && data.anomaly ? data.anomaly[macroIdx]?.toFixed(3) : 'N/A'
-    },
-    surroundings,
-    terrain: {
-      biome: biome?.name,
-      heightStep: tile.heightStep,
-      isRoad: tile.isRoad,
-      isCity: tile.isCity,
-      spriteId: centerSpriteId
-    },
-    vegetation: {
-      noiseTrees: fdTrees.toFixed(3),
-      noiseScatter: fdScatter.toFixed(3),
-      noiseGrass: fdGrass.toFixed(3),
-      typeFactor: ft.toFixed(3),
-      activeSprites,
-      scatterContinuation,
-      scatterPass2,
-      nearbyFormalTrees,
-      overlayHints
-    },
-    collision: {
-      gameCanWalk: canWalk(mx, my, data, foliageOverlayIdDbg),
-      foliageOverlaySpriteId: foliageOverlayIdDbg,
-      foliagePoolOverlayBlocksWalk:
-        foliageOverlayIdDbg != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(foliageOverlayIdDbg),
-      lakeLotusFoliageWalkRole: lakeLotusWalkRoleDbg,
-      lakeLotusWalkRoleBlocks:
-        lakeLotusWalkRoleDbg != null && isPurpleLakePoolWalkBlockingRole(lakeLotusWalkRoleDbg),
-      walkSurfaceKind: getTerrainSetWalkKind(BIOME_TO_TERRAIN[tile.biomeId] || 'grass'),
-      baseTerrainSpriteWalkable: isBaseTerrainSpriteWalkable(centerSpriteId),
-      terrainSprite: {
-        id: centerSpriteId,
-        objectSets: getObjectTileFlags(centerSpriteId)
-      },
-      overlays: activeSprites.map((s) => ({
-        type: s.type,
-        tiles: (s.ids || []).map((id) => ({
-          id,
-          objectSets: getObjectTileFlags(id)
-        }))
-      }))
-    },
-    logic: {
-      isFormalTree: (() => {
-        const treeType = getTreeType(tile.biomeId, mx, my, seed);
-        return !!treeType && (mx + my) % 3 === 0 && fdTrees >= TREE_DENSITY_THRESHOLD;
-      })(),
-      isFormalNeighbor: (() => {
-        const treeType = getTreeType(tile.biomeId, mx - 1, my, seed);
-        return (
-          !!treeType &&
-          (mx + my) % 3 === 1 &&
-          foliageDensity(mx - 1, my, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD
-        );
-      })()
-    },
-    proceduralEntities
-  };
-}
-
-const playContextMenu = document.getElementById('play-context-menu');
-const btnPlayCtxTeleport = document.getElementById('play-ctx-teleport');
-const btnPlayCtxDebug = document.getElementById('play-ctx-debug');
-let playContextPending = null;
-
-function closePlayContextMenu() {
-  if (!playContextMenu) return;
-  playContextMenu.hidden = true;
-  playContextMenu.setAttribute('aria-hidden', 'true');
-  playContextPending = null;
-  window.removeEventListener('mousedown', onPlayContextMenuDismiss, true);
-  window.removeEventListener('keydown', onPlayContextMenuKey, true);
-}
-
-function onPlayContextMenuDismiss(ev) {
-  if (playContextMenu && playContextMenu.contains(ev.target)) return;
-  closePlayContextMenu();
-}
-
-function onPlayContextMenuKey(ev) {
-  if (ev.key === 'Escape') closePlayContextMenu();
-}
-
-function openPlayContextMenu(pageX, pageY, mx, my) {
-  if (!playContextMenu) return;
-  closePlayContextMenu();
-  playContextPending = { mx, my };
-  playContextMenu.hidden = false;
-  playContextMenu.setAttribute('aria-hidden', 'false');
-  playContextMenu.style.left = `${pageX}px`;
-  playContextMenu.style.top = `${pageY}px`;
-  setTimeout(() => {
-    window.addEventListener('mousedown', onPlayContextMenuDismiss, true);
-    window.addEventListener('keydown', onPlayContextMenuKey, true);
-  }, 0);
-}
-
-canvas.addEventListener('contextmenu', (e) => {
-  if (appMode !== 'play' || !currentData) return;
-  e.preventDefault();
-
-  const rect = canvas.getBoundingClientRect();
-  const screenX = e.clientX - rect.left;
-  const screenY = e.clientY - rect.top;
-
-  const tileW = 40;
-  const tileH = 40;
-  const vx = player.visualX ?? player.x;
-  const vy = player.visualY ?? player.y;
-
-  const mx = Math.floor((screenX - canvas.width / 2) / tileW + vx + 0.5);
-  const my = Math.floor((screenY - canvas.height / 2) / tileH + vy + 0.5);
-
-  const maxMX = currentData.width * CHUNK_SIZE;
-  const maxMY = currentData.height * CHUNK_SIZE;
-  if (mx < 0 || my < 0 || mx >= maxMX || my >= maxMY) return;
-
-  openPlayContextMenu(e.clientX, e.clientY, mx, my);
-});
-
-if (btnPlayCtxTeleport) {
-  btnPlayCtxTeleport.addEventListener('click', () => {
-    if (!playContextPending || !currentData) return;
-    const { mx, my } = playContextPending;
-    setPlayerPos(mx, my);
-    closePlayContextMenu();
-    updateView();
-  });
-}
-
-if (btnPlayCtxDebug) {
-  btnPlayCtxDebug.addEventListener('click', () => {
-    if (!playContextPending || !currentData) return;
-    const { mx, my } = playContextPending;
-    closePlayContextMenu();
-    openDebugModal(buildPlayModeTileDebugInfo(mx, my, currentData));
-  });
-}
-
-// Modal Logic
-const debugModal = document.getElementById('tile-debug-modal');
-const debugContent = document.getElementById('tile-debug-content');
-const btnDebugClose = document.getElementById('tile-debug-close');
-const btnDebugCopy = document.getElementById('tile-debug-copy-json');
-let lastDebugInfo = null;
 
 if (btnDebugClose) {
   btnDebugClose.addEventListener('click', () => {
@@ -1039,470 +272,21 @@ if (btnDebugClose) {
 
 if (btnDebugCopy) {
   btnDebugCopy.addEventListener('click', () => {
+    const lastDebugInfo = getLastTileDebugInfo();
     if (lastDebugInfo) {
       navigator.clipboard.writeText(JSON.stringify(lastDebugInfo, null, 2)).then(() => {
         const oldText = btnDebugCopy.textContent;
         btnDebugCopy.textContent = 'COPIED!';
-        setTimeout(() => btnDebugCopy.textContent = oldText, 2000);
+        setTimeout(() => {
+          btnDebugCopy.textContent = oldText;
+        }, 2000);
       });
     }
   });
 }
 
-function formatObjectSetsFlags(f) {
-  if (!f) return '— (fora de OBJECT_SETS; bases de terreno vêm de TERRAIN_SETS)';
-  return `walkable: ${f.walkable ? 'sim' : 'não'} · acima do jogador: ${f.abovePlayer ? 'sim' : 'não'}`;
-}
-
-function openDebugModal(info) {
-  lastDebugInfo = info;
-  const escDbg = (s) =>
-    String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-  const coll = info.collision;
-  const overlayRows = coll && coll.overlays && coll.overlays.length
-    ? coll.overlays.map((o) => {
-        const cells = o.tiles.map((t) => `#${t.id} → ${formatObjectSetsFlags(t.objectSets)}`).join('<br>');
-        return `<tr><th style="vertical-align:top">${o.type}</th><td style="font-size:0.78rem;line-height:1.35">${cells}</td></tr>`;
-      }).join('')
-    : '<tr><th>Overlays</th><td>—</td></tr>';
-
-  const baseSetForPreview =
-    info.cell?.baseTerrainSetName != null ? TERRAIN_SETS[info.cell.baseTerrainSetName] : null;
-  const baseIconTerrain =
-    baseSetForPreview && info.terrain.spriteId != null
-      ? terrainSheetSpriteIconHtml(baseSetForPreview, info.terrain.spriteId)
-      : '';
-  const layerIconHtml = (L) => {
-    if (L?.tileIndex == null) return '';
-    const s = L?.terrainSetName ? TERRAIN_SETS[L.terrainSetName] : null;
-    if (s) return terrainSheetSpriteIconHtml(s, L.tileIndex);
-    if (L?.sourceSheet === 'nature') return natureSpriteIconHtml(L.tileIndex);
-    return '';
-  };
-
-  const heroStack =
-    (info.layers || [])
-      .map((L) => {
-        return layerIconHtml(L);
-      })
-      .join('') || '<span style="color:#888">—</span>';
-
-  const heroAndCellHtml =
-    info.cell != null
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-hero-preview">
-        <div class="tile-debug-sprite-stack tile-debug-hero-stack">${heroStack}</div>
-        <div>
-          <div class="tile-debug-hero-label">Elevation ${escDbg(info.cell.elevation)} · ${escDbg(info.cell.biome)}</div>
-          <div style="font-size:11px;color:#9898a8;margin-top:2px">Role: ${escDbg(info.cell.expectedRole ?? '—')}</div>
-        </div>
-      </div>
-      <div class="tile-debug-section-title">Cell</div>
-      <table class="tile-debug-table"><tbody>
-        <tr><th>Elevation</th><td>${escDbg(String(info.cell.elevation))}</td></tr>
-        <tr><th>Biome</th><td>${escDbg(info.cell.biome)}</td></tr>
-        <tr><th>Expected role</th><td>${escDbg(info.cell.expectedRole ?? '—')}</td></tr>
-        <tr><th>Base terrain set</th><td style="font-size:0.75rem">${escDbg(info.cell.baseTerrainSetName ?? '—')}</td></tr>
-      </tbody></table>
-    </div>`
-      : '';
-
-  const layersTableHtml =
-    info.layers && info.layers.length
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Layers &amp; sprites at this tile</div>
-      <table class="tile-debug-table"><thead><tr><th>Sprite</th><th>Layer</th><th>Tile index</th><th>Terrain / role</th></tr></thead><tbody>
-      ${info.layers
-        .map((L) => {
-          const spr = layerIconHtml(L) || '—';
-          return `<tr><td>${spr}</td><td>${escDbg(L.layer)}</td><td>${L.tileIndex != null ? L.tileIndex : '—'}</td><td style="font-size:0.76rem">${escDbg(L.terrainRole)}</td></tr>`;
-        })
-        .join('')}
-      </tbody></table>
-    </div>`
-      : '';
-
-  const heightGridHtml =
-    info.heightLevels3x3 && currentData
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Height levels (3×3)</div>
-      <div class="tile-debug-grid-3x3">
-      ${info.heightLevels3x3
-        .map((c) => {
-          const isC = c.label === 'C';
-          const t = getMicroTile(c.nx, c.ny, currentData);
-          let mini = '';
-          if (t) {
-            const nb = computeTerrainRoleAndSprite(c.nx, c.ny, currentData, t.heightStep);
-            if (nb.set && nb.spriteId != null) mini = `<div class="tile-debug-mini-sprites">${terrainSheetSpriteIconHtml(nb.set, nb.spriteId)}</div>`;
-          }
-          return `<div class="tile-debug-cell${isC ? ' center' : ''}"><span class="cell-label">${escDbg(c.label)} (${c.nx},${c.ny})</span>H=${c.h} · ${escDbg(c.biome)}${mini}</div>`;
-        })
-        .join('')}
-      </div>
-    </div>`
-      : '';
-
-  const neighborsTableHtml =
-    info.neighborsDetail && info.neighborsDetail.length
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Neighbors detail (elevation, biome, role, sprite)</div>
-      <table class="tile-debug-table"><thead><tr><th>Sprite</th><th>Pos</th><th>Elev</th><th>Biome</th><th>Role</th><th>Tile</th></tr></thead><tbody>
-      ${info.neighborsDetail
-        .map((n) => {
-          const s = n.terrainSetName ? TERRAIN_SETS[n.terrainSetName] : null;
-          const spr =
-            s && n.spriteId != null
-              ? `<span class="tile-debug-sprite-stack">${terrainSheetSpriteIconHtml(s, n.spriteId)}</span>`
-              : '—';
-          const el = n.elev != null ? String(n.elev) : '—';
-          return `<tr><td>${spr}</td><td>${escDbg(n.label)} (${n.nx},${n.ny})</td><td>${el}</td><td>${escDbg(n.biome)}</td><td>${escDbg(n.role)}</td><td style="font-size:0.74rem">${escDbg(n.tileInfo)}</td></tr>`;
-        })
-        .join('')}
-      </tbody></table>
-    </div>`
-      : '';
-
-  const terrainHtml = `
-    <div class="tile-debug-section">
-      <div class="tile-debug-section-title">Terrain Intelligence</div>
-      <table class="tile-debug-table">
-        <tbody>
-          <tr><th>Biome</th><td>${info.terrain.biome || 'Unknown'}</td></tr>
-          <tr><th>Height Step</th><td>${info.terrain.heightStep}</td></tr>
-          <tr><th>Macro Terrain</th><td>Elev: ${info.macro.elevation} | T: ${info.macro.temperature} | M: ${info.macro.moisture} | A: ${info.macro.anomaly}</td></tr>
-          <tr><th>Road / City</th><td>${info.terrain.isRoad ? 'Yes' : 'No'} / ${info.terrain.isCity ? 'Yes' : 'No'}</td></tr>
-          <tr><th>Base Sprite ID</th><td>
-             <div style="display:flex; align-items:center; gap:8px;">
-               ${info.terrain.spriteId !== null ? info.terrain.spriteId : 'N/A'}
-               ${baseIconTerrain}
-             </div>
-          </td></tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-
-  const collisionHtml = coll ? `
-    <div class="tile-debug-section">
-      <div class="tile-debug-section-title">Colisão / metadados do tileset</div>
-      <table class="tile-debug-table">
-        <tbody>
-          <tr><th>Pode andar (jogo)</th><td>${coll.gameCanWalk ? 'sim' : 'não'} <span style="opacity:0.75;font-size:0.8rem">(lago roxo: com overlay = bloqueia; sem overlay = só CENTER/IN_* bloqueiam; OUT/EDGE secos OK)</span></td></tr>
-          <tr><th>Foliage overlay (sprite)</th><td>${coll.foliageOverlaySpriteId != null ? coll.foliageOverlaySpriteId : '— (sem overlay)'}</td></tr>
-          <tr><th>Overlay pool bloqueia</th><td>${coll.foliagePoolOverlayBlocksWalk ? 'sim (lava: tudo; lago roxo: qualquer tile do overlay)' : 'não'}</td></tr>
-          <tr><th>Lago roxo — papel (walk)</th><td>${coll.lakeLotusFoliageWalkRole != null ? coll.lakeLotusFoliageWalkRole : '—'}</td></tr>
-          <tr><th>Lago roxo — papel bloqueia</th><td>${coll.lakeLotusWalkRoleBlocks ? 'sim (só sem overlay: CENTER ou IN_* )' : 'não'}</td></tr>
-          <tr><th>Superfície (set)</th><td>${coll.walkSurfaceKind === 'layer-base' ? 'Layer Base' : coll.walkSurfaceKind === 'terrain-foliage' ? 'Terrain Foliage' : '— (água, penhasco, lava…)'}</td></tr>
-          <tr><th>Sprite base permitido</th><td>${coll.baseTerrainSpriteWalkable ? 'sim' : 'não'}</td></tr>
-          <tr><th>Sprite base → OBJECT_SETS</th><td>${formatObjectSetsFlags(coll.terrainSprite?.objectSets)}</td></tr>
-          ${overlayRows}
-        </tbody>
-      </table>
-    </div>
-  ` : '';
-
-  const renderMatrix = (matrix, renderer) => {
-    return `<div class="tile-debug-matrix">
-      ${matrix.map((row, dy) => row.map((cell, dx) => {
-         const isCenter = dy === 1 && dx === 1;
-         return `<div class="tile-debug-cell ${isCenter ? 'active-center' : ''}">${renderer(cell, isCenter, dy, dx)}</div>`;
-      }).join('')).join('')}
-    </div>`;
-  };
-
-  const surroundHtml = `
-    <div class="tile-debug-section">
-      <div class="tile-debug-section-title">3x3 Surroundings</div>
-      <div style="display:flex; gap:16px;">
-        <div style="flex:1">
-          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">HeightStep</span>
-          ${renderMatrix(info.surroundings.heightStep, val => `H:${val}`)}
-        </div>
-        <div style="flex:1">
-          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Biomes</span>
-          ${renderMatrix(info.surroundings.biome, val => `<span class="tile-debug-biome-label">${val}</span>`)}
-        </div>
-        <div style="flex:1">
-          <span class="cell-label" style="font-size:0.7rem; color:#a0a0b0; display:block; text-align:center; margin-bottom:4px">Tree/Scatter Occup.</span>
-          ${renderMatrix(info.surroundings.formals, (isTree, isC, dy, dx) => {
-             const isScat = info.surroundings.scatter[dy][dx];
-             if (isTree) return '<span style="color:#8ceda1">Tree</span>';
-             if (isScat) return '<span style="color:#d2a1ff">Scat</span>';
-             return '<span style="color:#444">-</span>';
-          })}
-        </div>
-      </div>
-    </div>
-  `;
-
-  const vegHtml = `
-    <div class="tile-debug-section">
-      <div class="tile-debug-section-title">Vegetation Matrix</div>
-      <div class="tile-debug-grid">
-        <div class="tile-debug-cell">
-            <span class="cell-label">Trees Noise</span>
-            ${info.vegetation.noiseTrees}
-        </div>
-        <div class="tile-debug-cell">
-            <span class="cell-label">Scatter Noise</span>
-            ${info.vegetation.noiseScatter}
-        </div>
-        <div class="tile-debug-cell">
-            <span class="cell-label">Grass Noise</span>
-            ${info.vegetation.noiseGrass}
-        </div>
-        <div class="tile-debug-cell center">
-            <span class="cell-label">Type Factor</span>
-            ${info.vegetation.typeFactor}
-        </div>
-      </div>
-    </div>
-  `;
-
-  const vg = info.vegetation;
-  const overlayHintsHtml =
-    vg.overlayHints && vg.overlayHints.length
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Overlay hints (centro do tile)</div>
-      <ul style="margin:0;padding-left:1.2rem;font-size:0.78rem;line-height:1.45;color:#c8c8d8">
-        ${vg.overlayHints.map((h) => `<li>${String(h).replace(/</g, '&lt;')}</li>`).join('')}
-      </ul>
-    </div>`
-      : '';
-
-  const formalNearbyHtml =
-    vg.nearbyFormalTrees && vg.nearbyFormalTrees.length
-      ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Árvores formais (fase raiz no 3×3)</div>
-      <table class="tile-debug-table">
-        <tbody>
-          ${vg.nearbyFormalTrees
-            .map(
-              (t) => `<tr>
-            <th>Δ${t.offsetFromCenter.dx},${t.offsetFromCenter.dy}</th>
-            <td style="font-size:0.75rem;line-height:1.35">
-              <strong>${t.treeType || '—'}</strong> · noise ${t.noiseTrees}
-              · draw: ${t.rendererWouldDraw ? 'sim' : '<span style="color:#f88">não</span>'}
-              ${t.blockers ? ` · bloqueios: ${t.blockers.join(', ')}` : ''}
-              <br>
-              base ${JSON.stringify(t.spriteBaseIds)} · top ${JSON.stringify(t.spriteTopIds)}
-            </td>
-          </tr>`
-            )
-            .join('')}
-        </tbody>
-      </table>
-    </div>`
-      : '';
-
-  const pe = info.proceduralEntities;
-  const proceduralHtml = pe
-    ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">IDs procedurais (determinísticos)</div>
-      <p style="font-size:0.72rem;color:#a0a0b0;margin:0 0 8px;line-height:1.45">${escDbg(pe.schemaNote)}</p>
-      <table class="tile-debug-table">
-        <tbody>
-          <tr><th>worldSeed</th><td><code>${escDbg(String(pe.worldSeed))}</code></td></tr>
-          <tr><th>Grama (célula)</th><td><code>${escDbg(pe.grassCell.idHex)}</code></td></tr>
-          <tr><th>Scatter (célula)</th><td><code>${escDbg(pe.scatterCell.idHex)}</code></td></tr>
-          <tr><th>Rocha (reserva)</th><td><code>${escDbg(pe.rockCell.idHex)}</code></td></tr>
-          <tr><th>Cristal (reserva)</th><td><code>${escDbg(pe.crystalCell.idHex)}</code></td></tr>
-          <tr><th>Árvore formal (raiz)</th><td>${
-            pe.formalTreeRoot
-              ? `<code>${escDbg(pe.formalTreeRoot.idHex)}</code> · [${pe.formalTreeRoot.micro.mx},${pe.formalTreeRoot.micro.my}]`
-              : '—'
-          }</td></tr>
-          <tr><th>Instância scatter</th><td>${
-            pe.scatterInstance
-              ? `<code>${escDbg(pe.scatterInstance.idHex)}</code> · raiz [${pe.scatterInstance.rootMicro.mx},${pe.scatterInstance.rootMicro.my}]`
-              : '—'
-          }</td></tr>
-        </tbody>
-      </table>
-    </div>`
-    : '';
-
-  const sp = vg.scatterPass2;
-  const scatterPass2Html = sp
-    ? `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Pass 2 — base scatter (espelha render.js)</div>
-      <table class="tile-debug-table">
-        <tbody>
-          <tr><th>Base scatter aqui (2B ∨ 2C)</th><td>${
-            sp.pass2ScatterBaseWouldDrawHere
-              ? '<strong style="color:#8d8">sim</strong>'
-              : '<span style="color:#f88">não</span>'
-          }</td></tr>
-          <tr><th>CENTER / altura</th><td>${sp.centerRoleOk ? 'sim' : 'não'}</td></tr>
-          <tr><th>Papel terreno (tile)</th><td>${escDbg(sp.destTerrainRole ?? '—')} · 2C OK: ${sp.scatter2cDestOk ? 'sim' : 'não'}</td></tr>
-          <tr><th>2B origem (só col. esq.)</th><td>${
-            sp.pass2B.drawsHere ? 'sim' : 'não'
-          }${
-            sp.pass2B.itemKey
-              ? ` · <code style="font-size:0.72rem">${escDbg(sp.pass2B.itemKey)}</code> · cols=${sp.pass2B.cols ?? '—'}`
-              : ''
-          }</td></tr>
-          <tr><th>2C continuação</th><td>${sp.pass2C.drawsHere ? 'sim' : 'não'}</td></tr>
-        </tbody>
-      </table>
-      ${
-        sp.pass2B.baseLeftColumnSpriteIds?.length
-          ? `<p style="font-size:0.75rem;margin:6px 0 0;color:#a8a8b8">2B ids coluna esquerda: <code>${sp.pass2B.baseLeftColumnSpriteIds.join(
-              ', '
-            )}</code></p>`
-          : ''
-      }
-      ${
-        sp.pass2C.match
-          ? `<p style="font-size:0.76rem;margin:8px 0 0;line-height:1.4">2C: origem [${sp.pass2C.match.originMicro.mx}, ${sp.pass2C.match.originMicro.my}] · coluna +${sp.pass2C.match.columnIndexFromOrigin}${
-              sp.pass2C.match.rowIndexFromOrigin != null
-                ? ` · linha +${sp.pass2C.match.rowIndexFromOrigin}`
-                : ''
-            } · <code>${escDbg(sp.pass2C.match.itemKey)}</code> · sprite base <strong>${sp.pass2C.match.baseSpriteId}</strong></p>`
-          : ''
-      }
-      ${
-        sp.pass2C.westNeighborHint
-          ? `<p style="font-size:0.74rem;margin:6px 0 0;line-height:1.45;color:#aac">Vizinho imediato Oeste (dox=1): ${escDbg(sp.pass2C.westNeighborHint)}</p>`
-          : ''
-      }
-      ${
-        !sp.pass2B.drawsHere && sp.pass2B.reasons.length
-          ? `<div style="margin-top:8px;font-size:0.74rem"><strong>Se 2B não desenha:</strong><ul style="margin:4px 0 0;padding-left:1.1rem;line-height:1.4">${sp.pass2B.reasons
-              .map((r) => `<li>${escDbg(r)}</li>`)
-              .join('')}</ul></div>`
-          : ''
-      }
-      ${
-        !sp.pass2C.drawsHere && sp.pass2C.reasons.length
-          ? `<div style="margin-top:8px;font-size:0.74rem"><strong>2C:</strong><ul style="margin:4px 0 0;padding-left:1.1rem;line-height:1.4">${sp.pass2C.reasons
-              .map((r) => `<li>${escDbg(r)}</li>`)
-              .join('')}</ul></div>`
-          : ''
-      }
-    </div>`
-    : '';
-
-  const scatterContHtml = vg.scatterContinuation
-    ? (() => {
-        const sc = vg.scatterContinuation;
-        const allIds = [...(sc.baseIds || []), ...(sc.topIds || [])];
-        const icons = allIds
-          .map(
-            (id) =>
-              `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(id % 57) * 16}px -${Math.floor(id / 57) * 16}px;"></div>`
-          )
-          .join('');
-        return `<div class="tile-debug-section">
-      <div class="tile-debug-section-title">Scatter continuação (Oeste → este tile)</div>
-      <p style="font-size:0.78rem;margin:0 0 8px;color:#a0a0b0">Origem micro [${sc.originMicro.mx}, ${sc.originMicro.my}] · coluna +${sc.columnIndexFromOrigin}${
-        sc.rowIndexFromOrigin != null ? ` · linha +${sc.rowIndexFromOrigin}` : ''
-      } · <code>${String(sc.itemKey).replace(/</g, '')}</code> · ${sc.shape}</p>
-      <div class="sprite-badge"><span class="sprite-badge-label">IDs</span><div class="tile-debug-sprite-stack">${icons}</div></div>
-    </div>`;
-      })()
-    : '';
-
-  let spritesHtml = '';
-  if (info.vegetation.activeSprites && info.vegetation.activeSprites.length > 0) {
-     const badges = info.vegetation.activeSprites.map(s => {
-        let icons = '';
-        if (s.ids) {
-           icons = s.ids.map(id => `<div class="sprite-icon" style="background: url('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png') -${(id % 57)*16}px -${Math.floor(id / 57)*16}px;"></div>`).join('');
-        }
-        return `<div class="sprite-badge"><span class="sprite-badge-label">${s.type}</span><div class="tile-debug-sprite-stack">${icons}</div></div>`;
-     }).join('');
-     spritesHtml = `
-       <div class="tile-debug-section">
-         <div class="tile-debug-section-title">Active Overlays</div>
-         <div>${badges}</div>
-       </div>
-     `;
-  }
-
-  const logicHtml = `
-     <div class="tile-debug-section">
-       <div class="tile-debug-section-title">Exclusion Logic</div>
-       <table class="tile-debug-table">
-         <tbody>
-           <tr><th>Formal Tree Root</th><td>${info.logic.isFormalTree ? 'Yes' : 'No'}</td></tr>
-           <tr><th>Formal Protected Bounds</th><td>${info.logic.isFormalNeighbor ? 'Yes' : 'No'}</td></tr>
-         </tbody>
-       </table>
-     </div>
-  `;
-
-  debugContent.innerHTML =
-    heroAndCellHtml +
-    layersTableHtml +
-    heightGridHtml +
-    neighborsTableHtml +
-    terrainHtml +
-    collisionHtml +
-    surroundHtml +
-    vegHtml +
-    proceduralHtml +
-    overlayHintsHtml +
-    formalNearbyHtml +
-    scatterPass2Html +
-    scatterContHtml +
-    logicHtml +
-    spritesHtml;
-  document.getElementById('tile-debug-title').innerHTML = `Telemetry: Sector [${info.coord.mx}, ${info.coord.my}]`;
-  debugModal.classList.add('is-open');
-}
-
-// Teclado: Track held keys para movimento contínuo estilo Pokémon
-function keyToDir(key) {
-  if (key === 'ArrowUp' || key === 'w' || key === 'W') return 'up';
-  if (key === 'ArrowDown' || key === 's' || key === 'S') return 'down';
-  if (key === 'ArrowLeft' || key === 'a' || key === 'A') return 'left';
-  if (key === 'ArrowRight' || key === 'd' || key === 'D') return 'right';
-  return null;
-}
-
-window.addEventListener('keydown', (e) => {
-  if (appMode === 'play') {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'Shift'].includes(e.key)) {
-       e.preventDefault();
-    }
-
-    if (e.key === 'Shift') {
-      heldKeys.add('shift');
-    }
-
-    const dir = keyToDir(e.key);
-    if (dir) {
-      heldKeys.add(dir);
-      if (currentData) refreshPlayModeInfoBar();
-    }
-    
-    if (e.key === ' ') {
-      tryJumpPlayer(currentData);
-    }
-    
-    if (e.key === 'Escape') {
-      btnBackToMap.click();
-    }
-  }
-});
-
-window.addEventListener('keyup', (e) => {
-  if (e.key === 'Shift') heldKeys.delete('shift');
-  const dir = keyToDir(e.key);
-  if (dir) heldKeys.delete(dir);
-});
-
-// --- LÓGICA DE CONFIGURAÇÕES E I/O ---
-
 btnSettings.addEventListener('click', () => {
   settingsModal.classList.remove('hidden');
-  // Sincroniza sliders com o config atual
   document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
   document.getElementById('cfgElevation').value = currentConfig.elevationScale;
   document.getElementById('cfgElevationDetailOctaves').value =
@@ -1572,22 +356,19 @@ importFile.addEventListener('change', (e) => {
         run();
         infoBar.innerHTML = "<b style='color:#00ff00'>MUNDO IMPORTADO!</b>";
       } else {
-        alert("Arquivo JSON inválido ou formato antigo.");
+        alert('Arquivo JSON inválido ou formato antigo.');
       }
     } catch (err) {
-      alert("Erro ao ler JSON: " + err.message);
+      alert('Erro ao ler JSON: ' + err.message);
     }
   };
   reader.readAsText(file);
 });
 
-// Fase 5: Exportação Otimizada (Seed + Config)
 if (btnExport) {
   btnExport.addEventListener('click', () => {
     if (!currentData) return;
-    
-    // Otimização: Exportamos apenas a Seed e a Configuração.
-    // O sistema de Chunks e o Gerador reconstruirão tudo deterministicamente.
+
     const exportData = {
       version: 2,
       seed: seedInput.value,
@@ -1595,13 +376,12 @@ if (btnExport) {
     };
 
     downloadJsonFile(`pkmn-config-${exportData.seed}.json`, exportData);
-    
+
     const originalContent = infoBar.innerHTML;
     infoBar.innerHTML = "<b style='color:#00ff00'>JSON EXPORTADO COM SUCESSO!</b>";
     setTimeout(() => {
-      // Evita piscar se o mouse for movido rapidamente
       if (infoBar.innerHTML.includes('JSON EXPORTADO')) {
-         infoBar.innerHTML = originalContent;
+        infoBar.innerHTML = originalContent;
       }
     }, 2000);
   });
@@ -1612,15 +392,11 @@ seedInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') run();
 });
 
-// Execução inicial com pré-carregamento de ativos
+document.getElementById('chkCurvas')?.addEventListener('change', updateView);
+
 loadTilesetImages().then(async () => {
-  new BiomesModal(); // Inicializa o explorador de biomas
-  
-  // Character Selector UI initialization
+  new BiomesModal();
   new CharacterSelector('character-selector-container');
-  
-  // Preload player species sheets
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
-  
   run();
 });

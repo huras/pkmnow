@@ -35,6 +35,69 @@ const WANDER_MOVE_EXTRA = 1.2;
 const WANDER_IDLE_MIN = 0.35;
 const WANDER_IDLE_EXTRA = 1.0;
 const MAX_SPEED = 1.65;
+const WILD_GRAVITY = 45.0;
+const WILD_JUMP_IMPULSE = 12.0;
+/** Frames (~60 Hz) bloqueados no chão antes de tentar salto em fuga / perseguição. */
+const WILD_JUMP_BLOCKED_FRAMES_FLEE = 14;
+/** Idem no vagueio (saltos mais raros). */
+const WILD_JUMP_BLOCKED_FRAMES_WANDER = 28;
+const WILD_JUMP_COOLDOWN_SEC = 0.85;
+
+function ensureWildPhysicsState(entity) {
+  if (entity.z == null) entity.z = 0;
+  if (entity.vz == null) entity.vz = 0;
+  if (entity.grounded == null) entity.grounded = true;
+  if (entity.jumping == null) entity.jumping = false;
+  if (entity.jumpCooldown == null) entity.jumpCooldown = 0;
+  if (entity._blockedMoveFrames == null) entity._blockedMoveFrames = 0;
+}
+
+function integrateWildPokemonVertical(entity, dt) {
+  ensureWildPhysicsState(entity);
+  if (entity.jumpCooldown > 0) entity.jumpCooldown = Math.max(0, entity.jumpCooldown - dt);
+  if (!entity.grounded) {
+    entity.vz -= WILD_GRAVITY * dt;
+    entity.z += entity.vz * dt;
+    if (entity.z <= 0) {
+      entity.z = 0;
+      entity.vz = 0;
+      entity.grounded = true;
+      entity.jumping = false;
+    }
+  }
+}
+
+function tryWildPokemonJump(entity) {
+  if (!entity.grounded || (entity.jumpCooldown || 0) > 0) return;
+  entity.vz = WILD_JUMP_IMPULSE;
+  entity.grounded = false;
+  entity.jumping = true;
+  entity.jumpCooldown = WILD_JUMP_COOLDOWN_SEC;
+  entity._blockedMoveFrames = 0;
+}
+
+/**
+ * Move horizontal com deslize em eixo (como o jogador), para não “vibrar” em cantos.
+ * @returns {boolean} true se a posição mudou
+ */
+function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
+  const ox = entity.x;
+  const oy = entity.y;
+  if (canWildPokemonWalkMicroTile(nx, ny, data, ox, oy, air)) {
+    entity.x = nx;
+    entity.y = ny;
+    return true;
+  }
+  if (canWildPokemonWalkMicroTile(nx, oy, data, ox, oy, air)) {
+    entity.x = nx;
+    return true;
+  }
+  if (canWildPokemonWalkMicroTile(ox, ny, data, ox, oy, air)) {
+    entity.y = ny;
+    return true;
+  }
+  return false;
+}
 
 const DIRECTION_ROW_MAP = {
   down: 0,
@@ -102,6 +165,7 @@ function setEmotion(entity, type, persist = false) {
 }
 
 function updateWildMotion(entity, dt, data, playerX, playerY) {
+  ensureWildPhysicsState(entity);
   const beh = entity.behavior;
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
@@ -127,7 +191,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       // Basic collision-aware steering: move away from player
       const angToPlayer = Math.atan2(dyP, dxP);
       const fleeAng = angToPlayer; // Straight away
-      steerTowardAngle(entity, fleeAng, beh.fleeSpeed, data);
+      steerTowardAngle(entity, fleeAng, beh.fleeSpeed, data, wildIsAirborne(entity), true);
       
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
@@ -136,7 +200,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.aiState = 'approach';
       if (distP > beh.stopDist) {
         const approachAng = Math.atan2(-dyP, -dxP); // Straight toward
-        steerTowardAngle(entity, approachAng, beh.approachSpeed, data);
+        steerTowardAngle(entity, approachAng, beh.approachSpeed, data, wildIsAirborne(entity), true);
       } else {
         entity.vx = 0;
         entity.vy = 0;
@@ -251,25 +315,37 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
 
     // Greedy steering toward target
     const moveAng = Math.atan2(dyT, dxT);
-    steerTowardAngle(entity, moveAng, MAX_SPEED * 0.45, data);
+    steerTowardAngle(entity, moveAng, MAX_SPEED * 0.45, data, wildIsAirborne(entity), false);
   }
 
-  // Apply velocity speculatively with terrain bounds checking
+  // Apply velocity speculatively with terrain bounds checking (+ deslize em cantos)
+  const air = wildIsAirborne(entity);
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
 
-  if (!canWildPokemonWalkMicroTile(nx, ny, data, entity.x, entity.y)) {
+  const moved = tryApplyWildPokemonMove(entity, nx, ny, data, air);
+  if (!moved) {
     entity.vx = 0;
     entity.vy = 0;
     entity.targetX = null;
+    entity._blockedMoveFrames = (entity._blockedMoveFrames || 0) + 1;
 
-    // Path blocked during locomotion -> Frustration/scribbles
-    if (entity.aiState === 'wander' || entity.aiState === 'flee') {
-      setEmotion(entity, 6, false); // 💬
+    const needJumpFrames =
+      entity.aiState === 'flee' || entity.aiState === 'approach'
+        ? WILD_JUMP_BLOCKED_FRAMES_FLEE
+        : WILD_JUMP_BLOCKED_FRAMES_WANDER;
+    if (entity.grounded && !air && entity._blockedMoveFrames >= needJumpFrames) {
+      tryWildPokemonJump(entity);
+    }
+
+    if (
+      (entity.aiState === 'wander' || entity.aiState === 'flee' || entity.aiState === 'approach') &&
+      entity._blockedMoveFrames === needJumpFrames
+    ) {
+      setEmotion(entity, 6, false); // 💬 uma vez ao aproximar do salto
     }
   } else {
-    entity.x = nx;
-    entity.y = ny;
+    entity._blockedMoveFrames = 0;
   }
 
 
@@ -284,7 +360,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const clampedX = entity.centerX + nxc * WANDER_RADIUS;
     const clampedY = entity.centerY + nyc * WANDER_RADIUS;
 
-    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data, entity.x, entity.y)) {
+    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data, entity.x, entity.y, wildIsAirborne(entity))) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
@@ -307,6 +383,10 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   } else if (spd > 0.06) {
     const ang = Math.atan2(entity.vy, entity.vx);
     entity.facing = getFacingFromAngle(ang);
+  } else if (entity.aiState === 'flee') {
+    entity.facing = getFacingFromAngle(Math.atan2(dyP, dxP));
+  } else if (entity.aiState === 'approach' && distP > beh.stopDist) {
+    entity.facing = getFacingFromAngle(Math.atan2(-dyP, -dxP));
   }
 }
 
@@ -324,21 +404,34 @@ function getFacingFromAngle(ang) {
 /**
  * Helper to steer toward an angle while avoiding obstacles.
  */
-function steerTowardAngle(entity, targetAng, speed, data) {
-  // Try preferred direction first, then sweep neighbors
-  const angles = [
-    targetAng,
-    targetAng + Math.PI / 4,
-    targetAng - Math.PI / 4,
-    targetAng + Math.PI / 2,
-    targetAng - Math.PI / 2,
-  ];
+function wildIsAirborne(entity) {
+  ensureWildPhysicsState(entity);
+  return !!entity.jumping || (entity.z || 0) > 0.05;
+}
+
+function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSweep = false) {
+  // Preferido primeiro; em fuga/perseguição varredura estreita evita “lateral” na borda do penhasco.
+  const angles = narrowSweep
+    ? [
+        targetAng,
+        targetAng + Math.PI / 8,
+        targetAng - Math.PI / 8,
+        targetAng + Math.PI / 4,
+        targetAng - Math.PI / 4,
+      ]
+    : [
+        targetAng,
+        targetAng + Math.PI / 4,
+        targetAng - Math.PI / 4,
+        targetAng + Math.PI / 2,
+        targetAng - Math.PI / 2,
+      ];
 
   for (const ang of angles) {
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
     // Increased lookahead to avoid "shoveling" into props (radius-aware)
-    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y)) {
+    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, isAirborne)) {
       entity.vx = vx;
       entity.vy = vy;
       entity.stuckTimer = 0; // Clear stuck state on successful move
@@ -508,7 +601,13 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       spawnType,
       // PATHFINDING
       targetX: null,
-      targetY: null
+      targetY: null,
+      z: 0,
+      vz: 0,
+      grounded: true,
+      jumping: false,
+      jumpCooldown: 0,
+      _blockedMoveFrames: 0
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
@@ -535,6 +634,7 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       }
     }
 
+    integrateWildPokemonVertical(e, dt);
     updateWildMotion(e, dt, data, playerX, playerY);
     advanceWildPokemonAnim(e, dt);
   }

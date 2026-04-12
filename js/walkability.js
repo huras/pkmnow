@@ -4,6 +4,7 @@
  * Exclui penhascos (altura), água/lava (Borda com…), lago roxo: ver bloco em `canWalkMicroTile` (overlay vs sem overlay).
  */
 
+import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity } from './chunking.js';
 import { getRoleForCell, isTerrainInnerCornerRole, seededHash, parseShape } from './tessellation-logic.js';
@@ -50,6 +51,39 @@ export function getTerrainSetWalkKind(name) {
     return 'layer-base';
   }
   return null;
+}
+
+/** Resolved autotile set name for walk rules (roads use `roadFeature`, e.g. `stair-ns`). */
+function resolveTerrainSetNameForWalk(tile) {
+  if (!tile) return '';
+  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
+  return setName;
+}
+
+function isStairOrBridgeTerrainSetName(setName) {
+  return setName.includes('stair-') || setName.includes('-bridge');
+}
+
+function isConnectorTileForHeightStep(tile) {
+  return isStairOrBridgeTerrainSetName(resolveTerrainSetNameForWalk(tile));
+}
+
+/** True if `heightStep` may differ between these two micro tiles (ramp, bridge↔stair, etc.). */
+function okHeightStepTransition(sourceTile, targetTile) {
+  if (!sourceTile || !targetTile) return true;
+  if (sourceTile.heightStep === targetTile.heightStep) return true;
+
+  const step = Math.abs(targetTile.heightStep - sourceTile.heightStep);
+  const srcConn = isConnectorTileForHeightStep(sourceTile);
+  const tgtConn = isConnectorTileForHeightStep(targetTile);
+
+  // e.g. wooden-bridge (h=8) next to stair-ns (h=0): large nominal gap, still one logical ramp.
+  if (srcConn && tgtConn) return true;
+
+  if (step <= 1 && (srcConn || tgtConn)) return true;
+
+  return false;
 }
 
 export const WALL_ROLES = new Set([
@@ -282,6 +316,8 @@ export function isPropBlocking(mx, my, data) {
     const rootTile = getMicroTile(rootX, rootY, data);
     const rightTile = getMicroTile(rootX + 1, rootY, data);
     if (!rootTile || !rightTile) return false;
+    // Same gate as play-chunk-bake.js / render.js: no formal trunk on step-0 / roads / cities
+    if (rootTile.heightStep < 1 || rootTile.isRoad || rootTile.isCity) return false;
     if (rootTile.heightStep !== rightTile.heightStep) return false;
     
     const set = TERRAIN_SETS[BIOME_TO_TERRAIN[rootTile.biomeId] || 'grass'];
@@ -355,12 +391,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
     const sourceTile = getMicroTile(smx, smy, data);
     
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
-      // Check if target is a connector (stair/bridge)
-      let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
-      if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
-      
-      const isConnector = setName.includes('stair-') || setName.includes('-bridge');
-      if (!isConnector || Math.abs(targetTile.heightStep - sourceTile.heightStep) > 1) {
+      if (!okHeightStepTransition(sourceTile, targetTile)) {
         return false; // Physical barrier (cliff/drop)
       }
     }
@@ -393,45 +424,62 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
 }
 
 /**
- * Specialty walkability for Wild Pokémon: Allows swimming but blocks props/cliffs.
+ * Specialty walkability for Wild Pokémon: allows swimming (oceano / lago raso), bloqueia penhascos,
+ * paredes de autotile, lava/pools bloqueantes, lago roxo e props — alinhado a `canWalkMicroTile` com exceção de água.
+ * @param {boolean} [isAirborne=false] — durante salto, ignora degraus de altura, paredes EDGE e base/overlay “solo”.
  */
-export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY) {
+export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne = false) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
     return false;
   }
-  
+
   const targetTile = getMicroTile(mx, my, data);
   if (!targetTile) return false;
 
-  // 1. Height Context Check
-  if (srcX !== undefined && srcY !== undefined) {
+  // 1. Height Context Check (no ar: pode atravessar diferença de degrau num frame, como o jogador com impulso)
+  if (!isAirborne && srcX !== undefined && srcY !== undefined) {
     const smx = Math.floor(srcX);
     const smy = Math.floor(srcY);
     const sourceTile = getMicroTile(smx, smy, data);
-    
+
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
-      let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
-      if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
-      
-      const isConnector = setName.includes('stair-') || setName.includes('-bridge');
-      if (!isConnector || Math.abs(targetTile.heightStep - sourceTile.heightStep) > 1) {
+      if (!okHeightStepTransition(sourceTile, targetTile)) {
         return false;
       }
     }
   }
 
+  if (!isAirborne) {
+    const role = getMicroTileRole(mx, my, data);
+    if (WALL_ROLES.has(role)) return false;
+  }
+
   const sid = getBaseTerrainSpriteId(mx, my, data);
   if (sid === null) return false;
-  
-  // Custom check for Wild: strictly allow water/lava centers, but block cliffs
-  // We check the terrain set name for "altura"
+
   let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
   if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
-  if (setName.startsWith('altura ')) return false;
+  if (!isAirborne && setName.startsWith('altura ')) return false;
 
-  // 2. Prop Blocking (Trees, buildings, etc)
+  const overlayId = getFoliageOverlayTileId(mx, my, data);
+  if (!isAirborne && overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
+    return false;
+  }
+
+  const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
+  if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
+    return false;
+  }
+
+  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) {
+    const swimOk =
+      targetTile.biomeId === BIOMES.OCEAN.id ||
+      (lakeWalkRole != null && !isPurpleLakePoolWalkBlockingRole(lakeWalkRole));
+    if (!swimOk) return false;
+  }
+
   if (isPropBlocking(mx, my, data)) return false;
 
   return true;

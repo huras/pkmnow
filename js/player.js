@@ -4,9 +4,9 @@ import { BIOME_TO_TERRAIN } from './biome-tiles.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 
-const MAX_SPEED = 6.0;
-const ACCEL = 40.0;
-const FRICTION = 25.0;
+const MAX_SPEED = 3.2;
+const ACCEL = 32.0;
+const FRICTION = 20.0;
 const GRAVITY = 45.0;
 const JUMP_IMPULSE = 14.5;
 const GROUND_R = 0.32; // Raio de colisão
