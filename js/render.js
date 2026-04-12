@@ -35,6 +35,11 @@ import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { resolvePmdFrameSpec, resolveCanonicalPmdH, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
+import {
+  defaultPortraitSlugForBalloon,
+  ensureSpriteCollabPortraitLoaded,
+  getSpriteCollabPortraitImage
+} from './pokemon/spritecollab-portraits.js';
 
 import {
   PLAY_CHUNK_SIZE,
@@ -550,12 +555,28 @@ export function render(canvas, data, options = {}) {
       const pmdPivotX = pmdDw * 0.5;
       const pmdPivotY = pmdDh * PMD_MON_SHEET.pivotYFrac;
 
+      const emotionPayload =
+        we.emotionType !== null && typeof we.emotionType === 'number'
+          ? {
+              type: we.emotionType,
+              age: we.emotionAge,
+              portraitSlug:
+                we.emotionPortraitSlug ||
+                defaultPortraitSlugForBalloon(we.emotionType)
+            }
+          : null;
+
+      const wy = we.y;
+      const footSortY = wy + 0.5;
+      /** Past same-tile scatter/tree canopy sort (`floor(tile)+1`), still near the owning sprite. */
+      const emotionSortY = Math.max(footSortY + 0.018, Math.floor(wy) + 1.008);
+
       renderItems.push({
         type: 'wild',
         y: we.y,
         x: we.x,
         /** Depth sort: world pivot Y (tile center), not logical cell — matches sprite anchor vs props. */
-        sortY: we.y + 0.5,
+        sortY: footSortY,
         dexId: we.dexId,
         animMoving: !!we.animMoving,
         cx: snapPx((we.x + 0.5) * tileW),
@@ -571,12 +592,24 @@ export function render(canvas, data, options = {}) {
         pivotY: pmdPivotY,
         spawnPhase: we.spawnPhase ?? 1,
         spawnType: we.spawnType,
-        emotion: (we.emotionType !== null && typeof we.emotionType === 'number') ? {
-          type: we.emotionType,
-          age: we.emotionAge
-        } : null,
         targetHeightTiles
       });
+
+      if (emotionPayload) {
+        renderItems.push({
+          type: 'wildEmotion',
+          sortY: emotionSortY,
+          x: we.x,
+          y: we.y,
+          cx: snapPx((we.x + 0.5) * tileW),
+          cy: snapPx((we.y + 0.5) * tileH - (we.z || 0) * tileH),
+          pivotY: pmdPivotY,
+          spawnPhase: we.spawnPhase ?? 1,
+          spawnType: we.spawnType,
+          dexId: we.dexId,
+          emotion: emotionPayload
+        });
+      }
     }
 
     // --- Collect Player ---
@@ -621,7 +654,80 @@ export function render(canvas, data, options = {}) {
     // --- SORT BY Y (`sortY`: pivot — Pokémon vy+0.5; formal + scatter canopy originY+1 per translate; else `y`) ---
     renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
 
-      // --- DRAW PASS ---
+    /**
+     * Wild emotion is a separate render item so `sortY` clears scatter/tree canopies (`originY + 1`)
+     * on the same tile row; balloon is drawn before the portrait so the face stays on top.
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {{ cx: number, cy: number, pivotY: number, emotion: object, dexId: number }} em
+     * @param {number} spawnYOffset
+     */
+    const drawWildEmotionOverlay = (ctx, em, spawnYOffset) => {
+      if (!em.emotion) return;
+      const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
+      if (!emoImg || !emoImg.naturalWidth) return;
+      const eCols = 8;
+      const eRows = 10;
+      const eSw = Math.floor(emoImg.naturalWidth / eCols);
+      const eSh = Math.floor(emoImg.naturalHeight / eRows);
+      const progress = Math.min(1.0, em.emotion.age / 0.8);
+      const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
+      const dW = eSw * 1.25 * (tileW / 32);
+      const dH = eSh * 1.25 * (tileW / 32);
+      const px = snapPx(em.cx - dW * 0.5);
+      const spriteTopY = em.cy + spawnYOffset - em.pivotY;
+      const gapAboveHead = tileH * 0.06 + dH * 0.12;
+      const py = snapPx(spriteTopY - dH - gapAboveHead);
+
+      // Balloon first so the SpriteCollab portrait (drawn after) sits on top and stays readable
+      ctx.drawImage(emoImg, fIdx * eSw, em.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
+
+      const slug = em.emotion.portraitSlug;
+      const dexForFace = em.dexId;
+      if (slug && dexForFace != null) {
+        let pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
+        if (!pImg || !pImg.naturalWidth) {
+          ensureSpriteCollabPortraitLoaded(imageCache, dexForFace, slug);
+          pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
+        }
+        if (pImg && pImg.naturalWidth) {
+          const pr = tileW * 0.56;
+          const rad = pr * 0.48;
+          /** Circle center = top-left of the emotion balloon draw rect `(px, py)` → `(px+dW, py+dH)` */
+          const cx = px;
+          const cy = py;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+          ctx.clip();
+          const iw = pImg.naturalWidth;
+          const ih = pImg.naturalHeight;
+          const scale = Math.max(pr / iw, pr / ih);
+          const fw = iw * scale;
+          const fh = ih * scale;
+          ctx.drawImage(
+            pImg,
+            0,
+            0,
+            iw,
+            ih,
+            snapPx(cx - fw * 0.5),
+            snapPx(cy - fh * 0.5),
+            Math.ceil(fw),
+            Math.ceil(fh)
+          );
+          ctx.restore();
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    };
+
+    // --- DRAW PASS ---
     for (const item of renderItems) {
       ctx.save();
       
@@ -645,29 +751,13 @@ export function render(canvas, data, options = {}) {
         ctx.ellipse(item.cx, shadowCy, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Sprite
+        // Sprite (emotion balloon is a separate `wildEmotion` item — depth-sorted after local canopies)
         ctx.drawImage(
           item.sheet,
           item.sx, item.sy, item.sw, item.sh,
           snapPx(item.cx - item.pivotX), snapPx(item.cy - item.pivotY + spawnYOffset),
           snapPx(item.dw), snapPx(item.dh)
         );
-        // 🎈 Emotion Balloon
-        if (item.emotion) {
-          const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
-          if (emoImg && emoImg.naturalWidth) {
-            const eCols = 8, eRows = 10;
-            const eSw = Math.floor(emoImg.naturalWidth / eCols);
-            const eSh = Math.floor(emoImg.naturalHeight / eRows);
-            const progress = Math.min(1.0, item.emotion.age / 0.8);
-            const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
-            const dW = eSw * 1.25 * (tileW / 32);
-            const dH = eSh * 1.25 * (tileW / 32);
-            const px = snapPx(item.cx - dW * 0.5);
-            const py = snapPx(item.cy + spawnYOffset - item.pivotY - dH * 0.8);
-            ctx.drawImage(emoImg, fIdx * eSw, item.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
-          }
-        }
 
         // Terrain / Grass Depth Cue (Deferred Overlay)
         const targetMx = Math.floor(item.x);
@@ -678,6 +768,15 @@ export function render(canvas, data, options = {}) {
             drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
           }
         }
+      } else if (item.type === 'wildEmotion') {
+        ctx.globalAlpha = item.spawnPhase;
+        let spawnYOffset = 0;
+        if (item.spawnPhase < 1) {
+          if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
+          else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
+          else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+        }
+        drawWildEmotionOverlay(ctx, item, spawnYOffset);
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, itemKey } = item;
         const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');

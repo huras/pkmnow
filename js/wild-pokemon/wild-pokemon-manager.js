@@ -3,6 +3,11 @@ import { seededHashInt } from '../tessellation-logic.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
+import {
+  defaultPortraitSlugForBalloon,
+  ensureSpriteCollabPortraitLoaded,
+  probeSpriteCollabPortraitPrefix
+} from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
@@ -252,16 +257,34 @@ function advanceWildPokemonAnim(entity, dt) {
     // If not persistent, the balloon vanishes after completing its animation (1.0s to be safe)
     if (!entity.emotionPersist && entity.emotionAge > 1.2) {
       entity.emotionType = null;
+      entity.emotionPortraitSlug = null;
     }
   }
 }
 
-function setEmotion(entity, type, persist = false) {
-  // Prevent spamming the same emotion if already active
-  if (entity.emotionType === type && entity.emotionAge < 2.0) return;
+/**
+ * @param {object} entity
+ * @param {number} type — RPG Maker balloon row (0–9)
+ * @param {boolean} [persist]
+ * @param {string | null | undefined} [portraitSlug] — SpriteCollab basename without `.png`; default maps from balloon type
+ */
+function setEmotion(entity, type, persist = false, portraitSlug) {
+  const resolvedSlug =
+    portraitSlug === undefined || portraitSlug === null
+      ? defaultPortraitSlugForBalloon(type)
+      : String(portraitSlug);
+  if (
+    entity.emotionType === type &&
+    entity.emotionAge < 2.0 &&
+    (entity.emotionPortraitSlug || '') === resolvedSlug
+  ) {
+    return;
+  }
   entity.emotionType = type;
   entity.emotionAge = 0;
   entity.emotionPersist = persist;
+  entity.emotionPortraitSlug = resolvedSlug;
+  ensureSpriteCollabPortraitLoaded(imageCache, entity.dexId ?? 1, resolvedSlug).catch(() => {});
 }
 
 function updateWildMotion(entity, dt, data, playerX, playerY) {
@@ -278,7 +301,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     if (distP < beh.alertRadius) {
       entity.aiState = 'alert';
       entity.alertTimer = 1.0;
-      setEmotion(entity, 0, true); // !
+      setEmotion(entity, 0, true, 'Surprised'); // ! + portrait (same balloon, other faces possible)
       entity.animMoving = false;
     }
     return; // Don't wander while sleeping
@@ -408,7 +431,10 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.animMoving = false;
       
       if (Math.random() < 0.15 && entity.emotionType === null) {
-        setEmotion(entity, Math.random() < 0.5 ? 2 : 3, false); // ♪ or ♥
+        const balloon = Math.random() < 0.5 ? 2 : 3;
+        const happyish = ['Happy', 'Joyous', 'Inspired'];
+        const slug = happyish[Math.floor(Math.random() * happyish.length)];
+        setEmotion(entity, balloon, false, slug);
       }
       return;
     }
@@ -695,6 +721,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       aiState: spawnSleep ? 'sleep' : 'wander',
       alertTimer: 0,
       emotionType: spawnSleep ? 9 : null, // 9 = Zzz
+      emotionPortraitSlug: spawnSleep ? 'Normal' : null,
       emotionAge: 0,
       emotionPersist: spawnSleep, // Sleep persists until woken
       // SPAWN STATE
@@ -713,6 +740,10 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
+    probeSpriteCollabPortraitPrefix(dex).catch(() => {});
+    if (spawnSleep) {
+      ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
+    }
   }
 }
 
