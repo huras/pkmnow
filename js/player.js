@@ -1,8 +1,10 @@
-import { CHUNK_SIZE, getMicroTile } from './chunking.js';
-import { canWalkMicroTile, getMicroTileRole, WALL_ROLES } from './walkability.js';
-import { BIOME_TO_TERRAIN } from './biome-tiles.js';
+import { CHUNK_SIZE } from './chunking.js';
+import { canWalkMicroTile, pivotCellHeightTraversalOk } from './walkability.js';
+import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
+import { imageCache } from './image-cache.js';
+import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 
 const MAX_SPEED = 3.2;
 const ACCEL = 32.0;
@@ -56,18 +58,40 @@ export function setPlayerPos(x, y) {
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 }
 
-export function canWalk(x, y, data, srcX, srcY, isAirborne = false) {
+function playerFeetDeltaTiles() {
+  const isMoving = !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+  return getPmdFeetDeltaWorldTiles(imageCache, player.dexId || 94, isMoving);
+}
+
+export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTrunks = false) {
+  if (!data) return false;
+
+  const isMoving = !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+  const { x: fx, y: fy } = worldFeetFromPivotCell(x, y, imageCache, player.dexId || 94, isMoving);
+  let sfx;
+  let sfy;
+  if (srcX !== undefined && srcY !== undefined) {
+    const s = worldFeetFromPivotCell(srcX, srcY, imageCache, player.dexId || 94, isMoving);
+    sfx = s.x;
+    sfy = s.y;
+  }
+
   // 1. LOGICAL TRAVERSAL (The "Feet"):
-  // Se estiver no ar, o centro pode ignorar clifs. 
+  // Se estiver no ar, o centro pode ignorar clifs.
   // Se estiver no chão, o centro DEVE obedecer às regras de altura (escadas, mesma altura, etc).
+  // Probes usam deslocamento PMD (pivot → pés) alinhado ao render.
   if (!isAirborne) {
-    if (!canWalkMicroTile(x, y, data, srcX, srcY, undefined, isAirborne)) {
+    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks)) {
+      return false;
+    }
+    // Pivot pode entrar no tile ao norte antes dos pés saírem do platô (offset PMD para sul).
+    if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data)) {
       return false;
     }
   } else {
     // No ar, verificamos apenas se o centro não bateu em algo sólido (prop horizontal).
     // canWalkMicroTile sem srcX/Y pula o check de altura.
-    if (!canWalkMicroTile(x, y, data, undefined, undefined, undefined, isAirborne)) {
+    if (!canWalkMicroTile(fx, fy, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
       return false;
     }
   }
@@ -76,10 +100,10 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false) {
   // O corpo físico só pára por obstáculos REAIS (paredes, árvores, casas).
   // Ele NÃO liga para altura do chão (heightStep).
   const points = [
-    { x: x - GROUND_R, y: y - GROUND_R },
-    { x: x + GROUND_R, y: y - GROUND_R },
-    { x: x - GROUND_R, y: y + GROUND_R },
-    { x: x + GROUND_R, y: y + GROUND_R }
+    { x: fx - GROUND_R, y: fy - GROUND_R },
+    { x: fx + GROUND_R, y: fy - GROUND_R },
+    { x: fx - GROUND_R, y: fy + GROUND_R },
+    { x: fx + GROUND_R, y: fy + GROUND_R }
   ];
 
   for (const p of points) {
@@ -89,7 +113,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false) {
 
     // Chamamos canWalkMicroTile SEM srcX/srcY para ignorar o check de "heightStepMismatch".
     // Isso permite que um ombro do player sobreponha um tile de altura diferente sem travar.
-    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, isAirborne)) {
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
       return false;
     }
   }
@@ -177,25 +201,80 @@ export function updatePlayer(dt, data) {
      player.vy *= currentMaxSpeed / spd;
   }
 
-  // 2. Continuous Collision & Position Update (Sliding)
-  const nextX = player.x + player.vx * dt;
-  const nextY = player.y + player.vy * dt;
+  // 2. Tile / prop movement (ignore tree trunk circles here; trunks resolved like 25D demo: separate + slide on normal).
+  const ox = player.x;
+  const oy = player.y;
+  const ax = player.vx * dt;
+  const ay = player.vy * dt;
+  const stepMag2 = ax * ax + ay * ay;
+  const ig = true;
 
-  if (canWalk(nextX, nextY, data, player.x, player.y, isAirborne)) {
-    player.x = nextX;
-    player.y = nextY;
+  if (stepMag2 < 1e-14) {
+    // no displacement
+  } else if (canWalk(ox + ax, oy + ay, data, ox, oy, isAirborne, ig)) {
+    player.x = ox + ax;
+    player.y = oy + ay;
   } else {
-    // Sliding Resolution: Try X then Y
-    if (canWalk(nextX, player.y, data, player.x, player.y, isAirborne)) {
-      player.x = nextX;
+    let px = ox;
+    let py = oy;
+    let moved = false;
+
+    if (canWalk(ox, oy, data, ox, oy, isAirborne, ig)) {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) * 0.5;
+        if (canWalk(ox + ax * mid, oy + ay * mid, data, ox, oy, isAirborne, ig)) lo = mid;
+        else hi = mid;
+      }
+      const t = lo;
+      px = ox + ax * t;
+      py = oy + ay * t;
+      if (t > 1e-7) moved = true;
+
+      const rax = ax * (1 - t);
+      const ray = ay * (1 - t);
+      if (Math.abs(rax) >= Math.abs(ray)) {
+        if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
+          px += rax;
+          moved = true;
+        } else if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
+          py += ray;
+          moved = true;
+        }
+      } else {
+        if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
+          py += ray;
+          moved = true;
+        } else if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
+          px += rax;
+          moved = true;
+        }
+      }
+    }
+
+    if (moved) {
+      player.x = px;
+      player.y = py;
+    } else if (canWalk(ox + ax, oy, data, ox, oy, isAirborne, ig)) {
+      player.x = ox + ax;
       player.vy = 0;
-    } else if (canWalk(player.x, nextY, data, player.x, player.y, isAirborne)) {
-      player.y = nextY;
+    } else if (canWalk(ox, oy + ay, data, ox, oy, isAirborne, ig)) {
+      player.y = oy + ay;
       player.vx = 0;
     } else {
       player.vx = 0;
       player.vy = 0;
     }
+  }
+
+  if (player.grounded && !isAirborne && data) {
+    const fd = playerFeetDeltaTiles();
+    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
+    player.x = r.x;
+    player.y = r.y;
+    player.vx = r.vx;
+    player.vy = r.vy;
   }
 
   // 3. Vertical Physics (Jump)

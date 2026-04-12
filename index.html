@@ -41,6 +41,7 @@
           <label class="check-label"><input type="checkbox" id="chkRotas" checked> Rotas</label>
           <label class="check-label"><input type="checkbox" id="chkGrafo" checked> Grafo</label>
           <label class="check-label"><input type="checkbox" id="chkCurvas"> Curvas de Nível</label>
+          <label class="check-label" title="Modo jogo: ~37×37 tiles ao redor do jogador (tecla C). Cache acelera props scatter."><input type="checkbox" id="chkPlayColliders"> Colisores</label>
         </div>
         <input type="file" id="importFile" class="hidden" accept=".json">
         <button type="button" id="importBtn" class="btn-secondary">Importar JSON</button>
@@ -117,6 +118,9 @@
     <div id="play-context-menu" class="play-context-menu" hidden aria-hidden="true" role="menu">
       <button type="button" class="play-context-menu-item" id="play-ctx-teleport" role="menuitem">Teleport player here</button>
       <button type="button" class="play-context-menu-item" id="play-ctx-debug" role="menuitem">Debug tile</button>
+      <button type="button" class="play-context-menu-item" id="play-ctx-view-tree-data" role="menuitem" hidden>View tree data…</button>
+      <button type="button" class="play-context-menu-item" id="play-ctx-show-tree-collider" role="menuitem" hidden>Show tree collider</button>
+      <button type="button" class="play-context-menu-item" id="play-ctx-clear-tree-collider" role="menuitem" hidden>Clear tree collider highlight</button>
     </div>
 
     <!-- Debug Modal (Planet Genesis) -->
@@ -126,6 +130,7 @@
                 <div class="hud-title" id="tile-debug-title">Raw Data Dump</div>
                 <div style="display: flex; gap: 8px;">
                     <button type="button" class="btn-hud" id="tile-debug-copy-json">COPY JSON</button>
+                    <button type="button" class="btn-hud hidden" id="tile-debug-copy-tree-json">COPY TREE JSON</button>
                     <button type="button" class="btn-hud" id="tile-debug-close">CLOSE</button>
                 </div>
             </div>

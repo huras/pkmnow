@@ -7,9 +7,18 @@ import {
 } from './terrain-role-helpers.js';
 
 let lastDebugInfo = null;
+/** @type {object | null} */
+let lastTreeDebugInfo = null;
 let getCurrentData = () => null;
 let debugModalEl = null;
 let debugContentEl = null;
+
+function setDebugModalCopyButtons(mode) {
+  const btnTile = document.getElementById('tile-debug-copy-json');
+  const btnTree = document.getElementById('tile-debug-copy-tree-json');
+  if (btnTile) btnTile.classList.toggle('hidden', mode === 'tree');
+  if (btnTree) btnTree.classList.toggle('hidden', mode !== 'tree');
+}
 
 export function configureTileDebugModal(cfg) {
   getCurrentData = cfg.getCurrentData;
@@ -21,6 +30,10 @@ export function getLastTileDebugInfo() {
   return lastDebugInfo;
 }
 
+export function getLastTreeDebugInfo() {
+  return lastTreeDebugInfo;
+}
+
 
 export function formatObjectSetsFlags(f) {
   if (!f) return '— (fora de OBJECT_SETS; bases de terreno vêm de TERRAIN_SETS)';
@@ -29,6 +42,8 @@ export function formatObjectSetsFlags(f) {
 
 export function openDebugModal(info) {
   lastDebugInfo = info;
+  lastTreeDebugInfo = null;
+  setDebugModalCopyButtons('tile');
   const escDbg = (s) =>
     String(s)
       .replace(/&/g, '&amp;')
@@ -427,5 +442,85 @@ export function openDebugModal(info) {
     logicHtml +
     spritesHtml;
   document.getElementById('tile-debug-title').innerHTML = `Telemetry: Sector [${info.coord.mx}, ${info.coord.my}]`;
+  debugModalEl.classList.add('is-open');
+}
+
+/**
+ * Tree-focused debug view + JSON payload (`getLastTreeDebugInfo` for clipboard).
+ * @param {object} payload - from `buildPlayModeTreeDebugPayload`
+ */
+export function openTreeDebugModal(payload) {
+  lastTreeDebugInfo = payload;
+  lastDebugInfo = null;
+  setDebugModalCopyButtons('tree');
+
+  const escDbg = (s) =>
+    String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+  const h = payload.treeColliderHighlight;
+  const cw = payload.colliderWorldSamples;
+  const hiRow =
+    h == null
+      ? `<tr><th>Highlight</th><td><span style="color:#f88">No tree at this tile (use a tile with “Show tree collider” available).</span></td></tr>`
+      : `<tr><th>Highlight</th><td><code>${escDbg(JSON.stringify(h))}</code></td></tr>`;
+
+  const formalRows =
+    payload.formalCollider == null
+      ? ''
+      : `<tr><th>Formal trunk span</th><td><code>${escDbg(JSON.stringify(payload.formalCollider.trunkSpanWorld))}</code></td></tr>
+         <tr><th>didSpawnAtRoot</th><td>${payload.formalCollider.didSpawnAtRoot ? 'yes' : 'no'}</td></tr>`;
+
+  const scatterRows =
+    payload.scatterCollider == null
+      ? ''
+      : `<tr><th>Scatter origin</th><td>[${payload.scatterCollider.originMicro.mx}, ${payload.scatterCollider.originMicro.my}]</td></tr>
+         <tr><th>Item key</th><td><code>${escDbg(payload.scatterCollider.itemKey ?? '—')}</code></td></tr>
+         <tr><th>Scatter trunk span</th><td><code>${escDbg(JSON.stringify(payload.scatterCollider.trunkSpanWorld))}</code></td></tr>`;
+
+  const jsonRaw = JSON.stringify(payload, null, 2);
+  const jsonEsc = escDbg(jsonRaw);
+
+  debugContentEl.innerHTML = `
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">Tree — classification &amp; collider</div>
+      <table class="tile-debug-table"><tbody>
+        ${hiRow}
+        <tr><th>World sample (center)</th><td><code>${escDbg(JSON.stringify(cw.tileCenter))}</code></td></tr>
+        <tr><th>formalTrunkBlocksWorldPoint</th><td>${cw.formalTrunkBlocksWorldPoint ? '<strong>yes</strong>' : 'no'}</td></tr>
+        <tr><th>scatterTrunkBlocksWorldPoint</th><td>${cw.scatterTrunkBlocksWorldPoint ? '<strong>yes</strong>' : 'no'}</td></tr>
+        <tr><th>formalTrunkOverlapsThisCell</th><td>${cw.formalTrunkOverlapsThisCell ? 'yes' : 'no'}</td></tr>
+        <tr><th>scatterTrunkOverlapsThisCell</th><td>${cw.scatterTrunkOverlapsThisCell ? 'yes' : 'no'}</td></tr>
+        ${formalRows}
+        ${scatterRows}
+      </tbody></table>
+    </div>
+    <div class="tile-debug-section">
+      <div class="tile-debug-section-title">Logic &amp; Pass 2 (summary)</div>
+      <table class="tile-debug-table"><tbody>
+        <tr><th>Formal root (phase)</th><td>${payload.logic?.isFormalTree ? 'yes' : 'no'}</td></tr>
+        <tr><th>Formal neighbor</th><td>${payload.logic?.isFormalNeighbor ? 'yes' : 'no'}</td></tr>
+        <tr><th>Pass2 base here</th><td>${
+          payload.vegetation?.scatterPass2?.pass2ScatterBaseWouldDrawHere
+            ? '<strong style="color:#8d8">yes</strong>'
+            : 'no'
+        }</td></tr>
+      </tbody></table>
+    </div>
+    <p style="font-size:0.74rem;color:#a8a8c0;margin:10px 0 6px;line-height:1.45">
+      Use <strong>Copy tree JSON</strong> in the header for the full payload (sprites, OBJECT_SET ids, collision, procedural ids).
+    </p>
+    <details style="margin-top:4px">
+      <summary style="cursor:pointer;color:#bde;font-size:0.85rem">Preview JSON (truncated display — copy button has full file)</summary>
+      <pre style="max-height:38vh;overflow:auto;font-size:0.65rem;line-height:1.35;margin:8px 0 0;padding:8px;background:#1a1a22;border-radius:6px;border:1px solid #333">${jsonEsc}</pre>
+    </details>
+  `;
+
+  const titleEl = document.getElementById('tile-debug-title');
+  if (titleEl) {
+    titleEl.textContent = `Tree debug · [${payload.coord?.mx ?? '?'}, ${payload.coord?.my ?? '?'}]`;
+  }
   debugModalEl.classList.add('is-open');
 }

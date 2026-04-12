@@ -6,7 +6,14 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
-import { canWalkMicroTile, canWildPokemonWalkMicroTile, getFoliageOverlayTileId, getLakeLotusFoliageWalkRole } from '../walkability.js';
+import {
+  canWildPokemonWalkMicroTile,
+  getFoliageOverlayTileId,
+  getLakeLotusFoliageWalkRole,
+  pivotCellHeightTraversalOk
+} from '../walkability.js';
+import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
+import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 
 const SKY_SPECIES = new Set([
@@ -42,6 +49,8 @@ const WILD_JUMP_BLOCKED_FRAMES_FLEE = 14;
 /** Idem no vagueio (saltos mais raros). */
 const WILD_JUMP_BLOCKED_FRAMES_WANDER = 28;
 const WILD_JUMP_COOLDOWN_SEC = 0.85;
+/** Circle radius at feet for trunk separation (wild has no corner probes in wildWalkOk). */
+const WILD_TREE_BODY_R = 0.28;
 
 function ensureWildPhysicsState(entity) {
   if (entity.z == null) entity.z = 0;
@@ -76,23 +85,114 @@ function tryWildPokemonJump(entity) {
   entity._blockedMoveFrames = 0;
 }
 
+function wildFeetDeltaForEntity(entity) {
+  return getPmdFeetDeltaWorldTiles(imageCache, entity.dexId ?? 1, !!entity.animMoving);
+}
+
+function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTreeTrunks = false) {
+  const ft = worldFeetFromPivotCell(destX, destY, imageCache, entity.dexId ?? 1, !!entity.animMoving);
+  const st =
+    srcX !== undefined && srcY !== undefined
+      ? worldFeetFromPivotCell(srcX, srcY, imageCache, entity.dexId ?? 1, !!entity.animMoving)
+      : null;
+  if (
+    !canWildPokemonWalkMicroTile(ft.x, ft.y, data, st ? st.x : undefined, st ? st.y : undefined, air, ignoreTreeTrunks)
+  ) {
+    return false;
+  }
+  if (!air && srcX !== undefined && srcY !== undefined && !pivotCellHeightTraversalOk(destX, destY, srcX, srcY, data)) {
+    return false;
+  }
+  return true;
+}
+
+function applyWildTreeTrunkResolution(entity, data) {
+  ensureWildPhysicsState(entity);
+  const air = !!entity.jumping || (entity.z || 0) > 0.05;
+  if (!entity.grounded || air || !data) return;
+  const { dx, dy } = wildFeetDeltaForEntity(entity);
+  const r = resolvePivotWithFeetVsTreeTrunks(
+    entity.x,
+    entity.y,
+    dx,
+    dy,
+    WILD_TREE_BODY_R,
+    entity.vx,
+    entity.vy,
+    data
+  );
+  entity.x = r.x;
+  entity.y = r.y;
+  entity.vx = r.vx;
+  entity.vy = r.vy;
+}
+
 /**
- * Move horizontal com deslize em eixo (como o jogador), para não “vibrar” em cantos.
+ * Move horizontal: primeiro ao longo do vetor (como colisão contínua contra troncos redondos), depois sobra em eixo.
  * @returns {boolean} true se a posição mudou
  */
 function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
   const ox = entity.x;
   const oy = entity.y;
-  if (canWildPokemonWalkMicroTile(nx, ny, data, ox, oy, air)) {
+  const ax = nx - ox;
+  const ay = ny - oy;
+  if (ax * ax + ay * ay < 1e-14) return false;
+
+  const ig = true;
+  if (wildWalkOk(nx, ny, data, ox, oy, entity, air, ig)) {
     entity.x = nx;
     entity.y = ny;
     return true;
   }
-  if (canWildPokemonWalkMicroTile(nx, oy, data, ox, oy, air)) {
+
+  let px = ox;
+  let py = oy;
+  let moved = false;
+
+  if (wildWalkOk(ox, oy, data, ox, oy, entity, air, ig)) {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) * 0.5;
+      if (wildWalkOk(ox + ax * mid, oy + ay * mid, data, ox, oy, entity, air, ig)) lo = mid;
+      else hi = mid;
+    }
+    const t = lo;
+    px = ox + ax * t;
+    py = oy + ay * t;
+    if (t > 1e-7) moved = true;
+
+    const rax = ax * (1 - t);
+    const ray = ay * (1 - t);
+    if (Math.abs(rax) >= Math.abs(ray)) {
+      if (Math.abs(rax) > 1e-6 && wildWalkOk(px + rax, py, data, px, py, entity, air, ig)) {
+        px += rax;
+        moved = true;
+      } else if (Math.abs(ray) > 1e-6 && wildWalkOk(px, py + ray, data, px, py, entity, air, ig)) {
+        py += ray;
+        moved = true;
+      }
+    } else {
+      if (Math.abs(ray) > 1e-6 && wildWalkOk(px, py + ray, data, px, py, entity, air, ig)) {
+        py += ray;
+        moved = true;
+      } else if (Math.abs(rax) > 1e-6 && wildWalkOk(px + rax, py, data, px, py, entity, air, ig)) {
+        px += rax;
+        moved = true;
+      }
+    }
+  }
+
+  if (moved) {
+    entity.x = px;
+    entity.y = py;
+    return true;
+  }
+  if (wildWalkOk(nx, oy, data, ox, oy, entity, air, ig)) {
     entity.x = nx;
     return true;
   }
-  if (canWildPokemonWalkMicroTile(ox, ny, data, ox, oy, air)) {
+  if (wildWalkOk(ox, ny, data, ox, oy, entity, air, ig)) {
     entity.y = ny;
     return true;
   }
@@ -280,7 +380,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         const dist = Math.random() * WANDER_RADIUS;
         const tx = entity.centerX + Math.cos(ang) * dist;
         const ty = entity.centerY + Math.sin(ang) * dist;
-        if (canWildPokemonWalkMicroTile(tx, ty, data, entity.x, entity.y)) {
+        if (wildWalkOk(tx, ty, data, entity.x, entity.y, entity, false)) {
           entity.targetX = tx;
           entity.targetY = ty;
           break;
@@ -348,7 +448,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity._blockedMoveFrames = 0;
   }
 
-
+  applyWildTreeTrunkResolution(entity, data);
 
   // Clamp wander radius
   const dx = entity.x - entity.centerX;
@@ -360,7 +460,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const clampedX = entity.centerX + nxc * WANDER_RADIUS;
     const clampedY = entity.centerY + nyc * WANDER_RADIUS;
 
-    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data, entity.x, entity.y, wildIsAirborne(entity))) {
+    if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity))) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
@@ -431,7 +531,7 @@ function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSwee
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
     // Increased lookahead to avoid "shoveling" into props (radius-aware)
-    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, isAirborne)) {
+    if (wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne)) {
       entity.vx = vx;
       entity.vy = vy;
       entity.stuckTimer = 0; // Clear stuck state on successful move
@@ -529,14 +629,16 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     let spawnY = centerY + jy * 5;
 
     // Attempt to find a valid walkable tile for wild pokemon (allows water/lava, blocks trees/cliffs)
-    if (!canWildPokemonWalkMicroTile(spawnX, spawnY, data)) {
+    const spawnFt = worldFeetFromPivotCell(spawnX, spawnY, imageCache, dex, false);
+    if (!canWildPokemonWalkMicroTile(spawnFt.x, spawnFt.y, data)) {
       let found = false;
       // Search in expanding squares/circles
       for (let r = 1; r <= 5; r++) { // Increased radius to 5
         for (let a = 0; a < 8; a++) {
           const cx = spawnX + Math.cos((a * Math.PI) / 4) * r;
           const cy = spawnY + Math.sin((a * Math.PI) / 4) * r;
-          if (canWildPokemonWalkMicroTile(cx, cy, data)) {
+          const tryFt = worldFeetFromPivotCell(cx, cy, imageCache, dex, false);
+          if (canWildPokemonWalkMicroTile(tryFt.x, tryFt.y, data)) {
             spawnX = cx;
             spawnY = cy;
             found = true;

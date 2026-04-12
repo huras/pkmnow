@@ -488,6 +488,75 @@ export function analyzeScatterPass2Base(mx, my, data) {
 
 }
 
+function scatterItemKeyIsSolid(itemKey) {
+  if (!itemKey) return false;
+  const k = itemKey.toLowerCase();
+  return (
+    k.includes('tree') ||
+    k.includes('rock') ||
+    k.includes('crystal') ||
+    k.includes('cactus') ||
+    k.includes('broadleaf') ||
+    k.includes('palm')
+  );
+}
+
+/** Scatter props that are trees (narrow trunk collider). Big cactus counts as a tree; small cactus stays full-tile like rocks. */
+export function scatterItemKeyIsTree(itemKey) {
+  if (!itemKey) return false;
+  const k = itemKey.toLowerCase();
+  if (k.includes('big-cactus')) return true;
+  if (k.includes('crystal') || k.includes('rock') || k.includes('cactus')) return false;
+  return k.includes('tree') || k.includes('broadleaf') || k.includes('palm');
+}
+
+/** Persistent memo: `analyzeScatterPass2Base` is heavy; same (seed,mx,my) is queried many times per frame (collider overlay + movement). */
+const scatterSolidBlockCache = new Map();
+let scatterSolidBlockCacheSeed = null;
+const SCATTER_SOLID_CACHE_MAX = 14000;
+
+/**
+ * Clear scatter solid cache (e.g. after loading a new world with the same seed).
+ */
+export function clearScatterSolidBlockCache() {
+  scatterSolidBlockCache.clear();
+  scatterSolidBlockCacheSeed = null;
+}
+
+/**
+ * True when Pass 2 would draw a solid scatter **base** here (aligned with play-chunk-bake / render).
+ * Avoids blocking tiles that only sit inside the nominal 4×3 footprint but never receive base art.
+ * Walkability passes world feet through `canWalkMicroTile` → `floor(x),floor(y)` here; rocks/crystals/mineral bases use this cell.
+ */
+export function scatterSolidBaseBlocksMicroTile(mx, my, data) {
+  const seed = data.seed;
+  if (scatterSolidBlockCacheSeed !== seed) {
+    scatterSolidBlockCache.clear();
+    scatterSolidBlockCacheSeed = seed;
+  }
+  const key = `${mx},${my}`;
+  if (scatterSolidBlockCache.has(key)) return scatterSolidBlockCache.get(key);
+
+  const a = analyzeScatterPass2Base(mx, my, data);
+  const solidKey =
+    (a.pass2B.drawsHere && a.pass2B.itemKey) ||
+    (a.pass2C.drawsHere && a.pass2C.match?.itemKey) ||
+    null;
+  const blocked =
+    !!a.pass2ScatterBaseWouldDrawHere &&
+    scatterItemKeyIsSolid(solidKey) &&
+    !scatterItemKeyIsTree(solidKey);
+  scatterSolidBlockCache.set(key, blocked);
+  if (scatterSolidBlockCache.size > SCATTER_SOLID_CACHE_MAX) {
+    let over = scatterSolidBlockCache.size - 8000;
+    while (over-- > 0 && scatterSolidBlockCache.size > 8000) {
+      const k0 = scatterSolidBlockCache.keys().next().value;
+      scatterSolidBlockCache.delete(k0);
+    }
+  }
+  return blocked;
+}
+
 function explain2CForDox(mx, my, dox, tile, getT, seed, microW, microH, memo = null) {
   const ox0 = mx - dox;
   if (ox0 < 0 || ox0 >= microW) return `dox=${dox}: origem ox0=${ox0} fora do mapa micro`;

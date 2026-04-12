@@ -27,7 +27,8 @@ import {
 import {
   analyzeScatterPass2Base,
   validScatterOriginMicro,
-  grassSuppressedByScatterFootprint
+  grassSuppressedByScatterFootprint,
+  scatterItemKeyIsTree
 } from '../scatter-pass2-debug.js';
 import {
   getTerrainSetWalkKind,
@@ -35,7 +36,8 @@ import {
   getFoliageOverlayTileId,
   getLakeLotusFoliageWalkRole,
   isPurpleLakePoolWalkBlockingRole,
-  FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS
+  FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS,
+  didFormalTreeSpawnAtRoot
 } from '../walkability.js';
 import { canWalk } from '../player.js';
 import { computeTerrainRoleAndSprite, roleNameForSpriteIdInSet, TILE_DEBUG_DIRS_3X3 } from './terrain-role-helpers.js';
@@ -334,6 +336,28 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
     return { activeSprites: sprites, scatterContinuation };
   })();
 
+  const treeColliderHighlight = (() => {
+    if (didFormalTreeSpawnAtRoot(mx, my, data)) {
+      return { kind: 'formal', rootX: mx, my };
+    }
+    if (didFormalTreeSpawnAtRoot(mx - 1, my, data)) {
+      return { kind: 'formal', rootX: mx - 1, my };
+    }
+    if (!scatterPass2.pass2ScatterBaseWouldDrawHere) return null;
+    const itemKey =
+      (scatterPass2.pass2B.drawsHere && scatterPass2.pass2B.itemKey) ||
+      (scatterPass2.pass2C.drawsHere && scatterPass2.pass2C.match?.itemKey) ||
+      scatterContinuation?.itemKey ||
+      null;
+    if (!itemKey || !scatterItemKeyIsTree(itemKey)) return null;
+    const root =
+      scatterContinuation?.originMicro ??
+      scatterPass2.pass2C.match?.originMicro ??
+      (scatterPass2.pass2B.drawsHere ? { mx, my } : null);
+    if (!root) return null;
+    return { kind: 'scatter', ox0: root.mx, oy0: root.my };
+  })();
+
   const overlayDebugLayers = activeSprites.flatMap((s) =>
     (s.ids || []).map((id) => ({
       layer: 'overlay',
@@ -522,6 +546,7 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
         );
       })()
     },
-    proceduralEntities
+    proceduralEntities,
+    treeColliderHighlight
   };
 }

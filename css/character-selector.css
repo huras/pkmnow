@@ -1,7 +1,7 @@
 .character-selector {
   position: fixed;
-  top: 20px;
-  left: 20px;
+  bottom: 8px;
+  left: 8px;
   z-index: 1000;
   display: flex;
   flex-direction: column;

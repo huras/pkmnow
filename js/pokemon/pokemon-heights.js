@@ -48,7 +48,7 @@ export const POKEMON_HEIGHTS = {
   47: 3.5,  // Parasect
   48: 2.5,  // Venonat
   49: 4.1,  // Venomoth
-  50: 1.8,  // Diglett
+  50: 1.2,  // Diglett
   51: 1.8,  // Dugtrio
   52: 2.0,  // Meowth
   53: 3.8,  // Persian
@@ -73,8 +73,8 @@ export const POKEMON_HEIGHTS = {
   72: 2.5,  // Tentacool
   73: 7.9,  // Tentacruel
   74: 1.3,  // Geodude
-  75: 5.1,  // Graveler
-  76: 5.2,  // Golem
+  75: 3.1,  // Graveler
+  76: 3.2,  // Golem
   77: 2.6,  // Ponyta
   78: 3.9,  // Rapidash
   79: 2.5,  // Slowpoke
@@ -84,8 +84,8 @@ export const POKEMON_HEIGHTS = {
   83: 2.1,  // Farfetch'd
   84: 2.5,  // Doduo
   85: 4.2,  // Dodrio
-  86: 2.5,  // Seel
-  87: 3.5,  // Dewgong
+  86: 2.0,  // Seel
+  87: 3.1,  // Dewgong
   88: 2.5,  // Grimer
   89: 4.8,  // Muk
   90: 2.2,  // Shellder
@@ -135,7 +135,7 @@ export const POKEMON_HEIGHTS = {
   134: 3, // Vaporeon
   135: 3, // Jolteon
   136: 2.5, // Flareon
-  137: 3.5, // Porygon
+  137: 2.5, // Porygon
   138: 2.1, // Omanyte
   139: 3.0, // Omastar
   140: 1.5, // Kabuto
@@ -145,9 +145,9 @@ export const POKEMON_HEIGHTS = {
   144: 7, // Articuno
   145: 7, // Zapdos
   146: 7, // Moltres
-  147: 2.5, // Dratini
-  148: 3.5, // Dragonair
-  149: 4.2, // Dragonite
+  147: 2.0, // Dratini
+  148: 3.0, // Dragonair
+  149: 4.4, // Dragonite
   150: 4.1, // Mewtwo
   151: 3.5  // Mew
 };

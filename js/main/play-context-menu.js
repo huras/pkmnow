@@ -8,10 +8,17 @@ import { setPlayerPos } from '../player.js';
  *   getCurrentData: () => object | null,
  *   updateView: () => void,
  *   openDebugModal: (info: object) => void,
+ *   openTreeDebugModal: (payload: object) => void,
  *   buildPlayModeTileDebugInfo: (mx: number, my: number, data: object) => object,
+ *   buildPlayModeTreeDebugPayload: (mx: number, my: number, data: object) => object,
  *   playContextMenu: HTMLElement | null,
  *   btnPlayCtxTeleport: HTMLElement | null,
  *   btnPlayCtxDebug: HTMLElement | null,
+ *   btnPlayCtxViewTreeData: HTMLElement | null,
+ *   btnPlayCtxShowTreeCollider: HTMLElement | null,
+ *   btnPlayCtxClearTreeCollider: HTMLElement | null,
+ *   getPlayTreeColliderHighlight: () => object | null,
+ *   setPlayTreeColliderHighlight: (v: object | null) => void,
  *   getPlayer: () => import('../player.js').player
  * }} opts
  */
@@ -22,10 +29,17 @@ export function installPlayContextMenu(opts) {
     getCurrentData,
     updateView,
     openDebugModal,
+    openTreeDebugModal,
     buildPlayModeTileDebugInfo,
+    buildPlayModeTreeDebugPayload,
     playContextMenu,
     btnPlayCtxTeleport,
     btnPlayCtxDebug,
+    btnPlayCtxViewTreeData,
+    btnPlayCtxShowTreeCollider,
+    btnPlayCtxClearTreeCollider,
+    getPlayTreeColliderHighlight,
+    setPlayTreeColliderHighlight,
     getPlayer
   } = opts;
 
@@ -52,11 +66,25 @@ export function installPlayContextMenu(opts) {
   function openPlayContextMenu(pageX, pageY, mx, my) {
     if (!playContextMenu) return;
     closePlayContextMenu();
-    playContextPending = { mx, my };
+    const data = getCurrentData();
+    let treeColliderHighlight = null;
+    if (data && buildPlayModeTileDebugInfo) {
+      treeColliderHighlight = buildPlayModeTileDebugInfo(mx, my, data).treeColliderHighlight;
+    }
+    playContextPending = { mx, my, treeColliderHighlight };
     playContextMenu.hidden = false;
     playContextMenu.setAttribute('aria-hidden', 'false');
     playContextMenu.style.left = `${pageX}px`;
     playContextMenu.style.top = `${pageY}px`;
+    if (btnPlayCtxViewTreeData) {
+      btnPlayCtxViewTreeData.hidden = !treeColliderHighlight;
+    }
+    if (btnPlayCtxShowTreeCollider) {
+      btnPlayCtxShowTreeCollider.hidden = !treeColliderHighlight;
+    }
+    if (btnPlayCtxClearTreeCollider) {
+      btnPlayCtxClearTreeCollider.hidden = !getPlayTreeColliderHighlight?.();
+    }
     setTimeout(() => {
       window.addEventListener('mousedown', onPlayContextMenuDismiss, true);
       window.addEventListener('keydown', onPlayContextMenuKey, true);
@@ -105,6 +133,36 @@ export function installPlayContextMenu(opts) {
       const { mx, my } = playContextPending;
       closePlayContextMenu();
       openDebugModal(buildPlayModeTileDebugInfo(mx, my, getCurrentData()));
+    });
+  }
+
+  if (btnPlayCtxViewTreeData && buildPlayModeTreeDebugPayload && openTreeDebugModal) {
+    btnPlayCtxViewTreeData.addEventListener('click', () => {
+      if (!playContextPending || !getCurrentData()) return;
+      const { mx, my } = playContextPending;
+      const data = getCurrentData();
+      closePlayContextMenu();
+      const payload = buildPlayModeTreeDebugPayload(mx, my, data);
+      openTreeDebugModal(payload);
+    });
+  }
+
+  if (btnPlayCtxShowTreeCollider && setPlayTreeColliderHighlight) {
+    btnPlayCtxShowTreeCollider.addEventListener('click', () => {
+      if (!playContextPending) return;
+      const hi = playContextPending.treeColliderHighlight;
+      if (!hi) return;
+      setPlayTreeColliderHighlight(hi);
+      closePlayContextMenu();
+      updateView();
+    });
+  }
+
+  if (btnPlayCtxClearTreeCollider && setPlayTreeColliderHighlight) {
+    btnPlayCtxClearTreeCollider.addEventListener('click', () => {
+      setPlayTreeColliderHighlight(null);
+      closePlayContextMenu();
+      updateView();
     });
   }
 }

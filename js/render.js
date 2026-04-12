@@ -18,7 +18,13 @@ import {
   isSortableScatter
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, foliageDensity, foliageType } from './chunking.js';
-import { isPropBlocking } from './walkability.js';
+import {
+  canWalkMicroTile,
+  formalTreeTrunkOverlapsMicroCell,
+  getFormalTreeTrunkWorldXSpan,
+  scatterTreeTrunkOverlapsMicroCell,
+  getScatterTreeTrunkWorldSpanIfOrigin
+} from './walkability.js';
 import { validScatterOriginMicro } from './scatter-pass2-debug.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
@@ -26,7 +32,7 @@ import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
-import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
+import { resolvePmdFrameSpec, resolveCanonicalPmdH, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 
 import {
   PLAY_CHUNK_SIZE,
@@ -503,35 +509,6 @@ export function render(canvas, data, options = {}) {
       }
     }
     
-    /** Resolve frame size/cols using AnimData.xml metadata first, then image fallback. */
-    const resolvePmdFrameSpec = (sheet, isMoving, dexId) => {
-      const meta = getDexAnimMeta(dexId);
-      const modeMeta = isMoving ? meta?.walk : meta?.idle;
-      const fallbackCols = isMoving ? 4 : 8;
-      const animCols = modeMeta?.durations?.length || fallbackCols;
-      const sw = Math.max(
-        1,
-        Number(modeMeta?.frameWidth) ||
-        Math.floor((sheet.naturalWidth || PMD_MON_SHEET.frameW * animCols) / animCols)
-      );
-      const sh = Math.max(
-        1,
-        Number(modeMeta?.frameHeight) ||
-        Math.floor((sheet.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8)
-      );
-      return { sw, sh, animCols };
-    };
-
-    /** Canonical PMD frame box per species used to keep visual scale stable across idle/walk padding differences. */
-    const resolveCanonicalPmdH = (wIdle, wWalk, dexId) => {
-      const meta = getDexAnimMeta(dexId);
-      const idleH = Number(meta?.idle?.frameHeight) ||
-        Math.floor(((wIdle?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
-      const walkH = Number(meta?.walk?.frameHeight) ||
-        Math.floor(((wWalk?.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8));
-      return Math.max(1, idleH || walkH || PMD_MON_SHEET.frameH);
-    };
-
     // --- Collect Wild entities ---
     for (const we of wildList) {
       const { walk: wWalk, idle: wIdle } = getResolvedSheets(imageCache, we.dexId);
@@ -553,6 +530,8 @@ export function render(canvas, data, options = {}) {
         type: 'wild',
         y: we.y, // raw world Y for sorting
         x: we.x,
+        dexId: we.dexId,
+        animMoving: !!we.animMoving,
         cx: snapPx((we.x + 0.5) * tileW),
         cy: snapPx((we.y + 0.5) * tileH - (we.z || 0) * tileH),
         sheet: wSheet,
@@ -594,6 +573,8 @@ export function render(canvas, data, options = {}) {
         type: 'player',
         y: vy, // visualY for sorting
         x: vx,
+        dexId: playerDex,
+        animMoving: isPlayerMoving,
         cx: snapPx((vx + 0.5) * tileW),
         cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
         sheet: pSheet,
@@ -808,43 +789,158 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // --- DEBUG COLLIDERS (Toggled by 'C' key) ---
-    if (window.debugColliders) {
-      ctx.save();
-      // 1. Entities (Player + Wild)
-      for (const item of renderItems) {
-        if (item.type === 'player' || item.type === 'wild') {
-          ctx.strokeStyle = 'rgba(0, 255, 100, 0.8)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          // Use GROUND_R like logic (simplified for viz)
-          const r = 0.32 * tileW; 
-          ctx.arc(item.cx, item.cy, r, 0, Math.PI * 2);
-          ctx.stroke();
-          
-          // Position markers
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(item.cx - 2, item.cy - 2, 4, 4);
-        } else if (item.type === 'scatter' || item.type === 'tree') {
-          // Pivot point
-          ctx.fillStyle = '#f0f';
-          ctx.fillRect(item.originX * tileW + tileW/2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);
-        }
-      }
+    // --- Collider overlay (checkbox or C key): walkability tint + every nearby trunk stroke + entity radii.
+    // "Inspect one tree" (context menu) only adds the yellow trunk highlight below + player feet circle here — not all trunks.
+    const treeColliderDbg = options.settings?.playTreeColliderHighlight;
+    const showFullColliderOverlay = options.settings?.showPlayColliders || window.debugColliders;
 
-      // 2. Tile Blocking (Props)
-      ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-      ctx.lineWidth = 1;
-      for (let my = startY; my < endY; my++) {
-        for (let mx = startX; mx < endX; mx++) {
-          if (isPropBlocking(mx, my, data)) {
-            ctx.strokeRect(mx * tileW + 2, my * tileH + 2, tileW - 4, tileH - 4);
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-            ctx.fillRect(mx * tileW + 2, my * tileH + 2, tileW - 4, tileH - 4);
+    if (showFullColliderOverlay) {
+      ctx.save();
+      const twCell = Math.ceil(tileW);
+      const thCell = Math.ceil(tileH);
+      const pCol = options.settings?.player;
+      const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
+      const cy = pCol ? Math.floor(pCol.y) : startY + Math.floor((endY - startY) / 2);
+      const COLL_OVERLAY_RAD = 18;
+      const ox0 = Math.max(startX, cx - COLL_OVERLAY_RAD);
+      const ox1 = Math.min(endX, cx + COLL_OVERLAY_RAD + 1);
+      const oy0 = Math.max(startY, cy - COLL_OVERLAY_RAD);
+      const oy1 = Math.min(endY, cy + COLL_OVERLAY_RAD + 1);
+      const overlayFeetDex = player.dexId || 94;
+      const overlayFeetMoving = isPlayerWalkingAnim;
+      for (let my = oy0; my < oy1; my++) {
+        for (let mx = ox0; mx < ox1; mx++) {
+          const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, overlayFeetMoving);
+          const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
+          const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
+          const scatterTrunk = scatterTreeTrunkOverlapsMicroCell(mx, my, data);
+          if (!feetOk) {
+            ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
+            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+          } else if (formalTrunk || scatterTrunk) {
+            ctx.fillStyle = formalTrunk
+              ? 'rgba(90, 220, 255, 0.26)'
+              : 'rgba(180, 120, 255, 0.24)';
+            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
           }
         }
       }
+
+      ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
+      ctx.lineWidth = 2;
+      for (let my = oy0; my < oy1; my++) {
+        for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
+          const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+          if (!span) continue;
+          const pxCx = snapPx(span.cx * tileW);
+          const pxCy = snapPx(span.cy * tileH);
+          const rx = Math.max(1, span.radius * tileW);
+          const ry = Math.max(1, span.radius * tileH);
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      const microWColOv = width * CHUNK_SIZE;
+      const microHColOv = height * CHUNK_SIZE;
+      const scatterTrunkMemo = new Map();
+      ctx.strokeStyle = 'rgba(200, 140, 255, 0.9)';
+      ctx.lineWidth = 2;
+      for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
+        if (oxS < 0 || oxS >= microWColOv) continue;
+        const yOrigMax = Math.min(microHColOv - 1, oy1 + 3);
+        for (let oyS = Math.max(0, oy0 - 10); oyS <= yOrigMax; oyS++) {
+          const sspan = getScatterTreeTrunkWorldSpanIfOrigin(oxS, oyS, data, scatterTrunkMemo);
+          if (!sspan) continue;
+          const cr = sspan.radius;
+          if (sspan.cx + cr <= ox0 || sspan.cx - cr >= ox1 || sspan.cy + cr <= oy0 || sspan.cy - cr >= oy1) continue;
+          const pxCx = snapPx(sspan.cx * tileW);
+          const pxCy = snapPx(sspan.cy * tileH);
+          const rx = Math.max(1, cr * tileW);
+          const ry = Math.max(1, cr * tileH);
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      for (const item of renderItems) {
+        if (item.type === 'player' || item.type === 'wild') {
+          ctx.strokeStyle = 'rgba(0, 255, 140, 0.55)';
+          ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
+          ctx.lineWidth = 2;
+          const r = 0.32 * Math.min(tileW, tileH);
+          const dex = item.dexId ?? 94;
+          const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
+          const fcx = snapPx(ft.x * tileW);
+          const fcy = snapPx(ft.y * tileH);
+          ctx.beginPath();
+          ctx.arc(fcx, fcy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillRect(fcx - 2, fcy - 2, 4, 4);
+        } else if (item.type === 'scatter' || item.type === 'tree') {
+          ctx.fillStyle = 'rgba(255, 80, 255, 0.65)';
+          ctx.fillRect(item.originX * tileW + tileW / 2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);
+        }
+      }
       ctx.restore();
+    } else if (treeColliderDbg) {
+      ctx.save();
+      for (const item of renderItems) {
+        if (item.type === 'player' || item.type === 'wild') {
+          ctx.strokeStyle = 'rgba(0, 255, 140, 0.55)';
+          ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
+          ctx.lineWidth = 2;
+          const r = 0.32 * Math.min(tileW, tileH);
+          const dex = item.dexId ?? 94;
+          const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
+          const fcx = snapPx(ft.x * tileW);
+          const fcy = snapPx(ft.y * tileH);
+          ctx.beginPath();
+          ctx.arc(fcx, fcy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillRect(fcx - 2, fcy - 2, 4, 4);
+        }
+      }
+      ctx.restore();
+    }
+
+    if (treeColliderDbg?.kind === 'formal') {
+      const span = getFormalTreeTrunkWorldXSpan(treeColliderDbg.rootX, treeColliderDbg.my, data);
+      if (span) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 210, 70, 0.98)';
+        ctx.lineWidth = 3;
+        const pxCx = snapPx(span.cx * tileW);
+        const pxCy = snapPx(span.cy * tileH);
+        const rx = Math.max(2, span.radius * tileW);
+        const ry = Math.max(2, span.radius * tileH);
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (treeColliderDbg?.kind === 'scatter') {
+      const treeMemo = new Map();
+      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(treeColliderDbg.ox0, treeColliderDbg.oy0, data, treeMemo);
+      if (sspan) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 190, 95, 0.98)';
+        ctx.lineWidth = 3;
+        const pxCx = snapPx(sspan.cx * tileW);
+        const pxCy = snapPx(sspan.cy * tileH);
+        const rx = Math.max(2, sspan.radius * tileW);
+        const ry = Math.max(2, sspan.radius * tileH);
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // Indicador de colisão: círculo com diâmetro = 1 tile no centro da célula lógica (player.x, player.y).
