@@ -23,6 +23,12 @@ import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
+import {
+  buildPlayColliderOverlayCache,
+  clearPlayColliderOverlayCache,
+  ensurePlayColliderOverlayCache,
+  getPlayColliderOverlayCache
+} from './main/play-collider-overlay-cache.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -110,12 +116,19 @@ function getSettings() {
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
   const overlayContours = document.getElementById('chkCurvas')?.checked ?? false;
   const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
+  const collidersOn = showPlayColliders || window.debugColliders;
+  if (appMode === 'play' && currentData && collidersOn) {
+    ensurePlayColliderOverlayCache(currentData, player, imageCache, collidersOn);
+  } else {
+    clearPlayColliderOverlayCache();
+  }
   return {
     viewType,
     overlayPaths,
     overlayGraph,
     overlayContours,
     showPlayColliders,
+    playColliderOverlayCache: collidersOn ? getPlayColliderOverlayCache() : null,
     playDetailColliderHighlight,
     appMode,
     player,
@@ -174,6 +187,7 @@ function run() {
   resizeCanvas();
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
+  clearPlayColliderOverlayCache();
   resetWildPokemonManager();
   playDetailColliderHighlight = null;
   updateView();
@@ -456,7 +470,17 @@ seedInput.addEventListener('keydown', (e) => {
 });
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
-document.getElementById('chkPlayColliders')?.addEventListener('change', updateView);
+document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
+  const on = document.getElementById('chkPlayColliders')?.checked ?? false;
+  if (on && appMode === 'play' && currentData) {
+    const overlayFeetMoving =
+      !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+    buildPlayColliderOverlayCache(currentData, player, imageCache, overlayFeetMoving);
+  } else if (!on) {
+    clearPlayColliderOverlayCache();
+  }
+  updateView();
+});
 
 loadTilesetImages().then(async () => {
   new BiomesModal();

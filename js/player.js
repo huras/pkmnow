@@ -1,5 +1,11 @@
 import { CHUNK_SIZE } from './chunking.js';
-import { canWalkMicroTile, pivotCellHeightTraversalOk } from './walkability.js';
+import {
+  canWalkMicroTile,
+  pivotCellHeightTraversalOk,
+  beginWalkProbeCache,
+  endWalkProbeCache
+} from './walkability.js';
+import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
@@ -209,63 +215,68 @@ export function updatePlayer(dt, data) {
   const stepMag2 = ax * ax + ay * ay;
   const ig = true;
 
-  if (stepMag2 < 1e-14) {
-    // no displacement
-  } else if (canWalk(ox + ax, oy + ay, data, ox, oy, isAirborne, ig)) {
-    player.x = ox + ax;
-    player.y = oy + ay;
-  } else {
-    let px = ox;
-    let py = oy;
-    let moved = false;
-
-    if (canWalk(ox, oy, data, ox, oy, isAirborne, ig)) {
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 14; i++) {
-        const mid = (lo + hi) * 0.5;
-        if (canWalk(ox + ax * mid, oy + ay * mid, data, ox, oy, isAirborne, ig)) lo = mid;
-        else hi = mid;
-      }
-      const t = lo;
-      px = ox + ax * t;
-      py = oy + ay * t;
-      if (t > 1e-7) moved = true;
-
-      const rax = ax * (1 - t);
-      const ray = ay * (1 - t);
-      if (Math.abs(rax) >= Math.abs(ray)) {
-        if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
-          px += rax;
-          moved = true;
-        } else if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
-          py += ray;
-          moved = true;
-        }
-      } else {
-        if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
-          py += ray;
-          moved = true;
-        } else if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
-          px += rax;
-          moved = true;
-        }
-      }
-    }
-
-    if (moved) {
-      player.x = px;
-      player.y = py;
-    } else if (canWalk(ox + ax, oy, data, ox, oy, isAirborne, ig)) {
+  beginWalkProbeCache();
+  try {
+    if (stepMag2 < 1e-14) {
+      // no displacement
+    } else if (canWalk(ox + ax, oy + ay, data, ox, oy, isAirborne, ig)) {
       player.x = ox + ax;
-      player.vy = 0;
-    } else if (canWalk(ox, oy + ay, data, ox, oy, isAirborne, ig)) {
       player.y = oy + ay;
-      player.vx = 0;
     } else {
-      player.vx = 0;
-      player.vy = 0;
+      let px = ox;
+      let py = oy;
+      let moved = false;
+
+      if (canWalk(ox, oy, data, ox, oy, isAirborne, ig)) {
+        let lo = 0;
+        let hi = 1;
+        for (let i = 0; i < 14; i++) {
+          const mid = (lo + hi) * 0.5;
+          if (canWalk(ox + ax * mid, oy + ay * mid, data, ox, oy, isAirborne, ig)) lo = mid;
+          else hi = mid;
+        }
+        const t = lo;
+        px = ox + ax * t;
+        py = oy + ay * t;
+        if (t > 1e-7) moved = true;
+
+        const rax = ax * (1 - t);
+        const ray = ay * (1 - t);
+        if (Math.abs(rax) >= Math.abs(ray)) {
+          if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
+            px += rax;
+            moved = true;
+          } else if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
+            py += ray;
+            moved = true;
+          }
+        } else {
+          if (Math.abs(ray) > 1e-6 && canWalk(px, py + ray, data, px, py, isAirborne, ig)) {
+            py += ray;
+            moved = true;
+          } else if (Math.abs(rax) > 1e-6 && canWalk(px + rax, py, data, px, py, isAirborne, ig)) {
+            px += rax;
+            moved = true;
+          }
+        }
+      }
+
+      if (moved) {
+        player.x = px;
+        player.y = py;
+      } else if (canWalk(ox + ax, oy, data, ox, oy, isAirborne, ig)) {
+        player.x = ox + ax;
+        player.vy = 0;
+      } else if (canWalk(ox, oy + ay, data, ox, oy, isAirborne, ig)) {
+        player.y = oy + ay;
+        player.vx = 0;
+      } else {
+        player.vx = 0;
+        player.vy = 0;
+      }
     }
+  } finally {
+    endWalkProbeCache();
   }
 
   if (player.grounded && !isAirborne && data) {
@@ -276,6 +287,8 @@ export function updatePlayer(dt, data) {
     player.vx = r.vx;
     player.vy = r.vy;
   }
+
+  clampPlayerToPlayColliderBoundsIfActive(player);
 
   // 3. Vertical Physics (Jump)
   if (!player.grounded) {

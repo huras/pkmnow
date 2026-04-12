@@ -22,13 +22,12 @@ import {
   canWalkMicroTile,
   formalTreeTrunkOverlapsMicroCell,
   getFormalTreeTrunkWorldXSpan,
-  scatterTreeTrunkOverlapsMicroCell,
-  getScatterTreeTrunkWorldSpanIfOrigin,
-  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
-  scatterNonTreeSolidCircleOverlapsMicroCell,
-  getScatterNonTreeVegetationCircleWorldSpanIfOrigin
+  scatterPhysicsCircleOverlapsMicroCellAny,
+  scatterPhysicsCircleAtOrigin,
+  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER
 } from './walkability.js';
-import { validScatterOriginMicro } from './scatter-pass2-debug.js';
+import { validScatterOriginMicro, scatterItemKeyIsTree } from './scatter-pass2-debug.js';
+import { circleAabbIntersectsRect } from './main/play-collider-overlay-cache.js';
 import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
@@ -835,43 +834,33 @@ export function render(canvas, data, options = {}) {
       const twCell = Math.ceil(tileW);
       const thCell = Math.ceil(tileH);
       const pCol = options.settings?.player;
-      const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
-      const cy = pCol ? Math.floor(pCol.y) : startY + Math.floor((endY - startY) / 2);
-      const COLL_OVERLAY_RAD = 18;
-      const ox0 = Math.max(startX, cx - COLL_OVERLAY_RAD);
-      const ox1 = Math.min(endX, cx + COLL_OVERLAY_RAD + 1);
-      const oy0 = Math.max(startY, cy - COLL_OVERLAY_RAD);
-      const oy1 = Math.min(endY, cy + COLL_OVERLAY_RAD + 1);
-      const overlayFeetDex = player.dexId || 94;
-      const overlayFeetMoving = isPlayerWalkingAnim;
-      for (let my = oy0; my < oy1; my++) {
-        for (let mx = ox0; mx < ox1; mx++) {
-          const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, overlayFeetMoving);
-          const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
-          const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
-          const scatterTrunk = scatterTreeTrunkOverlapsMicroCell(mx, my, data);
-          const scatterSolidCircle =
-            EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER && scatterNonTreeSolidCircleOverlapsMicroCell(mx, my, data);
-          if (!feetOk) {
-            ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
-            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
-          } else if (formalTrunk || scatterTrunk || scatterSolidCircle) {
-            ctx.fillStyle = formalTrunk
-              ? 'rgba(90, 220, 255, 0.26)'
-              : scatterTrunk
-                ? 'rgba(180, 120, 255, 0.24)'
-                : 'rgba(100, 200, 255, 0.22)';
-            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+      const colliderCache = options.settings?.playColliderOverlayCache;
+      const useColliderCache = colliderCache && colliderCache.seed === data.seed;
+
+      if (useColliderCache) {
+        const { mxMin, mxMax, myMin, myMax, stride, cellFlags } = colliderCache;
+        for (let my = Math.max(startY, myMin); my < endY && my <= myMax; my++) {
+          for (let mx = Math.max(startX, mxMin); mx < endX && mx <= mxMax; mx++) {
+            const v = cellFlags[(my - myMin) * stride + (mx - mxMin)];
+            if (v === 1) {
+              ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            } else if (v === 2) {
+              ctx.fillStyle = 'rgba(90, 220, 255, 0.26)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            } else if (v === 3) {
+              ctx.fillStyle = 'rgba(160, 170, 255, 0.24)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            }
           }
         }
-      }
 
-      ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
-      ctx.lineWidth = 2;
-      for (let my = oy0; my < oy1; my++) {
-        for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
-          const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
-          if (!span) continue;
+        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
+        ctx.lineWidth = 2;
+        for (const span of colliderCache.formalEllipses) {
+          if (!circleAabbIntersectsRect(span.cx, span.cy, span.radius, startX, startY, endX, endY)) {
+            continue;
+          }
           const pxCx = snapPx(span.cx * tileW);
           const pxCy = snapPx(span.cy * tileH);
           const rx = Math.max(1, span.radius * tileW);
@@ -880,45 +869,84 @@ export function render(canvas, data, options = {}) {
           ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-      }
 
-      const microWColOv = width * CHUNK_SIZE;
-      const microHColOv = height * CHUNK_SIZE;
-      const scatterTrunkMemo = new Map();
-      ctx.strokeStyle = 'rgba(200, 140, 255, 0.9)';
-      ctx.lineWidth = 2;
-      for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
-        if (oxS < 0 || oxS >= microWColOv) continue;
-        const yOrigMax = Math.min(microHColOv - 1, oy1 + 3);
-        for (let oyS = Math.max(0, oy0 - 10); oyS <= yOrigMax; oyS++) {
-          const sspan = getScatterTreeTrunkWorldSpanIfOrigin(oxS, oyS, data, scatterTrunkMemo, getCached);
-          if (!sspan) continue;
-          const cr = sspan.radius;
-          if (sspan.cx + cr <= ox0 || sspan.cx - cr >= ox1 || sspan.cy + cr <= oy0 || sspan.cy - cr >= oy1) continue;
-          const pxCx = snapPx(sspan.cx * tileW);
-          const pxCy = snapPx(sspan.cy * tileH);
-          const rx = Math.max(1, cr * tileW);
-          const ry = Math.max(1, cr * tileH);
+        ctx.lineWidth = 2;
+        for (const p of colliderCache.scatterEllipses) {
+          if (!circleAabbIntersectsRect(p.cx, p.cy, p.radius, startX, startY, endX, endY)) {
+            continue;
+          }
+          ctx.strokeStyle = p.isTree
+            ? 'rgba(200, 140, 255, 0.9)'
+            : 'rgba(100, 200, 255, 0.88)';
+          const pxCx = snapPx(p.cx * tileW);
+          const pxCy = snapPx(p.cy * tileH);
+          const rx = Math.max(1, p.radius * tileW);
+          const ry = Math.max(1, p.radius * tileH);
           ctx.beginPath();
           ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-      }
+      } else {
+        const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
+        const cy = pCol ? Math.floor(pCol.y) : startY + Math.floor((endY - startY) / 2);
+        const COLL_OVERLAY_RAD = 18;
+        const ox0 = Math.max(startX, cx - COLL_OVERLAY_RAD);
+        const ox1 = Math.min(endX, cx + COLL_OVERLAY_RAD + 1);
+        const oy0 = Math.max(startY, cy - COLL_OVERLAY_RAD);
+        const oy1 = Math.min(endY, cy + COLL_OVERLAY_RAD + 1);
+        const overlayFeetDex = player.dexId || 94;
+        const overlayFeetMoving = isPlayerWalkingAnim;
+        for (let my = oy0; my < oy1; my++) {
+          for (let mx = ox0; mx < ox1; mx++) {
+            const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, overlayFeetMoving);
+            const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
+            const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
+            const scatterPhy = scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data);
+            if (!feetOk) {
+              ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            } else if (formalTrunk || scatterPhy) {
+              ctx.fillStyle = formalTrunk
+                ? 'rgba(90, 220, 255, 0.26)'
+                : 'rgba(160, 170, 255, 0.24)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            }
+          }
+        }
 
-      if (EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) {
-        const scatterSolidMemo = new Map();
-        ctx.strokeStyle = 'rgba(100, 200, 255, 0.88)';
+        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
         ctx.lineWidth = 2;
-        for (let oxN = ox0 - 8; oxN < ox1 + 2; oxN++) {
-          if (oxN < 0 || oxN >= microWColOv) continue;
-          const yOrigMaxN = Math.min(microHColOv - 1, oy1 + 3);
-          for (let oyN = Math.max(0, oy0 - 10); oyN <= yOrigMaxN; oyN++) {
-            const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(oxN, oyN, data, scatterSolidMemo, getCached);
-            if (!nspan) continue;
-            const cr = nspan.radius;
-            if (nspan.cx + cr <= ox0 || nspan.cx - cr >= ox1 || nspan.cy + cr <= oy0 || nspan.cy - cr >= oy1) continue;
-            const pxCx = snapPx(nspan.cx * tileW);
-            const pxCy = snapPx(nspan.cy * tileH);
+        for (let my = oy0; my < oy1; my++) {
+          for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
+            const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+            if (!span) continue;
+            const pxCx = snapPx(span.cx * tileW);
+            const pxCy = snapPx(span.cy * tileH);
+            const rx = Math.max(1, span.radius * tileW);
+            const ry = Math.max(1, span.radius * tileH);
+            ctx.beginPath();
+            ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+
+        const microWColOv = width * CHUNK_SIZE;
+        const microHColOv = height * CHUNK_SIZE;
+        const scatterPhyMemo = new Map();
+        ctx.lineWidth = 2;
+        for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
+          if (oxS < 0 || oxS >= microWColOv) continue;
+          const yOrigMax = Math.min(microHColOv - 1, oy1 + 3);
+          for (let oyS = Math.max(0, oy0 - 10); oyS <= yOrigMax; oyS++) {
+            const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, scatterPhyMemo, getCached);
+            if (!p) continue;
+            const cr = p.radius;
+            if (p.cx + cr <= ox0 || p.cx - cr >= ox1 || p.cy + cr <= oy0 || p.cy - cr >= oy1) continue;
+            ctx.strokeStyle = scatterItemKeyIsTree(p.itemKey)
+              ? 'rgba(200, 140, 255, 0.9)'
+              : 'rgba(100, 200, 255, 0.88)';
+            const pxCx = snapPx(p.cx * tileW);
+            const pxCy = snapPx(p.cy * tileH);
             const rx = Math.max(1, cr * tileW);
             const ry = Math.max(1, cr * tileH);
             ctx.beginPath();
@@ -990,15 +1018,15 @@ export function render(canvas, data, options = {}) {
       }
     } else if (detailColliderDbg?.kind === 'scatter-tree') {
       const treeMemo = new Map();
-      const sspan = getScatterTreeTrunkWorldSpanIfOrigin(detailColliderDbg.ox0, detailColliderDbg.oy0, data, treeMemo, getCached);
-      if (sspan) {
+      const p = scatterPhysicsCircleAtOrigin(detailColliderDbg.ox0, detailColliderDbg.oy0, data, treeMemo, getCached);
+      if (p && scatterItemKeyIsTree(p.itemKey)) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 190, 95, 0.98)';
         ctx.lineWidth = 3;
-        const pxCx = snapPx(sspan.cx * tileW);
-        const pxCy = snapPx(sspan.cy * tileH);
-        const rx = Math.max(2, sspan.radius * tileW);
-        const ry = Math.max(2, sspan.radius * tileH);
+        const pxCx = snapPx(p.cx * tileW);
+        const pxCy = snapPx(p.cy * tileH);
+        const rx = Math.max(2, p.radius * tileW);
+        const ry = Math.max(2, p.radius * tileH);
         ctx.beginPath();
         ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -1008,20 +1036,20 @@ export function render(canvas, data, options = {}) {
       ctx.save();
       if (EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) {
         const solidMemo = new Map();
-        const nspan = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(
+        const p = scatterPhysicsCircleAtOrigin(
           detailColliderDbg.ox0,
           detailColliderDbg.oy0,
           data,
           solidMemo,
           getCached
         );
-        if (nspan) {
+        if (p && !scatterItemKeyIsTree(p.itemKey)) {
           ctx.strokeStyle = 'rgba(120, 220, 255, 0.95)';
           ctx.lineWidth = 3;
-          const pxCx = snapPx(nspan.cx * tileW);
-          const pxCy = snapPx(nspan.cy * tileH);
-          const rx = Math.max(2, nspan.radius * tileW);
-          const ry = Math.max(2, nspan.radius * tileH);
+          const pxCx = snapPx(p.cx * tileW);
+          const pxCy = snapPx(p.cy * tileH);
+          const rx = Math.max(2, p.radius * tileW);
+          const ry = Math.max(2, p.radius * tileH);
           ctx.beginPath();
           ctx.ellipse(pxCx, pxCy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();

@@ -26,6 +26,25 @@ import {
   TREE_NOISE_SCALE
 } from './biome-tiles.js';
 
+/** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
+let walkProbeCache = null;
+const walkProbeCacheStorage = new Map();
+
+/**
+ * Call before a tight sequence of `canWalk` / `canWalkMicroTile` with `ignoreTreeTrunks: true`
+ * (e.g. bisection in `updatePlayer`). Clears any prior batch.
+ */
+export function beginWalkProbeCache() {
+  walkProbeCacheStorage.clear();
+  walkProbeCache = walkProbeCacheStorage;
+}
+
+/** Clears the walk probe memo; call after the movement batch (typically in `finally`). */
+export function endWalkProbeCache() {
+  walkProbeCache = null;
+  walkProbeCacheStorage.clear();
+}
+
 /**
  * @param {string} name - chave em TERRAIN_SETS
  * @returns {'layer-base' | 'terrain-foliage' | null}
@@ -472,10 +491,11 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
 }
 
 /**
- * Scatter trunk as a **circle** in micro-tile space (center on trunk row center, radius = old half-strip width).
- * @returns {{ left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number } | null}
+ * One scatter **origin** → at most one physics circle (tree trunk or, when experiment on, non-tree solid “stem”).
+ * Deduplicates `validScatterOriginMicro` + itemKey between tree / solid paths (hot: `gatherTreeTrunkCirclesNearWorldPoint`).
+ * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, itemKey: string }}
  */
-export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
+export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
   const microW = data.width * CHUNK_SIZE;
   const microH = data.height * CHUNK_SIZE;
   const seed = data.seed;
@@ -489,7 +509,9 @@ export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo 
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
   if (!itemsO.length) return null;
   const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
-  if (!scatterItemKeyIsTree(itemKey)) return null;
+  const isTree = scatterItemKeyIsTree(itemKey);
+  const isSolid = scatterItemKeyIsSolid(itemKey);
+  if (!isTree && !(EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER && isSolid && !isTree)) return null;
 
   const objSet = OBJECT_SETS[itemKey];
   if (!objSet) return null;
@@ -500,7 +522,7 @@ export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo 
   const trunkOyRel = scatterTreeTrunkFootprintRowOYRel(basePart, rows, cols, itemKey);
   const trunkMy = oy0 + trunkOyRel;
   const rowOx = scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel);
-  const k = String(itemKey).toLowerCase();
+  const kLower = String(itemKey).toLowerCase();
   let cx;
   let trunkWidthTiles;
   if (rowOx) {
@@ -510,10 +532,29 @@ export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo 
     cx = ox0 + cols * 0.5;
     trunkWidthTiles = cols;
   }
-  if (k.includes('big-cactus')) trunkWidthTiles = 1;
+  if (kLower.includes('big-cactus')) trunkWidthTiles = 1;
   const cy = trunkMy + 0.5;
   const r = (trunkWidthTiles * FORMAL_TREE_TRUNK_WIDTH_FRAC) / 2;
-  return { left: cx - r, right: cx + r, trunkMy, cx, cy, radius: r };
+  return {
+    left: cx - r,
+    right: cx + r,
+    trunkMy,
+    cx,
+    cy,
+    radius: r,
+    itemKey
+  };
+}
+
+/**
+ * Scatter trunk as a **circle** in micro-tile space (center on trunk row center, radius = old half-strip width).
+ * @returns {{ left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number } | null}
+ */
+export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
+  const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo, getTileFn);
+  if (!p || !scatterItemKeyIsTree(p.itemKey)) return null;
+  const { left, right, trunkMy, cx, cy, radius } = p;
+  return { left, right, trunkMy, cx, cy, radius };
 }
 
 /**
@@ -522,88 +563,87 @@ export function getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo 
  * @returns {{ left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number } | null}
  */
 export function getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
+  const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo, getTileFn);
+  if (
+    !p ||
+    !EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER ||
+    scatterItemKeyIsTree(p.itemKey) ||
+    !scatterItemKeyIsSolid(p.itemKey)
+  ) {
+    return null;
+  }
+  const { left, right, trunkMy, cx, cy, radius } = p;
+  return { left, right, trunkMy, cx, cy, radius };
+}
+
+/**
+ * @param {'tree' | 'nonTreeSolid' | 'any'} which
+ */
+function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
   const microW = data.width * CHUNK_SIZE;
   const microH = data.height * CHUNK_SIZE;
-  const seed = data.seed;
-  const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
-  if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
+  if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
 
-  const nTile = getT(ox0, oy0);
-  if (!nTile) return null;
-  if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
+  const ix = Math.floor(wx);
+  const iy = Math.floor(wy);
+  const originMemo = new Map();
 
-  const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
-  if (!itemsO.length) return null;
-  const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
-  if (!scatterItemKeyIsSolid(itemKey) || scatterItemKeyIsTree(itemKey)) return null;
-
-  const objSet = OBJECT_SETS[itemKey];
-  if (!objSet) return null;
-  const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!basePart?.ids?.length) return null;
-
-  const { rows, cols } = parseShape(objSet.shape);
-  const trunkOyRel = scatterTreeTrunkFootprintRowOYRel(basePart, rows, cols, itemKey);
-  const trunkMy = oy0 + trunkOyRel;
-  const rowOx = scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel);
-  const k = String(itemKey).toLowerCase();
-  let cx;
-  let trunkWidthTiles;
-  if (rowOx) {
-    cx = ox0 + (rowOx.minOx + rowOx.maxOx + 1) * 0.5;
-    trunkWidthTiles = rowOx.widthTiles;
-  } else {
-    cx = ox0 + cols * 0.5;
-    trunkWidthTiles = cols;
+  for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
+    for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      if (!p) continue;
+      if (which === 'tree' && !scatterItemKeyIsTree(p.itemKey)) continue;
+      if (
+        which === 'nonTreeSolid' &&
+        (!EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER ||
+          scatterItemKeyIsTree(p.itemKey) ||
+          !scatterItemKeyIsSolid(p.itemKey))
+      ) {
+        continue;
+      }
+      const dx = wx - p.cx;
+      const dy = wy - p.cy;
+      if (dx * dx + dy * dy <= p.radius * p.radius) return true;
+    }
   }
-  if (k.includes('big-cactus')) trunkWidthTiles = 1;
-  const cy = trunkMy + 0.5;
-  const r = (trunkWidthTiles * FORMAL_TREE_TRUNK_WIDTH_FRAC) / 2;
-  return { left: cx - r, right: cx + r, trunkMy, cx, cy, radius: r };
+  return false;
 }
 
 /**
  * World-space: true if point lies inside a scatter trunk circle (any origin near sample).
  */
 export function scatterTreeTrunkBlocksWorldPoint(wx, wy, data) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
-  if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
-
-  const ix = Math.floor(wx);
-  const iy = Math.floor(wy);
-  const originMemo = new Map();
-
-  for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
-    for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
-      const span = getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo);
-      if (!span) continue;
-      const dx = wx - span.cx;
-      const dy = wy - span.cy;
-      if (dx * dx + dy * dy <= span.radius * span.radius) return true;
-    }
-  }
-  return false;
+  return scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, 'tree');
 }
 
 /** World-space: point inside any non-tree solid scatter “trunk” circle (same scan window as trees). */
 export function scatterNonTreeSolidCircleBlocksWorldPoint(wx, wy, data) {
-  if (!EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) return false;
+  return scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, 'nonTreeSolid');
+}
+
+/**
+ * @param {'tree' | 'nonTreeSolid' | 'any'} which
+ */
+function scatterPhysicsCirclesOverlapMicroCell(mx, my, data, which) {
   const microW = data.width * CHUNK_SIZE;
   const microH = data.height * CHUNK_SIZE;
-  if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
+  if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
 
-  const ix = Math.floor(wx);
-  const iy = Math.floor(wy);
   const originMemo = new Map();
-
-  for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
-    for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
-      const span = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, originMemo);
-      if (!span) continue;
-      const dx = wx - span.cx;
-      const dy = wy - span.cy;
-      if (dx * dx + dy * dy <= span.radius * span.radius) return true;
+  for (let ox0 = Math.max(0, mx - 8); ox0 <= Math.min(microW - 1, mx + 2); ox0++) {
+    for (let oy0 = Math.max(0, my - 5); oy0 <= Math.min(microH - 1, my + 2); oy0++) {
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      if (!p) continue;
+      if (which === 'tree' && !scatterItemKeyIsTree(p.itemKey)) continue;
+      if (
+        which === 'nonTreeSolid' &&
+        (!EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER ||
+          scatterItemKeyIsTree(p.itemKey) ||
+          !scatterItemKeyIsSolid(p.itemKey))
+      ) {
+        continue;
+      }
+      if (circleIntersectsUnitSquare(p.cx, p.cy, p.radius, mx, my)) return true;
     }
   }
   return false;
@@ -613,38 +653,17 @@ export function scatterNonTreeSolidCircleBlocksWorldPoint(wx, wy, data) {
  * True if a scatter trunk circle intersects the micro-cell [mx, mx+1) × [my, my+1).
  */
 export function scatterTreeTrunkOverlapsMicroCell(mx, my, data) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
-  if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
-
-  const originMemo = new Map();
-
-  for (let ox0 = Math.max(0, mx - 8); ox0 <= Math.min(microW - 1, mx + 2); ox0++) {
-    for (let oy0 = Math.max(0, my - 5); oy0 <= Math.min(microH - 1, my + 2); oy0++) {
-      const span = getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo);
-      if (!span) continue;
-      if (circleIntersectsUnitSquare(span.cx, span.cy, span.radius, mx, my)) return true;
-    }
-  }
-  return false;
+  return scatterPhysicsCirclesOverlapMicroCell(mx, my, data, 'tree');
 }
 
 /** True if a non-tree solid scatter circle intersects the micro-cell [mx, mx+1) × [my, my+1). */
 export function scatterNonTreeSolidCircleOverlapsMicroCell(mx, my, data) {
-  if (!EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) return false;
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
-  if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
+  return scatterPhysicsCirclesOverlapMicroCell(mx, my, data, 'nonTreeSolid');
+}
 
-  const originMemo = new Map();
-  for (let ox0 = Math.max(0, mx - 8); ox0 <= Math.min(microW - 1, mx + 2); ox0++) {
-    for (let oy0 = Math.max(0, my - 5); oy0 <= Math.min(microH - 1, my + 2); oy0++) {
-      const span = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, originMemo);
-      if (!span) continue;
-      if (circleIntersectsUnitSquare(span.cx, span.cy, span.radius, mx, my)) return true;
-    }
-  }
-  return false;
+/** Single origin scan: tree trunk **or** (experiment) non-tree solid circle hits the cell. */
+export function scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data) {
+  return scatterPhysicsCirclesOverlapMicroCell(mx, my, data, 'any');
 }
 
 /**
@@ -673,26 +692,12 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
   const originMemo = new Map();
   for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
     for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
-      const span = getScatterTreeTrunkWorldSpanIfOrigin(ox0, oy0, data, originMemo);
-      if (!span) continue;
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      if (!p) continue;
       const k = `s:${ox0},${oy0}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push({ cx: span.cx, cy: span.cy, r: span.radius });
-    }
-  }
-
-  if (EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER) {
-    const memoNs = new Map();
-    for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
-      for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
-        const span = getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, data, memoNs);
-        if (!span) continue;
-        const k = `ns:${ox0},${oy0}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        out.push({ cx: span.cx, cy: span.cy, r: span.radius });
-      }
+      out.push({ cx: p.cx, cy: p.cy, r: p.radius });
     }
   }
 
@@ -744,12 +749,32 @@ export function isPropBlocking(mx, my, data) {
 export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId, isAirborne = false, ignoreTreeTrunks = false) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
+
+  /** @type {string | null} */
+  let cacheKey = null;
+  if (walkProbeCache && ignoreTreeTrunks) {
+    if (mx >= 0 && mx < data.width * CHUNK_SIZE && my >= 0 && my < data.height * CHUNK_SIZE) {
+      const fol = cachedFoliageOverlayId === undefined ? 'u' : String(cachedFoliageOverlayId);
+      cacheKey =
+        srcX !== undefined && srcY !== undefined
+          ? `${mx},${my},${Math.floor(srcX)},${Math.floor(srcY)},${isAirborne ? 1 : 0},${fol}`
+          : `${mx},${my},ns,${isAirborne ? 1 : 0},${fol}`;
+      const cached = walkProbeCache.get(cacheKey);
+      if (cached !== undefined) return cached;
+    }
+  }
+
+  const finish = (ok) => {
+    if (cacheKey !== null && walkProbeCache) walkProbeCache.set(cacheKey, ok);
+    return ok;
+  };
+
   if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
     return false;
   }
 
   const targetTile = getMicroTile(mx, my, data);
-  if (!targetTile) return false;
+  if (!targetTile) return finish(false);
 
   // 1. Height Context Check
   if (srcX !== undefined && srcY !== undefined) {
@@ -759,7 +784,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
     
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
       if (!okHeightStepTransition(sourceTile, targetTile)) {
-        return false; // Physical barrier (cliff/drop)
+        return finish(false); // Physical barrier (cliff/drop)
       }
     }
   }
@@ -767,37 +792,31 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
   // 1.5 Role-Based Wall Block
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return false;
+    if (WALL_ROLES.has(role)) return finish(false);
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) return false;
+  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) return finish(false);
 
   const overlayId =
     cachedFoliageOverlayId === undefined ? getFoliageOverlayTileId(mx, my, data) : cachedFoliageOverlayId;
   if (!isAirborne && overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
-    return false;
+    return finish(false);
   }
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
   if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
-    return false;
+    return finish(false);
   }
 
   // Block props (buildings / scatter non-tree solids). Formal + scatter trees: narrow trunk in world space.
-  if (isPropBlocking(mx, my, data)) return false;
-  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return false;
-  if (!ignoreTreeTrunks && !isAirborne && scatterTreeTrunkBlocksWorldPoint(x, y, data)) return false;
-  if (
-    !ignoreTreeTrunks &&
-    !isAirborne &&
-    EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER &&
-    scatterNonTreeSolidCircleBlocksWorldPoint(x, y, data)
-  ) {
-    return false;
+  if (isPropBlocking(mx, my, data)) return finish(false);
+  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return finish(false);
+  if (!ignoreTreeTrunks && !isAirborne && scatterPhysicsCirclesBlockWorldPoint(x, y, data, 'any')) {
+    return finish(false);
   }
 
-  return true;
+  return finish(true);
 }
 
 /**
@@ -861,13 +880,7 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   if (isPropBlocking(mx, my, data)) return false;
   if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return false;
-  if (!ignoreTreeTrunks && !isAirborne && scatterTreeTrunkBlocksWorldPoint(x, y, data)) return false;
-  if (
-    !ignoreTreeTrunks &&
-    !isAirborne &&
-    EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER &&
-    scatterNonTreeSolidCircleBlocksWorldPoint(x, y, data)
-  ) {
+  if (!ignoreTreeTrunks && !isAirborne && scatterPhysicsCirclesBlockWorldPoint(x, y, data, 'any')) {
     return false;
   }
 
