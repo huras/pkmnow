@@ -215,7 +215,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         const dist = Math.random() * WANDER_RADIUS;
         const tx = entity.centerX + Math.cos(ang) * dist;
         const ty = entity.centerY + Math.sin(ang) * dist;
-        if (canWildPokemonWalkMicroTile(tx, ty, data)) {
+        if (canWildPokemonWalkMicroTile(tx, ty, data, entity.x, entity.y)) {
           entity.targetX = tx;
           entity.targetY = ty;
           break;
@@ -257,7 +257,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
 
-  if (!canWildPokemonWalkMicroTile(nx, ny, data)) {
+  if (!canWildPokemonWalkMicroTile(nx, ny, data, entity.x, entity.y)) {
     entity.vx = 0;
     entity.vy = 0;
     entity.targetX = null;
@@ -283,7 +283,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const clampedX = entity.centerX + nxc * WANDER_RADIUS;
     const clampedY = entity.centerY + nyc * WANDER_RADIUS;
 
-    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data)) {
+    if (canWildPokemonWalkMicroTile(clampedX, clampedY, data, entity.x, entity.y)) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
@@ -331,7 +331,7 @@ function steerTowardAngle(entity, targetAng, speed, data) {
   for (const ang of angles) {
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
-    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.1, entity.y + vy * 0.1, data)) {
+    if (canWildPokemonWalkMicroTile(entity.x + vx * 0.1, entity.y + vy * 0.1, data, entity.x, entity.y)) {
       entity.vx = vx;
       entity.vy = vy;
       return;

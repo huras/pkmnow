@@ -43,8 +43,8 @@ export function setPlayerPos(x, y) {
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 }
 
-export function canWalk(x, y, data, cachedFoliageOverlayId) {
-  return canWalkMicroTile(x, y, data, cachedFoliageOverlayId);
+export function canWalk(x, y, data, srcX, srcY, cachedFoliageOverlayId) {
+  return canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId);
 }
 
 const DIRECTION_ROW_MAP = {
@@ -72,7 +72,7 @@ export function tryMovePlayer(dx, dy, data) {
   const nx = player.x + dx;
   const ny = player.y + dy;
   // Colisão: canWalkMicroTile(floor) num único tile; ver ordem em walkability.js → canWalkMicroTile
-  if (canWalk(nx, ny, data)) {
+  if (canWalk(nx, ny, data, player.x, player.y)) {
     player.fromX = player.x;
     player.fromY = player.y;
     player.x = nx;

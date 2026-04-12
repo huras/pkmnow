@@ -348,8 +348,8 @@ export function analyzeScatterPass2Base(mx, my, data) {
       } else {
         const { rows, cols } = parseShape(objSet.shape);
         cols2B = cols;
-        const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
-        if (!basePart?.ids?.length) reasons2B.push('sem part base/CENTER com ids');
+        const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+        if (!basePart?.ids?.length) reasons2B.push('sem part base/CENTER/ALL com ids');
         else {
           baseLeftColumnSpriteIds = basePart.ids.filter((_, idx) => idx % cols === 0);
           let drawableLeft = 0;
@@ -423,7 +423,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
         const doy = my - oy0;
         if (dox >= colsO || doy < 0 || doy >= rowsO) continue;
 
-        const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+        const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
         if (!basePartO?.ids?.length) continue;
         const idxO = doy * colsO + dox;
         if (idxO < 0 || idxO >= basePartO.ids.length) continue;
@@ -524,10 +524,10 @@ function explain2CForDox(mx, my, dox, tile, getT, seed, microW, microH, memo = n
     const doy = my - oy0;
     if (dox >= colsO || doy < 0 || doy >= rowsO) continue;
 
-    const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER');
+    const basePartO = objSetO.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
     const idxO = doy * colsO + dox;
     if (!basePartO?.ids?.length || idxO >= basePartO.ids.length) {
-      return `dox=${dox}: sem sprite de base para índice ${idxO} (${itemKeyO})`;
+      return `dox=${dox}: sem sprite de base (ou ALL) para índice ${idxO} (${itemKeyO})`;
     }
     return `dox=${dox}: OK — origem (${ox0},${oy0}) · linha +${doy} coluna +${dox} · base id=${basePartO.ids[idxO]} · ${itemKeyO}`;
   }

@@ -1467,7 +1467,7 @@ function bakeChunk(cx, cy, data, tileW, tileH) {
             const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
             const objSet = OBJECT_SETS[itemKey];
             if (objSet) {
-              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER');
+              const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
               const { cols, rows } = parseShape(objSet.shape);
 
               // Suppression rule: No grass under this scatter footprint

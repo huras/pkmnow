@@ -7,6 +7,7 @@
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { CHUNK_SIZE, getMicroTile, foliageDensity } from './chunking.js';
 import { getRoleForCell, isTerrainInnerCornerRole, seededHash, parseShape } from './tessellation-logic.js';
+import { validScatterOriginMicro } from './scatter-pass2-debug.js';
 import {
   BIOME_TO_TERRAIN,
   BIOME_TO_FOLIAGE,
@@ -263,15 +264,24 @@ export function isPropBlocking(mx, my, data) {
     return !!tt && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
   };
   
-  // Check if this tile or its left neighbor is a tree root
-  if (isFormalRoot(mx, my) || isFormalRoot(mx - 1, my)) {
-     // Check if it's a flat center tile (height consistency)
-     const set = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-     if (set) {
-        const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
-        const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, set.type);
-        if (role === 'CENTER') return true;
-     }
+  const didFormalTreeSpawnAtRoot = (rootX, rootY) => {
+    if (!isFormalRoot(rootX, rootY)) return false;
+    const rootTile = getMicroTile(rootX, rootY, data);
+    const rightTile = getMicroTile(rootX + 1, rootY, data);
+    if (!rootTile || !rightTile) return false;
+    if (rootTile.heightStep !== rightTile.heightStep) return false;
+    
+    const set = TERRAIN_SETS[BIOME_TO_TERRAIN[rootTile.biomeId] || 'grass'];
+    if (set) {
+       const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= rootTile.heightStep;
+       const role = getRoleForCell(rootY, rootX, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, set.type);
+       if (role !== 'CENTER') return false;
+    }
+    return true;
+  };
+
+  if (didFormalTreeSpawnAtRoot(mx, my) || didFormalTreeSpawnAtRoot(mx - 1, my)) {
+     return true;
   }
 
   // 3. Scatter Decoration Collision
@@ -294,7 +304,9 @@ export function isPropBlocking(mx, my, data) {
 
            const { cols, rows } = parseShape(objSet.shape);
            if (mx >= sx && mx < sx + cols && my >= sy && my < sy + rows) {
-              return true;
+              if (validScatterOriginMicro(sx, sy, data.seed, data.width * CHUNK_SIZE, data.height * CHUNK_SIZE, (c, r) => getMicroTile(c, r, data))) {
+                 return true;
+              }
            }
         }
       }
@@ -306,17 +318,41 @@ export function isPropBlocking(mx, my, data) {
 
 /**
  * Colisão em grelha: um único tile micro por amostra.
- * @param {number} x - tile micro (pode ser fracionário; usa floor)
- * @param {number} y
+ * @param {number} x - Target tile micro X
+ * @param {number} y - Target tile micro Y
  * @param {object} data
- * @param {number | null | undefined} cachedFoliageOverlayId - opcional
+ * @param {number} srcX - Source tile micro X (optional, for height context)
+ * @param {number} srcY - Source tile micro Y (optional, for height context)
+ * @param {number | null | undefined} cachedFoliageOverlayId - optional
  */
-export function canWalkMicroTile(x, y, data, cachedFoliageOverlayId) {
+export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
     return false;
   }
+
+  const targetTile = getMicroTile(mx, my, data);
+  if (!targetTile) return false;
+
+  // 1. Height Context Check
+  if (srcX !== undefined && srcY !== undefined) {
+    const smx = Math.floor(srcX);
+    const smy = Math.floor(srcY);
+    const sourceTile = getMicroTile(smx, smy, data);
+    
+    if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
+      // Check if target is a connector (stair/bridge)
+      let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
+      if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
+      
+      const isConnector = setName.includes('stair-') || setName.includes('-bridge');
+      if (!isConnector || Math.abs(targetTile.heightStep - sourceTile.heightStep) > 1) {
+        return false; // Physical barrier (cliff/drop)
+      }
+    }
+  }
+
   const sid = getBaseTerrainSpriteId(mx, my, data);
   if (!isBaseTerrainSpriteWalkable(sid)) return false;
 
@@ -340,26 +376,40 @@ export function canWalkMicroTile(x, y, data, cachedFoliageOverlayId) {
 /**
  * Specialty walkability for Wild Pokémon: Allows swimming but blocks props/cliffs.
  */
-export function canWildPokemonWalkMicroTile(x, y, data) {
+export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
     return false;
   }
   
-  const tile = getMicroTile(mx, my, data);
-  if (!tile) return false;
+  const targetTile = getMicroTile(mx, my, data);
+  if (!targetTile) return false;
 
-  // 1. Basic Terrain / Cliff Check
-  // Note: We bypass isBaseTerrainSpriteWalkable because that blocks water.
-  // We only block cliffs (names starting with 'altura') or borders.
+  // 1. Height Context Check
+  if (srcX !== undefined && srcY !== undefined) {
+    const smx = Math.floor(srcX);
+    const smy = Math.floor(srcY);
+    const sourceTile = getMicroTile(smx, smy, data);
+    
+    if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
+      let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
+      if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
+      
+      const isConnector = setName.includes('stair-') || setName.includes('-bridge');
+      if (!isConnector || Math.abs(targetTile.heightStep - sourceTile.heightStep) > 1) {
+        return false;
+      }
+    }
+  }
+
   const sid = getBaseTerrainSpriteId(mx, my, data);
   if (sid === null) return false;
   
   // Custom check for Wild: strictly allow water/lava centers, but block cliffs
   // We check the terrain set name for "altura"
-  let setName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-  if (tile.isRoad && tile.roadFeature) setName = tile.roadFeature;
+  let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
+  if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
   if (setName.startsWith('altura ')) return false;
 
   // 2. Prop Blocking (Trees, buildings, etc)
