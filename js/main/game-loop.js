@@ -19,6 +19,13 @@ export function keyToDir(key) {
   return null;
 }
 
+/** WASD or arrows — used to block browser Ctrl+W / Ctrl+S etc. in play mode. */
+function isPlayMovementKeyEvent(e) {
+  if (keyToDir(e.key)) return true;
+  const c = e.code;
+  return c === 'KeyW' || c === 'KeyA' || c === 'KeyS' || c === 'KeyD';
+}
+
 /**
  * @param {{
  *   getAppMode: () => string,
@@ -126,7 +133,10 @@ export function createGameLoop(api) {
 export function registerPlayKeyboard(api) {
   const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, player } = api;
 
-  window.addEventListener('keydown', (e) => {
+  /** Capture phase: run before browser default actions (e.g. Ctrl+W close tab). */
+  window.addEventListener(
+    'keydown',
+    (e) => {
     if (getAppMode() === 'play') {
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (
@@ -156,9 +166,10 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
       }
 
-      // Block browser shortcuts (Ctrl+W close tab, Ctrl+S, etc.) while using run + movement.
-      if (e.ctrlKey && keyToDir(e.key)) {
+      // Block Ctrl+W / Ctrl+S / Ctrl+N… with movement keys (capture + stopPropagation).
+      if (e.ctrlKey && isPlayMovementKeyEvent(e)) {
         e.preventDefault();
+        e.stopPropagation();
       }
       if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
         e.preventDefault();
@@ -195,9 +206,13 @@ export function registerPlayKeyboard(api) {
         onEscapePlay();
       }
     }
-  });
+    },
+    true
+  );
 
-  window.addEventListener('keyup', (e) => {
+  window.addEventListener(
+    'keyup',
+    (e) => {
     const el = e.target instanceof HTMLElement ? e.target : null;
     if (
       el &&
@@ -214,5 +229,7 @@ export function registerPlayKeyboard(api) {
     }
     const dir = keyToDir(e.key);
     if (dir) heldKeys.delete(dir);
-  });
+    },
+    true
+  );
 }

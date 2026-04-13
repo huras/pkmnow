@@ -1,5 +1,7 @@
+import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { speciesHasGroundType } from '../pokemon/pokemon-type-helpers.js';
+import { isGhostPhaseShiftBurrowEligibleDex, isGhostPhaseShiftLeftHeld } from './ghost-phase-shift.js';
 
 /** Diglett / Dugtrio: move underground — no cliff, prop, tree or scatter colliders while burrowing. */
 
@@ -10,17 +12,20 @@ export function isUndergroundBurrowerDex(dexId) {
 
 /**
  * Player feet-only burrow (same walk rules as wild Diglett line).
- * - 50/51: while grounded and moving (always “under” when walking).
- * - Other Ground types: only while moving **and** holding Shift (dig input).
+ * - 50/51: while grounded and moving, or **Left Shift** while still (idle burrow).
+ * - Other Ground types: **Left Shift** on the ground (moving or not).
+ * - Ghost types: **Left Shift** — see `ghost-phase-shift.js`.
  *
  * @param {number} dexId
- * @param {{ isAirborne: boolean, grounded: boolean, isMoving: boolean, shiftHeld: boolean }} o
+ * @param {{ isAirborne: boolean, grounded: boolean, isMoving: boolean }} o
  */
 export function isPlayerUndergroundBurrowWalkActive(dexId, o) {
-  if (o.isAirborne || !o.grounded || !o.isMoving) return false;
+  if (o.isAirborne || !o.grounded) return false;
   const d = Math.floor(Number(dexId) || 0);
-  if (isUndergroundBurrowerDex(d)) return true;
-  return speciesHasGroundType(d) && !!o.shiftHeld;
+  const leftDig = !!playInputState.shiftLeftHeld;
+  if (isUndergroundBurrowerDex(d)) return !!o.isMoving || leftDig;
+  if (isGhostPhaseShiftBurrowEligibleDex(d)) return isGhostPhaseShiftLeftHeld();
+  return speciesHasGroundType(d) && leftDig;
 }
 
 /**

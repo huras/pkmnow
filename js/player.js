@@ -12,8 +12,12 @@ import {
   endWalkProbeCache
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
+import {
+  computeGhostPhaseShiftDrawAlpha,
+  isGhostPhaseShiftBurrowEligibleDex
+} from './wild-pokemon/ghost-phase-shift.js';
 import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
-import { isShiftDigHeld } from './main/play-input-state.js';
+import { playInputState } from './main/play-input-state.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
@@ -58,8 +62,10 @@ export const player = {
   grounded: true,
   /** Sprint until all direction keys released (set from play keyboard). */
   runMode: false,
-  /** Visual dig: any Ground-type while moving, or holding Shift (either side) on the ground. */
-  digActive: false
+  /** Visual dig: Ground-type while moving or Left Shift; Ghost idem for phase/dig anim. */
+  digActive: false,
+  /** Ghost + Left Shift (or moving): alpha from `computeGhostPhaseShiftDrawAlpha`. */
+  ghostPhaseAlpha: 1
 };
 
 export function setPlayerSpecies(dexId) {
@@ -86,6 +92,7 @@ export function setPlayerPos(x, y) {
   player.animFrame = 0;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
   player.runMode = false;
+  player.ghostPhaseAlpha = 1;
 }
 
 function playerFeetDeltaTiles() {
@@ -115,8 +122,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
       isAirborne,
       grounded: !!player.grounded,
-      isMoving,
-      shiftHeld: isShiftDigHeld()
+      isMoving
     });
 
   if (burrowWalk) {
@@ -223,10 +229,12 @@ export function updatePlayer(dt, data) {
   const isAirborne = player.jumping || player.z > 0.05;
   const spdGround = Math.hypot(player.vx ?? 0, player.vy ?? 0);
   const movingGrounded = !!player.grounded && spdGround > 0.1;
+  const gr = speciesHasGroundType(player.dexId ?? 0);
+  const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
   player.digActive =
     !!player.grounded &&
-    speciesHasGroundType(player.dexId ?? 0) &&
-    (isShiftDigHeld() || movingGrounded);
+    ((gr && (!!playInputState.shiftLeftHeld || movingGrounded)) ||
+      (gh && (!!playInputState.shiftLeftHeld || movingGrounded)));
 
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {
@@ -264,8 +272,7 @@ export function updatePlayer(dt, data) {
     isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
       isAirborne,
       grounded: !!player.grounded,
-      isMoving: true,
-      shiftHeld: isShiftDigHeld()
+      isMoving: true
     });
   let terrainSlowMul = 1;
   if (burrowFeetWalkActive && data) {
@@ -366,18 +373,13 @@ export function updatePlayer(dt, data) {
   }
 
   const spdPostMove = Math.hypot(player.vx ?? 0, player.vy ?? 0);
-  const playerBurrowMoving =
-    player.grounded &&
-    !isAirborne &&
-    spdPostMove > 0.1 &&
-    isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
-      isAirborne,
-      grounded: !!player.grounded,
-      isMoving: spdPostMove > 0.1,
-      shiftHeld: isShiftDigHeld()
-    });
+  const playerBurrowWalkActive = isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
+    isAirborne,
+    grounded: !!player.grounded,
+    isMoving: spdPostMove > 0.1
+  });
 
-  if (player.grounded && !isAirborne && data && !playerBurrowMoving) {
+  if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
     const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
     player.x = r.x;
@@ -408,6 +410,11 @@ export function updatePlayer(dt, data) {
   player.visualY = player.y;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 
+  player.ghostPhaseAlpha = computeGhostPhaseShiftDrawAlpha({
+    grounded: !!player.grounded,
+    dexId: player.dexId ?? 94
+  });
+
   const useWalkLikeAnim = !!player.grounded && (spd > 0.1 || !!player.digActive);
 
   if (useWalkLikeAnim) {
@@ -416,7 +423,7 @@ export function updatePlayer(dt, data) {
     const pmdDexForWalkLike =
       player.digActive &&
       speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
-      isShiftDigHeld()
+      playInputState.shiftLeftHeld
         ? getBorrowDigPlaceholderDex(player.dexId ?? 0)
         : player.dexId ?? 94;
     const meta = getDexAnimMeta(pmdDexForWalkLike);

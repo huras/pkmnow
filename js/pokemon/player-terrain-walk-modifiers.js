@@ -1,3 +1,4 @@
+import { isGhostPhaseShiftBurrowEligibleDex } from '../wild-pokemon/ghost-phase-shift.js';
 import { pivotCellHeightTraversalOk, pivotCellHeightStepDelta } from '../walkability.js';
 
 /** Default slow while burrowing upward through blocked height (Diglett line; override via modifiers). */
@@ -26,9 +27,11 @@ export const DEFAULT_UNDERGROUND_CLIFF_UP_SLOW_MULT = 0.1;
  * @returns {number} multiplier in (0,1], or 1 if no effect
  */
 function undergroundBurrowCliffAscendSlow(ctx) {
-  const { grounded, airborne, spd, data, ox, oy, tx, ty, burrowFeetWalkActive, burrowFeetTileExists } = ctx;
+  const { dexId, grounded, airborne, spd, data, ox, oy, tx, ty, burrowFeetWalkActive, burrowFeetTileExists } =
+    ctx;
   if (!data || !grounded || airborne || spd <= 0.1) return 1;
   if (!burrowFeetWalkActive) return 1;
+  if (isGhostPhaseShiftBurrowEligibleDex(dexId)) return 1;
   if (!burrowFeetTileExists(tx, ty, data)) return 1;
   if (pivotCellHeightTraversalOk(tx, ty, ox, oy, data)) return 1;
   const dh = pivotCellHeightStepDelta(tx, ty, ox, oy, data);

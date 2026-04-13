@@ -41,7 +41,7 @@ import {
   worldFeetFromPivotCell
 } from './pokemon/pmd-layout-metrics.js';
 import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
-import { isShiftDigHeld } from './main/play-input-state.js';
+import { playInputState } from './main/play-input-state.js';
 import {
   getBorrowDigPlaceholderDex,
   isUndergroundBurrowerDex,
@@ -632,11 +632,11 @@ export function render(canvas, data, options = {}) {
     // --- Collect Player ---
     const isPlayerMoving = isPlayerWalkingAnim;
     const playerDex = player.dexId || 94;
-    /** Non–Diglett/Dugtrio Ground: placeholder sprites only while Shift-digging (not auto “dig” while walking). */
+    /** Non–Diglett/Dugtrio Ground: placeholder sprites only while Left Shift dig (not auto “dig” while walking). */
     const borrowDiglettArt =
       !!player.digActive &&
       speciesUsesBorrowedDiglettDigVisual(playerDex) &&
-      isShiftDigHeld();
+      !!playInputState.shiftLeftHeld;
     const borrowPlaceholderDex = borrowDiglettArt ? getBorrowDigPlaceholderDex(playerDex) : null;
     if (borrowDiglettArt && borrowPlaceholderDex != null) {
       void ensurePokemonSheetsLoaded(imageCache, borrowPlaceholderDex);
@@ -650,7 +650,7 @@ export function render(canvas, data, options = {}) {
     const wantsDigSheet =
       !!player.digActive &&
       speciesHasGroundType(playerDex) &&
-      (isUndergroundBurrowerDex(playerDex) || isShiftDigHeld()) &&
+      (isUndergroundBurrowerDex(playerDex) || !!playInputState.shiftLeftHeld) &&
       !!pDig;
     const pSheet = wantsDigSheet ? pDig : isPlayerMoving ? pWalk : pIdle;
     const pmdAnimSlice = wantsDigSheet ? 'dig' : isPlayerMoving ? 'walk' : 'idle';
@@ -681,6 +681,7 @@ export function render(canvas, data, options = {}) {
         /** Depth sort: world pivot Y (tile center), not logical cell. */
         sortY: vy + 0.5,
         dexId: playerDex,
+        drawAlpha: player.ghostPhaseAlpha ?? 1,
         animMoving: isPlayerMoving,
         cx: snapPx((vx + 0.5) * tileW),
         cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
@@ -836,6 +837,8 @@ export function render(canvas, data, options = {}) {
       if (item.type === 'wild' || item.type === 'player') {
         if (item.type === 'wild') {
           ctx.globalAlpha = item.spawnPhase;
+        } else {
+          ctx.globalAlpha = item.drawAlpha != null ? item.drawAlpha : 1;
         }
 
         let spawnYOffset = 0;

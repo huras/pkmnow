@@ -14,3 +14,8 @@ export function speciesHasType(dexId, typeSlug) {
 export function speciesHasGroundType(dexId) {
   return speciesHasType(dexId, 'ground');
 }
+
+/** True if species has Ghost (Shift “phase” through blocked height like dig, but translucent). */
+export function speciesHasGhostType(dexId) {
+  return speciesHasType(dexId, 'ghost');
+}

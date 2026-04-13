@@ -3,7 +3,7 @@
  * (avoids circular imports with `game-loop.js`).
  */
 export const playInputState = {
-  /** Either Shift held — dig (Ground types). */
+  /** Left = dig / burrow in play; Right tracked for possible future use. */
   shiftLeftHeld: false,
   shiftRightHeld: false
 };

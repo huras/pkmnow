@@ -28,3 +28,6 @@ desktop.ini
 
 # Local scratch / temp
 temp-*.txt
+
+# SpriteCollab portraits (large tree); delete this line to track under git
+# tilesets/spritecollab-portraits/
