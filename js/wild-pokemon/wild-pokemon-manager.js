@@ -303,6 +303,12 @@ function setEmotion(entity, type, persist = false, portraitSlug) {
 
 function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
+  if (entity.deadState) {
+    entity.vx = 0;
+    entity.vy = 0;
+    entity.animMoving = false;
+    return;
+  }
   const beh = entity.behavior;
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
@@ -756,10 +762,20 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       _blockedMoveFrames: 0,
       hp: 50,
       maxHp: 50,
+      deadState: null, // 'faint' | 'sleepFallback'
+      deadTimer: 0,
       hitFlashTimer: 0,
       takeDamage: function(amount) {
         this.hp -= amount;
         if (this.hp <= 0) {
+          this.hp = 0;
+          this.deadState = this.animMeta?.faint ? 'faint' : 'sleepFallback';
+          this.deadTimer = 1.35;
+          this.aiState = 'sleep';
+          this.animMoving = false;
+          this.vx = 0;
+          this.vy = 0;
+          setEmotion(this, 9, true, 'Pain');
           this.isDespawning = true;
         }
         this.hitFlashTimer = 0.2; // flash for 200ms
@@ -788,8 +804,13 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
 
     // Transition spawn phase
     if (e.isDespawning) {
-      // Faster despawn to clean up quickly
-      e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - dt * 2.0);
+      if (e.deadTimer > 0) {
+        e.deadTimer = Math.max(0, e.deadTimer - dt);
+      }
+      if (e.deadTimer <= 0) {
+        // Faster despawn to clean up quickly
+        e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - dt * 2.0);
+      }
       if (e.spawnPhase <= 0) toDelete.push(k);
     } else {
       // Only start the spawn animation when the player is relatively close (within view distance)

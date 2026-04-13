@@ -825,7 +825,10 @@ export function render(canvas, data, options = {}) {
         spawnPhase: we.spawnPhase ?? 1,
         spawnType: we.spawnType,
         targetHeightTiles,
-        hitFlashTimer: we.hitFlashTimer
+        hitFlashTimer: we.hitFlashTimer,
+        hp: we.hp,
+        maxHp: we.maxHp,
+        deadState: we.deadState
       });
 
       if (emotionPayload) {
@@ -1099,6 +1102,35 @@ export function render(canvas, data, options = {}) {
     const batchedEffects = [];
 
     // --- DRAW PASS ---
+    const drawWildHpBar = (item, spawnYOffset) => {
+      if (!Number.isFinite(item.hp) || !Number.isFinite(item.maxHp) || item.maxHp <= 0) return;
+      const hp01 = Math.max(0, Math.min(1, item.hp / item.maxHp));
+      const barW = Math.max(16, Math.floor(tileW * 0.82));
+      const barH = Math.max(3, Math.floor(tileH * 0.08));
+      const x = Math.floor(item.cx - barW * 0.5);
+      const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+      ctx.fillStyle = hp01 > 0.5 ? '#63e86f' : hp01 > 0.22 ? '#ffd54a' : '#ff6363';
+      ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
+    };
+
+    const drawWildDeadState = (item, spawnYOffset) => {
+      if (!item.deadState) return;
+      const deadY = Math.floor(item.cy - item.pivotY + spawnYOffset - tileH * 0.4);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.25, ctx.globalAlpha * 0.85);
+      ctx.fillStyle = 'rgba(20,20,24,0.75)';
+      ctx.fillRect(item.cx - 14, deadY - 11, 28, 14);
+      ctx.fillStyle = '#d0e6ff';
+      ctx.font = `700 ${Math.max(10, Math.floor(tileH * 0.22))}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const deadLabel = item.deadState === 'faint' ? 'Faint' : 'Zzz';
+      ctx.fillText(deadLabel, item.cx, deadY - 4);
+      ctx.restore();
+    };
+
     for (const item of renderItems) {
       ctx.save();
       
@@ -1150,6 +1182,11 @@ export function render(canvas, data, options = {}) {
         }
         
         ctx.filter = 'none';
+
+        if (item.type === 'wild') {
+          drawWildHpBar(item, spawnYOffset);
+          drawWildDeadState(item, spawnYOffset);
+        }
 
         // Terrain / Grass Depth Cue (Deferred Overlay)
         const targetMx = Math.floor(item.x);
