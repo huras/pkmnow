@@ -7,6 +7,7 @@ import {
   getWildPokemonEntities
 } from '../wild-pokemon/wild-pokemon-manager.js';
 import { updateMoves } from '../moves/moves-manager.js';
+import { updateGrassFire } from '../play-grass-fire.js';
 import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
 
 export const heldKeys = new Set();
@@ -93,6 +94,7 @@ export function createGameLoop(api) {
       updateWildPokemon(dt, currentData, pvx, pvy);
       updatePlayPointerCombat(dt, player);
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
+      updateGrassFire(dt, currentData, pvx, pvy);
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
     }

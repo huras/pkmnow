@@ -14,7 +14,6 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
   scatterHasWindSway,
-  lakeLotusGrassInteriorAllowed,
   isSortableScatter
 } from './biome-tiles.js';
 import { getMicroTile, CHUNK_SIZE, foliageDensity, foliageType } from './chunking.js';
@@ -47,6 +46,7 @@ import {
 } from './pokemon/pokemon-type-helpers.js';
 import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
+import { aimAtCursor } from './main/play-mouse-combat.js';
 import {
   getBorrowDigPlaceholderDex,
   isUndergroundBurrowerDex,
@@ -76,6 +76,8 @@ import {
 import { computePlayViewState } from './render/play-view-camera.js';
 import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
+import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
+import { clearGrassFireStateForNewMap, grassFireVisualPhaseAt } from './play-grass-fire.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
@@ -202,6 +204,31 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
       ctx.fillStyle = '#ffaa66';
       ctx.beginPath();
       ctx.arc(px, py, 7 * a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (p.type === 'grassFire') {
+    const img = imageCache.get('tilesets/effects/burn-start.png');
+    const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;
+    const fi = (Math.min(BURN_START_FRAMES - 1, Math.floor((1 - a) * BURN_START_FRAMES)) + flick) % BURN_START_FRAMES;
+    if (img && img.naturalWidth) {
+      const dw = Math.ceil(tileW * 1.12);
+      const dh = Math.ceil(tileH * 1.12);
+      ctx.globalAlpha = Math.min(1, a * 1.15);
+      ctx.drawImage(
+        img,
+        0,
+        fi * BURN_START_FRAME,
+        BURN_START_FRAME,
+        BURN_START_FRAME,
+        px - dw * 0.5,
+        py - dh * 0.5,
+        dw,
+        dh
+      );
+    } else {
+      ctx.fillStyle = '#ff7722';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(4, tileW * 0.22) * a, 0, Math.PI * 2);
       ctx.fill();
     }
   } else if (p.type === 'emberTrail') {
@@ -339,7 +366,9 @@ export function render(canvas, data, options = {}) {
     tileH = ch / height;
   }
 
-  syncPlayChunkCache(data, tileW, appMode);
+  if (syncPlayChunkCache(data, tileW, appMode)) {
+    clearGrassFireStateForNewMap();
+  }
 
   if (appMode === 'map') {
     clearPlayCameraSnapshot();
@@ -639,79 +668,77 @@ export function render(canvas, data, options = {}) {
         ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA;
       }
 
-      const gv = getGrassVariant(tile.biomeId);
-      const gTiles = GRASS_TILES[gv];
-      const { scale: gs, threshold: gt } = getGrassParams(tile.biomeId);
+      const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
+      const firePhase = grassFireVisualPhaseAt(mx, my);
 
-      if (gTiles && foliageDensity(mx, my, data.seed, gs) >= gt && !tile.isRoad && !tile.isCity) {
-        let isFlat = true;
-        const lakeInterior = lakeLotusGrassInteriorAllowed(
-          mx,
-          my,
-          tile,
-          data.height * CHUNK_SIZE,
-          data.width * CHUNK_SIZE,
-          (c, r) => getCached(c, r)
-        );
-        if (lakeInterior === null) {
-          const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-          if (setForRole) {
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-            if (getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
-          }
-        } else {
-          isFlat = lakeInterior;
+      if (firePhase && (layers.base || layers.top)) {
+        const burning = firePhase === 'burning';
+        const fillBase = burning ? 'rgba(58,26,10,0.82)' : 'rgba(7,5,4,0.92)';
+        const fillTop = burning ? 'rgba(44,18,7,0.86)' : 'rgba(4,3,2,0.94)';
+        const drawScorchedFull = (fill, y0, hFull) => {
+          ctx.fillStyle = fill;
+          ctx.fillRect(snapPx(tx), snapPx(y0), tileW, hFull);
+        };
+        const drawScorchedOverlayStrip = (fill, y0, hFull) => {
+          const sh = hFull * barFrac;
+          const sy = y0 + hFull * (1 - barFrac);
+          ctx.fillStyle = fill;
+          ctx.fillRect(snapPx(tx), snapPx(sy), tileW, sh);
+        };
+        const drawScorchedLayer = (fill, y0, hFull) => {
+          if (playerTopOverlay) drawScorchedOverlayStrip(fill, y0, hFull);
+          else drawScorchedFull(fill, y0, hFull);
+        };
+        /** Base grass is blitted in a 2×tileH quad; lower half sits over baked terrain — scorch only upper half so chão stays unchanged. */
+        const baseGrassY0 = ty - tileH;
+        const baseBurnScorchH = tileH;
+        if (layers.base && !playerTopOverlay) {
+          drawScorchedLayer(fillBase, baseGrassY0, baseBurnScorchH);
         }
-
-        if (isFlat) {
-          const items = BIOME_VEGETATION[tile.biomeId] || [];
-          const trType = getTreeType(tile.biomeId, mx, my, data.seed);
-          const isFT = !!trType && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-          const isFN = !!trType && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-
-          const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
-          const cy = Math.floor(my / PLAY_CHUNK_SIZE);
-          const chunk = playChunkMap.get(`${cx},${cy}`);
-          const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
-
-          if (!isFT && !isFN && !isOccupiedByObject) {
-            let baseId = gTiles.original;
-            if (gv === 'lotus' && gTiles.grass2 != null) {
-              const ftPick = foliageType(mx, my, data.seed);
-              baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
-            }
-            if (baseId != null) {
-              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
-              const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
-              blitGrassQuad(frame, ty - tileH, tileH * 2);
-            }
+        if (lodDetail < 2 && layers.top) {
+          drawScorchedLayer(fillTop, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+        }
+        if (burning) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = 'rgba(255,130,40,0.14)';
+          if (layers.base && !playerTopOverlay) {
+            drawScorchedLayer('rgba(255,130,40,0.14)', baseGrassY0, baseBurnScorchH);
           }
+          if (lodDetail < 2 && layers.top) {
+            drawScorchedLayer('rgba(255,110,30,0.12)', ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+          }
+          ctx.restore();
+        }
+        if (playerTopOverlay) {
+          ctx.restore();
+        }
+        return;
+      }
+
+      if (layers.base) {
+        const gv = getGrassVariant(tile.biomeId);
+        const gTiles = GRASS_TILES[gv];
+        let baseId = gTiles.original;
+        if (gv === 'lotus' && gTiles.grass2 != null) {
+          const ftPick = foliageType(mx, my, data.seed);
+          baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
+        }
+        if (baseId != null) {
+          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
+          blitGrassQuad(frame, ty - tileH, tileH * 2);
         }
       }
 
-      if (lodDetail < 2) {
+      if (lodDetail < 2 && layers.top) {
         const vt = getGrassVariant(tile.biomeId);
         const vTiles = GRASS_TILES[vt];
-        const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
-        if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
-          const topId = vTiles.originalTop;
-          if (topId) {
-            const items = BIOME_VEGETATION[tile.biomeId] || [];
-            const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
-            const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-            const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-
-            const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
-            const cy = Math.floor(my / PLAY_CHUNK_SIZE);
-            const chunk = playChunkMap.get(`${cx},${cy}`);
-            const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
-
-            if (!isFT && !isFN && !isOccupiedByObject) {
-              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
-              const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
-              blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
-            }
-          }
+        const topId = vTiles.originalTop;
+        if (topId) {
+          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
+          blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
         }
       }
 
@@ -1691,6 +1718,37 @@ export function render(canvas, data, options = {}) {
         ctx.beginPath();
         ctx.arc(collCx, collCyGround, Math.max(1, collR - 1), 0, Math.PI * 2);
         ctx.stroke();
+        {
+          const { tx, ty } = aimAtCursor(player);
+          const pcx = player.x + 0.5;
+          const pcy = player.y + 0.5;
+          let dx = (tx - pcx) * tileW;
+          let dy = (ty - pcy) * tileH;
+          if (Math.hypot(dx, dy) < 1e-4) {
+            dx = tileW;
+            dy = 0;
+          }
+          const ang = Math.atan2(dy, dx);
+          ctx.save();
+          ctx.setLineDash([]);
+          ctx.translate(collCx, collCyGround);
+          ctx.rotate(ang);
+          const ring = Math.max(2, collR + 2);
+          ctx.fillStyle = 'rgba(110, 185, 255, 0.92)';
+          ctx.strokeStyle = 'rgba(20, 55, 120, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          const tip = ring + 11;
+          const inner = ring - 2;
+          ctx.moveTo(tip, 0);
+          ctx.lineTo(inner, -6);
+          ctx.lineTo(inner - 2.5, 0);
+          ctx.lineTo(inner, 6);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
         if (pz > 0.02) {
           ctx.strokeStyle = 'rgba(160, 255, 235, 0.65)';
           ctx.lineWidth = 1.5;

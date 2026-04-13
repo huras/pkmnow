@@ -34,6 +34,11 @@ import {
   velocityFromToGround
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
+import {
+  grassFireTryExtinguishAt,
+  grassFireTryIgniteAt,
+  GRASS_FIRE_PARTICLE_SEC
+} from '../play-grass-fire.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -520,12 +525,6 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
 }
 
 /**
- * @param {number} dt
- * @param {Iterable<object>} wildPokemonList
- * @param {object | null} _data reserved for terrain/water queries (ground embers, etc.)
- * @param {import('../player.js').player} player
- */
-/**
  * Remaining player cooldown (seconds) for a move id. Used by play HUD chips.
  * @param {string} moveId
  * @returns {number}
@@ -563,7 +562,13 @@ export function getPlayerMoveCooldownRemaining(moveId) {
   }
 }
 
-export function updateMoves(dt, wildPokemonList, _data, player) {
+/**
+ * @param {number} dt
+ * @param {Iterable<object>} wildPokemonList
+ * @param {object | null} data map macro data (grass fire / terrain queries)
+ * @param {import('../player.js').player} player
+ */
+export function updateMoves(dt, wildPokemonList, data, player) {
   updatePlayerCombatTimers(dt);
   playerEmberCooldown = Math.max(0, playerEmberCooldown - dt);
   playerWaterCooldown = Math.max(0, playerWaterCooldown - dt);
@@ -590,6 +595,10 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
       activeParticles.splice(i, 1);
       continue;
     }
+    if (p.type === 'grassFire') {
+      p.z = 0.08;
+      continue;
+    }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
@@ -613,6 +622,25 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
       } else if (proj.type === 'confusionOrb') {
         spawnHitParticles(proj.x, proj.y, 0);
         applySplashToWild(proj, wildList, 0);
+      }
+      if (data) {
+        const zz = Number(proj.z) || 0;
+        if (grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
+          const tcx = Math.floor(proj.x) + 0.5;
+          const tcy = Math.floor(proj.y) + 0.5;
+          pushParticle({
+            type: 'grassFire',
+            x: tcx,
+            y: tcy,
+            vx: 0,
+            vy: 0,
+            z: 0.06,
+            vz: 0,
+            life: GRASS_FIRE_PARTICLE_SEC,
+            maxLife: GRASS_FIRE_PARTICLE_SEC
+          });
+        }
+        grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
       }
       activeProjectiles.splice(i, 1);
       continue;

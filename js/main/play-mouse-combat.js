@@ -21,7 +21,8 @@ function combatModifierHeld() {
   return !!playInputState.ctrlLeftHeld;
 }
 
-function aimAtCursor(player) {
+/** World aim used for LMB/RMB casts and HUD — same as a shot fired now. */
+export function aimAtCursor(player) {
   if (!playInputState.mouseValid) {
     return { tx: player.x + 1, ty: player.y, sx: player.x, sy: player.y };
   }
