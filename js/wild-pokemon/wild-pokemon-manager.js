@@ -1,4 +1,4 @@
-import { CHUNK_SIZE } from '../chunking.js';
+import { CHUNK_SIZE, getMicroTile } from '../chunking.js';
 import { seededHashInt } from '../tessellation-logic.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
@@ -8,6 +8,7 @@ import {
   ensureSpriteCollabPortraitLoaded,
   probeSpriteCollabPortraitPrefix
 } from '../pokemon/spritecollab-portraits.js';
+import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
@@ -20,6 +21,7 @@ import {
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
+import { isUndergroundBurrowerDex } from './underground-burrow.js';
 
 const SKY_SPECIES = new Set([
   6,   // Charizard
@@ -95,6 +97,16 @@ function wildFeetDeltaForEntity(entity) {
 }
 
 function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTreeTrunks = false) {
+  if (!air && isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) {
+    const ft = worldFeetFromPivotCell(destX, destY, imageCache, entity.dexId ?? 1, true);
+    const mx = Math.floor(ft.x);
+    const my = Math.floor(ft.y);
+    const gw = data.width * CHUNK_SIZE;
+    const gh = data.height * CHUNK_SIZE;
+    if (mx < 0 || mx >= gw || my < 0 || my >= gh) return false;
+    return getMicroTile(mx, my, data) != null;
+  }
+
   const ft = worldFeetFromPivotCell(destX, destY, imageCache, entity.dexId ?? 1, !!entity.animMoving);
   const st =
     srcX !== undefined && srcY !== undefined
@@ -115,6 +127,7 @@ function applyWildTreeTrunkResolution(entity, data) {
   ensureWildPhysicsState(entity);
   const air = !!entity.jumping || (entity.z || 0) > 0.05;
   if (!entity.grounded || air || !data) return;
+  if (isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) return;
   const { dx, dy } = wildFeetDeltaForEntity(entity);
   const r = resolvePivotWithFeetVsTreeTrunks(
     entity.x,
@@ -255,7 +268,7 @@ function advanceWildPokemonAnim(entity, dt) {
   if (entity.emotionType !== null) {
     entity.emotionAge += dt;
     // If not persistent, the balloon vanishes after completing its animation (1.0s to be safe)
-    if (!entity.emotionPersist && entity.emotionAge > 1.2) {
+    if (!entity.emotionPersist && entity.emotionAge > WILD_EMOTION_NONPERSIST_CLEAR_SEC) {
       entity.emotionType = null;
       entity.emotionPortraitSlug = null;
     }
@@ -403,7 +416,9 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         const dist = Math.random() * WANDER_RADIUS;
         const tx = entity.centerX + Math.cos(ang) * dist;
         const ty = entity.centerY + Math.sin(ang) * dist;
-        if (wildWalkOk(tx, ty, data, entity.x, entity.y, entity, false)) {
+        const wanderEntity =
+          isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
+        if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false)) {
           entity.targetX = tx;
           entity.targetY = ty;
           break;

@@ -1,5 +1,5 @@
 import { PMD_MON_SHEET } from './pmd-default-timing.js';
-import { getDexAnimMeta } from './pmd-anim-metadata.js';
+import { getDexAnimMeta, getDexAnimSlice } from './pmd-anim-metadata.js';
 import { POKEMON_HEIGHTS } from './pokemon-heights.js';
 import { getResolvedSheets } from './pokemon-asset-loader.js';
 
@@ -13,6 +13,29 @@ export function resolvePmdFrameSpec(sheet, isMoving, dexId) {
   const meta = getDexAnimMeta(dexId);
   const modeMeta = isMoving ? meta?.walk : meta?.idle;
   const fallbackCols = isMoving ? 4 : 8;
+  const animCols = modeMeta?.durations?.length || fallbackCols;
+  const sw = Math.max(
+    1,
+    Number(modeMeta?.frameWidth) ||
+      Math.floor((sheet.naturalWidth || PMD_MON_SHEET.frameW * animCols) / animCols)
+  );
+  const sh = Math.max(
+    1,
+    Number(modeMeta?.frameHeight) ||
+      Math.floor((sheet.naturalHeight || PMD_MON_SHEET.frameH * 8) / 8)
+  );
+  return { sw, sh, animCols };
+}
+
+/**
+ * Frame spec for an explicit slice (e.g. dig sheet uses `dig` timings, fallback to walk).
+ * @param {HTMLImageElement} sheet
+ * @param {number} dexId
+ * @param {'idle'|'walk'|'dig'} sliceKey
+ */
+export function resolvePmdFrameSpecForSlice(sheet, dexId, sliceKey) {
+  const modeMeta = getDexAnimSlice(dexId, sliceKey);
+  const fallbackCols = sliceKey === 'idle' ? 8 : 4;
   const animCols = modeMeta?.durations?.length || fallbackCols;
   const sw = Math.max(
     1,

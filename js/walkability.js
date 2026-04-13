@@ -136,6 +136,22 @@ export function pivotCellHeightTraversalOk(pivotX, pivotY, srcPivotX, srcPivotY,
   return okHeightStepTransition(st, pt);
 }
 
+/**
+ * Pivot-cell height delta (destination − source). Used for burrow climb rules.
+ * @returns {number | null} null if either tile missing
+ */
+export function pivotCellHeightStepDelta(pivotX, pivotY, srcPivotX, srcPivotY, macroData) {
+  if (srcPivotX === undefined || srcPivotY === undefined) return null;
+  const pmx = Math.floor(pivotX);
+  const pmy = Math.floor(pivotY);
+  const smx0 = Math.floor(srcPivotX);
+  const smy0 = Math.floor(srcPivotY);
+  const pt = getMicroTile(pmx, pmy, macroData);
+  const st = getMicroTile(smx0, smy0, macroData);
+  if (!pt || !st) return null;
+  return pt.heightStep - st.heightStep;
+}
+
 export const WALL_ROLES = new Set([
   'EDGE_S', 'EDGE_W', 'EDGE_E', 
   'IN_NW', 'IN_NE', 'IN_SW', 'IN_SE',

@@ -160,7 +160,7 @@ export const POKEMON_CONFIG = {
   139: { name: 'Omastar', types: ['rock', 'water'], heightTiles: 3, baseSpeed: 55 },
   140: { name: 'Kabuto', types: ['rock', 'water'], heightTiles: 1.5, baseSpeed: 55 },
   141: { name: 'Kabutops', types: ['rock', 'water'], heightTiles: 3.5, baseSpeed: 80 },
-  142: { name: 'Aerodactyl', types: ['rock', 'flying'], heightTiles: 6, baseSpeed: 130 },
+  142: { name: 'Aerodactyl', types: ['rock', 'flying'], heightTiles: 4.5, baseSpeed: 130 },
   143: { name: 'Snorlax', types: ['normal'], heightTiles: 6, baseSpeed: 30 },
   144: { name: 'Articuno', types: ['ice', 'flying'], heightTiles: 7, baseSpeed: 85 },
   145: { name: 'Zapdos', types: ['electric', 'flying'], heightTiles: 7, baseSpeed: 100 },

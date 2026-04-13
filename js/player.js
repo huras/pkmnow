@@ -1,10 +1,19 @@
-import { CHUNK_SIZE } from './chunking.js';
+import { CHUNK_SIZE, getMicroTile } from './chunking.js';
+import {
+  getBorrowDigPlaceholderDex,
+  isPlayerUndergroundBurrowWalkActive,
+  speciesUsesBorrowedDiglettDigVisual
+} from './wild-pokemon/underground-burrow.js';
+import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import {
   canWalkMicroTile,
   pivotCellHeightTraversalOk,
   beginWalkProbeCache,
   endWalkProbeCache
 } from './walkability.js';
+import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
+import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
+import { isShiftDigHeld } from './main/play-input-state.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
@@ -18,6 +27,12 @@ const FRICTION = 20.0;
 const GRAVITY = 45.0;
 const JUMP_IMPULSE = 14.5;
 const GROUND_R = 0.32; // Raio de colisão
+
+/** Sprint (Left Ctrl while moving, Minecraft-style: clears when movement stops). */
+const RUN_SPEED_CAP_MULT = 2;
+
+/** Dig animation advance when stationary (world-units/sec equivalent feel). */
+const DIG_IDLE_ANIM_SPEED = 2.8;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 const initialDex = parseInt(localStorage.getItem(SAVED_DEX_KEY)) || 94;
@@ -40,12 +55,20 @@ export const player = {
   totalDistMoved: 0,
   dexId: initialDex,
   jumping: false,
-  grounded: true
+  grounded: true,
+  /** Sprint until all direction keys released (set from play keyboard). */
+  runMode: false,
+  /** Visual dig: any Ground-type while moving, or holding Shift (either side) on the ground. */
+  digActive: false
 };
 
 export function setPlayerSpecies(dexId) {
   player.dexId = dexId;
+  player.runMode = false;
   localStorage.setItem(SAVED_DEX_KEY, dexId);
+  if (speciesUsesBorrowedDiglettDigVisual(dexId)) {
+    void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(dexId));
+  }
 }
 
 export function setPlayerPos(x, y) {
@@ -62,17 +85,44 @@ export function setPlayerPos(x, y) {
   player.totalDistMoved = 0;
   player.animFrame = 0;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
+  player.runMode = false;
 }
 
 function playerFeetDeltaTiles() {
-  const isMoving = !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+  const isMoving =
+    (!!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1) || !!player.digActive;
   return getPmdFeetDeltaWorldTiles(imageCache, player.dexId || 94, isMoving);
+}
+
+/** Feet tile exists (burrow path); same criterion as wild underground walk. */
+function burrowFeetTileExists(pivotX, pivotY, data) {
+  if (!data) return false;
+  const { x: fx, y: fy } = worldFeetFromPivotCell(pivotX, pivotY, imageCache, player.dexId || 94, true);
+  const mx = Math.floor(fx);
+  const my = Math.floor(fy);
+  const gw = data.width * CHUNK_SIZE;
+  const gh = data.height * CHUNK_SIZE;
+  if (mx < 0 || mx >= gw || my < 0 || my >= gh) return false;
+  return getMicroTile(mx, my, data) != null;
 }
 
 export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTrunks = false) {
   if (!data) return false;
 
   const isMoving = !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+  const burrowWalk =
+    !isAirborne &&
+    isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
+      isAirborne,
+      grounded: !!player.grounded,
+      isMoving,
+      shiftHeld: isShiftDigHeld()
+    });
+
+  if (burrowWalk) {
+    return burrowFeetTileExists(x, y, data);
+  }
+
   const { x: fx, y: fy } = worldFeetFromPivotCell(x, y, imageCache, player.dexId || 94, isMoving);
   let sfx;
   let sfy;
@@ -171,6 +221,12 @@ export function isPlayerIdleOnWaitingFrame() {
  */
 export function updatePlayer(dt, data) {
   const isAirborne = player.jumping || player.z > 0.05;
+  const spdGround = Math.hypot(player.vx ?? 0, player.vy ?? 0);
+  const movingGrounded = !!player.grounded && spdGround > 0.1;
+  player.digActive =
+    !!player.grounded &&
+    speciesHasGroundType(player.dexId ?? 0) &&
+    (isShiftDigHeld() || movingGrounded);
 
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {
@@ -198,9 +254,39 @@ export function updatePlayer(dt, data) {
     }
   }
 
-  // Clamp Speed
+  // Clamp Speed (underground cliff crossing caps Diglett/Dugtrio much lower)
   const inputMag = Math.hypot(player.inputX, player.inputY);
-  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag);
+  const spdPreClamp = Math.hypot(player.vx, player.vy);
+  const burrowFeetWalkActive =
+    player.grounded &&
+    !isAirborne &&
+    spdPreClamp > 0.1 &&
+    isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
+      isAirborne,
+      grounded: !!player.grounded,
+      isMoving: true,
+      shiftHeld: isShiftDigHeld()
+    });
+  let terrainSlowMul = 1;
+  if (burrowFeetWalkActive && data) {
+    const tx = player.x + player.vx * dt;
+    const ty = player.y + player.vy * dt;
+    terrainSlowMul = resolveTerrainWalkSpeedCapMultiplier({
+      dexId: player.dexId ?? 0,
+      grounded: !!player.grounded,
+      airborne: isAirborne,
+      spd: spdPreClamp,
+      data,
+      ox: player.x,
+      oy: player.y,
+      tx,
+      ty,
+      burrowFeetWalkActive,
+      burrowFeetTileExists
+    });
+  }
+  const runMul = player.runMode ? RUN_SPEED_CAP_MULT : 1;
+  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
@@ -279,7 +365,19 @@ export function updatePlayer(dt, data) {
     endWalkProbeCache();
   }
 
-  if (player.grounded && !isAirborne && data) {
+  const spdPostMove = Math.hypot(player.vx ?? 0, player.vy ?? 0);
+  const playerBurrowMoving =
+    player.grounded &&
+    !isAirborne &&
+    spdPostMove > 0.1 &&
+    isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
+      isAirborne,
+      grounded: !!player.grounded,
+      isMoving: spdPostMove > 0.1,
+      shiftHeld: isShiftDigHeld()
+    });
+
+  if (player.grounded && !isAirborne && data && !playerBurrowMoving) {
     const fd = playerFeetDeltaTiles();
     const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
     player.x = r.x;
@@ -310,10 +408,21 @@ export function updatePlayer(dt, data) {
   player.visualY = player.y;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 
-  if (spd > 0.1 && player.grounded) {
-    player.totalDistMoved += spd * dt;
-    const meta = getDexAnimMeta(player.dexId);
-    const seq = meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
+  const useWalkLikeAnim = !!player.grounded && (spd > 0.1 || !!player.digActive);
+
+  if (useWalkLikeAnim) {
+    const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;
+    player.totalDistMoved += animSpd * dt;
+    const pmdDexForWalkLike =
+      player.digActive &&
+      speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
+      isShiftDigHeld()
+        ? getBorrowDigPlaceholderDex(player.dexId ?? 0)
+        : player.dexId ?? 94;
+    const meta = getDexAnimMeta(pmdDexForWalkLike);
+    const seq = player.digActive
+      ? meta?.dig?.durations || meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk
+      : meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
     const totalTicks = seq.reduce((a, b) => a + b, 0);
 
     const walkDistanceCycle = 3.5; 

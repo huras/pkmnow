@@ -1,4 +1,5 @@
 import { updatePlayer, tryJumpPlayer } from '../player.js';
+import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
   updateWildPokemon
@@ -59,9 +60,11 @@ export function createGameLoop(api) {
     }
 
     if (['play'].includes(getAppMode())) {
-      const runMult = heldKeys.has('shift') ? 2.0 : 1.0;
-      player.inputX = inX * runMult;
-      player.inputY = inY * runMult;
+      if (inX === 0 && inY === 0) {
+        player.runMode = false;
+      }
+      player.inputX = inX;
+      player.inputY = inY;
     } else {
       player.inputX = 0;
       player.inputY = 0;
@@ -125,12 +128,57 @@ export function registerPlayKeyboard(api) {
 
   window.addEventListener('keydown', (e) => {
     if (getAppMode() === 'play') {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'Shift'].includes(e.key)) {
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (
+        el &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (
+        [
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+          ' ',
+          'w',
+          'a',
+          's',
+          'd',
+          'W',
+          'A',
+          'S',
+          'D'
+        ].includes(e.key)
+      ) {
         e.preventDefault();
       }
 
-      if (e.key === 'Shift') {
-        heldKeys.add('shift');
+      // Block browser shortcuts (Ctrl+W close tab, Ctrl+S, etc.) while using run + movement.
+      if (e.ctrlKey && keyToDir(e.key)) {
+        e.preventDefault();
+      }
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        e.preventDefault();
+      }
+
+      if (e.code === 'ShiftLeft') {
+        e.preventDefault();
+        playInputState.shiftLeftHeld = true;
+      }
+      if (e.code === 'ShiftRight') {
+        e.preventDefault();
+        playInputState.shiftRightHeld = true;
+      }
+
+      if (e.code === 'ControlLeft' && !e.repeat) {
+        const movingIntent =
+          heldKeys.has('up') || heldKeys.has('down') || heldKeys.has('left') || heldKeys.has('right');
+        if (movingIntent) {
+          player.runMode = true;
+        }
       }
 
       const dir = keyToDir(e.key);
@@ -150,7 +198,20 @@ export function registerPlayKeyboard(api) {
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.key === 'Shift') heldKeys.delete('shift');
+    const el = e.target instanceof HTMLElement ? e.target : null;
+    if (
+      el &&
+      (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+    ) {
+      return;
+    }
+
+    if (e.code === 'ShiftLeft') {
+      playInputState.shiftLeftHeld = false;
+    }
+    if (e.code === 'ShiftRight') {
+      playInputState.shiftRightHeld = false;
+    }
     const dir = keyToDir(e.key);
     if (dir) heldKeys.delete(dir);
   });

@@ -32,14 +32,30 @@ import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
-import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
-import { resolvePmdFrameSpec, resolveCanonicalPmdH, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
+import {
+  resolvePmdFrameSpec,
+  resolvePmdFrameSpecForSlice,
+  resolveCanonicalPmdH,
+  worldFeetFromPivotCell
+} from './pokemon/pmd-layout-metrics.js';
+import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
+import { isShiftDigHeld } from './main/play-input-state.js';
+import {
+  getBorrowDigPlaceholderDex,
+  isUndergroundBurrowerDex,
+  speciesUsesBorrowedDiglettDigVisual
+} from './wild-pokemon/underground-burrow.js';
 import {
   defaultPortraitSlugForBalloon,
   ensureSpriteCollabPortraitLoaded,
   getSpriteCollabPortraitImage
 } from './pokemon/spritecollab-portraits.js';
+import {
+  CLASSIC_BALLOON_FRAME_ANIM_SEC,
+  PORTRAIT_REVEAL_AFTER_SEC
+} from './pokemon/emotion-display-timing.js';
 
 import {
   PLAY_CHUNK_SIZE,
@@ -132,9 +148,10 @@ export function render(canvas, data, options = {}) {
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
 
-    /** Must match `updatePlayer`: walk sheet + walk frames only while grounded and moving. */
+    /** Must match `updatePlayer`: walk/dig sheet while grounded and moving or digging. */
     const isPlayerWalkingAnim =
-      !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+      !!player.grounded &&
+      (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 || !!player.digActive);
     const isMovingHorizontal = isPlayerWalkingAnim && Math.abs(player.vy ?? 0) < 0.05;
     const overlayMx = Math.floor(vx);
     const overlayMy = Math.floor(vy);
@@ -615,13 +632,42 @@ export function render(canvas, data, options = {}) {
     // --- Collect Player ---
     const isPlayerMoving = isPlayerWalkingAnim;
     const playerDex = player.dexId || 94;
-    const { walk: pWalk, idle: pIdle } = getResolvedSheets(imageCache, playerDex);
-    const pSheet = isPlayerMoving ? pWalk : pIdle;
+    /** Non–Diglett/Dugtrio Ground: placeholder sprites only while Shift-digging (not auto “dig” while walking). */
+    const borrowDiglettArt =
+      !!player.digActive &&
+      speciesUsesBorrowedDiglettDigVisual(playerDex) &&
+      isShiftDigHeld();
+    const borrowPlaceholderDex = borrowDiglettArt ? getBorrowDigPlaceholderDex(playerDex) : null;
+    if (borrowDiglettArt && borrowPlaceholderDex != null) {
+      void ensurePokemonSheetsLoaded(imageCache, borrowPlaceholderDex);
+    }
+    const { walk: pWalk, idle: pIdle, dig: pDigSelf } = getResolvedSheets(imageCache, playerDex);
+    const diglettSheets =
+      borrowDiglettArt && borrowPlaceholderDex != null
+        ? getResolvedSheets(imageCache, borrowPlaceholderDex)
+        : null;
+    const pDig = borrowDiglettArt && diglettSheets ? diglettSheets.dig : pDigSelf;
+    const wantsDigSheet =
+      !!player.digActive &&
+      speciesHasGroundType(playerDex) &&
+      (isUndergroundBurrowerDex(playerDex) || isShiftDigHeld()) &&
+      !!pDig;
+    const pSheet = wantsDigSheet ? pDig : isPlayerMoving ? pWalk : pIdle;
+    const pmdAnimSlice = wantsDigSheet ? 'dig' : isPlayerMoving ? 'walk' : 'idle';
+    const pmdSpecDex =
+      wantsDigSheet && borrowDiglettArt && borrowPlaceholderDex != null ? borrowPlaceholderDex : playerDex;
 
     if (pSheet) {
-      const { sw, sh, animCols } = resolvePmdFrameSpec(pSheet, isPlayerMoving, playerDex);
-      const canonicalH = resolveCanonicalPmdH(pIdle, pWalk, playerDex);
-      const targetHeightTiles = POKEMON_HEIGHTS[playerDex] || 1.1;
+      const { sw, sh, animCols } = resolvePmdFrameSpecForSlice(pSheet, pmdSpecDex, pmdAnimSlice);
+      const idleForCanon = borrowDiglettArt && diglettSheets ? diglettSheets.idle : pIdle;
+      const walkForCanon = borrowDiglettArt && diglettSheets ? diglettSheets.walk : pWalk;
+      const canonicalDex =
+        borrowDiglettArt && borrowPlaceholderDex != null ? borrowPlaceholderDex : playerDex;
+      const canonicalH = resolveCanonicalPmdH(idleForCanon, walkForCanon, canonicalDex);
+      const targetHeightTiles =
+        wantsDigSheet && borrowDiglettArt && borrowPlaceholderDex != null
+          ? POKEMON_HEIGHTS[borrowPlaceholderDex] || 1.2
+          : POKEMON_HEIGHTS[playerDex] || 1.1;
       const targetHeightPx = targetHeightTiles * tileH;
       const finalScale = targetHeightPx / canonicalH;
 
@@ -655,76 +701,132 @@ export function render(canvas, data, options = {}) {
     renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
 
     /**
-     * Wild emotion is a separate render item so `sortY` clears scatter/tree canopies (`originY + 1`)
-     * on the same tile row; balloon is drawn before the portrait so the face stays on top.
+     * Wild emotion: classic RPG Maker balloon (anim → hold last frame 1.2s), then portrait panel + tail.
      * @param {CanvasRenderingContext2D} ctx
      * @param {{ cx: number, cy: number, pivotY: number, emotion: object, dexId: number }} em
      * @param {number} spawnYOffset
      */
     const drawWildEmotionOverlay = (ctx, em, spawnYOffset) => {
       if (!em.emotion) return;
-      const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
-      if (!emoImg || !emoImg.naturalWidth) return;
-      const eCols = 8;
-      const eRows = 10;
-      const eSw = Math.floor(emoImg.naturalWidth / eCols);
-      const eSh = Math.floor(emoImg.naturalHeight / eRows);
-      const progress = Math.min(1.0, em.emotion.age / 0.8);
-      const fIdx = Math.min(eCols - 1, Math.floor(progress * eCols));
-      const dW = eSw * 1.25 * (tileW / 32);
-      const dH = eSh * 1.25 * (tileW / 32);
-      const px = snapPx(em.cx - dW * 0.5);
       const spriteTopY = em.cy + spawnYOffset - em.pivotY;
-      const gapAboveHead = tileH * 0.06 + dH * 0.12;
-      const py = snapPx(spriteTopY - dH - gapAboveHead);
-
-      // Balloon first so the SpriteCollab portrait (drawn after) sits on top and stays readable
-      ctx.drawImage(emoImg, fIdx * eSw, em.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
-
       const slug = em.emotion.portraitSlug;
       const dexForFace = em.dexId;
-      if (slug && dexForFace != null) {
-        let pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
-        if (!pImg || !pImg.naturalWidth) {
-          ensureSpriteCollabPortraitLoaded(imageCache, dexForFace, slug);
-          pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
-        }
-        if (pImg && pImg.naturalWidth) {
-          const pr = tileW * 0.56;
-          const rad = pr * 0.48;
-          /** Circle center = top-left of the emotion balloon draw rect `(px, py)` → `(px+dW, py+dH)` */
-          const cx = px;
-          const cy = py;
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-          ctx.clip();
-          const iw = pImg.naturalWidth;
-          const ih = pImg.naturalHeight;
-          const scale = Math.max(pr / iw, pr / ih);
-          const fw = iw * scale;
-          const fh = ih * scale;
-          ctx.drawImage(
-            pImg,
-            0,
-            0,
-            iw,
-            ih,
-            snapPx(cx - fw * 0.5),
-            snapPx(cy - fh * 0.5),
-            Math.ceil(fw),
-            Math.ceil(fh)
-          );
-          ctx.restore();
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255,255,255,0.82)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          ctx.restore();
-        }
+      const portraitRevealAfterSec = PORTRAIT_REVEAL_AFTER_SEC;
+
+      let pImg =
+        slug && dexForFace != null ? getSpriteCollabPortraitImage(imageCache, dexForFace, slug) : undefined;
+      if (slug && dexForFace != null && (!pImg || !pImg.naturalWidth)) {
+        ensureSpriteCollabPortraitLoaded(imageCache, dexForFace, slug);
+        pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
       }
+
+      /**
+       * @param {{ holdLastFrame?: boolean }} [opts]
+       */
+      const drawRpgMakerEmotionBalloon = (opts = {}) => {
+        const { holdLastFrame = false } = opts;
+        const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
+        if (!emoImg || !emoImg.naturalWidth) return;
+        const eCols = 8;
+        const eRows = 10;
+        const eSw = Math.floor(emoImg.naturalWidth / eCols);
+        const eSh = Math.floor(emoImg.naturalHeight / eRows);
+        const progress = Math.min(1.0, em.emotion.age / CLASSIC_BALLOON_FRAME_ANIM_SEC);
+        const fIdx = holdLastFrame
+          ? eCols - 1
+          : Math.min(eCols - 1, Math.floor(progress * eCols));
+        const dW = eSw * 1.25 * (tileW / 32);
+        const dH = eSh * 1.25 * (tileW / 32);
+        const px = snapPx(em.cx - dW * 0.5);
+        const gapAboveHead = tileH * 0.06 + dH * 0.12;
+        const py = snapPx(spriteTopY - dH - gapAboveHead);
+        ctx.drawImage(emoImg, fIdx * eSw, em.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
+      };
+
+      if (pImg && pImg.naturalWidth && em.emotion.age < portraitRevealAfterSec) {
+        const holdLast = em.emotion.age >= CLASSIC_BALLOON_FRAME_ANIM_SEC;
+        drawRpgMakerEmotionBalloon({ holdLastFrame: holdLast });
+        return;
+      }
+
+      const roundRectPath = (x, y, w, h, r) => {
+        let rad = r;
+        if (w < 2 * rad) rad = w / 2;
+        if (h < 2 * rad) rad = h / 2;
+        ctx.beginPath();
+        ctx.moveTo(x + rad, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rad);
+        ctx.arcTo(x + w, y + h, x, y + h, rad);
+        ctx.arcTo(x, y + h, x, y, rad);
+        ctx.arcTo(x, y, x + w, y, rad);
+        ctx.closePath();
+      };
+
+      if (pImg && pImg.naturalWidth) {
+        const side = tileW * 1.14;
+        const gap = tileH * 0.07;
+        const bx = snapPx(em.cx - side * 0.5);
+        const by = snapPx(spriteTopY - side - gap);
+        const cr = Math.max(8, side * 0.09);
+        const midX = bx + side * 0.5;
+        const boxBottom = by + side;
+        const tipY = snapPx(spriteTopY - tileH * 0.035);
+        const tailHalfW = side * 0.13;
+
+        ctx.save();
+        ctx.translate(0, 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        roundRectPath(bx, by, side, side, cr);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        roundRectPath(bx, by, side, side, cr);
+        ctx.fillStyle = 'rgba(252,250,255,0.98)';
+        ctx.fill();
+        roundRectPath(bx, by, side, side, cr);
+        ctx.clip();
+        const iw = pImg.naturalWidth;
+        const ih = pImg.naturalHeight;
+        const scale = Math.max(side / iw, side / ih);
+        const fw = iw * scale;
+        const fh = ih * scale;
+        ctx.drawImage(
+          pImg,
+          0,
+          0,
+          iw,
+          ih,
+          snapPx(bx + (side - fw) * 0.5),
+          snapPx(by + (side - fh) * 0.48),
+          Math.ceil(fw),
+          Math.ceil(fh)
+        );
+        ctx.restore();
+
+        ctx.save();
+        roundRectPath(bx, by, side, side, cr);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(midX - tailHalfW, boxBottom);
+        ctx.lineTo(em.cx, tipY);
+        ctx.lineTo(midX + tailHalfW, boxBottom);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(252,250,255,0.98)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      drawRpgMakerEmotionBalloon();
     };
 
     // --- DRAW PASS ---
