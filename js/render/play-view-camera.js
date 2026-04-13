@@ -13,6 +13,11 @@ let lastPerfMs = 0;
 /** @type {0|1|2} */
 let lodDetail = 0;
 
+/** Last play LOD from `computePlayViewState` (0 = full detail, vegetation animates). */
+export function getPlayLodDetail() {
+  return lodDetail;
+}
+
 /**
  * Vertical span in "tile row units" × effTileH = pixels, for shadow (ground cell) + airborne sprite.
  * @param {number} z

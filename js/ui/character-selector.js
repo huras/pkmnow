@@ -3,6 +3,7 @@ import { getGen1SpeciesName, padDex3 } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
+import { getMicroTile } from '../chunking.js';
 
 export class CharacterSelector {
   constructor(containerId) {
@@ -26,23 +27,65 @@ export class CharacterSelector {
     this.updatePreview().catch(() => {});
   }
 
+  /** Play mode: ground = `player.z`; sea = `heightStep` + `z` (0 beach, − ocean). Both always on-screen. */
+  updatePlayAltitudeHud(data) {
+    const gVal = this.container?.querySelector('#player-alt-ground-val');
+    const sVal = this.container?.querySelector('#player-alt-sea-val');
+    if (!gVal || !sVal) return;
+
+    if (!data) {
+      gVal.textContent = '—';
+      sVal.textContent = '—';
+      return;
+    }
+
+    const mx = Math.floor(player.x);
+    const my = Math.floor(player.y);
+    const tile = getMicroTile(mx, my, data);
+    const hs = tile?.heightStep ?? 0;
+    const z = Number(player.z) || 0;
+
+    const aboveGround = z;
+    const aboveSea = hs + z;
+
+    gVal.textContent = aboveGround.toFixed(1);
+    sVal.textContent =
+      aboveSea === 0 ? '0' : (aboveSea > 0 ? '+' : '') + aboveSea.toFixed(1);
+  }
+
   render() {
     const activeName = getGen1SpeciesName(player.dexId);
     this.container.innerHTML = `
       <div class="character-selector">
         <div class="selector-header">
           <div class="player-preview-pill player-preview-pill--no-portrait" id="player-preview-pill" title="${activeName}">
-            <img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="${activeName}" width="48" height="48">
+            <img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="${activeName}" width="40" height="40">
           </div>
           <div class="player-info">
-            <span class="player-label">Playing as</span>
             <span class="player-name" id="current-player-name">${activeName}</span>
           </div>
         </div>
 
+        <div
+          class="player-alt-compact"
+          role="status"
+          aria-live="polite"
+          aria-label="Ground height above tile underfoot, and sea level in tiles (beach is zero, negative is ocean)"
+        >
+          <span class="player-alt-compact__item">
+            <span class="player-alt-compact__label">Ground</span>
+            <span class="player-alt-compact__v" id="player-alt-ground-val">—</span>
+          </span>
+          <span class="player-alt-compact__dot" aria-hidden="true"></span>
+          <span class="player-alt-compact__item player-alt-compact__item--sea">
+            <span class="player-alt-compact__label player-alt-compact__label--sea">Sea</span>
+            <span class="player-alt-compact__v player-alt-compact__v--sea" id="player-alt-sea-val">—</span>
+          </span>
+        </div>
+
         <div class="search-container">
           <span class="search-icon">🔍</span>
-          <input type="text" class="selector-search" id="species-search" placeholder="Change Pokémon..." autocomplete="off">
+          <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
           
           <div class="results-list" id="search-results">
             <!-- Results injected here -->
@@ -95,7 +138,7 @@ export class CharacterSelector {
     resultsList.innerHTML = filtered.map(s => `
       <div class="result-item ${s.id === player.dexId ? 'selected' : ''}" data-id="${s.id}">
         <span class="result-portrait-mask" aria-hidden="true">
-          <img class="result-icon-portrait result-icon-portrait--pending" alt="" width="36" height="36" data-dex="${s.id}" decoding="async" />
+          <img class="result-icon-portrait result-icon-portrait--pending" alt="" width="30" height="30" data-dex="${s.id}" decoding="async" />
         </span>
         <span class="result-name">${s.name}</span>
         <span class="result-id">#${padDex3(s.id)}</span>
@@ -155,7 +198,7 @@ export class CharacterSelector {
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');
     if (!portraitEl) {
-      pillEl.innerHTML = `<img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="" width="48" height="48">`;
+      pillEl.innerHTML = `<img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="" width="40" height="40">`;
       portraitEl = pillEl.querySelector('#player-preview-portrait');
     }
 

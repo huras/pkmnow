@@ -16,7 +16,11 @@ import {
   computeGhostPhaseShiftDrawAlpha,
   isGhostPhaseShiftBurrowEligibleDex
 } from './wild-pokemon/ghost-phase-shift.js';
-import { speciesHasFlyingType, speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
+import {
+  speciesHasFlyingType,
+  speciesHasGroundType,
+  speciesHasSmoothLevitationFlight
+} from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
@@ -32,17 +36,28 @@ const GRAVITY = 45.0;
 const JUMP_IMPULSE = 14.5;
 const GROUND_R = 0.32; // Raio de colisão
 
-/** Flying-type creative flight (Minecraft-style vertical: Space up, Left Shift down). */
-const FLIGHT_MAX_Z = 28;
-const FLIGHT_VERT_SPEED = 13;
-const FLIGHT_MAX_SPEED_MULT = 2.15;
-const FLIGHT_FRICTION_MULT = 0.42;
+/** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
+/** Creative flight ceiling (world tile units); HUD / UI may import this. */
+export const PLAYER_FLIGHT_MAX_Z_TILES = 28;
+const FLIGHT_MAX_Z = PLAYER_FLIGHT_MAX_Z_TILES;
+/** Winged Flying-type: snappier / “flappy” feel. */
+const FLIGHT_WINGED_VERT_SPEED = 13;
+const FLIGHT_WINGED_MAX_SPEED_MULT = 2.15;
+const FLIGHT_WINGED_FRICTION_MULT = 0.42;
+/** Mewtwo / Mew levitation: calmer horizontal + vertical (see `speciesHasSmoothLevitationFlight`). */
+const FLIGHT_LEVITATION_VERT_SPEED = 7.2;
+const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38;
+const FLIGHT_LEVITATION_FRICTION_MULT = 0.82;
 
 /** Sprint (Left Ctrl while moving, Minecraft-style: clears when movement stops). */
 const RUN_SPEED_CAP_MULT = 2;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */
 const DIG_IDLE_ANIM_SPEED = 2.8;
+
+/** Ground dig (non-Ghost): hold Left Shift to fill charge, then latch burrow until leave ground / jump. */
+const DIG_CHARGE_SEC = 0.88;
+const DIG_CHARGE_DECAY = 2.2;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 const initialDex = parseInt(localStorage.getItem(SAVED_DEX_KEY)) || 94;
@@ -73,7 +88,11 @@ export const player = {
   /** Ghost + Left Shift (or moving): alpha from `computeGhostPhaseShiftDrawAlpha`. */
   ghostPhaseAlpha: 1,
   /** Flying-type only: F toggles; Space/Left Shift move vertically while active. */
-  flightActive: false
+  flightActive: false,
+  /** Ground (non-Ghost): latched underground walk after dig charge completes. */
+  digBurrowMode: false,
+  /** Ground dig charge 0..1 while holding Shift before latch (resets if released early). */
+  digCharge01: 0
 };
 
 export function setPlayerSpecies(dexId) {
@@ -81,9 +100,11 @@ export function setPlayerSpecies(dexId) {
   player.runMode = false;
   if (!speciesHasFlyingType(dexId)) player.flightActive = false;
   localStorage.setItem(SAVED_DEX_KEY, dexId);
-  if (speciesUsesBorrowedDiglettDigVisual(dexId)) {
+  if (speciesUsesBorrowedDiglettDigVisual(dexId) || speciesHasGroundType(dexId)) {
     void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(dexId));
   }
+  player.digBurrowMode = false;
+  player.digCharge01 = 0;
 }
 
 export function setPlayerPos(x, y) {
@@ -103,6 +124,8 @@ export function setPlayerPos(x, y) {
   player.runMode = false;
   player.ghostPhaseAlpha = 1;
   player.flightActive = false;
+  player.digBurrowMode = false;
+  player.digCharge01 = 0;
 }
 
 /** Toggle creative flight (Flying-type species only). Called from play keyboard (e.g. KeyF). */
@@ -112,7 +135,14 @@ export function togglePlayerCreativeFlight() {
   if (player.flightActive) {
     player.jumping = false;
     player.vz = 0;
+    player.digBurrowMode = false;
+    player.digCharge01 = 0;
   }
+}
+
+export function isGroundDigLatchEligible() {
+  const d = player.dexId ?? 0;
+  return speciesHasGroundType(d) && !isGhostPhaseShiftBurrowEligibleDex(d);
 }
 
 function playerFeetDeltaTiles() {
@@ -142,7 +172,8 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
       isAirborne,
       grounded: !!player.grounded,
-      isMoving
+      isMoving,
+      digBurrowMode: !!player.digBurrowMode
     });
 
   if (burrowWalk) {
@@ -238,6 +269,10 @@ export function tryJumpPlayer(data) {
   }
 
   if (!player.grounded) return false;
+  if (isGroundDigLatchEligible()) {
+    player.digBurrowMode = false;
+    player.digCharge01 = 0;
+  }
   player.vz = JUMP_IMPULSE;
   player.grounded = false;
   player.jumping = true;
@@ -259,15 +294,32 @@ export function isPlayerIdleOnWaitingFrame() {
 export function updatePlayer(dt, data) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
+  const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
   const isAirborne = player.jumping || player.z > 0.05;
-  const spdGround = Math.hypot(player.vx ?? 0, player.vy ?? 0);
-  const movingGrounded = !!player.grounded && spdGround > 0.1;
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
-  player.digActive =
-    !!player.grounded &&
-    ((gr && (!!playInputState.shiftLeftHeld || movingGrounded)) ||
-      (gh && (!!playInputState.shiftLeftHeld || movingGrounded)));
+
+  if (!isGroundDigLatchEligible() || flightMove) {
+    player.digBurrowMode = false;
+    player.digCharge01 = 0;
+  } else if (!player.grounded || isAirborne) {
+    player.digBurrowMode = false;
+    player.digCharge01 = 0;
+  } else if (player.digBurrowMode) {
+    /* latched: stay dug until leave ground / jump */
+  } else if (playInputState.shiftLeftHeld) {
+    player.digCharge01 = Math.min(1, player.digCharge01 + dt / DIG_CHARGE_SEC);
+    if (player.digCharge01 >= 1) {
+      player.digBurrowMode = true;
+      player.digCharge01 = 0;
+    }
+  } else {
+    player.digCharge01 = Math.max(0, player.digCharge01 - dt * DIG_CHARGE_DECAY);
+  }
+
+  const groundDigVisual =
+    isGroundDigLatchEligible() && !!player.grounded && !isAirborne && (player.digCharge01 > 0 || player.digBurrowMode);
+  player.digActive = !!player.grounded && (groundDigVisual || (gh && !!playInputState.shiftLeftHeld));
 
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {
@@ -288,7 +340,12 @@ export function updatePlayer(dt, data) {
     // Friction
     const spd = Math.hypot(player.vx, player.vy);
     if (spd > 0) {
-      const fr = FRICTION * (flightMove ? FLIGHT_FRICTION_MULT : 1);
+      const flightFric = flightMove
+        ? smoothLevitationFlight
+          ? FLIGHT_LEVITATION_FRICTION_MULT
+          : FLIGHT_WINGED_FRICTION_MULT
+        : 1;
+      const fr = FRICTION * flightFric;
       const drop = fr * dt;
       const newSpd = Math.max(0, spd - drop);
       player.vx *= newSpd / spd;
@@ -306,7 +363,8 @@ export function updatePlayer(dt, data) {
     isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
       isAirborne,
       grounded: !!player.grounded,
-      isMoving: true
+      isMoving: true,
+      digBurrowMode: !!player.digBurrowMode
     });
   let terrainSlowMul = 1;
   if (burrowFeetWalkActive && data) {
@@ -327,7 +385,11 @@ export function updatePlayer(dt, data) {
     });
   }
   const runMul = player.runMode ? RUN_SPEED_CAP_MULT : 1;
-  const flightMul = flightMove ? FLIGHT_MAX_SPEED_MULT : 1;
+  const flightMul = flightMove
+    ? smoothLevitationFlight
+      ? FLIGHT_LEVITATION_MAX_SPEED_MULT
+      : FLIGHT_WINGED_MAX_SPEED_MULT
+    : 1;
   const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
@@ -411,7 +473,8 @@ export function updatePlayer(dt, data) {
   const playerBurrowWalkActive = isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
     isAirborne,
     grounded: !!player.grounded,
-    isMoving: spdPostMove > 0.1
+    isMoving: spdPostMove > 0.1,
+    digBurrowMode: !!player.digBurrowMode
   });
 
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
@@ -427,8 +490,9 @@ export function updatePlayer(dt, data) {
 
   // 3. Vertical — creative flight (Flying) or jump / gravity
   if (flightMove) {
-    const up = playInputState.spaceHeld ? FLIGHT_VERT_SPEED : 0;
-    const down = playInputState.shiftLeftHeld ? FLIGHT_VERT_SPEED : 0;
+    const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
+    const up = playInputState.spaceHeld ? vSp : 0;
+    const down = playInputState.shiftLeftHeld ? vSp : 0;
     const dz = (up - down) * dt;
     player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
     player.vz = 0;
@@ -464,10 +528,11 @@ export function updatePlayer(dt, data) {
   const useWalkLikeAnim =
     (!!player.grounded && (spd > 0.1 || !!player.digActive)) ||
     (flightMove &&
+      smoothLevitationFlight &&
       (spd > 0.1 ||
         !!playInputState.spaceHeld ||
         !!playInputState.shiftLeftHeld ||
-        player.z > 0.08));
+        player.z > 0.02));
 
   if (useWalkLikeAnim) {
     const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;
@@ -475,7 +540,7 @@ export function updatePlayer(dt, data) {
     const pmdDexForWalkLike =
       player.digActive &&
       speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
-      playInputState.shiftLeftHeld
+      player.digBurrowMode
         ? getBorrowDigPlaceholderDex(player.dexId ?? 0)
         : player.dexId ?? 94;
     const meta = getDexAnimMeta(pmdDexForWalkLike);

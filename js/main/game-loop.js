@@ -1,4 +1,5 @@
 import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
+import { getPlayLodDetail } from '../render/play-view-camera.js';
 import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
@@ -34,7 +35,8 @@ function isPlayMovementKeyEvent(e) {
  *   updateView: () => void,
  *   refreshPlayModeInfoBar: () => void,
  *   getPlayFpsEl: () => HTMLElement | null,
- *   player: import('../player.js').player
+ *   player: import('../player.js').player,
+ *   onPlayHudFrame?: (data: object | null) => void
  * }} api
  */
 export function createGameLoop(api) {
@@ -45,7 +47,8 @@ export function createGameLoop(api) {
     updateView,
     refreshPlayModeInfoBar,
     getPlayFpsEl,
-    player
+    player,
+    onPlayHudFrame
   } = api;
 
   function gameLoop(timestamp) {
@@ -86,6 +89,7 @@ export function createGameLoop(api) {
       syncWildPokemonWindow(currentData, pvx, pvy);
       updateWildPokemon(dt, currentData, pvx, pvy);
       refreshPlayModeInfoBar();
+      onPlayHudFrame?.(currentData);
     }
 
     const tFrameStart = performance.now();
@@ -98,7 +102,8 @@ export function createGameLoop(api) {
       const cutoff = tEnd - 1000;
       while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
       const fps = playFpsSampleTimes.length;
-      playFpsEl.textContent = `${fps} FPS · ${frameMs.toFixed(1)} ms/frame`;
+      const lod = getPlayLodDetail();
+      playFpsEl.textContent = `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms`;
     }
     if (getAppMode() === 'play') {
       animFrameId = requestAnimationFrame(gameLoop);

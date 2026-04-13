@@ -22,5 +22,13 @@ export function speciesHasGhostType(dexId) {
 
 /** True if species has Flying — creative-style flight in play (see `player.js`). */
 export function speciesHasFlyingType(dexId) {
+  const d = Math.floor(Number(dexId) || 0);
+  if (d === 150 || d === 151) return true; // Mewtwo / Mew — levitation; not added as a type slot
   return speciesHasType(dexId, 'flying');
+}
+
+/** Mewtwo / Mew: smoother creative flight + walk cycle while aloft (see `player.js` / `render.js`). */
+export function speciesHasSmoothLevitationFlight(dexId) {
+  const d = Math.floor(Number(dexId) || 0);
+  return d === 150 || d === 151;
 }

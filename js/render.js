@@ -28,7 +28,7 @@ import {
 } from './walkability.js';
 import { validScatterOriginMicro, scatterItemKeyIsTree } from './scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from './main/play-collider-overlay-cache.js';
-import { isPlayerIdleOnWaitingFrame } from './player.js';
+import { isGroundDigLatchEligible, isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
@@ -40,7 +40,12 @@ import {
   resolveCanonicalPmdH,
   worldFeetFromPivotCell
 } from './pokemon/pmd-layout-metrics.js';
-import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
+import {
+  speciesHasFlyingType,
+  speciesHasGroundType,
+  speciesHasSmoothLevitationFlight
+} from './pokemon/pokemon-type-helpers.js';
+import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
 import {
   getBorrowDigPlaceholderDex,
@@ -163,11 +168,21 @@ export function render(canvas, data, options = {}) {
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
+    const latchGround = isGroundDigLatchEligible();
+    const time = options.settings?.time || 0;
 
-    /** Must match `updatePlayer`: walk/dig sheet while grounded and moving or digging. */
+    /** Match `updatePlayer`: walk/dig on ground; Mewtwo/Mew use walk slice while levitating. */
+    const flightHudActive = speciesHasFlyingType(playerDexForCam) && player.flightActive;
+    const smoothLev = speciesHasSmoothLevitationFlight(playerDexForCam);
     const isPlayerWalkingAnim =
-      !!player.grounded &&
-      (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 || !!player.digActive);
+      (!!player.grounded &&
+        (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 || !!player.digActive)) ||
+      (flightHudActive &&
+        smoothLev &&
+        (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 ||
+          !!playInputState.spaceHeld ||
+          !!playInputState.shiftLeftHeld ||
+          (player.z ?? 0) > 0.02));
     const isMovingHorizontal = isPlayerWalkingAnim && Math.abs(player.vy ?? 0) < 0.05;
     const overlayMx = Math.floor(vx);
     const overlayMy = Math.floor(vy);
@@ -290,18 +305,24 @@ export function render(canvas, data, options = {}) {
       }
     };
 
-    const time = options.settings?.time || 0;
-    const canopyAnimTime = lodDetail >= 2 ? 0 : lodDetail >= 1 ? time * 0.65 : time;
+    /** Vegetation sway / grass wind only at LOD 0 (cheap LODs stay static). */
+    const vegAnimTime = lodDetail === 0 ? time : 0;
+    const canopyAnimTime = vegAnimTime;
 
-
-    // PASS 0: Oceano — animação water-tile.png (faixa 16×16 por frame, empilhados em Y)
+    // PASS 0: Oceano — water overlay at every LOD (sea never dropped at LOD 2 / flight zoom).
+    // LOD 2 = static frame 0 (cheap); LOD 1 = slower anim; LOD 0 = full anim.
     const waterImg = imageCache.get('tilesets/water-tile.png');
-    if (lodDetail < 2 && waterImg && waterImg.naturalWidth >= WATER_ANIM_SRC_W && waterImg.naturalHeight >= WATER_ANIM_SRC_H) {
+    if (waterImg && waterImg.naturalWidth >= WATER_ANIM_SRC_W && waterImg.naturalHeight >= WATER_ANIM_SRC_H) {
       const waterFrames = Math.floor(waterImg.naturalHeight / WATER_ANIM_SRC_H);
       if (waterFrames >= 1) {
         const t = options.settings?.time ?? 0;
-        const waterTickRate = lodDetail >= 1 ? 2.4 : 3.5;
-        const tick = Math.floor(t * waterTickRate);
+        const waterPhase =
+          lodDetail >= 2
+            ? 0
+            : lodDetail >= 1
+              ? Math.floor(t * 2.4) % waterFrames
+              : Math.floor(t * 3.5) % waterFrames;
+        const syOcean = waterPhase * WATER_ANIM_SRC_H;
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = true;
@@ -320,12 +341,10 @@ export function render(canvas, data, options = {}) {
               const oRole = getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, oceanSet.type);
               if (oRole && String(oRole).startsWith('OUT_')) continue;
             }
-            const phase = (tick + mx * 2 + my * 5) % waterFrames;
-            const sy = phase * WATER_ANIM_SRC_H;
             ctx.drawImage(
               waterImg,
               0,
-              sy,
+              syOcean,
               WATER_ANIM_SRC_W,
               WATER_ANIM_SRC_H,
               mx * tileW,
@@ -459,8 +478,7 @@ export function render(canvas, data, options = {}) {
               baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
             }
             if (baseId != null) {
-              const timeGrassLow = lodDetail >= 1 ? time * 0.65 : time;
-              const fIdx = AnimationRenderer.getFrameIndex(timeGrassLow, mx, my);
+              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
               blitGrassQuad(frame, ty - tileH, tileH * 2);
             }
@@ -486,8 +504,7 @@ export function render(canvas, data, options = {}) {
             const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
 
             if (!isFT && !isFN && !isOccupiedByObject) {
-              const timeGrass = lodDetail >= 1 ? time * 0.65 : time;
-              const fIdx = AnimationRenderer.getFrameIndex(timeGrass, mx, my);
+              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
               blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
             }
@@ -660,15 +677,47 @@ export function render(canvas, data, options = {}) {
       }
     }
 
+    const playerDex = player.dexId || 94;
+
+    const phDex = getBorrowDigPlaceholderDex(playerDex);
+    const inDigCharge = latchGround && player.digCharge01 > 0 && !player.digBurrowMode;
+
+    /** Full-size Diglett/Dugtrio loop beside player while charging (player species keeps mask). */
+    if (inDigCharge) {
+      void ensurePokemonSheetsLoaded(imageCache, phDex);
+      const { idle: cIdle, walk: cWalk, dig: cDig } = getResolvedSheets(imageCache, phDex);
+      const cSheet = cDig || cWalk;
+      if (cSheet) {
+        const slice = cDig && player.digCharge01 > 0.12 ? 'dig' : 'walk';
+        const { sw: csw, sh: csh, animCols: cCols } = resolvePmdFrameSpecForSlice(cSheet, phDex, slice);
+        const canonC = resolveCanonicalPmdH(cIdle, cWalk, phDex);
+        const targetTilesC = POKEMON_HEIGHTS[phDex] || 1.2;
+        const targetPxC = targetTilesC * tileH;
+        const cScale = targetPxC / canonC;
+        const cdw = csw * cScale;
+        const cdh = csh * cScale;
+        const cFrame = Math.floor(time * 11) % Math.max(1, cCols);
+        renderItems.push({
+          type: 'digCompanion',
+          sortY: vy + 0.44,
+          sheet: cSheet,
+          sx: cFrame * csw,
+          sy: (player.animRow ?? 0) * csh,
+          sw: csw,
+          sh: csh,
+          dw: cdw,
+          dh: cdh,
+          cx: snapPx((vx + 0.92) * tileW),
+          cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH)
+        });
+      }
+    }
+
     // --- Collect Player ---
     const isPlayerMoving = isPlayerWalkingAnim;
-    const playerDex = player.dexId || 94;
-    /** Non–Diglett/Dugtrio Ground: placeholder sprites only while Left Shift dig (not auto “dig” while walking). */
     const borrowDiglettArt =
-      !!player.digActive &&
-      speciesUsesBorrowedDiglettDigVisual(playerDex) &&
-      !!playInputState.shiftLeftHeld;
-    const borrowPlaceholderDex = borrowDiglettArt ? getBorrowDigPlaceholderDex(playerDex) : null;
+      latchGround && player.digBurrowMode && speciesUsesBorrowedDiglettDigVisual(playerDex);
+    const borrowPlaceholderDex = borrowDiglettArt ? phDex : null;
     if (borrowDiglettArt && borrowPlaceholderDex != null) {
       void ensurePokemonSheetsLoaded(imageCache, borrowPlaceholderDex);
     }
@@ -679,12 +728,12 @@ export function render(canvas, data, options = {}) {
         : null;
     const pDig = borrowDiglettArt && diglettSheets ? diglettSheets.dig : pDigSelf;
     const wantsDigSheet =
-      !!player.digActive &&
-      speciesHasGroundType(playerDex) &&
-      (isUndergroundBurrowerDex(playerDex) || !!playInputState.shiftLeftHeld) &&
-      !!pDig;
-    const pSheet = wantsDigSheet ? pDig : isPlayerMoving ? pWalk : pIdle;
-    const pmdAnimSlice = wantsDigSheet ? 'dig' : isPlayerMoving ? 'walk' : 'idle';
+      latchGround &&
+      player.digBurrowMode &&
+      !isGhostPhaseShiftBurrowEligibleDex(playerDex) &&
+      (borrowDiglettArt ? !!pDig : !!pDigSelf || isUndergroundBurrowerDex(playerDex));
+    const pSheet = wantsDigSheet ? pDig || pWalk || pIdle : isPlayerMoving ? pWalk : pIdle;
+    const pmdAnimSlice = wantsDigSheet ? (pDig ? 'dig' : 'walk') : isPlayerMoving ? 'walk' : 'idle';
     const pmdSpecDex =
       wantsDigSheet && borrowDiglettArt && borrowPlaceholderDex != null ? borrowPlaceholderDex : playerDex;
 
@@ -696,8 +745,8 @@ export function render(canvas, data, options = {}) {
         borrowDiglettArt && borrowPlaceholderDex != null ? borrowPlaceholderDex : playerDex;
       const canonicalH = resolveCanonicalPmdH(idleForCanon, walkForCanon, canonicalDex);
       const targetHeightTiles =
-        wantsDigSheet && borrowDiglettArt && borrowPlaceholderDex != null
-          ? POKEMON_HEIGHTS[borrowPlaceholderDex] || 1.2
+        latchGround && player.digBurrowMode
+          ? POKEMON_HEIGHTS[phDex] || 1.2
           : POKEMON_HEIGHTS[playerDex] || 1.1;
       const targetHeightPx = targetHeightTiles * tileH;
       const finalScale = targetHeightPx / canonicalH;
@@ -714,6 +763,7 @@ export function render(canvas, data, options = {}) {
         dexId: playerDex,
         drawAlpha: player.ghostPhaseAlpha ?? 1,
         animMoving: isPlayerMoving,
+        digBuryVisual: player.digBurrowMode ? 0 : player.digCharge01,
         cx: snapPx((vx + 0.5) * tileW),
         cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
         sheet: pSheet,
@@ -887,13 +937,25 @@ export function render(canvas, data, options = {}) {
         ctx.ellipse(item.cx, shadowCy, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Sprite (emotion balloon is a separate `wildEmotion` item — depth-sorted after local canopies)
-        ctx.drawImage(
-          item.sheet,
-          item.sx, item.sy, item.sw, item.sh,
-          snapPx(item.cx - item.pivotX), snapPx(item.cy - item.pivotY + spawnYOffset),
-          snapPx(item.dw), snapPx(item.dh)
-        );
+        const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
+        const pxL = snapPx(item.cx - item.pivotX);
+        const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset);
+        const pxW = snapPx(item.dw);
+        const pxH = snapPx(item.dh);
+        if (bury > 0.004) {
+          const rawVis = pxH * (1 - bury * 0.39);
+          const visH = Math.min(pxH - 1, Math.max(6, Math.floor(rawVis)));
+          const sink = pxH - visH;
+          const pxT = snapPx(pxT0 + sink);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(pxL, pxT, pxW, visH);
+          ctx.clip();
+          ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT, pxW, pxH);
+          ctx.restore();
+        } else {
+          ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
+        }
 
         // Terrain / Grass Depth Cue (Deferred Overlay)
         const targetMx = Math.floor(item.x);
@@ -904,6 +966,18 @@ export function render(canvas, data, options = {}) {
             drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
           }
         }
+      } else if (item.type === 'digCompanion') {
+        ctx.drawImage(
+          item.sheet,
+          item.sx,
+          item.sy,
+          item.sw,
+          item.sh,
+          snapPx(item.cx - item.dw * 0.5),
+          snapPx(item.cy - item.dh * PMD_MON_SHEET.pivotYFrac),
+          snapPx(item.dw),
+          snapPx(item.dh)
+        );
       } else if (item.type === 'wildEmotion') {
         ctx.globalAlpha = item.spawnPhase;
         let spawnYOffset = 0;
@@ -947,7 +1021,7 @@ export function render(canvas, data, options = {}) {
               atlasCols,
               tileW,
               tileH,
-              lodDetail < 2 && wind
+              lodDetail === 0 && wind
             );
             const px = snapPx(originX * tileW + (cols * tileW) / 2);
             const py = snapPx(originY * tileH + tileH);
@@ -1339,6 +1413,51 @@ export function render(canvas, data, options = {}) {
         ctx.setLineDash([]);
         ctx.restore();
       }
+    }
+
+    if (
+      latchGround &&
+      !!player.grounded &&
+      playInputState.shiftLeftHeld &&
+      !player.digBurrowMode &&
+      player.digCharge01 > 0
+    ) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const pillW = Math.min(280, cw * 0.44);
+      const pillH = 22;
+      const rad = pillH / 2;
+      const px0 = (cw - pillW) * 0.5;
+      const py0 = ch - 72;
+      const pad = 4;
+      const prog = Math.min(1, player.digCharge01);
+      ctx.beginPath();
+      ctx.moveTo(px0 + rad, py0);
+      ctx.arcTo(px0 + pillW, py0, px0 + pillW, py0 + pillH, rad);
+      ctx.arcTo(px0 + pillW, py0 + pillH, px0, py0 + pillH, rad);
+      ctx.arcTo(px0, py0 + pillH, px0, py0, rad);
+      ctx.arcTo(px0, py0, px0 + pillW, py0, rad);
+      ctx.closePath();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      if (prog > 0) {
+        const innerW = (pillW - pad * 2) * prog;
+        ctx.beginPath();
+        const ix = px0 + pad;
+        const iy = py0 + pad;
+        const ih = pillH - pad * 2;
+        const ir = ih / 2;
+        ctx.moveTo(ix + ir, iy);
+        ctx.arcTo(ix + innerW, iy, ix + innerW, iy + ih, ir);
+        ctx.arcTo(ix + innerW, iy + ih, ix, iy + ih, ir);
+        ctx.arcTo(ix, iy + ih, ix, iy, ir);
+        ctx.arcTo(ix, iy, ix + innerW, iy, ir);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(135, 206, 250, 0.95)';
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     const minimapCanvas = document.getElementById('minimap');

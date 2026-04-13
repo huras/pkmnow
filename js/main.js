@@ -59,6 +59,8 @@ const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
 
 let currentData = null;
+/** @type {import('./ui/character-selector.js').CharacterSelector | null} */
+let playCharacterSelector = null;
 let appMode = 'map';
 let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
@@ -153,7 +155,8 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   updateView,
   refreshPlayModeInfoBar,
   getPlayFpsEl: () => playFpsEl,
-  player
+  player,
+  onPlayHudFrame: (data) => playCharacterSelector?.updatePlayAltitudeHud(data)
 });
 
 registerPlayKeyboard({
@@ -287,6 +290,7 @@ btnBackToMap.addEventListener('click', () => {
   document.querySelector('.app').classList.remove('play-mode-active');
 
   stopGameLoop();
+  playCharacterSelector?.updatePlayAltitudeHud(null);
   resizeCanvas();
   updateView();
 });
@@ -488,7 +492,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
 
 loadTilesetImages().then(async () => {
   new BiomesModal();
-  new CharacterSelector('character-selector-container');
+  playCharacterSelector = new CharacterSelector('character-selector-container');
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   run();
 });

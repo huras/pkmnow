@@ -1,4 +1,3 @@
-import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { speciesHasGroundType } from '../pokemon/pokemon-type-helpers.js';
 import { isGhostPhaseShiftBurrowEligibleDex, isGhostPhaseShiftLeftHeld } from './ghost-phase-shift.js';
@@ -11,21 +10,21 @@ export function isUndergroundBurrowerDex(dexId) {
 }
 
 /**
- * Player feet-only burrow (same walk rules as wild Diglett line).
- * - 50/51: while grounded and moving, or **Left Shift** while still (idle burrow).
- * - Other Ground types: **Left Shift** on the ground (moving or not).
- * - Ghost types: **Left Shift** — see `ghost-phase-shift.js`.
+ * Player feet-only burrow.
+ * - Ghost: **Left Shift** only (phase), not latched — see `ghost-phase-shift.js`.
+ * - Ground (non-Ghost): only while **`digBurrowMode`** after charge completes (no hold).
+ * - Diglett / Dugtrio: same latch; when latched, idle or moving keeps burrow feet path.
  *
  * @param {number} dexId
- * @param {{ isAirborne: boolean, grounded: boolean, isMoving: boolean }} o
+ * @param {{ isAirborne: boolean, grounded: boolean, isMoving: boolean, digBurrowMode?: boolean }} o
  */
 export function isPlayerUndergroundBurrowWalkActive(dexId, o) {
   if (o.isAirborne || !o.grounded) return false;
   const d = Math.floor(Number(dexId) || 0);
-  const leftDig = !!playInputState.shiftLeftHeld;
-  if (isUndergroundBurrowerDex(d)) return !!o.isMoving || leftDig;
   if (isGhostPhaseShiftBurrowEligibleDex(d)) return isGhostPhaseShiftLeftHeld();
-  return speciesHasGroundType(d) && leftDig;
+  if (!o.digBurrowMode) return false;
+  if (isUndergroundBurrowerDex(d)) return true;
+  return speciesHasGroundType(d);
 }
 
 /**
