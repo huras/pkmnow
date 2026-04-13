@@ -40,7 +40,7 @@ export const POKEMON_CONFIG = {
   19: { name: 'Rattata', types: ['normal'], heightTiles: 1.6, baseSpeed: 72 },
   20: { name: 'Raticate', types: ['normal'], heightTiles: 3.5, baseSpeed: 97 },
   21: { name: 'Spearow', types: ['normal', 'flying'], heightTiles: 2.5, baseSpeed: 70 },
-  22: { name: 'Fearow', types: ['normal', 'flying'], heightTiles: 4.7, baseSpeed: 100 },
+  22: { name: 'Fearow', types: ['normal', 'flying'], heightTiles: 5.2, baseSpeed: 100 },
   23: { name: 'Ekans', types: ['poison'], heightTiles: 2.5, baseSpeed: 55 },
   24: { name: 'Arbok', types: ['poison'], heightTiles: 3.5, baseSpeed: 80 },
   25: { name: 'Pikachu', types: ['electric'], heightTiles: 2.9, baseSpeed: 90 },

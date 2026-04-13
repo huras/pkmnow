@@ -1,4 +1,4 @@
-import { updatePlayer, tryJumpPlayer } from '../player.js';
+import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
@@ -175,6 +175,15 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
       }
 
+      if (e.code === 'Space') {
+        playInputState.spaceHeld = true;
+      }
+      if (e.code === 'KeyF') {
+        e.preventDefault();
+        togglePlayerCreativeFlight();
+        if (getCurrentData()) refreshPlayModeInfoBar(true);
+      }
+
       if (e.code === 'ShiftLeft') {
         e.preventDefault();
         playInputState.shiftLeftHeld = true;
@@ -198,7 +207,7 @@ export function registerPlayKeyboard(api) {
         if (getCurrentData()) refreshPlayModeInfoBar(true);
       }
 
-      if (e.key === ' ') {
+      if (e.key === ' ' && !e.repeat) {
         tryJumpPlayer(getCurrentData());
       }
 
@@ -221,6 +230,9 @@ export function registerPlayKeyboard(api) {
       return;
     }
 
+    if (e.code === 'Space') {
+      playInputState.spaceHeld = false;
+    }
     if (e.code === 'ShiftLeft') {
       playInputState.shiftLeftHeld = false;
     }

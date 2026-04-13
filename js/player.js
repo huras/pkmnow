@@ -16,7 +16,7 @@ import {
   computeGhostPhaseShiftDrawAlpha,
   isGhostPhaseShiftBurrowEligibleDex
 } from './wild-pokemon/ghost-phase-shift.js';
-import { speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
+import { speciesHasFlyingType, speciesHasGroundType } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
@@ -31,6 +31,12 @@ const FRICTION = 20.0;
 const GRAVITY = 45.0;
 const JUMP_IMPULSE = 14.5;
 const GROUND_R = 0.32; // Raio de colisão
+
+/** Flying-type creative flight (Minecraft-style vertical: Space up, Left Shift down). */
+const FLIGHT_MAX_Z = 28;
+const FLIGHT_VERT_SPEED = 13;
+const FLIGHT_MAX_SPEED_MULT = 2.15;
+const FLIGHT_FRICTION_MULT = 0.42;
 
 /** Sprint (Left Ctrl while moving, Minecraft-style: clears when movement stops). */
 const RUN_SPEED_CAP_MULT = 2;
@@ -65,12 +71,15 @@ export const player = {
   /** Visual dig: Ground-type while moving or Left Shift; Ghost idem for phase/dig anim. */
   digActive: false,
   /** Ghost + Left Shift (or moving): alpha from `computeGhostPhaseShiftDrawAlpha`. */
-  ghostPhaseAlpha: 1
+  ghostPhaseAlpha: 1,
+  /** Flying-type only: F toggles; Space/Left Shift move vertically while active. */
+  flightActive: false
 };
 
 export function setPlayerSpecies(dexId) {
   player.dexId = dexId;
   player.runMode = false;
+  if (!speciesHasFlyingType(dexId)) player.flightActive = false;
   localStorage.setItem(SAVED_DEX_KEY, dexId);
   if (speciesUsesBorrowedDiglettDigVisual(dexId)) {
     void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(dexId));
@@ -93,6 +102,17 @@ export function setPlayerPos(x, y) {
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
   player.runMode = false;
   player.ghostPhaseAlpha = 1;
+  player.flightActive = false;
+}
+
+/** Toggle creative flight (Flying-type species only). Called from play keyboard (e.g. KeyF). */
+export function togglePlayerCreativeFlight() {
+  if (!speciesHasFlyingType(player.dexId ?? 0)) return;
+  player.flightActive = !player.flightActive;
+  if (player.flightActive) {
+    player.jumping = false;
+    player.vz = 0;
+  }
 }
 
 function playerFeetDeltaTiles() {
@@ -206,6 +226,17 @@ export function tryMovePlayer(dx, dy, data) {
  * - Se estiver no plano, faz apenas um pulinho (hop) no lugar para feedback visual.
  */
 export function tryJumpPlayer(data) {
+  const canFly = speciesHasFlyingType(player.dexId ?? 0);
+  if (canFly && player.flightActive) return false;
+
+  // Double jump (Flying): second Space while airborne starts creative flight.
+  if (canFly && !player.flightActive && !player.grounded && (player.jumping || player.z > 0.05)) {
+    player.flightActive = true;
+    player.jumping = false;
+    player.vz = 0;
+    return true;
+  }
+
   if (!player.grounded) return false;
   player.vz = JUMP_IMPULSE;
   player.grounded = false;
@@ -226,6 +257,8 @@ export function isPlayerIdleOnWaitingFrame() {
  * @param {number} multiplier - multiplicador de velocidade (não afeta o tempo da animação interna do PMD)
  */
 export function updatePlayer(dt, data) {
+  const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
+  const flightMove = canFlySpecies && player.flightActive;
   const isAirborne = player.jumping || player.z > 0.05;
   const spdGround = Math.hypot(player.vx ?? 0, player.vy ?? 0);
   const movingGrounded = !!player.grounded && spdGround > 0.1;
@@ -255,10 +288,11 @@ export function updatePlayer(dt, data) {
     // Friction
     const spd = Math.hypot(player.vx, player.vy);
     if (spd > 0) {
-       const drop = FRICTION * dt;
-       const newSpd = Math.max(0, spd - drop);
-       player.vx *= newSpd / spd;
-       player.vy *= newSpd / spd;
+      const fr = FRICTION * (flightMove ? FLIGHT_FRICTION_MULT : 1);
+      const drop = fr * dt;
+      const newSpd = Math.max(0, spd - drop);
+      player.vx *= newSpd / spd;
+      player.vy *= newSpd / spd;
     }
   }
 
@@ -293,7 +327,8 @@ export function updatePlayer(dt, data) {
     });
   }
   const runMul = player.runMode ? RUN_SPEED_CAP_MULT : 1;
-  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul;
+  const flightMul = flightMove ? FLIGHT_MAX_SPEED_MULT : 1;
+  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
@@ -390,19 +425,30 @@ export function updatePlayer(dt, data) {
 
   clampPlayerToPlayColliderBoundsIfActive(player);
 
-  // 3. Vertical Physics (Jump)
-  if (!player.grounded) {
-     player.vz -= GRAVITY * dt;
-     player.z += player.vz * dt;
+  // 3. Vertical — creative flight (Flying) or jump / gravity
+  if (flightMove) {
+    const up = playInputState.spaceHeld ? FLIGHT_VERT_SPEED : 0;
+    const down = playInputState.shiftLeftHeld ? FLIGHT_VERT_SPEED : 0;
+    const dz = (up - down) * dt;
+    player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
+    player.vz = 0;
+    player.jumping = false;
+    if (player.z <= 1e-4) {
+      player.z = 0;
+      player.grounded = true;
+    } else {
+      player.grounded = false;
+    }
+  } else if (!player.grounded) {
+    player.vz -= GRAVITY * dt;
+    player.z += player.vz * dt;
 
-     if (player.z <= 0) {
-        player.z = 0;
-        player.vz = 0;
-        player.grounded = true;
-        player.jumping = false;
-        // Ao aterrissar, não fazemos nada especial; o próximo frame de canWalk 
-        // usará player.x/y (já no novo tile) como src, então o check de altura passará.
-     }
+    if (player.z <= 0) {
+      player.z = 0;
+      player.vz = 0;
+      player.grounded = true;
+      player.jumping = false;
+    }
   }
 
   // 4. Update Visual and Animation
@@ -415,7 +461,13 @@ export function updatePlayer(dt, data) {
     dexId: player.dexId ?? 94
   });
 
-  const useWalkLikeAnim = !!player.grounded && (spd > 0.1 || !!player.digActive);
+  const useWalkLikeAnim =
+    (!!player.grounded && (spd > 0.1 || !!player.digActive)) ||
+    (flightMove &&
+      (spd > 0.1 ||
+        !!playInputState.spaceHeld ||
+        !!playInputState.shiftLeftHeld ||
+        player.z > 0.08));
 
   if (useWalkLikeAnim) {
     const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;

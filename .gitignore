@@ -30,4 +30,4 @@ desktop.ini
 temp-*.txt
 
 # SpriteCollab portraits (large tree); delete this line to track under git
-# tilesets/spritecollab-portraits/
+tilesets/spritecollab-portraits/

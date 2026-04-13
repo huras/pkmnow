@@ -19,3 +19,8 @@ export function speciesHasGroundType(dexId) {
 export function speciesHasGhostType(dexId) {
   return speciesHasType(dexId, 'ghost');
 }
+
+/** True if species has Flying — creative-style flight in play (see `player.js`). */
+export function speciesHasFlyingType(dexId) {
+  return speciesHasType(dexId, 'flying');
+}

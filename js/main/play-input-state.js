@@ -5,7 +5,9 @@
 export const playInputState = {
   /** Left = dig / burrow in play; Right tracked for possible future use. */
   shiftLeftHeld: false,
-  shiftRightHeld: false
+  shiftRightHeld: false,
+  /** Space held — vertical flight up while in creative flight mode. */
+  spaceHeld: false
 };
 
 export function isShiftDigHeld() {

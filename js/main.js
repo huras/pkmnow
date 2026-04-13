@@ -8,6 +8,7 @@ import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos } from './player.js';
+import { speciesHasFlyingType } from './pokemon/pokemon-type-helpers.js';
 import { CHUNK_SIZE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
@@ -106,7 +107,10 @@ function refreshPlayModeInfoBar(force = false) {
     if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
   }
   const baseAt = computeTerrainRoleAndSprite(mx, my, currentData, tile.heightStep);
-  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}</span>`;
+  const flyHint =
+    speciesHasFlyingType(player.dexId ?? 0) &&
+    ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (Space twice · F · Space↑ Shift↓)`;
+  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
   infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
 }
 
