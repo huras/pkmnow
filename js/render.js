@@ -251,10 +251,12 @@ export function render(canvas, data, options = {}) {
       return t;
     };
 
-    // Pré-carregar os tiles visíveis no cache
-    for (let my = startY; my < endY; my++) {
-      for (let mx = startX; mx < endX; mx++) {
-        getCached(mx, my);
+    // Warm viewport tile cache (LOD 2 skips: far zoom = huge rect; passes fill lazily and saves many getMicroTile calls).
+    if (lodDetail < 2) {
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          getCached(mx, my);
+        }
       }
     }
 
@@ -330,13 +332,14 @@ export function render(canvas, data, options = {}) {
         const oceanSet = TERRAIN_SETS[BIOME_TO_TERRAIN[BIOMES.OCEAN.id]];
         const microRows = height * CHUNK_SIZE;
         const microCols = width * CHUNK_SIZE;
+        const oceanRoleGate = lodDetail < 2 && !!oceanSet;
         for (let my = startY; my < endY; my++) {
           for (let mx = startX; mx < endX; mx++) {
             const tile = getCached(mx, my);
             if (!tile || tile.biomeId !== BIOMES.OCEAN.id) continue;
             // Quinas OUT_* do autotile são “terra” na lógica de caminhada; não cobrir com água animada
             // (senão parece oceano profundo mas `baseTerrainSpriteWalkable` continua true).
-            if (oceanSet) {
+            if (oceanRoleGate) {
               const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
               const oRole = getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, oceanSet.type);
               if (oRole && String(oRole).startsWith('OUT_')) continue;
@@ -414,6 +417,7 @@ export function render(canvas, data, options = {}) {
      */
     const drawGrass5aForCell = (mx, my, tile, tw, th, tx, ty, mode) => {
       const playerTopOverlay = mode === 'playerTopOverlay';
+      if (lodDetail >= 2 && !playerTopOverlay) return;
       const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
       const blitGrassQuad = (frame, destYTop, destHFull) => {
@@ -520,28 +524,31 @@ export function render(canvas, data, options = {}) {
     const playerTileMx = Math.floor(vx);
     const playerTileMy = Math.floor(vy);
 
-    // PASS 5a: full grass under sprite for player + E/W always; idle waiting frame adds bottom strip after PASS 4 (no skip here). S/SE/SW deferred only.
-    forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
-      if (mx === playerTileMx && my === playerTileMy) {
-        drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
-        return;
-      }
-      if (isGrassDeferredAroundPlayer(mx, my)) {
-        if (isGrassDeferredEwNeighbor(mx, my)) {
+    // PASS 5a: animated grass (skipped entirely at LOD 2 — baked terrain + overlays only; big CPU win when zoomed out).
+    if (lodDetail < 2) {
+      forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+        if (mx === playerTileMx && my === playerTileMy) {
           drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+          return;
         }
-        return;
-      }
-      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
-    });
+        if (isGrassDeferredAroundPlayer(mx, my)) {
+          if (isGrassDeferredEwNeighbor(mx, my)) {
+            drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+          }
+          return;
+        }
+        drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+      });
+    }
 
     // PASS 3.5: Sorted Entities pass (Player + Wild Pokémon)
     const wildList = getWildPokemonEntities();
     const renderItems = [];
     
     // --- Collect Sortable Objects (Scatter, Trees, Buildings) ---
-    for (let myScan = startY - 4; myScan < endY; myScan++) {
-      for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
+    const sortableScanPad = lodDetail >= 2 ? 2 : 4;
+    for (let myScan = startY - sortableScanPad; myScan < endY; myScan++) {
+      for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
         if (mxScan < 0 || myScan < 0 || mxScan >= width * CHUNK_SIZE || myScan >= height * CHUNK_SIZE) continue;
         const t = getCached(mxScan, myScan);
         if (!t || t.heightStep < 1) continue;

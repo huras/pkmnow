@@ -97,11 +97,13 @@ export function computePlayViewState(p) {
   else if (s >= 0.68 && lodDetail === 2) lodDetail = 1;
   else if (s >= 0.86 && lodDetail === 1) lodDetail = 0;
 
-  const chunkPad = s < 0.92 ? 2 : s < 0.99 ? 1 : 0;
+  /** Far LOD: fewer offscreen chunks + slightly tighter tile margin (big win when zoomed out). */
+  const chunkPad = lodDetail >= 2 ? 1 : s < 0.92 ? 2 : s < 0.99 ? 1 : 0;
 
   const viewW = cw / effTileW;
   const viewH = ch / effTileH;
-  const margin = 4 + Math.min(36, Math.ceil(16 * (1 / Math.max(0.5, smoothedViewScale) - 1)));
+  const marginBase = 4 + Math.min(36, Math.ceil(16 * (1 / Math.max(0.5, smoothedViewScale) - 1)));
+  const margin = lodDetail >= 2 ? Math.max(2, marginBase - 8) : marginBase;
   const startXTiles = Math.floor(vx - viewW / 2) - margin;
   const startYTiles = Math.floor(vy - viewH / 2) - margin;
   const endXTiles = Math.ceil(vx + viewW / 2) + margin;
