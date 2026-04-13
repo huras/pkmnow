@@ -114,18 +114,36 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
       const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
       const role = getRoleForCell(my, mx, microHBake, microWBake, isAtOrAbove, biomeSet.type);
-      const tileId = biomeSet.roles[role] ?? biomeSet.roles.CENTER ?? biomeSet.centerId;
+      const centerIdW = biomeSet.roles?.CENTER ?? biomeSet.centerId;
+      const tileId = biomeSet.roles[role] ?? centerIdW ?? biomeSet.centerId;
       if (tileId == null) continue;
-      const sx = (tileId % cols) * 16;
-      const sy = Math.floor(tileId / cols) * 16;
+      const px = Math.round((mx - startX) * tileW);
+      const py = Math.round((my - startY) * tileH);
+      const concConvAbcW =
+        biomeSet.type === 'conc-conv-a' ||
+        biomeSet.type === 'conc-conv-b' ||
+        biomeSet.type === 'conc-conv-c';
+      if (concConvAbcW && role && role !== 'CENTER' && centerIdW != null && tileId !== centerIdW) {
+        octx.drawImage(
+          img,
+          (centerIdW % cols) * 16,
+          Math.floor(centerIdW / cols) * 16,
+          16,
+          16,
+          px,
+          py,
+          twNat,
+          thNat
+        );
+      }
       octx.drawImage(
         img,
-        sx,
-        sy,
+        (tileId % cols) * 16,
+        Math.floor(tileId / cols) * 16,
         16,
         16,
-        Math.round((mx - startX) * tileW),
-        Math.round((my - startY) * tileH),
+        px,
+        py,
         twNat,
         thNat
       );
@@ -156,16 +174,37 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
             const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
             role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, biomeSet.type);
           }
-          const tileId = role ? (biomeSet.roles[role] ?? biomeSet.roles.CENTER ?? biomeSet.centerId) : null;
+          const centerId = biomeSet.roles?.CENTER ?? biomeSet.centerId;
+          const tileId = role ? (biomeSet.roles[role] ?? centerId) : null;
           if (img && tileId != null) {
+            const px = Math.round((mx - startX) * tileW);
+            const py = Math.round((my - startY) * tileH);
+            // Cantos/bordas conc-conv costumam ter alpha; sem isto vê-se só a cor plana do PASS 1.
+            const concConvAbc =
+              biomeSet.type === 'conc-conv-a' ||
+              biomeSet.type === 'conc-conv-b' ||
+              biomeSet.type === 'conc-conv-c';
+            if (concConvAbc && role && role !== 'CENTER' && centerId != null && tileId !== centerId) {
+              octx.drawImage(
+                img,
+                (centerId % cols) * 16,
+                Math.floor(centerId / cols) * 16,
+                16,
+                16,
+                px,
+                py,
+                twNat,
+                thNat
+              );
+            }
             octx.drawImage(
               img,
               (tileId % cols) * 16,
               Math.floor(tileId / cols) * 16,
               16,
               16,
-              Math.round((mx - startX) * tileW),
-              Math.round((my - startY) * tileH),
+              px,
+              py,
               twNat,
               thNat
             );

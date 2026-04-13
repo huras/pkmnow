@@ -10,6 +10,12 @@ function speciesHasDedicatedDigSheetMeta(dexId) {
   return !!(m && Object.prototype.hasOwnProperty.call(m, 'dig'));
 }
 
+/** Only load optional action sheets when metadata explicitly declares the slice. */
+function speciesHasDedicatedSliceMeta(dexId, sliceKey) {
+  const m = getDexAnimMeta(dexId);
+  return !!(m && Object.prototype.hasOwnProperty.call(m, sliceKey));
+}
+
 /** @type {Map<string, Promise<void>>} */
 const inflight = new Map();
 
@@ -49,12 +55,24 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   const walk = `tilesets/pokemon/${id}_walk.png`;
   const idle = `tilesets/pokemon/${id}_idle.png`;
   const dig = `tilesets/pokemon/${id}_dig.png`;
+  const hurt = `tilesets/pokemon/${id}_hurt.png`;
+  const sleep = `tilesets/pokemon/${id}_sleep.png`;
+  const faint = `tilesets/pokemon/${id}_faint.png`;
   const tasks = [
     loadOne(imageCache, walk, FALLBACK_WALK),
     loadOne(imageCache, idle, FALLBACK_IDLE)
   ];
   if (speciesHasDedicatedDigSheetMeta(dexId)) {
     tasks.push(loadOne(imageCache, dig, walk));
+  }
+  if (speciesHasDedicatedSliceMeta(dexId, 'hurt')) {
+    tasks.push(loadOne(imageCache, hurt, idle));
+  }
+  if (speciesHasDedicatedSliceMeta(dexId, 'sleep')) {
+    tasks.push(loadOne(imageCache, sleep, idle));
+  }
+  if (speciesHasDedicatedSliceMeta(dexId, 'faint')) {
+    tasks.push(loadOne(imageCache, faint, idle));
   }
   return Promise.all(tasks);
 }
@@ -66,6 +84,9 @@ export function getPokemonSheetPaths(dexId) {
     walk,
     idle: `tilesets/pokemon/${id}_idle.png`,
     dig: `tilesets/pokemon/${id}_dig.png`,
+    hurt: `tilesets/pokemon/${id}_hurt.png`,
+    sleep: `tilesets/pokemon/${id}_sleep.png`,
+    faint: `tilesets/pokemon/${id}_faint.png`,
     fallbackWalk: FALLBACK_WALK,
     fallbackIdle: FALLBACK_IDLE
   };
@@ -74,17 +95,33 @@ export function getPokemonSheetPaths(dexId) {
 /**
  * @param {Map<string, HTMLImageElement>} imageCache
  * @param {number} dexId
- * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined }}
+ * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined }}
  */
 export function getResolvedSheets(imageCache, dexId) {
-  const { walk, idle, dig, fallbackWalk, fallbackIdle } = getPokemonSheetPaths(dexId);
+  const { walk, idle, dig, hurt, sleep, faint, fallbackWalk, fallbackIdle } = getPokemonSheetPaths(dexId);
   const w = imageCache.get(walk) || imageCache.get(fallbackWalk);
   const useDedicatedDig = speciesHasDedicatedDigSheetMeta(dexId);
+  const useDedicatedHurt = speciesHasDedicatedSliceMeta(dexId, 'hurt');
+  const useDedicatedSleep = speciesHasDedicatedSliceMeta(dexId, 'sleep');
+  const useDedicatedFaint = speciesHasDedicatedSliceMeta(dexId, 'faint');
+  const idleSheet = imageCache.get(idle) || imageCache.get(fallbackIdle);
   const digSheet = useDedicatedDig ? imageCache.get(dig) || w : w;
   return {
     walk: w,
-    idle: imageCache.get(idle) || imageCache.get(fallbackIdle),
+    idle: idleSheet,
     /** Walk sheet unless species has PMD `dig` + optional `NNN_dig.png`. */
-    dig: digSheet
+    dig: digSheet,
+    /** Optional sheet for dedicated `hurt` timings/frames, fallback to idle. */
+    hurt: useDedicatedHurt
+      ? imageCache.get(hurt) || idleSheet
+      : idleSheet,
+    /** Optional sheet for dedicated `sleep` timings/frames, fallback to idle. */
+    sleep: useDedicatedSleep
+      ? imageCache.get(sleep) || idleSheet
+      : idleSheet,
+    /** Optional sheet for dedicated `faint` timings/frames, fallback to idle. */
+    faint: useDedicatedFaint
+      ? imageCache.get(faint) || idleSheet
+      : idleSheet
   };
 }

@@ -8,6 +8,13 @@ export const MAX_SCATTER_ROWS_PASS2 = 8;
 export const WATER_ANIM_SRC_W = 16;
 export const WATER_ANIM_SRC_H = 16;
 
+/**
+ * Opacidade da camada animada de água no oceano quando lodDetail < 2 (zoom perto).
+ * < 1 mistura com o autotile base (margem/lake shore) e desenha também sobre OUT_*,
+ * alinhando o visual ao LOD 2 (água sólida em todo tile oceano).
+ */
+export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
+
 /** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles. */
 export const PLAY_CHUNK_SIZE = 8;
 

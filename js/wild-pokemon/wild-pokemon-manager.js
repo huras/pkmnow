@@ -249,8 +249,23 @@ function advanceWildPokemonAnim(entity, dt) {
   const ticks = dt * 60;
   entity.animRow = DIRECTION_ROW_MAP[entity.facing] ?? 0;
   const meta = entity.animMeta || null;
-
-  if (entity.animMoving) {
+  if (entity.deadState) {
+    const isFaint = entity.deadState === 'faint';
+    const seq = isFaint
+      ? (meta?.faint?.durations?.length ? meta.faint.durations : (meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle))
+      : (meta?.sleep?.durations?.length ? meta.sleep.durations : (meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle));
+    const total = seq.reduce((a, b) => a + b, 0);
+    entity.deadAnimTimer = (entity.deadAnimTimer || 0) + ticks;
+    const t = isFaint ? Math.min(total, entity.deadAnimTimer) : (entity.deadAnimTimer % total);
+    entity.animFrame = pickAnimFrame(seq, t);
+    entity.animRow = 0;
+  } else if (entity.hurtTimer > 0) {
+    entity.hurtAnimTimer = (entity.hurtAnimTimer || 0) + ticks;
+    const seq = meta?.hurt?.durations?.length ? meta.hurt.durations : meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
+    const total = seq.reduce((a, b) => a + b, 0);
+    const loopTick = entity.hurtAnimTimer % total;
+    entity.animFrame = pickAnimFrame(seq, loopTick);
+  } else if (entity.animMoving) {
     entity._walkPhase = (entity._walkPhase || 0) + ticks;
     const seq = meta?.walk?.durations?.length ? meta.walk.durations : PMD_DEFAULT_MON_ANIMS.Walk;
     const total = seq.reduce((a, b) => a + b, 0);
@@ -762,15 +777,22 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       _blockedMoveFrames: 0,
       hp: 50,
       maxHp: 50,
-      deadState: null, // 'faint' | 'sleepFallback'
+      deadState: null, // 'faint' | 'sleep'
       deadTimer: 0,
+      deadAnimTimer: 0,
+      hurtTimer: 0,
+      hurtAnimTimer: 0,
       hitFlashTimer: 0,
       takeDamage: function(amount) {
         this.hp -= amount;
+        this.hurtTimer = 0.28;
+        this.hurtAnimTimer = 0;
         if (this.hp <= 0) {
           this.hp = 0;
-          this.deadState = this.animMeta?.faint ? 'faint' : 'sleepFallback';
+          this.hurtTimer = 0;
+          this.deadState = this.animMeta?.faint ? 'faint' : 'sleep';
           this.deadTimer = 1.35;
+          this.deadAnimTimer = 0;
           this.aiState = 'sleep';
           this.animMoving = false;
           this.vx = 0;
@@ -822,6 +844,7 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
 
     integrateWildPokemonVertical(e, dt);
     updateWildMotion(e, dt, data, playerX, playerY);
+    if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - dt);
     advanceWildPokemonAnim(e, dt);
     
     if (e.hitFlashTimer > 0) {

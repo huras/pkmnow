@@ -36,7 +36,6 @@ import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
 import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import {
-  resolvePmdFrameSpec,
   resolvePmdFrameSpecForSlice,
   resolveCanonicalPmdH,
   worldFeetFromPivotCell
@@ -68,6 +67,7 @@ import {
   PLAY_BAKE_TILE_PX,
   WATER_ANIM_SRC_W,
   WATER_ANIM_SRC_H,
+  PLAY_SEA_OVERLAY_ALPHA_LOD01,
   VEG_MULTITILE_OVERLAP_PX,
   GRASS_DEFER_AROUND_PLAYER_DELTAS,
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -473,6 +473,8 @@ export function render(canvas, data, options = {}) {
 
     // PASS 0: Oceano — water overlay at every LOD (sea never dropped at LOD 2 / flight zoom).
     // LOD 2 = static frame 0 (cheap); LOD 1 = slower anim; LOD 0 = full anim.
+    // LOD 0/1: overlay não-opaco + desenho em todo tile (incl. OUT_*), para não deixar “cantos secos”
+    // do autotile lake-shore visíveis só no zoom perto; LOD 2 permanece opaco.
     const waterImg = imageCache.get('tilesets/water-tile.png');
     if (waterImg && waterImg.naturalWidth >= WATER_ANIM_SRC_W && waterImg.naturalHeight >= WATER_ANIM_SRC_H) {
       const waterFrames = Math.floor(waterImg.naturalHeight / WATER_ANIM_SRC_H);
@@ -486,24 +488,14 @@ export function render(canvas, data, options = {}) {
               : Math.floor(t * 3.5) % waterFrames;
         const syOcean = waterPhase * WATER_ANIM_SRC_H;
         ctx.save();
+        ctx.globalAlpha = lodDetail >= 2 ? 1 : PLAY_SEA_OVERLAY_ALPHA_LOD01;
         ctx.imageSmoothingEnabled = true;
         if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = true;
         if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
-        const oceanSet = TERRAIN_SETS[BIOME_TO_TERRAIN[BIOMES.OCEAN.id]];
-        const microRows = height * CHUNK_SIZE;
-        const microCols = width * CHUNK_SIZE;
-        const oceanRoleGate = lodDetail < 2 && !!oceanSet;
         for (let my = startY; my < endY; my++) {
           for (let mx = startX; mx < endX; mx++) {
             const tile = getCached(mx, my);
             if (!tile || tile.biomeId !== BIOMES.OCEAN.id) continue;
-            // Quinas OUT_* do autotile são “terra” na lógica de caminhada; não cobrir com água animada
-            // (senão parece oceano profundo mas `baseTerrainSpriteWalkable` continua true).
-            if (oceanRoleGate) {
-              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-              const oRole = getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, oceanSet.type);
-              if (oRole && String(oRole).startsWith('OUT_')) continue;
-            }
             ctx.drawImage(
               waterImg,
               0,
@@ -772,11 +764,18 @@ export function render(canvas, data, options = {}) {
     
     // --- Collect Wild entities ---
     for (const we of wildList) {
-      const { walk: wWalk, idle: wIdle } = getResolvedSheets(imageCache, we.dexId);
+      const { walk: wWalk, idle: wIdle, hurt: wHurt, sleep: wSleep, faint: wFaint } = getResolvedSheets(imageCache, we.dexId);
       if (!wWalk || !wIdle) continue;
-      const wSheet = we.animMoving ? wWalk : wIdle;
+      const wildAnimSlice = we.deadState
+        ? (we.deadState === 'faint' ? 'faint' : 'sleep')
+        : (we.hurtTimer > 0.001 ? 'hurt' : (we.animMoving ? 'walk' : 'idle'));
+      const wSheet =
+        wildAnimSlice === 'faint' ? (wFaint || wIdle)
+        : wildAnimSlice === 'sleep' ? (wSleep || wIdle)
+        : wildAnimSlice === 'hurt' ? (wHurt || wIdle)
+        : (we.animMoving ? wWalk : wIdle);
 
-      const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpec(wSheet, !!we.animMoving, we.dexId);
+      const { sw: pmdSw, sh: pmdSh, animCols } = resolvePmdFrameSpecForSlice(wSheet, we.dexId, wildAnimSlice);
       const canonicalH = resolveCanonicalPmdH(wIdle, wWalk, we.dexId);
       const targetHeightTiles = POKEMON_HEIGHTS[we.dexId] || 1.1;
       const targetHeightPx = targetHeightTiles * tileH;
@@ -828,7 +827,8 @@ export function render(canvas, data, options = {}) {
         hitFlashTimer: we.hitFlashTimer,
         hp: we.hp,
         maxHp: we.maxHp,
-        deadState: we.deadState
+        deadState: we.deadState,
+        hurtTimer: we.hurtTimer
       });
 
       if (emotionPayload) {
@@ -1115,22 +1115,6 @@ export function render(canvas, data, options = {}) {
       ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
     };
 
-    const drawWildDeadState = (item, spawnYOffset) => {
-      if (!item.deadState) return;
-      const deadY = Math.floor(item.cy - item.pivotY + spawnYOffset - tileH * 0.4);
-      ctx.save();
-      ctx.globalAlpha = Math.max(0.25, ctx.globalAlpha * 0.85);
-      ctx.fillStyle = 'rgba(20,20,24,0.75)';
-      ctx.fillRect(item.cx - 14, deadY - 11, 28, 14);
-      ctx.fillStyle = '#d0e6ff';
-      ctx.font = `700 ${Math.max(10, Math.floor(tileH * 0.22))}px Inter, system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const deadLabel = item.deadState === 'faint' ? 'Faint' : 'Zzz';
-      ctx.fillText(deadLabel, item.cx, deadY - 4);
-      ctx.restore();
-    };
-
     for (const item of renderItems) {
       ctx.save();
       
@@ -1185,7 +1169,6 @@ export function render(canvas, data, options = {}) {
 
         if (item.type === 'wild') {
           drawWildHpBar(item, spawnYOffset);
-          drawWildDeadState(item, spawnYOffset);
         }
 
         // Terrain / Grass Depth Cue (Deferred Overlay)
