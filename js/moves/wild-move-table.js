@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'ember' | 'waterBurst' | 'poisonSting'} WildMoveId */
+/** @typedef {'ember' | 'waterBurst' | 'poisonSting' | 'flamethrower' | 'confusion' | 'bubble' | 'waterGun' | 'psybeam' | 'prismaticLaser' | 'poisonPowder' | 'incinerate' | 'silkShoot'} WildMoveId */
 
 /**
  * Explicit overrides (dex → move), inspired by Zelda `WILD_AGGRO_SPELLS`.
@@ -19,7 +19,19 @@ const DEX_OVERRIDE = new Map([
   [59, 'ember'],
   [77, 'ember'],
   [78, 'ember'],
-  [126, 'ember'],
+  [126, 'incinerate'],
+  [65, 'psybeam'],
+  [64, 'confusion'],
+  [63, 'confusion'],
+  [150, 'prismaticLaser'],
+  [151, 'prismaticLaser'],
+  [7, 'bubble'],
+  [8, 'waterGun'],
+  [9, 'waterGun'],
+  [12, 'poisonPowder'],
+  [49, 'poisonPowder'],
+  [10, 'silkShoot'],
+  [13, 'silkShoot'],
   [10, 'poisonSting'],
   [11, 'poisonSting'],
   [12, 'poisonSting'],
@@ -59,6 +71,7 @@ export function resolveWildMoveIdForDex(dexId) {
   const types = cfg?.types ?? [];
   if (types.includes('fire')) return 'ember';
   if (types.includes('water')) return 'waterBurst';
+  if (types.includes('psychic')) return 'confusion';
   if (types.includes('poison') || types.includes('bug')) return 'poisonSting';
   return 'poisonSting';
 }

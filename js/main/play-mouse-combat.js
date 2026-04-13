@@ -1,13 +1,10 @@
 import { playInputState } from './play-input-state.js';
 import {
-  castEmber,
-  castWaterBurst,
-  castEmberCharged,
-  castWaterCharged,
-  castCounterAttack1,
-  castCounterAttack2,
+  castMoveById,
+  castMoveChargedById,
   castUltimate
 } from '../moves/moves-manager.js';
+import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
@@ -16,12 +13,12 @@ let leftHeld = false;
 let rightHeld = false;
 let leftDownAt = 0;
 let rightDownAt = 0;
-/** Shift held when primary/secondary button went down (locks “no charge build” for that press). */
+/** Left Ctrl held when primary/secondary button went down (locks “no charge build” for that press). */
 let leftShiftAtDown = false;
 let rightShiftAtDown = false;
 
-function shiftHeld() {
-  return !!(playInputState.shiftLeftHeld || playInputState.shiftRightHeld);
+function combatModifierHeld() {
+  return !!playInputState.ctrlLeftHeld;
 }
 
 function aimAtCursor(player) {
@@ -30,15 +27,55 @@ function aimAtCursor(player) {
   return { tx, ty, sx: player.x, sy: player.y };
 }
 
+/** @type {Record<string, string>} */
+const HOTKEY_TO_MOVE_ID = {
+  Digit1: 'ember',
+  Digit2: 'flamethrower',
+  Digit3: 'confusion',
+  Digit4: 'bubble',
+  Digit5: 'waterGun',
+  Digit6: 'psybeam',
+  Digit7: 'prismaticLaser',
+  Digit8: 'poisonSting',
+  Digit9: 'poisonPowder',
+  Digit0: 'incinerate',
+  Minus: 'silkShoot'
+};
+
+/**
+ * Keyboard quick-cast for all Zelda-ported moves.
+ * 1 Ember, 2 Flamethrower, 3 Confusion, 4 Bubble, 5 Water Gun,
+ * 6 Psybeam, 7 Prismatic Laser, 8 Poison Sting, 9 Poison Powder,
+ * 0 Incinerate, - Silk Shoot.
+ * @returns {boolean} true when a hotkey was consumed.
+ */
+export function castMappedMoveByHotkey(code, player) {
+  const moveId = HOTKEY_TO_MOVE_ID[code];
+  if (!moveId || !player) return false;
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  castMoveById(moveId, sx, sy, tx, ty, player);
+  return true;
+}
+
+function resolveSlots(player) {
+  const moves = getPokemonMoveset(player?.dexId || 1);
+  return {
+    leftTap: moves[0],
+    rightTap: moves[1],
+    leftShift: moves[2],
+    rightShift: moves[3]
+  };
+}
+
 /**
  * @param {number} dt
  * @param {import('../player.js').player} player
  */
 export function updatePlayPointerCombat(dt, player) {
-  if (leftHeld && !shiftHeld()) {
+  if (leftHeld && !combatModifierHeld()) {
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
   }
-  if (rightHeld && !shiftHeld()) {
+  if (rightHeld && !combatModifierHeld()) {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
   }
 }
@@ -59,7 +96,7 @@ export function installPlayPointerCombat(deps) {
       if (getAppMode() !== 'play') return;
       if (e.target !== canvas) return;
       const player = getPlayer();
-      const sh = shiftHeld();
+      const sh = combatModifierHeld();
 
       if (e.button === 0) {
         e.preventDefault();
@@ -88,18 +125,19 @@ export function installPlayPointerCombat(deps) {
     if (getAppMode() !== 'play') return;
     const player = getPlayer();
     const now = performance.now();
-    const shUp = shiftHeld();
+    const shUp = combatModifierHeld();
 
     if (e.button === 0 && leftHeld) {
       leftHeld = false;
       const heldMs = now - leftDownAt;
       const { sx, sy, tx, ty } = aimAtCursor(player);
+      const slots = resolveSlots(player);
       if (leftShiftAtDown || shUp) {
-        castCounterAttack1(sx, sy, tx, ty, player);
+        castMoveById(slots.leftShift, sx, sy, tx, ty, player);
       } else if (heldMs < TAP_MS) {
-        castEmber(sx, sy, tx, ty, player);
+        castMoveById(slots.leftTap, sx, sy, tx, ty, player);
       } else {
-        castEmberCharged(sx, sy, tx, ty, player, playInputState.chargeLeft01 || 0);
+        castMoveChargedById(slots.leftTap, sx, sy, tx, ty, player, playInputState.chargeLeft01 || 0);
       }
       playInputState.chargeLeft01 = 0;
     }
@@ -107,12 +145,13 @@ export function installPlayPointerCombat(deps) {
       rightHeld = false;
       const heldMs = now - rightDownAt;
       const { sx, sy, tx, ty } = aimAtCursor(player);
+      const slots = resolveSlots(player);
       if (rightShiftAtDown || shUp) {
-        castCounterAttack2(sx, sy, tx, ty, player);
+        castMoveById(slots.rightShift, sx, sy, tx, ty, player);
       } else if (heldMs < TAP_MS) {
-        castWaterBurst(sx, sy, tx, ty, player);
+        castMoveById(slots.rightTap, sx, sy, tx, ty, player);
       } else {
-        castWaterCharged(sx, sy, tx, ty, player, playInputState.chargeRight01 || 0);
+        castMoveChargedById(slots.rightTap, sx, sy, tx, ty, player, playInputState.chargeRight01 || 0);
       }
       playInputState.chargeRight01 = 0;
     }

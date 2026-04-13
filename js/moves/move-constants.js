@@ -13,6 +13,10 @@ export const BURN_START_FRAMES = 5;
 /** Seconds between trail particles per projectile (replaces random spam). */
 export const EMBER_TRAIL_INTERVAL = 0.045;
 export const WATER_TRAIL_INTERVAL = 0.038;
+export const PSY_TRAIL_INTERVAL = 0.05;
+export const POWDER_TRAIL_INTERVAL = 0.06;
+export const SILK_TRAIL_INTERVAL = 0.05;
+export const LASER_TRAIL_INTERVAL = 0.03;
 
 /** Wild AI primary move interval (seconds). */
 export const WILD_MOVE_COOLDOWN_DEFAULT = 1.15;

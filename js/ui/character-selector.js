@@ -6,6 +6,7 @@ import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
+import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 
 export class CharacterSelector {
   constructor(containerId) {
@@ -99,6 +100,12 @@ export class CharacterSelector {
           <label class="play-pointer-mode-bar__opt"
             ><input type="radio" name="playPointerMode" value="debug" /> Debug</label
           >
+        </div>
+
+        <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
+          <div class="player-moves-title">Moves</div>
+          <div class="player-moves-list" id="current-player-moves"></div>
+          <div class="player-moves-help">LMB/RMB = 1st/2nd · Left Ctrl + click = 3rd/4th</div>
         </div>
 
         <div class="search-container">
@@ -244,6 +251,15 @@ export class CharacterSelector {
     if (typesEl) {
       const cfg = getPokemonConfig(player.dexId);
       typesEl.innerHTML = cfg?.types.map(t => `<span class="type-icon type-${t}">${t.toUpperCase()}</span>`).join(' ') || '';
+    }
+
+    const movesEl = this.container.querySelector('#current-player-moves');
+    if (movesEl) {
+      const moves = getPokemonMoveset(player.dexId);
+      const hotkeys = ['LMB', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
+      movesEl.innerHTML = moves
+        .map((m, i) => `<span class="move-chip" title="${getMoveLabel(m)}"><b>${hotkeys[i] || '—'}</b> ${getMoveLabel(m)}</span>`)
+        .join('');
     }
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');

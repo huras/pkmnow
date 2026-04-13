@@ -33,6 +33,8 @@ import {
   getPlayColliderOverlayCache
 } from './main/play-collider-overlay-cache.js';
 import { playInputState } from './main/play-input-state.js';
+import { computePlayViewState } from './render/play-view-camera.js';
+import { getPokemonConfig } from './pokemon/pokemon-config.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -241,24 +243,36 @@ canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
 
   const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
+  const mouseClientX = e.clientX - rect.left;
+  const mouseClientY = e.clientY - rect.top;
+  const mousePxX = (mouseClientX / rect.width) * canvas.width;
+  const mousePxY = (mouseClientY / rect.height) * canvas.height;
 
   if (appMode === 'play') {
-    const tileW = 40;
-    const tileH = 40;
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
-    const worldX = (mouseX - canvas.width / 2) / tileW + vx + 0.5;
-    const worldY = (mouseY - canvas.height / 2) / tileH + vy + 0.5;
+    const cfg = getPokemonConfig(player.dexId ?? 1);
+    const playCam = computePlayViewState({
+      cw: canvas.width,
+      ch: canvas.height,
+      vx,
+      vy,
+      playerZ: player.z ?? 0,
+      flightActive: !!player.flightActive,
+      framingHeightTiles: cfg?.heightTiles ?? 1.1
+    });
+
+    // Same inverse transform used by render(): screen px -> world tile coordinates.
+    const worldX = (mousePxX - playCam.currentTransX) / playCam.effTileW - 0.5;
+    const worldY = (mousePxY - playCam.currentTransY) / playCam.effTileH - 0.5;
     playInputState.mouseX = worldX;
     playInputState.mouseY = worldY;
     lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
     return;
   }
 
-  const gx = Math.floor((mouseX / rect.width) * currentData.width);
-  const gy = Math.floor((mouseY / rect.height) * currentData.height);
+  const gx = Math.floor((mouseClientX / rect.width) * currentData.width);
+  const gy = Math.floor((mouseClientY / rect.height) * currentData.height);
   if (lastHoverTile && lastHoverTile.x === gx && lastHoverTile.y === gy) return;
   lastHoverTile = { x: gx, y: gy };
   const now = performance.now();
@@ -286,7 +300,7 @@ function enterPlayMode(gx, gy) {
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Ataques: clique esq = Brasa · clique dir = Água · segure = carregar o mesmo · Shift+clique esq = Contra (veneno) · Shift+clique dir = Contra (água) · scroll do meio = Ultimate. Menu de debug: Ctrl+clique direito.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Debug menu: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 

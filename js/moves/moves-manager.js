@@ -3,6 +3,10 @@ import {
   MAX_PROJECTILES,
   EMBER_TRAIL_INTERVAL,
   WATER_TRAIL_INTERVAL,
+  PSY_TRAIL_INTERVAL,
+  POWDER_TRAIL_INTERVAL,
+  SILK_TRAIL_INTERVAL,
+  LASER_TRAIL_INTERVAL,
   COLLISION_BROAD_PHASE_TILES,
   WILD_MOVE_COOLDOWN_DEFAULT,
   FIRE_FRAME_W,
@@ -11,6 +15,17 @@ import {
 import { castEmberVolley } from './ember-move.js';
 import { castWaterBurstVolley } from './water-burst-move.js';
 import { castPoisonStingOnce, castPoisonStingFan } from './poison-sting-move.js';
+import {
+  castFlamethrower,
+  castConfusion,
+  castBubble,
+  castWaterGun,
+  castPsybeam,
+  castPrismaticLaser,
+  castPoisonPowder,
+  castIncinerate,
+  castSilkShoot
+} from './zelda-ported-moves.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
 
@@ -23,6 +38,15 @@ let playerPoisonCooldown = 0;
 let playerUltimateCooldown = 0;
 let playerCounter1Cooldown = 0;
 let playerCounter2Cooldown = 0;
+let playerFlamethrowerCooldown = 0;
+let playerConfusionCooldown = 0;
+let playerBubbleCooldown = 0;
+let playerWaterGunCooldown = 0;
+let playerPsybeamCooldown = 0;
+let playerPrismaticLaserCooldown = 0;
+let playerPoisonPowderCooldown = 0;
+let playerIncinerateCooldown = 0;
+let playerSilkShootCooldown = 0;
 
 function pushProjectile(p) {
   while (activeProjectiles.length >= MAX_PROJECTILES) activeProjectiles.shift();
@@ -90,6 +114,75 @@ function checkPlayerHit(proj, player) {
   return checkCollision(proj.x, proj.y, proj.radius, { x: px, y: py });
 }
 
+function spawnIncinerateShards(proj, pushProjectileRef) {
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    const speed = 8.8 + Math.random() * 1.8;
+    pushProjectileRef({
+      type: 'incinerateShard',
+      x: proj.x,
+      y: proj.y,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      z: proj.z || 0,
+      radius: 0.2,
+      timeToLive: 0.42 + Math.random() * 0.18,
+      damage: (proj.splashDamage || 2) * 0.8,
+      sourceEntity: proj.sourceEntity,
+      fromWild: proj.fromWild,
+      hitsWild: proj.hitsWild,
+      hitsPlayer: proj.hitsPlayer,
+      trailAcc: EMBER_TRAIL_INTERVAL * (i / count)
+    });
+  }
+}
+
+function applySplashToWild(proj, wildList) {
+  const r = proj.splashRadius || 0;
+  const d = proj.splashDamage || 0;
+  if (r <= 0 || d <= 0) return;
+  for (const wild of wildList) {
+    if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
+    if (Math.hypot(wild.x - proj.x, wild.y - proj.y) <= r) {
+      if (wild.takeDamage) wild.takeDamage(d);
+    }
+  }
+}
+
+/**
+ * Cast by move id (used by configurable movesets in UI/controls).
+ * @param {string} moveId
+ * @param {number} sourceX
+ * @param {number} sourceY
+ * @param {number} targetX
+ * @param {number} targetY
+ * @param {object | null} sourceEntity
+ */
+export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (moveId === 'ember') return castEmber(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'flamethrower') return castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'confusion') return castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'bubble') return castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'waterBurst') return castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'waterGun') return castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * Charged variant dispatch (falls back to normal if no dedicated charge impl).
+ */
+export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerEmberCooldown > 0) return;
   playerEmberCooldown = 0.2;
@@ -112,6 +205,87 @@ export function castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity
   if (playerPoisonCooldown > 0) return;
   playerPoisonCooldown = 0.45;
   castPoisonStingOnce(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFlamethrowerCooldown > 0) return;
+  playerFlamethrowerCooldown = 0.7;
+  castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerConfusionCooldown > 0) return;
+  playerConfusionCooldown = 0.6;
+  castConfusion(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerBubbleCooldown > 0) return;
+  playerBubbleCooldown = 0.55;
+  castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerWaterGunCooldown > 0) return;
+  playerWaterGunCooldown = 0.65;
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerPsybeamCooldown > 0) return;
+  playerPsybeamCooldown = 0.75;
+  castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerPrismaticLaserCooldown > 0) return;
+  playerPrismaticLaserCooldown = 1.45;
+  castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerPoisonPowderCooldown > 0) return;
+  playerPoisonPowderCooldown = 0.95;
+  castPoisonPowder(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerIncinerateCooldown > 0) return;
+  playerIncinerateCooldown = 0.78;
+  castIncinerate(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+}
+
+export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerSilkShootCooldown > 0) return;
+  playerSilkShootCooldown = 0.72;
+  castSilkShoot(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
@@ -235,6 +409,24 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castEmberVolley(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'waterBurst') {
     castWaterBurstVolley(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'flamethrower') {
+    castFlamethrower(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'confusion') {
+    castConfusion(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'bubble') {
+    castBubble(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'waterGun') {
+    castWaterGun(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'psybeam') {
+    castPsybeam(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'prismaticLaser') {
+    castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'poisonPowder') {
+    castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'incinerate') {
+    castIncinerate(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'silkShoot') {
+    castSilkShoot(entity.x, entity.y, playerX, playerY, entity, opts);
   } else {
     castPoisonStingOnce(entity.x, entity.y, playerX, playerY, entity, opts);
   }
@@ -255,6 +447,15 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
   playerUltimateCooldown = Math.max(0, playerUltimateCooldown - dt);
   playerCounter1Cooldown = Math.max(0, playerCounter1Cooldown - dt);
   playerCounter2Cooldown = Math.max(0, playerCounter2Cooldown - dt);
+  playerFlamethrowerCooldown = Math.max(0, playerFlamethrowerCooldown - dt);
+  playerConfusionCooldown = Math.max(0, playerConfusionCooldown - dt);
+  playerBubbleCooldown = Math.max(0, playerBubbleCooldown - dt);
+  playerWaterGunCooldown = Math.max(0, playerWaterGunCooldown - dt);
+  playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
+  playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
+  playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
+  playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
+  playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
 
@@ -281,6 +482,14 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
     const proj = activeProjectiles[i];
     proj.timeToLive -= dt;
     if (proj.timeToLive <= 0) {
+      if (proj.type === 'incinerateCore') {
+        spawnHitParticles(proj.x, proj.y, proj.z || 0);
+        applySplashToWild(proj, wildList);
+        spawnIncinerateShards(proj, pushProjectile);
+      } else if (proj.type === 'confusionOrb') {
+        spawnHitParticles(proj.x, proj.y, proj.z || 0);
+        applySplashToWild(proj, wildList);
+      }
       activeProjectiles.splice(i, 1);
       continue;
     }
@@ -291,12 +500,31 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
     const trailType =
       proj.type === 'ember'
         ? 'emberTrail'
-        : proj.type === 'waterShot'
+        : proj.type === 'waterShot' || proj.type === 'waterGunShot' || proj.type === 'bubbleShot'
           ? 'waterTrail'
+          : proj.type === 'poisonPowderShot'
+            ? 'powderTrail'
+            : proj.type === 'silkShot'
+              ? 'silkTrail'
+              : proj.type === 'confusionOrb' || proj.type === 'psybeamShot'
+                ? 'psyTrail'
+                : proj.type === 'prismaticShot'
+                  ? 'laserTrail'
           : null;
     if (trailType && proj.trailAcc != null) {
       proj.trailAcc += dt;
-      const interval = proj.type === 'waterShot' ? WATER_TRAIL_INTERVAL : EMBER_TRAIL_INTERVAL;
+      const interval =
+        trailType === 'waterTrail'
+          ? WATER_TRAIL_INTERVAL
+          : trailType === 'psyTrail'
+            ? PSY_TRAIL_INTERVAL
+            : trailType === 'powderTrail'
+              ? POWDER_TRAIL_INTERVAL
+              : trailType === 'silkTrail'
+                ? SILK_TRAIL_INTERVAL
+                : trailType === 'laserTrail'
+                  ? LASER_TRAIL_INTERVAL
+                  : EMBER_TRAIL_INTERVAL;
       while (proj.trailAcc >= interval) {
         proj.trailAcc -= interval;
         spawnTrailParticle(proj.x, proj.y, trailType);
@@ -306,9 +534,14 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
     let hit = false;
 
     if (proj.hitsPlayer && checkPlayerHit(proj, player)) {
-      const poison = proj.type === 'poisonSting' && Math.random() < 0.22;
+      const poisonCapable = proj.type === 'poisonSting' || proj.type === 'poisonPowderShot';
+      const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
+      const poison = poisonCapable && Math.random() < poisonChance;
       if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
         spawnHitParticles(proj.x, proj.y, proj.z);
+      }
+      if (proj.type === 'incinerateCore') {
+        spawnIncinerateShards(proj, pushProjectile);
       }
       hit = true;
     }
@@ -322,6 +555,12 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
         if (checkCollision(proj.x, proj.y, proj.radius, wild)) {
           if (wild.takeDamage) wild.takeDamage(proj.damage);
           spawnHitParticles(proj.x, proj.y, proj.z);
+          if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
+            applySplashToWild(proj, wildList);
+          }
+          if (proj.type === 'incinerateCore') {
+            spawnIncinerateShards(proj, pushProjectile);
+          }
           hit = true;
           break;
         }

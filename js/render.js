@@ -117,6 +117,54 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     const r = Math.max(4, tileW * 0.19);
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
+  } else if (p.type === 'waterGunShot' || p.type === 'bubbleShot') {
+    ctx.fillStyle = p.type === 'bubbleShot' ? 'rgba(235,248,255,0.6)' : 'rgba(110,185,255,0.88)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1.5;
+    const r = p.type === 'bubbleShot' ? Math.max(5, tileW * 0.22) : Math.max(4, tileW * 0.17);
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (p.type === 'bubbleShot') ctx.stroke();
+  } else if (p.type === 'flamethrowerShot' || p.type === 'incinerateCore' || p.type === 'incinerateShard') {
+    ctx.fillStyle = p.type === 'flamethrowerShot' ? '#ff6a00' : '#ff4500';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(3, tileW * (p.type === 'incinerateShard' ? 0.1 : 0.14)), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'confusionOrb') {
+    ctx.fillStyle = 'rgba(164,94,255,0.65)';
+    ctx.strokeStyle = 'rgba(222,171,255,0.95)';
+    ctx.lineWidth = 2;
+    const r = Math.max(5, tileW * 0.2);
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (p.type === 'psybeamShot') {
+    const ang = Math.atan2(p.vy || 0, p.vx || 1);
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(255,112,198,0.9)';
+    ctx.fillRect(-Math.max(3, tileW * 0.16), -Math.max(2, tileH * 0.07), Math.max(7, tileW * 0.32), Math.max(4, tileH * 0.14));
+    ctx.restore();
+  } else if (p.type === 'prismaticShot') {
+    const colors = ['#ff1744', '#ff9100', '#ffee58', '#40c4ff', '#7c4dff'];
+    const idx = Math.floor(((time * 25) % colors.length + colors.length) % colors.length);
+    ctx.fillStyle = colors[idx];
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'poisonPowderShot') {
+    ctx.fillStyle = 'rgba(120,255,140,0.55)';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(4, tileW * 0.16), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'silkShot') {
+    ctx.fillStyle = 'rgba(245,245,245,0.85)';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
+    ctx.fill();
   } else if (p.type === 'poisonSting') {
     const ang = p.stingAngle ?? 0;
     ctx.save();
@@ -164,6 +212,26 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.fillStyle = '#b8ecff';
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'psyTrail') {
+    ctx.fillStyle = '#d892ff';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'powderTrail') {
+    ctx.fillStyle = '#a7ff9a';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'silkTrail') {
+    ctx.fillStyle = '#f2f2f2';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'laserTrail') {
+    ctx.fillStyle = '#ffd6ff';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.09) * a, 0, Math.PI * 2);
     ctx.fill();
   } else {
     ctx.fillStyle = '#ffff88';

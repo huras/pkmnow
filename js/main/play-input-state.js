@@ -8,6 +8,8 @@ export const playInputState = {
   shiftRightHeld: false,
   /** Space held — vertical flight up while in creative flight mode. */
   spaceHeld: false,
+  /** Left Ctrl held — combat modifier (counter slots). */
+  ctrlLeftHeld: false,
   /** World tile coordinates of the mouse */
   mouseX: 0,
   mouseY: 0,

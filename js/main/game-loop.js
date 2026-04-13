@@ -7,7 +7,7 @@ import {
   getWildPokemonEntities
 } from '../wild-pokemon/wild-pokemon-manager.js';
 import { updateMoves } from '../moves/moves-manager.js';
-import { updatePlayPointerCombat } from './play-mouse-combat.js';
+import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -204,6 +204,9 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
         playInputState.shiftRightHeld = true;
       }
+      if (e.code === 'ControlLeft') {
+        playInputState.ctrlLeftHeld = true;
+      }
 
       const dir = keyToDir(e.key);
       if (dir) {
@@ -224,6 +227,10 @@ export function registerPlayKeyboard(api) {
 
       if (e.key === ' ' && !e.repeat) {
         tryJumpPlayer(getCurrentData());
+      }
+
+      if (!e.repeat && castMappedMoveByHotkey(e.code, player)) {
+        e.preventDefault();
       }
 
       if (e.key === 'Escape') {
@@ -253,6 +260,9 @@ export function registerPlayKeyboard(api) {
     }
     if (e.code === 'ShiftRight') {
       playInputState.shiftRightHeld = false;
+    }
+    if (e.code === 'ControlLeft') {
+      playInputState.ctrlLeftHeld = false;
     }
     const dir = keyToDir(e.key);
     if (dir) heldKeys.delete(dir);

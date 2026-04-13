@@ -240,6 +240,52 @@ body.play-mode-active .character-selector .play-pointer-mode-bar {
   transform: scale(1.1);
 }
 
+.player-moves-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-moves-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.player-moves-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.move-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #f5f8ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.move-chip b {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: #a5dcff;
+}
+
+.player-moves-help {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .search-container {
   position: relative;
   margin-top: 4px;
