@@ -74,6 +74,7 @@ import {
   PLAYER_TILE_GRASS_OVERLAY_ALPHA
 } from './render/render-constants.js';
 import { computePlayViewState } from './render/play-view-camera.js';
+import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
@@ -241,6 +242,50 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
   }
 }
 
+/**
+ * Play collider overlay: walk feet on the ground plane + optional dashed Z axis + body circle
+ * at `item.airZ` tiles high (matches sprite / projectile `z` convention).
+ * @param {{ type: string, x: number, y: number, dexId?: number, animMoving?: boolean, airZ?: number }} item
+ */
+function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache) {
+  const zLift = Math.max(0, Number(item.airZ) || 0);
+  const r = 0.32 * Math.min(tileW, tileH);
+  const dex = item.dexId ?? 94;
+  const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
+  const fcx = snapPx(ft.x * tileW);
+  const fcyGround = snapPx(ft.y * tileH);
+  const fcyBody = snapPx(ft.y * tileH - zLift * tileH);
+
+  if (zLift > 0.02) {
+    ctx.strokeStyle = 'rgba(200, 255, 220, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(fcx, fcyGround);
+    ctx.lineTo(fcx, fcyBody);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(0, 255, 140, 0.3)';
+    ctx.fillStyle = 'rgba(0, 255, 140, 0.05)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(fcx, fcyGround, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 255, 140, 0.58)';
+  ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(fcx, fcyBody, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.fillRect(fcx - 2, fcyBody - 2, 4, 4);
+}
+
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
   PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC,
@@ -297,6 +342,7 @@ export function render(canvas, data, options = {}) {
   syncPlayChunkCache(data, tileW, appMode);
 
   if (appMode === 'map') {
+    clearPlayCameraSnapshot();
     drawCachedMapOverview(ctx, {
       data,
       cw,
@@ -325,6 +371,7 @@ export function render(canvas, data, options = {}) {
       flightActive: !!player.flightActive,
       framingHeightTiles: POKEMON_HEIGHTS[playerDexForCam] || 1.1
     });
+    setPlayCameraSnapshot({ ...playCam, cw, ch });
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
@@ -806,6 +853,8 @@ export function render(canvas, data, options = {}) {
         type: 'wild',
         y: we.y,
         x: we.x,
+        /** World height (tiles) for collider / FX overlay — same as sprite lift. */
+        airZ: we.z ?? 0,
         /** Depth sort: world pivot Y (tile center), not logical cell — matches sprite anchor vs props. */
         sortY: footSortY,
         dexId: we.dexId,
@@ -952,6 +1001,8 @@ export function render(canvas, data, options = {}) {
         type: 'player',
         y: vy,
         x: vx,
+        /** World height (tiles) for collider / FX overlay — same as sprite lift. */
+        airZ: player.z ?? 0,
         /** Depth sort: world pivot Y (tile center), not logical cell. */
         sortY: vy + 0.5,
         dexId: playerDex,
@@ -1521,20 +1572,7 @@ export function render(canvas, data, options = {}) {
 
       for (const item of renderItems) {
         if (item.type === 'player' || item.type === 'wild') {
-          ctx.strokeStyle = 'rgba(0, 255, 140, 0.55)';
-          ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
-          ctx.lineWidth = 2;
-          const r = 0.32 * Math.min(tileW, tileH);
-          const dex = item.dexId ?? 94;
-          const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
-          const fcx = snapPx(ft.x * tileW);
-          const fcy = snapPx(ft.y * tileH);
-          ctx.beginPath();
-          ctx.arc(fcx, fcy, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(255,255,255,0.85)';
-          ctx.fillRect(fcx - 2, fcy - 2, 4, 4);
+          drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
         } else if (item.type === 'scatter' || item.type === 'tree') {
           ctx.fillStyle = 'rgba(255, 80, 255, 0.65)';
           ctx.fillRect(item.originX * tileW + tileW / 2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);
@@ -1545,20 +1583,7 @@ export function render(canvas, data, options = {}) {
       ctx.save();
       for (const item of renderItems) {
         if (item.type === 'player' || item.type === 'wild') {
-          ctx.strokeStyle = 'rgba(0, 255, 140, 0.55)';
-          ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
-          ctx.lineWidth = 2;
-          const r = 0.32 * Math.min(tileW, tileH);
-          const dex = item.dexId ?? 94;
-          const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
-          const fcx = snapPx(ft.x * tileW);
-          const fcy = snapPx(ft.y * tileH);
-          ctx.beginPath();
-          ctx.arc(fcx, fcy, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(255,255,255,0.85)';
-          ctx.fillRect(fcx - 2, fcy - 2, 4, 4);
+          drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
         }
       }
       ctx.restore();
@@ -1646,8 +1671,8 @@ export function render(canvas, data, options = {}) {
       ctx.restore();
     }
 
-    // Indicador de colisão: círculo com diâmetro = 1 tile no centro da célula lógica (player.x, player.y).
-    // É essa célula que o jogo trata como "onde estás" após um passo; canWalk(nx,ny) avalia o tile de destino da mesma forma (grelha, sem elipse contínua).
+    // Indicador de colisão: círculo = 1 tile no centro da célula lógica (player.x, player.y) = chão;
+    // com `player.z` > 0, eixo tracejado até o corpo no ar (mesma convenção que sprite / projéteis).
     {
       const collMx = player.x;
       const collMy = player.y;
@@ -1655,15 +1680,32 @@ export function render(canvas, data, options = {}) {
       const microHCol = height * CHUNK_SIZE;
       if (collMx >= 0 && collMy >= 0 && collMx < microWCol && collMy < microHCol) {
         const collCx = snapPx((collMx + 0.5) * tileW);
-        const collCy = snapPx((collMy + 0.5) * tileH);
+        const collCyGround = snapPx((collMy + 0.5) * tileH);
+        const pz = Math.max(0, Number(player.z) || 0);
+        const collCyBody = snapPx((collMy + 0.5) * tileH - pz * tileH);
         const collR = Math.min(tileW, tileH) * 0.5;
         ctx.save();
         ctx.strokeStyle = 'rgba(0, 240, 200, 0.92)';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
-        ctx.arc(collCx, collCy, Math.max(1, collR - 1), 0, Math.PI * 2);
+        ctx.arc(collCx, collCyGround, Math.max(1, collR - 1), 0, Math.PI * 2);
         ctx.stroke();
+        if (pz > 0.02) {
+          ctx.strokeStyle = 'rgba(160, 255, 235, 0.65)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(collCx, collCyGround);
+          ctx.lineTo(collCx, collCyBody);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(0, 240, 200, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(collCx, collCyBody, Math.max(1, collR * 0.42), 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.setLineDash([]);
         ctx.restore();
       }

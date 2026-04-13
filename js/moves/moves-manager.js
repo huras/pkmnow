@@ -8,6 +8,7 @@ import {
   SILK_TRAIL_INTERVAL,
   LASER_TRAIL_INTERVAL,
   COLLISION_BROAD_PHASE_TILES,
+  PROJECTILE_Z_HIT_TOLERANCE_TILES,
   WILD_MOVE_COOLDOWN_DEFAULT,
   FIRE_FRAME_W,
   FIRE_FRAME_H
@@ -27,6 +28,11 @@ import {
   castSilkShoot
 } from './zelda-ported-moves.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
+import {
+  clampFloorAimToMaxRange,
+  spawnAlongHypotTowardGround,
+  velocityFromToGround
+} from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
@@ -68,7 +74,13 @@ function pushParticle(p) {
   activeParticles.push(p);
 }
 
-export function spawnHitParticles(x, y, z) {
+/**
+ * Burst FX at tile center (matches play aim) on the ground plane x,y; `effectZ` is world height (tiles).
+ */
+export function spawnHitParticles(x, y, effectZ) {
+  const tcx = Math.floor(x) + 0.5;
+  const tcy = Math.floor(y) + 0.5;
+  const zz = Number(effectZ) || 0;
   const budget = Math.min(8, MAX_PARTICLES - activeParticles.length);
   for (let i = 0; i < budget; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -76,11 +88,11 @@ export function spawnHitParticles(x, y, z) {
     const life = 0.28 + Math.random() * 0.28;
     pushParticle({
       type: 'burst',
-      x,
-      y,
+      x: tcx,
+      y: tcy,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      z: z + 0.5,
+      z: zz + 0.5,
       vz: 4 + Math.random() * 3,
       life,
       maxLife: 0.56
@@ -88,15 +100,17 @@ export function spawnHitParticles(x, y, z) {
   }
 }
 
-function spawnTrailParticle(px, py, trailType) {
+/** @param {number} [baseZ] — match parent projectile z so trails align when casting from flight (projectiles use `sourceEntity.z`). */
+function spawnTrailParticle(px, py, trailType, baseZ = 0) {
   const spread = 0.18;
+  const bz = Number(baseZ) || 0;
   pushParticle({
     type: trailType,
     x: px + (Math.random() - 0.5) * spread,
     y: py + (Math.random() - 0.5) * spread,
     vx: (Math.random() - 0.5) * 1.6,
     vy: (Math.random() - 0.5) * 1.6,
-    z: 0.15 + Math.random() * 0.25,
+    z: bz + 0.15 + Math.random() * 0.25,
     vz: 0.8 + Math.random() * 1.6,
     life: 0.42,
     maxLife: 0.42
@@ -113,6 +127,12 @@ function broadPhaseOk(px, py, tx, ty) {
   return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
 }
 
+function zHitAligned(projZ, targetZ) {
+  const pz = Number(projZ) || 0;
+  const tz = Number(targetZ) || 0;
+  return Math.abs(pz - tz) <= PROJECTILE_Z_HIT_TOLERANCE_TILES;
+}
+
 /**
  * @param {import('../player.js').player} player
  */
@@ -121,21 +141,26 @@ function checkPlayerHit(proj, player) {
   const px = player.visualX ?? player.x;
   const py = player.visualY ?? player.y;
   if (!broadPhaseOk(proj.x, proj.y, px, py)) return false;
+  if (!zHitAligned(proj.z, player.z ?? 0)) return false;
   return checkCollision(proj.x, proj.y, proj.radius, { x: px, y: py });
 }
 
-function spawnIncinerateShards(proj, pushProjectileRef) {
+/** @param {number | null | undefined} effectZ — impact height; default `proj.z` (spawn altitude). */
+function spawnIncinerateShards(proj, pushProjectileRef, effectZ) {
+  const z0 = effectZ !== undefined && effectZ !== null ? Number(effectZ) || 0 : proj.z || 0;
+  const tcx = Math.floor(proj.x) + 0.5;
+  const tcy = Math.floor(proj.y) + 0.5;
   const count = 10;
   for (let i = 0; i < count; i++) {
     const a = (i / count) * Math.PI * 2;
     const speed = 8.8 + Math.random() * 1.8;
     pushProjectileRef({
       type: 'incinerateShard',
-      x: proj.x,
-      y: proj.y,
+      x: tcx,
+      y: tcy,
       vx: Math.cos(a) * speed,
       vy: Math.sin(a) * speed,
-      z: proj.z || 0,
+      z: z0,
       radius: 0.2,
       timeToLive: 0.42 + Math.random() * 0.18,
       damage: (proj.splashDamage || 2) * 0.8,
@@ -148,13 +173,15 @@ function spawnIncinerateShards(proj, pushProjectileRef) {
   }
 }
 
-function applySplashToWild(proj, wildList) {
+/** @param {number | undefined} splashZ — world height for splash (e.g. `0` on ground TTL); default `proj.z`. */
+function applySplashToWild(proj, wildList, splashZ) {
   const r = proj.splashRadius || 0;
   const d = proj.splashDamage || 0;
   if (r <= 0 || d <= 0) return;
+  const sz = splashZ !== undefined ? Number(splashZ) || 0 : proj.z || 0;
   for (const wild of wildList) {
     if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
-    if (Math.hypot(wild.x - proj.x, wild.y - proj.y) <= r) {
+    if (Math.hypot(wild.x - proj.x, wild.y - proj.y) <= r && zHitAligned(sz, wild.z ?? 0)) {
       if (wild.takeDamage) wild.takeDamage(d);
     }
   }
@@ -396,23 +423,37 @@ export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
   playerUltimateCooldown = 7.5;
   bumpPlayerMoveCastVisual(sourceEntity);
   const aimA = Math.atan2(targetY - sourceY, targetX - sourceX);
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.02;
+  const maxRing = 11;
   const n = 18;
   for (let i = 0; i < n; i++) {
     const ringA = (i / n) * Math.PI * 2;
     const a = ringA * 0.55 + aimA * 0.45;
-    const sp = 11.5 + (i % 3) * 0.6;
-    const vx = Math.cos(a) * sp;
-    const vy = Math.sin(a) * sp;
+    const speed = 11.5 + (i % 3) * 0.6;
+    const rawTx = sourceX + Math.cos(a) * maxRing;
+    const rawTy = sourceY + Math.sin(a) * maxRing;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxRing);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.22);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      speed,
+      { ttlMargin: 1.08, ttlPad: 0.08 }
+    );
     const isEmber = i % 2 === 0;
     pushProjectile({
       type: isEmber ? 'ember' : 'waterShot',
-      x: sourceX + Math.cos(a) * 0.22,
-      y: sourceY + Math.sin(a) * 0.22,
+      x: sp.startX,
+      y: sp.startY,
       vx,
       vy,
-      z: (sourceEntity?.z || 0) + 0.02,
+      vz,
+      z: sp.startZ,
       radius: isEmber ? 0.36 : 0.3,
-      timeToLive: isEmber ? 1.35 : 1.05,
+      timeToLive,
       damage: isEmber ? 7 : 6,
       sourceEntity,
       fromWild: false,
@@ -566,12 +607,12 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
     proj.timeToLive -= dt;
     if (proj.timeToLive <= 0) {
       if (proj.type === 'incinerateCore') {
-        spawnHitParticles(proj.x, proj.y, proj.z || 0);
-        applySplashToWild(proj, wildList);
-        spawnIncinerateShards(proj, pushProjectile);
+        spawnHitParticles(proj.x, proj.y, 0);
+        applySplashToWild(proj, wildList, 0);
+        spawnIncinerateShards(proj, pushProjectile, 0);
       } else if (proj.type === 'confusionOrb') {
-        spawnHitParticles(proj.x, proj.y, proj.z || 0);
-        applySplashToWild(proj, wildList);
+        spawnHitParticles(proj.x, proj.y, 0);
+        applySplashToWild(proj, wildList, 0);
       }
       activeProjectiles.splice(i, 1);
       continue;
@@ -579,6 +620,9 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
 
     proj.x += proj.vx * dt;
     proj.y += proj.vy * dt;
+    if (Number.isFinite(proj.vz)) {
+      proj.z += proj.vz * dt;
+    }
 
     const trailType =
       proj.type === 'ember'
@@ -610,7 +654,7 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
                   : EMBER_TRAIL_INTERVAL;
       while (proj.trailAcc >= interval) {
         proj.trailAcc -= interval;
-        spawnTrailParticle(proj.x, proj.y, trailType);
+        spawnTrailParticle(proj.x, proj.y, trailType, proj.z);
       }
     }
 
@@ -620,11 +664,12 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
       const poisonCapable = proj.type === 'poisonSting' || proj.type === 'poisonPowderShot';
       const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
       const poison = poisonCapable && Math.random() < poisonChance;
+      const pz = player.z ?? 0;
       if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
-        spawnHitParticles(proj.x, proj.y, proj.z);
+        spawnHitParticles(proj.x, proj.y, pz);
       }
       if (proj.type === 'incinerateCore') {
-        spawnIncinerateShards(proj, pushProjectile);
+        spawnIncinerateShards(proj, pushProjectile, pz);
       }
       hit = true;
     }
@@ -635,14 +680,16 @@ export function updateMoves(dt, wildPokemonList, _data, player) {
           continue;
         }
         if (!broadPhaseOk(proj.x, proj.y, wild.x, wild.y)) continue;
+        const wz = wild.z ?? 0;
+        if (!zHitAligned(proj.z, wz)) continue;
         if (checkCollision(proj.x, proj.y, proj.radius, wild)) {
           if (wild.takeDamage) wild.takeDamage(proj.damage);
-          spawnHitParticles(proj.x, proj.y, proj.z);
+          spawnHitParticles(proj.x, proj.y, wz);
           if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
             applySplashToWild(proj, wildList);
           }
           if (proj.type === 'incinerateCore') {
-            spawnIncinerateShards(proj, pushProjectile);
+            spawnIncinerateShards(proj, pushProjectile, wz);
           }
           hit = true;
           break;

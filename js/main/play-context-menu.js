@@ -2,8 +2,7 @@ import { CHUNK_SIZE } from '../chunking.js';
 import { setPlayerPos } from '../player.js';
 import { getPlayPointerMode } from './play-pointer-mode.js';
 import { tryPlayerFieldMoveOnTile } from '../wild-pokemon/wild-pokemon-manager.js';
-import { computePlayViewState } from '../render/play-view-camera.js';
-import { getPokemonConfig } from '../pokemon/pokemon-config.js';
+import { playScreenPixelsToWorldTileCoords } from '../render/play-camera-snapshot.js';
 
 /**
  * @param {{
@@ -109,22 +108,13 @@ export function installPlayContextMenu(opts) {
     const currentData = getCurrentData();
     const player = getPlayer();
 
-    const vx = player.visualX ?? player.x;
-    const vy = player.visualY ?? player.y;
-    const cfg = getPokemonConfig(player.dexId ?? 1);
-    const playCam = computePlayViewState({
-      cw: canvas.width,
-      ch: canvas.height,
-      vx,
-      vy,
-      playerZ: player.z ?? 0,
-      flightActive: !!player.flightActive,
-      framingHeightTiles: cfg?.heightTiles ?? 1.1
-    });
-
-    // Keep right-click tile targeting in sync with play hover/camera transform.
-    const worldX = (mousePxX - playCam.currentTransX) / playCam.effTileW - 0.5;
-    const worldY = (mousePxY - playCam.currentTransY) / playCam.effTileH - 0.5;
+    const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+      canvas.width,
+      canvas.height,
+      mousePxX,
+      mousePxY,
+      player
+    );
     const mx = Math.floor(worldX);
     const my = Math.floor(worldY);
 

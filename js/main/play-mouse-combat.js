@@ -22,8 +22,13 @@ function combatModifierHeld() {
 }
 
 function aimAtCursor(player) {
-  const tx = playInputState.mouseX || (player.x + 1);
-  const ty = playInputState.mouseY || player.y;
+  if (!playInputState.mouseValid) {
+    return { tx: player.x + 1, ty: player.y, sx: player.x, sy: player.y };
+  }
+  const wx = playInputState.mouseX;
+  const wy = playInputState.mouseY;
+  const tx = Math.floor(wx) + 0.5;
+  const ty = Math.floor(wy) + 0.5;
   return { tx, ty, sx: player.x, sy: player.y };
 }
 
@@ -166,5 +171,6 @@ export function installPlayPointerCombat(deps) {
     rightHeld = false;
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
+    playInputState.mouseValid = false;
   });
 }

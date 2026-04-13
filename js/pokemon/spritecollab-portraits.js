@@ -8,7 +8,8 @@
  * if the project copy is missing. Re-sync: `scripts/copy-spritecollab-portraits.ps1`.
  *
  * Slugs match file basenames (PascalCase / Teary-Eyed.png → slug `Teary-Eyed`). Not every species has every file;
- * missing files fall back to `Normal.png` for that species folder.
+ * missing files fall back to `Normal.png` for that species folder. After one 404 per dex+slug,
+ * further loads skip the missing URL (see `portraitPrimaryMiss`).
  */
 
 /** @type {Map<string, Promise<string | null>>} */
@@ -19,6 +20,13 @@ const portraitPrefixByDex = new Map();
 
 /** @type {Map<string, Promise<void>>} */
 const portraitLoadInflight = new Map();
+
+/**
+ * `${dex}:${slug}` → primary emotion PNG returned 404 once; skip further GETs and load `Normal.png` only.
+ * (SpriteCollab rarely ships every slug per species; avoids console spam and wasted requests.)
+ * @type {Set<string>}
+ */
+const portraitPrimaryMiss = new Set();
 
 export function getSpriteCollabPortraitBase() {
   if (typeof window !== 'undefined' && window.__SPRITECOLLAB_PORTRAIT_BASE__) {
@@ -158,11 +166,39 @@ export async function probeSpriteCollabPortraitPrefix(dexId) {
  * @param {string} cacheKey
  * @param {string} src
  * @param {string} fallbackSrc
+ * @param {string | null} missKey — `${dex}:${slug}` for portraitPrimaryMiss; null skips miss tracking
  */
-function loadPortraitWithFallback(imageCache, cacheKey, src, fallbackSrc) {
+function loadPortraitWithFallback(imageCache, cacheKey, src, fallbackSrc, missKey) {
   if (imageCache.has(cacheKey)) return Promise.resolve();
   const existing = portraitLoadInflight.get(cacheKey);
   if (existing) return existing;
+
+  const loadFallbackOnly = () =>
+    new Promise((resolve) => {
+      const fb = new Image();
+      fb.onload = () => {
+        imageCache.set(cacheKey, fb);
+        portraitLoadInflight.delete(cacheKey);
+        resolve();
+      };
+      fb.onerror = () => {
+        portraitLoadInflight.delete(cacheKey);
+        resolve();
+      };
+      fb.src = fallbackSrc;
+    });
+
+  if (src === fallbackSrc) {
+    const p = loadFallbackOnly();
+    portraitLoadInflight.set(cacheKey, p);
+    return p;
+  }
+
+  if (missKey && portraitPrimaryMiss.has(missKey)) {
+    const p = loadFallbackOnly();
+    portraitLoadInflight.set(cacheKey, p);
+    return p;
+  }
 
   const p = new Promise((resolve) => {
     const img = new Image();
@@ -172,6 +208,7 @@ function loadPortraitWithFallback(imageCache, cacheKey, src, fallbackSrc) {
       resolve();
     };
     img.onerror = () => {
+      if (missKey) portraitPrimaryMiss.add(missKey);
       const fb = new Image();
       fb.onload = () => {
         imageCache.set(cacheKey, fb);
@@ -203,7 +240,8 @@ export async function ensureSpriteCollabPortraitLoaded(imageCache, dexId, slug) 
   const primary = `${prefix}${safe}.png`;
   const fallback = `${prefix}Normal.png`;
   const cacheKey = `portrait:${d}:${safe}`;
-  return loadPortraitWithFallback(imageCache, cacheKey, primary, fallback);
+  const missKey = `${d}:${safe}`;
+  return loadPortraitWithFallback(imageCache, cacheKey, primary, fallback, missKey);
 }
 
 /**

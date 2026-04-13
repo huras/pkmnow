@@ -1,4 +1,9 @@
 import { WATER_TRAIL_INTERVAL, FIRE_FRAME_W, FIRE_FRAME_H } from './move-constants.js';
+import {
+  clampFloorAimToMaxRange,
+  spawnAlongHypotTowardGround,
+  velocityFromToGround
+} from './projectile-ground-hypot.js';
 
 function clamp01(n) {
   return n < 0 ? 0 : n > 1 ? 1 : n;
@@ -22,43 +27,45 @@ export function castWaterBurstVolley(sourceX, sourceY, targetX, targetY, sourceE
     speedMul = 1,
     damageMul = 1
   } = opts;
-  const dx0 = targetX - sourceX;
-  const dy0 = targetY - sourceY;
-  const dist0 = Math.hypot(dx0, dy0);
-  const dirX = dist0 > 1e-6 ? dx0 / dist0 : 0;
-  const dirY = dist0 > 1e-6 ? dy0 / dist0 : 1;
 
   const maxRangeTiles = fromWild ? 8 : 10;
-  let aimX = targetX;
-  let aimY = targetY;
-  if (dist0 > maxRangeTiles) {
-    aimX = sourceX + dirX * maxRangeTiles;
-    aimY = sourceY + dirY * maxRangeTiles;
-  }
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxRangeTiles);
 
   const cp = clamp01(chargePower);
   const speed = 19 * speedMul * (1 + 0.22 * cp);
   const count = countOverride ?? Math.round(7 + cp * 8);
   const spread = 0.35 * spreadMul * (1 + 0.4 * cp);
-  const startX = sourceX + dirX * 0.3;
-  const startY = sourceY + dirY * 0.3;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.05;
+
+  const aimCenter = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.3);
 
   for (let i = 0; i < count; i++) {
     const spreadA = (Math.random() - 0.5) * spread;
-    const baseA = Math.atan2(aimY - startY, aimX - startX);
+    const baseA = Math.atan2(aim.aimY - aimCenter.startY, aim.aimX - aimCenter.startX);
     const finalA = baseA + spreadA;
-    const vx = Math.cos(finalA) * speed;
-    const vy = Math.sin(finalA) * speed;
-    const travelTiles = Math.hypot(aimX - startX, aimY - startY) || 1;
-    const timeToLive = clamp01(travelTiles / speed) * 0.95 + 0.2;
+    const reach = Math.hypot(aim.aimX - aimCenter.startX, aim.aimY - aimCenter.startY) + 0.01;
+    const rawTx = aimCenter.startX + Math.cos(finalA) * reach;
+    const rawTy = aimCenter.startY + Math.sin(finalA) * reach;
+    const aimPt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxRangeTiles);
+
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      aimCenter.startX,
+      aimCenter.startY,
+      aimCenter.startZ,
+      aimPt.aimX,
+      aimPt.aimY,
+      speed,
+      { ttlMargin: 0.95, ttlPad: 0.2 }
+    );
 
     pushProjectile({
       type: 'waterShot',
-      x: startX,
-      y: startY,
+      x: aimCenter.startX,
+      y: aimCenter.startY,
       vx,
       vy,
-      z: (sourceEntity?.z || 0) + 0.05,
+      vz,
+      z: aimCenter.startZ,
       radius: 0.32,
       timeToLive,
       damage: (fromWild ? 6 : 9) * damageMul * (1 + 0.45 * cp),

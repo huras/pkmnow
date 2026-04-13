@@ -1,3 +1,9 @@
+import {
+  clampFloorAimToMaxRange,
+  spawnAlongHypotTowardGround,
+  velocityFromToGround
+} from './projectile-ground-hypot.js';
+
 function clamp01(n) {
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
@@ -33,39 +39,32 @@ export function castPoisonStingFan(sourceX, sourceY, targetX, targetY, sourceEnt
 
 export function castPoisonStingOnce(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 1e-4) return;
-  const dirX = dx / dist;
-  const dirY = dy / dist;
-
   const maxRange = fromWild ? 10 : 11;
-  let tx = targetX;
-  let ty = targetY;
-  if (dist > maxRange) {
-    tx = sourceX + dirX * maxRange;
-    ty = sourceY + dirY * maxRange;
-  }
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxRange);
 
   const speed = 14;
-  const startX = sourceX + dirX * 0.4;
-  const startY = sourceY + dirY * 0.4;
-  const pdx = tx - startX;
-  const pdy = ty - startY;
-  const pDist = Math.hypot(pdx, pdy) || 1e-6;
-  const vx = (pdx / pDist) * speed;
-  const vy = (pdy / pDist) * speed;
-  const timeToLive = clamp01(pDist / speed) * 1.05 + 0.12;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const spawn = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.4);
+
+  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    spawn.startX,
+    spawn.startY,
+    spawn.startZ,
+    aim.aimX,
+    aim.aimY,
+    speed,
+    { ttlMargin: 1.05, ttlPad: 0.12 }
+  );
   const angle = Math.atan2(vy, vx);
 
   pushProjectile({
     type: 'poisonSting',
-    x: startX,
-    y: startY,
+    x: spawn.startX,
+    y: spawn.startY,
     vx,
     vy,
-    z: sourceEntity?.z || 0,
+    vz,
+    z: spawn.startZ,
     radius: 0.28,
     timeToLive,
     damage: fromWild ? 10 : 14,

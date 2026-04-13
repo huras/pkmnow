@@ -3,6 +3,11 @@ import {
   FIRE_FRAME_H,
   FIRE_FRAME_W
 } from './move-constants.js';
+import {
+  clampFloorAimToMaxRange,
+  spawnAlongHypotTowardGround,
+  velocityFromToGround
+} from './projectile-ground-hypot.js';
 
 /** @param {number} n */
 function clamp01(n) {
@@ -35,49 +40,43 @@ export function castEmberVolley(
     damageMul = 1
   } = opts;
   const cp = clamp01(chargePower);
-  const dx0 = targetX - sourceX;
-  const dy0 = targetY - sourceY;
-  const dist0 = Math.hypot(dx0, dy0);
-  const dirX = dist0 > 1e-6 ? dx0 / dist0 : 0;
-  const dirY = dist0 > 1e-6 ? dy0 / dist0 : 1;
 
   const maxRangeTiles = fromWild ? 9 : 12;
-  let aimX = targetX;
-  let aimY = targetY;
-  if (dist0 > maxRangeTiles) {
-    aimX = sourceX + dirX * maxRangeTiles;
-    aimY = sourceY + dirY * maxRangeTiles;
-  }
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxRangeTiles);
 
   const speed = (fromWild ? 13 : 15) * speedMul * (1 + 0.2 * cp);
   const spreadTiles = (fromWild ? 0.55 : 0.85) * spreadMul * (1 + 0.35 * cp);
   const count = countOverride ?? Math.round(6 + cp * 8);
   const spawnOff = 0.35;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
 
-  const startX = sourceX + dirX * spawnOff;
-  const startY = sourceY + dirY * spawnOff;
+  const aimCenter = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, spawnOff);
 
   for (let i = 0; i < count; i++) {
     const ang = Math.random() * Math.PI * 2;
     const rad = Math.random() * spreadTiles;
-    const finalTx = aimX + Math.cos(ang) * rad;
-    const finalTy = aimY + Math.sin(ang) * rad;
+    const rawFx = aim.aimX + Math.cos(ang) * rad;
+    const rawFy = aim.aimY + Math.sin(ang) * rad;
+    const tgt = clampFloorAimToMaxRange(sourceX, sourceY, rawFx, rawFy, maxRangeTiles);
 
-    const pdx = finalTx - startX;
-    const pdy = finalTy - startY;
-    const pDist = Math.hypot(pdx, pdy) || 1e-6;
-    const vx = (pdx / pDist) * speed;
-    const vy = (pdy / pDist) * speed;
-    const travelTiles = pDist;
-    const timeToLive = clamp01(travelTiles / speed) * 1.15 + 0.15;
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      aimCenter.startX,
+      aimCenter.startY,
+      aimCenter.startZ,
+      tgt.aimX,
+      tgt.aimY,
+      speed,
+      { ttlMargin: 1.15, ttlPad: 0.15 }
+    );
 
     pushProjectile({
       type: 'ember',
-      x: startX,
-      y: startY,
+      x: aimCenter.startX,
+      y: aimCenter.startY,
       vx,
       vy,
-      z: sourceEntity?.z || 0,
+      vz,
+      z: aimCenter.startZ,
       radius: 0.38,
       timeToLive,
       damage: (fromWild ? 8 : 12) * damageMul * (1 + 0.5 * cp),

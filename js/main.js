@@ -33,8 +33,10 @@ import {
   getPlayColliderOverlayCache
 } from './main/play-collider-overlay-cache.js';
 import { playInputState } from './main/play-input-state.js';
-import { computePlayViewState } from './render/play-view-camera.js';
-import { getPokemonConfig } from './pokemon/pokemon-config.js';
+import {
+  playScreenPixelsToWorldTileCoords,
+  clearPlayCameraSnapshot
+} from './render/play-camera-snapshot.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -252,24 +254,16 @@ canvas.addEventListener('mousemove', (e) => {
   const mousePxY = (mouseClientY / rect.height) * canvas.height;
 
   if (appMode === 'play') {
-    const vx = player.visualX ?? player.x;
-    const vy = player.visualY ?? player.y;
-    const cfg = getPokemonConfig(player.dexId ?? 1);
-    const playCam = computePlayViewState({
-      cw: canvas.width,
-      ch: canvas.height,
-      vx,
-      vy,
-      playerZ: player.z ?? 0,
-      flightActive: !!player.flightActive,
-      framingHeightTiles: cfg?.heightTiles ?? 1.1
-    });
-
-    // Same inverse transform used by render(): screen px -> world tile coordinates.
-    const worldX = (mousePxX - playCam.currentTransX) / playCam.effTileW - 0.5;
-    const worldY = (mousePxY - playCam.currentTransY) / playCam.effTileH - 0.5;
+    const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+      canvas.width,
+      canvas.height,
+      mousePxX,
+      mousePxY,
+      player
+    );
     playInputState.mouseX = worldX;
     playInputState.mouseY = worldY;
+    playInputState.mouseValid = true;
     lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
     return;
   }
@@ -292,12 +286,14 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mouseleave', () => {
+  if (appMode === 'play') playInputState.mouseValid = false;
   if (currentData && appMode === 'map') updateView();
 });
 
 function enterPlayMode(gx, gy) {
   resetWildPokemonManager();
   setPlayerPos(gx * CHUNK_SIZE + CHUNK_SIZE / 2, gy * CHUNK_SIZE + CHUNK_SIZE / 2);
+  playInputState.mouseValid = false;
   appMode = 'play';
   btnExport.classList.add('hidden');
   btnBackToMap.classList.remove('hidden');
@@ -317,6 +313,7 @@ function enterPlayMode(gx, gy) {
 }
 
 btnBackToMap.addEventListener('click', () => {
+  clearPlayCameraSnapshot();
   appMode = 'map';
   btnExport.classList.remove('hidden');
   btnBackToMap.classList.add('hidden');

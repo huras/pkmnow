@@ -218,7 +218,7 @@ export function isBaseTerrainSpriteWalkable(spriteId) {
 
 /**
  * Só para lago roxo **sem** sprite de folhagem (`getFoliageOverlayTileId === null`): bloqueia CENTER e cantos IN_NE/NW/SE/SW.
- * Quinas OUT_* e bordas EDGE_* contam como margem seca → não bloqueiam aqui (com overlay, usa-se o Set abaixo).
+ * Quinas OUT_* e bordas EDGE_* contam como margem seca → não bloqueiam aqui (overlay roxo: só CENTER/IN_* no Set abaixo).
  */
 export function isPurpleLakePoolWalkBlockingRole(role) {
   if (role == null || role === '') return false;
@@ -229,7 +229,7 @@ export function isPurpleLakePoolWalkBlockingRole(role) {
 /**
  * Resolved foliage overlay tile IDs that block walking (O(1) lookup).
  * - `lava-lake-dirt` (Vulcão): **all** roles including OUT_* corners — still lava art, not safe ground.
- * - `purples lago-de-agua-doce-rock` (Arcane): **todos** os IDs do overlay — com folhagem desenhada, toda a célula é “poça” (inclui quinas OUT_*).
+ * - `purples lago-de-agua-doce-rock` (Arcane): só roles de poça (`CENTER` / `IN_*`) — margem OUT_* e EDGE_* = solo seco como no lago sem overlay.
  */
 export const FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS = (() => {
   const bad = new Set();
@@ -239,8 +239,8 @@ export const FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS = (() => {
   }
   const purples = TERRAIN_SETS['purples lago-de-agua-doce-rock'];
   if (purples?.roles) {
-    for (const id of Object.values(purples.roles)) {
-      bad.add(id);
+    for (const [role, id] of Object.entries(purples.roles)) {
+      if (isPurpleLakePoolWalkBlockingRole(role)) bad.add(id);
     }
   }
   return bad;
@@ -829,7 +829,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
   }
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
-  if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
+  if (!isAirborne && lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
     return finish(false);
   }
 
@@ -891,7 +891,7 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
   }
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
-  if (lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
+  if (!isAirborne && lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
     return false;
   }
 

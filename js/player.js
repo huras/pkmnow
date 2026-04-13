@@ -342,7 +342,7 @@ export function updatePlayer(dt, data) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
   const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
-  const isAirborne = player.jumping || player.z > 0.05;
+  const isAirborne = player.jumping || player.z > 0.05 || flightMove;
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
 

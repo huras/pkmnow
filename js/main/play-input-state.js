@@ -10,9 +10,11 @@ export const playInputState = {
   spaceHeld: false,
   /** Left Ctrl held — combat modifier (counter slots). */
   ctrlLeftHeld: false,
-  /** World tile coordinates of the mouse */
+  /** World tile coordinates of the mouse (ground plane; see `playScreenPixelsToWorldTileCoords`). */
   mouseX: 0,
   mouseY: 0,
+  /** False until first `mousemove` in play on the canvas (avoids (0,0) aim before hover). */
+  mouseValid: false,
   /** 0–1 while holding LMB (no Shift) — charged fire shot. */
   chargeLeft01: 0,
   /** 0–1 while holding RMB (no Shift) — charged water shot. */

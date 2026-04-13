@@ -23,3 +23,9 @@ export const WILD_MOVE_COOLDOWN_DEFAULT = 1.15;
 
 /** Broad-phase: skip hit test if farther than this (tiles). */
 export const COLLISION_BROAD_PHASE_TILES = 4;
+
+/**
+ * Projectiles and targets must be within this Z distance (tiles) to damage each other.
+ * Stops 2D-only hits when the shadow is near but the sprite/projectile is far above/below (flight / jump).
+ */
+export const PROJECTILE_Z_HIT_TOLERANCE_TILES = 1.35;

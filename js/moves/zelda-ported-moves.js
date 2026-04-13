@@ -6,21 +6,11 @@ import {
   SILK_TRAIL_INTERVAL,
   LASER_TRAIL_INTERVAL
 } from './move-constants.js';
-
-function clamp01(n) {
-  return n < 0 ? 0 : n > 1 ? 1 : n;
-}
-
-function resolveAim(sourceX, sourceY, targetX, targetY, maxRange) {
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 1e-6) return { aimX: sourceX + 1, aimY: sourceY, dirX: 1, dirY: 0, dist: 1 };
-  const dirX = dx / dist;
-  const dirY = dy / dist;
-  if (dist <= maxRange) return { aimX: targetX, aimY: targetY, dirX, dirY, dist };
-  return { aimX: sourceX + dirX * maxRange, aimY: sourceY + dirY * maxRange, dirX, dirY, dist: maxRange };
-}
+import {
+  clampFloorAimToMaxRange,
+  spawnAlongHypotTowardGround,
+  velocityFromToGround
+} from './projectile-ground-hypot.js';
 
 function pushLinearProjectile(pushProjectile, spec) {
   pushProjectile(spec);
@@ -32,21 +22,38 @@ function pushLinearProjectile(pushProjectile, spec) {
  */
 export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 8.5 : 10);
+  const maxR = fromWild ? 8.5 : 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const count = 11;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.26;
     const a = Math.atan2(aim.dirY, aim.dirX) + spread;
     const speed = 16 + Math.random() * 2;
+    const reach = 5.0;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.35);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      speed,
+      { ttlMargin: 1.05, ttlPad: 0.1 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'flamethrowerShot',
-      x: sourceX + aim.dirX * 0.35,
-      y: sourceY + aim.dirY * 0.35,
-      vx: Math.cos(a) * speed,
-      vy: Math.sin(a) * speed,
-      z: sourceEntity?.z || 0,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.25,
-      timeToLive: 0.52 + Math.random() * 0.18,
+      timeToLive,
       damage: fromWild ? 3 : 4,
       sourceEntity,
       fromWild,
@@ -59,21 +66,37 @@ export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntit
 
 export function castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 8 : 10);
-  const baseA = Math.atan2(aim.dirY, aim.dirX);
+  const maxR = fromWild ? 8 : 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const count = 4;
   for (let i = 0; i < count; i++) {
     const spread = (i - (count - 1) * 0.5) * 0.12;
-    const a = baseA + spread;
+    const a = Math.atan2(aim.dirY, aim.dirX) + spread;
+    const reach = 3.6;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.35);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      9.8,
+      { ttlMargin: 1.08, ttlPad: 0.08 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'bubbleShot',
-      x: sourceX + aim.dirX * 0.35,
-      y: sourceY + aim.dirY * 0.35,
-      vx: Math.cos(a) * 9.8,
-      vy: Math.sin(a) * 9.8,
-      z: sourceEntity?.z || 0,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.3,
-      timeToLive: 1.1,
+      timeToLive,
       damage: fromWild ? 4 : 6,
       sourceEntity,
       fromWild,
@@ -86,20 +109,37 @@ export function castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, opt
 
 export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 9 : 11);
+  const maxR = fromWild ? 9 : 11;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.04;
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const count = 8;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.16;
     const a = Math.atan2(aim.dirY, aim.dirX) + spread;
+    const reach = 4.8;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.33);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      14.5,
+      { ttlMargin: 1.05, ttlPad: 0.08 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'waterGunShot',
-      x: sourceX + aim.dirX * 0.33,
-      y: sourceY + aim.dirY * 0.33,
-      vx: Math.cos(a) * 14.5,
-      vy: Math.sin(a) * 14.5,
-      z: (sourceEntity?.z || 0) + 0.04,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.25,
-      timeToLive: 0.9,
+      timeToLive,
       damage: fromWild ? 3 : 5,
       sourceEntity,
       fromWild,
@@ -112,16 +152,29 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
 
 export function castConfusion(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 8 : 10);
+  const maxR = fromWild ? 8 : 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.4);
+  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    sp.startX,
+    sp.startY,
+    sp.startZ,
+    aim.aimX,
+    aim.aimY,
+    8.2,
+    { ttlMargin: 1.12, ttlPad: 0.12 }
+  );
   pushLinearProjectile(pushProjectile, {
     type: 'confusionOrb',
-    x: sourceX + aim.dirX * 0.4,
-    y: sourceY + aim.dirY * 0.4,
-    vx: aim.dirX * 8.2,
-    vy: aim.dirY * 8.2,
-    z: sourceEntity?.z || 0,
+    x: sp.startX,
+    y: sp.startY,
+    vx,
+    vy,
+    vz,
+    z: sp.startZ,
     radius: 0.34,
-    timeToLive: 1.45,
+    timeToLive,
     damage: fromWild ? 6 : 9,
     splashDamage: fromWild ? 2 : 3,
     splashRadius: 1.25,
@@ -135,16 +188,29 @@ export function castConfusion(sourceX, sourceY, targetX, targetY, sourceEntity, 
 
 export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 11 : 13);
+  const maxR = fromWild ? 11 : 13;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.44);
+  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    sp.startX,
+    sp.startY,
+    sp.startZ,
+    aim.aimX,
+    aim.aimY,
+    18,
+    { ttlMargin: 1.05, ttlPad: 0.06 }
+  );
   pushLinearProjectile(pushProjectile, {
     type: 'psybeamShot',
-    x: sourceX + aim.dirX * 0.44,
-    y: sourceY + aim.dirY * 0.44,
-    vx: aim.dirX * 18,
-    vy: aim.dirY * 18,
-    z: sourceEntity?.z || 0,
+    x: sp.startX,
+    y: sp.startY,
+    vx,
+    vy,
+    vz,
+    z: sp.startZ,
     radius: 0.3,
-    timeToLive: 0.78,
+    timeToLive,
     damage: fromWild ? 7 : 12,
     sourceEntity,
     fromWild,
@@ -156,20 +222,37 @@ export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, op
 
 export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 12 : 15);
+  const maxR = fromWild ? 12 : 15;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const count = 12;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.08;
     const a = Math.atan2(aim.dirY, aim.dirX) + spread;
+    const reach = 5.5;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.42);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      20,
+      { ttlMargin: 1.02, ttlPad: 0.06 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'prismaticShot',
-      x: sourceX + aim.dirX * 0.42,
-      y: sourceY + aim.dirY * 0.42,
-      vx: Math.cos(a) * 20,
-      vy: Math.sin(a) * 20,
-      z: sourceEntity?.z || 0,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.24,
-      timeToLive: 0.7,
+      timeToLive,
       damage: fromWild ? 4 : 6,
       sourceEntity,
       fromWild,
@@ -182,25 +265,36 @@ export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEnt
 
 export function castPoisonPowder(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 8 : 10);
+  const maxR = fromWild ? 8 : 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.35);
   const count = 24;
   for (let i = 0; i < count; i++) {
     const ang = Math.random() * Math.PI * 2;
     const rad = Math.random() * 1.7;
-    const tx = aim.aimX + Math.cos(ang) * rad;
-    const ty = aim.aimY + Math.sin(ang) * rad;
-    const dx = tx - sourceX;
-    const dy = ty - sourceY;
-    const dist = Math.hypot(dx, dy) || 1;
+    const rawTx = aim.aimX + Math.cos(ang) * rad;
+    const rawTy = aim.aimY + Math.sin(ang) * rad;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      7.6,
+      { ttlMargin: 1.08, ttlPad: 0.1 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'poisonPowderShot',
-      x: sourceX + aim.dirX * 0.35,
-      y: sourceY + aim.dirY * 0.35,
-      vx: (dx / dist) * 7.6,
-      vy: (dy / dist) * 7.6,
-      z: sourceEntity?.z || 0,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.34,
-      timeToLive: 1.2,
+      timeToLive,
       damage: fromWild ? 1.5 : 2.5,
       sourceEntity,
       fromWild,
@@ -214,16 +308,29 @@ export function castPoisonPowder(sourceX, sourceY, targetX, targetY, sourceEntit
 
 export function castIncinerate(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 9 : 11);
+  const maxR = fromWild ? 9 : 11;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.35);
+  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    sp.startX,
+    sp.startY,
+    sp.startZ,
+    aim.aimX,
+    aim.aimY,
+    12.8,
+    { ttlMargin: 1.06, ttlPad: 0.08 }
+  );
   pushLinearProjectile(pushProjectile, {
     type: 'incinerateCore',
-    x: sourceX + aim.dirX * 0.35,
-    y: sourceY + aim.dirY * 0.35,
-    vx: aim.dirX * 12.8,
-    vy: aim.dirY * 12.8,
-    z: sourceEntity?.z || 0,
+    x: sp.startX,
+    y: sp.startY,
+    vx,
+    vy,
+    vz,
+    z: sp.startZ,
     radius: 0.33,
-    timeToLive: 0.95,
+    timeToLive,
     damage: fromWild ? 6 : 9,
     splashDamage: fromWild ? 2 : 3.5,
     splashRadius: 1.3,
@@ -237,20 +344,37 @@ export function castIncinerate(sourceX, sourceY, targetX, targetY, sourceEntity,
 
 export function castSilkShoot(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, fromWild ? 8.5 : 10);
+  const maxR = fromWild ? 8.5 : 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const count = 9;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.18;
     const a = Math.atan2(aim.dirY, aim.dirX) + spread;
+    const reach = 4.6;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.34);
+    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      pt.aimX,
+      pt.aimY,
+      12,
+      { ttlMargin: 1.04, ttlPad: 0.08 }
+    );
     pushLinearProjectile(pushProjectile, {
       type: 'silkShot',
-      x: sourceX + aim.dirX * 0.34,
-      y: sourceY + aim.dirY * 0.34,
-      vx: Math.cos(a) * 12,
-      vy: Math.sin(a) * 12,
-      z: sourceEntity?.z || 0,
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
       radius: 0.27,
-      timeToLive: 0.82,
+      timeToLive,
       damage: fromWild ? 2 : 3,
       sourceEntity,
       fromWild,
@@ -264,18 +388,31 @@ export function castSilkShoot(sourceX, sourceY, targetX, targetY, sourceEntity, 
 
 export function castPoisonStingAlias(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { pushProjectile, fromWild = false } = opts;
-  const aim = resolveAim(sourceX, sourceY, targetX, targetY, 11);
+  const maxR = 11;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.4);
+  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    sp.startX,
+    sp.startY,
+    sp.startZ,
+    aim.aimX,
+    aim.aimY,
+    14,
+    { ttlMargin: 1.05, ttlPad: 0.1 }
+  );
   pushProjectile({
     type: 'poisonSting',
-    x: sourceX + aim.dirX * 0.4,
-    y: sourceY + aim.dirY * 0.4,
-    vx: aim.dirX * 14,
-    vy: aim.dirY * 14,
-    z: sourceEntity?.z || 0,
+    x: sp.startX,
+    y: sp.startY,
+    vx,
+    vy,
+    vz,
+    z: sp.startZ,
     radius: 0.28,
-    timeToLive: 1.0,
+    timeToLive,
     damage: fromWild ? 10 : 14,
-    stingAngle: Math.atan2(aim.dirY, aim.dirX),
+    stingAngle: Math.atan2(vy, vx),
     sourceEntity,
     fromWild,
     hitsWild: !fromWild,
@@ -285,6 +422,5 @@ export function castPoisonStingAlias(sourceX, sourceY, targetX, targetY, sourceE
 }
 
 export function castPoisonStringTypo(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  // Alias intentionally kept for user typo compatibility: "PoisonString".
   castPoisonStingAlias(sourceX, sourceY, targetX, targetY, sourceEntity, opts);
 }
