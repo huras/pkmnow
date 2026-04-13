@@ -22,6 +22,7 @@ import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.j
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
+import { tryCastWildMove } from '../moves/moves-manager.js';
 
 const SKY_SPECIES = new Set([
   6,   // Charizard
@@ -340,6 +341,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
       } else {
         entity.vx = 0;
         entity.vy = 0;
+        tryCastWildMove(entity, playerX, playerY, dt);
       }
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
@@ -751,7 +753,22 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       grounded: true,
       jumping: false,
       jumpCooldown: 0,
-      _blockedMoveFrames: 0
+      _blockedMoveFrames: 0,
+      hp: 50,
+      maxHp: 50,
+      hitFlashTimer: 0,
+      takeDamage: function(amount) {
+        this.hp -= amount;
+        if (this.hp <= 0) {
+          this.isDespawning = true;
+        }
+        this.hitFlashTimer = 0.2; // flash for 200ms
+        
+        // Flee on hit if not already fleeing
+        if (this.aiState !== 'flee' && this.aiState !== 'sleep') {
+          this.aiState = 'flee';
+        }
+      }
     };
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
@@ -785,10 +802,58 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     integrateWildPokemonVertical(e, dt);
     updateWildMotion(e, dt, data, playerX, playerY);
     advanceWildPokemonAnim(e, dt);
+    
+    if (e.hitFlashTimer > 0) {
+      e.hitFlashTimer -= dt;
+      if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
+    }
   }
   for (const k of toDelete) entitiesByKey.delete(k);
 }
 
 export function getWildPokemonEntities() {
   return Array.from(entitiesByKey.values());
+}
+
+/** Euclidean distance from tile center (micro) to wild pivot for a field move to register. */
+const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
+const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
+
+/**
+ * Game mode: right-click field move — wild mon near the targeted tile gets a pain balloon and knockback from the player.
+ * @param {number} mx
+ * @param {number} my
+ * @param {object} data
+ * @param {{ x: number, y: number }} player
+ * @returns {{ hit: boolean, dexId?: number }}
+ */
+export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
+  if (!data || !player) return { hit: false };
+  const maxMX = data.width * CHUNK_SIZE;
+  const maxMY = data.height * CHUNK_SIZE;
+  if (mx < 0 || my < 0 || mx >= maxMX || my >= maxMY) return { hit: false };
+
+  const tx = mx + 0.5;
+  const ty = my + 0.5;
+  let best = null;
+  let bestD = Infinity;
+  for (const e of entitiesByKey.values()) {
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning) continue;
+    const d = Math.hypot(e.x - tx, e.y - ty);
+    if (d <= PLAYER_FIELD_MOVE_HIT_RADIUS && d < bestD) {
+      bestD = d;
+      best = e;
+    }
+  }
+  if (!best) return { hit: false };
+
+  setEmotion(best, 5, false);
+  const dx = best.x - player.x;
+  const dy = best.y - player.y;
+  const len = Math.hypot(dx, dy) || 1;
+  best.vx = (dx / len) * PLAYER_FIELD_MOVE_KNOCKBACK;
+  best.vy = (dy / len) * PLAYER_FIELD_MOVE_KNOCKBACK;
+  best.targetX = null;
+  best.targetY = null;
+  return { hit: true, dexId: best.dexId };
 }

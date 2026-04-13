@@ -2,6 +2,7 @@ import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import { resetWildPokemonManager } from './wild-pokemon/wild-pokemon-manager.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
+import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
@@ -22,6 +23,7 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
 import {
@@ -30,6 +32,7 @@ import {
   ensurePlayColliderOverlayCache,
   getPlayColliderOverlayCache
 } from './main/play-collider-overlay-cache.js';
+import { playInputState } from './main/play-input-state.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -112,7 +115,14 @@ function refreshPlayModeInfoBar(force = false) {
   const flyHint =
     speciesHasFlyingType(player.dexId ?? 0) &&
     ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (Space twice · F · Space↑ Shift↓)`;
-  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
+  const hp = player.hp ?? player.maxHp ?? 100;
+  const maxH = player.maxHp ?? 100;
+  const psn =
+    (player.poisonVisualSec ?? 0) > 0.05
+      ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
+      : '';
+  const ifr = (player.projIFrameSec ?? 0) > 0 ? ` · i-frames ${(player.projIFrameSec ?? 0).toFixed(2)}s` : '';
+  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
   infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
 }
 
@@ -165,6 +175,12 @@ registerPlayKeyboard({
   refreshPlayModeInfoBar,
   onEscapePlay: () => btnBackToMap.click(),
   player
+});
+
+installPlayPointerCombat({
+  canvas,
+  getAppMode: () => appMode,
+  getPlayer: () => player
 });
 
 installPlayContextMenu({
@@ -233,9 +249,11 @@ canvas.addEventListener('mousemove', (e) => {
     const tileH = 40;
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
-    const mx = Math.floor((mouseX - canvas.width / 2) / tileW + vx + 0.5);
-    const my = Math.floor((mouseY - canvas.height / 2) / tileH + vy + 0.5);
-    lastHoverTile = { x: mx, y: my };
+    const worldX = (mouseX - canvas.width / 2) / tileW + vx + 0.5;
+    const worldY = (mouseY - canvas.height / 2) / tileH + vy + 0.5;
+    playInputState.mouseX = worldX;
+    playInputState.mouseY = worldY;
+    lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
     return;
   }
 
@@ -268,12 +286,14 @@ function enterPlayMode(gx, gy) {
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML =
-    "<b style='color:#fff'>Mova-se com WASD ou Setas. Toque duas vezes na mesma direção para correr. ESC para sair.</b>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Ataques: clique esq = Brasa · clique dir = Água · segure = carregar o mesmo · Shift+clique esq = Contra (veneno) · Shift+clique dir = Contra (água) · scroll do meio = Ultimate. Menu de debug: Ctrl+clique direito.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
+
+  playCharacterSelector?.syncPlayPointerModeRadios();
 
   resizeCanvas();
   startGameLoop();
@@ -495,5 +515,6 @@ loadTilesetImages().then(async () => {
   new BiomesModal();
   playCharacterSelector = new CharacterSelector('character-selector-container');
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
+  await ensureEffectAssetsLoaded(imageCache);
   run();
 });

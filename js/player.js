@@ -92,7 +92,14 @@ export const player = {
   /** Ground (non-Ghost): latched underground walk after dig charge completes. */
   digBurrowMode: false,
   /** Ground dig charge 0..1 while holding Shift before latch (resets if released early). */
-  digCharge01: 0
+  digCharge01: 0,
+  /** Play mode: HP when hit by wild projectiles. */
+  hp: 100,
+  maxHp: 100,
+  /** Seconds remaining: ignore projectile damage while > 0. */
+  projIFrameSec: 0,
+  /** HUD-only poison indicator after Poison Sting. */
+  poisonVisualSec: 0
 };
 
 export function setPlayerSpecies(dexId) {
@@ -105,6 +112,8 @@ export function setPlayerSpecies(dexId) {
   }
   player.digBurrowMode = false;
   player.digCharge01 = 0;
+  player.hp = player.maxHp ?? 100;
+  player.projIFrameSec = 0;
 }
 
 export function setPlayerPos(x, y) {
@@ -126,6 +135,30 @@ export function setPlayerPos(x, y) {
   player.flightActive = false;
   player.digBurrowMode = false;
   player.digCharge01 = 0;
+  player.hp = player.maxHp ?? 100;
+  player.projIFrameSec = 0;
+  player.poisonVisualSec = 0;
+}
+
+/**
+ * @param {number} amount
+ * @param {boolean} [applyPoisonVisual]
+ * @returns {boolean} true if damage was applied (not blocked by iframes)
+ */
+export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false) {
+  if (player.projIFrameSec > 0) return false;
+  const maxH = player.maxHp ?? 100;
+  const cur = player.hp ?? maxH;
+  player.hp = Math.max(0, cur - amount);
+  player.projIFrameSec = 0.55;
+  if (applyPoisonVisual) player.poisonVisualSec = 3;
+  return true;
+}
+
+/** @param {number} dt */
+export function updatePlayerCombatTimers(dt) {
+  if (player.projIFrameSec > 0) player.projIFrameSec = Math.max(0, player.projIFrameSec - dt);
+  if (player.poisonVisualSec > 0) player.poisonVisualSec = Math.max(0, player.poisonVisualSec - dt);
 }
 
 /** Toggle creative flight (Flying-type species only). Called from play keyboard (e.g. KeyF). */

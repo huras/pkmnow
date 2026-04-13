@@ -4,6 +4,8 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
+import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
+import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 
 export class CharacterSelector {
   constructor(containerId) {
@@ -63,6 +65,7 @@ export class CharacterSelector {
           </div>
           <div class="player-info">
             <span class="player-name" id="current-player-name">${activeName}</span>
+            <div class="player-types" id="current-player-types"></div>
           </div>
         </div>
 
@@ -83,6 +86,21 @@ export class CharacterSelector {
           </span>
         </div>
 
+        <div
+          id="play-pointer-mode-bar"
+          class="play-pointer-mode-bar"
+          role="group"
+          aria-label="Right-click: game move vs debug menu"
+        >
+          <span class="play-pointer-mode-bar__label">Right-click</span>
+          <label class="play-pointer-mode-bar__opt"
+            ><input type="radio" name="playPointerMode" value="game" /> Game</label
+          >
+          <label class="play-pointer-mode-bar__opt"
+            ><input type="radio" name="playPointerMode" value="debug" /> Debug</label
+          >
+        </div>
+
         <div class="search-container">
           <span class="search-icon">🔍</span>
           <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
@@ -98,6 +116,17 @@ export class CharacterSelector {
   attachEvents() {
     const searchInput = this.container.querySelector('#species-search');
     const resultsList = this.container.querySelector('#search-results');
+    const pointerBar = this.container.querySelector('#play-pointer-mode-bar');
+
+    if (pointerBar) {
+      this.syncPlayPointerModeRadios();
+      for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
+        el.addEventListener('change', () => {
+          if (!(el instanceof HTMLInputElement) || !el.checked) return;
+          if (el.value === 'game' || el.value === 'debug') setPlayPointerMode(el.value);
+        });
+      }
+    }
 
     searchInput.addEventListener('focus', () => {
       void this.showResults('');
@@ -123,6 +152,15 @@ export class CharacterSelector {
     });
   }
 
+  syncPlayPointerModeRadios() {
+    const pointerBar = this.container?.querySelector('#play-pointer-mode-bar');
+    if (!pointerBar) return;
+    const mode = getPlayPointerMode();
+    for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
+      if (el instanceof HTMLInputElement) el.checked = el.value === mode;
+    }
+  }
+
   async showResults(query) {
     const resultsList = this.container.querySelector('#search-results');
     const filtered = this.allSpecies.filter(s => 
@@ -135,15 +173,21 @@ export class CharacterSelector {
       return;
     }
 
-    resultsList.innerHTML = filtered.map(s => `
+    resultsList.innerHTML = filtered.map(s => {
+      const cfg = getPokemonConfig(s.id);
+      const typesHtml = cfg?.types.map(t => `<span class="type-icon type-${t}">${t.toUpperCase()}</span>`).join(' ') || '';
+      return `
       <div class="result-item ${s.id === player.dexId ? 'selected' : ''}" data-id="${s.id}">
         <span class="result-portrait-mask" aria-hidden="true">
           <img class="result-icon-portrait result-icon-portrait--pending" alt="" width="30" height="30" data-dex="${s.id}" decoding="async" />
         </span>
-        <span class="result-name">${s.name}</span>
+        <div class="result-details">
+          <span class="result-name">${s.name}</span>
+          <div class="result-types">${typesHtml}</div>
+        </div>
         <span class="result-id">#${padDex3(s.id)}</span>
       </div>
-    `).join('');
+    `}).join('');
 
     await Promise.all(
       [...resultsList.querySelectorAll('img.result-icon-portrait[data-dex]')].map(async (img) => {
@@ -195,6 +239,12 @@ export class CharacterSelector {
     const displayName = getGen1SpeciesName(player.dexId);
     nameEl.textContent = displayName;
     pillEl.title = displayName;
+
+    const typesEl = this.container.querySelector('#current-player-types');
+    if (typesEl) {
+      const cfg = getPokemonConfig(player.dexId);
+      typesEl.innerHTML = cfg?.types.map(t => `<span class="type-icon type-${t}">${t.toUpperCase()}</span>`).join(' ') || '';
+    }
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');
     if (!portraitEl) {

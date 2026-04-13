@@ -32,6 +32,7 @@ import { isGroundDigLatchEligible, isPlayerIdleOnWaitingFrame } from './player.j
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
+import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
 import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import {
@@ -78,8 +79,99 @@ import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
 import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
+import {
+  FIRE_FRAME_W,
+  FIRE_FRAME_H,
+  BURN_START_FRAME,
+  BURN_START_FRAMES
+} from './moves/move-constants.js';
 
 import './render/render-debug-hotkeys.js';
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} p
+ */
+function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
+  const px = snapPx(p.x * tileW);
+  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+  if (p.type === 'ember') {
+    const img = imageCache.get('tilesets/effects/actual-fire.png');
+    const fh = p.sheetFrameH || FIRE_FRAME_H;
+    const fw = p.sheetFrameW || FIRE_FRAME_W;
+    const n = p.sheetFrames || 4;
+    const frame = Math.floor(time * 14) % n;
+    const dw = Math.ceil(tileW * 1.35);
+    const dh = Math.ceil(tileH * 1.35);
+    if (img && img.naturalWidth) {
+      ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
+    } else {
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (p.type === 'waterShot') {
+    ctx.fillStyle = 'rgba(140,210,255,0.9)';
+    ctx.beginPath();
+    const r = Math.max(4, tileW * 0.19);
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'poisonSting') {
+    const ang = p.stingAngle ?? 0;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(170,90,230,0.94)';
+    ctx.beginPath();
+    ctx.moveTo(tileW * 0.3, 0);
+    ctx.lineTo(-tileW * 0.2, -tileH * 0.2);
+    ctx.lineTo(-tileW * 0.14, tileH * 0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} p
+ */
+function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
+  const px = snapPx(p.x * tileW);
+  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+  const a = Math.max(0, p.life / p.maxLife);
+  ctx.globalAlpha = a;
+  if (p.type === 'burst') {
+    const img = imageCache.get('tilesets/effects/burn-start.png');
+    const fi = Math.min(BURN_START_FRAMES - 1, Math.floor((1 - a) * BURN_START_FRAMES));
+    if (img && img.naturalWidth) {
+      const dw = Math.ceil(tileW * 1.05);
+      const dh = Math.ceil(tileH * 1.05);
+      ctx.drawImage(img, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, py - dh * 0.5, dw, dh);
+    } else {
+      ctx.fillStyle = '#ffaa66';
+      ctx.beginPath();
+      ctx.arc(px, py, 7 * a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (p.type === 'emberTrail') {
+    ctx.fillStyle = '#ffa200';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.12) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'waterTrail') {
+    ctx.fillStyle = '#b8ecff';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#ffff88';
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.08) * a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
 
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -664,7 +756,8 @@ export function render(canvas, data, options = {}) {
         pivotY: pmdPivotY,
         spawnPhase: we.spawnPhase ?? 1,
         spawnType: we.spawnType,
-        targetHeightTiles
+        targetHeightTiles,
+        hitFlashTimer: we.hitFlashTimer
       });
 
       if (emotionPayload) {
@@ -783,6 +876,22 @@ export function render(canvas, data, options = {}) {
         pivotX: dw * 0.5,
         pivotY: dh * PMD_MON_SHEET.pivotYFrac,
         targetHeightTiles
+      });
+    }
+
+    for (const proj of activeProjectiles) {
+      renderItems.push({
+        type: 'projectile',
+        proj: proj,
+        sortY: proj.y + 0.5,
+      });
+    }
+
+    for (const part of activeParticles) {
+      renderItems.push({
+        type: 'particle',
+        part: part,
+        sortY: part.y + 0.5,
       });
     }
 
@@ -918,6 +1027,9 @@ export function render(canvas, data, options = {}) {
       drawRpgMakerEmotionBalloon();
     };
 
+    /** Projectiles + particles: single additive pass after Y-sort (see `drawBatchedProjectile`). */
+    const batchedEffects = [];
+
     // --- DRAW PASS ---
     for (const item of renderItems) {
       ctx.save();
@@ -949,6 +1061,11 @@ export function render(canvas, data, options = {}) {
         const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset);
         const pxW = snapPx(item.dw);
         const pxH = snapPx(item.dh);
+        
+        if (item.type === 'wild' && item.hitFlashTimer > 0) {
+          ctx.filter = 'brightness(5) contrast(2) sepia(1) hue-rotate(-50deg)'; // Red/white flash
+        }
+
         if (bury > 0.004) {
           const rawVis = pxH * (1 - bury * 0.39);
           const visH = Math.min(pxH - 1, Math.max(6, Math.floor(rawVis)));
@@ -963,6 +1080,8 @@ export function render(canvas, data, options = {}) {
         } else {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
         }
+        
+        ctx.filter = 'none';
 
         // Terrain / Grass Depth Cue (Deferred Overlay)
         const targetMx = Math.floor(item.x);
@@ -1098,9 +1217,26 @@ export function render(canvas, data, options = {}) {
             });
           });
         }
+      } else if (item.type === 'projectile') {
+        batchedEffects.push({ kind: 'projectile', proj: item.proj });
+      } else if (item.type === 'particle') {
+        batchedEffects.push({ kind: 'particle', part: item.part });
       }
       ctx.restore();
 
+    }
+
+    if (batchedEffects.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const be of batchedEffects) {
+        if (be.kind === 'projectile') {
+          drawBatchedProjectile(ctx, be.proj, tileW, tileH, snapPx, time);
+        } else {
+          drawBatchedParticle(ctx, be.part, tileW, tileH, snapPx);
+        }
+      }
+      ctx.restore();
     }
 
     // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile

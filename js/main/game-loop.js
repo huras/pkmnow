@@ -3,8 +3,11 @@ import { getPlayLodDetail } from '../render/play-view-camera.js';
 import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
-  updateWildPokemon
+  updateWildPokemon,
+  getWildPokemonEntities
 } from '../wild-pokemon/wild-pokemon-manager.js';
+import { updateMoves } from '../moves/moves-manager.js';
+import { updatePlayPointerCombat } from './play-mouse-combat.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -88,6 +91,8 @@ export function createGameLoop(api) {
       const pvy = player.visualY ?? player.y;
       syncWildPokemonWindow(currentData, pvx, pvy);
       updateWildPokemon(dt, currentData, pvx, pvy);
+      updatePlayPointerCombat(dt, player);
+      updateMoves(dt, getWildPokemonEntities(), currentData, player);
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
     }
