@@ -120,7 +120,7 @@ export function velocityFromToGroundWithHorizontalRangeFrom(
   const vx = (dx / L) * speed;
   const vy = (dy / L) * speed;
   const vz = (dz / L) * speed;
-  let ttlCore = timeToReachHorizontalRadius(
+  const ttlHoriz = timeToReachHorizontalRadius(
     rangeOriginX,
     rangeOriginY,
     startX,
@@ -129,15 +129,24 @@ export function velocityFromToGroundWithHorizontalRangeFrom(
     vy,
     maxHorizontalTiles
   );
+  let tGround = Infinity;
   if (opt.capAtGroundZ !== false && vz < -1e-6 && startZ > 1e-5) {
-    const tGround = startZ / (-vz);
-    if (tGround > 1e-5) ttlCore = Math.min(ttlCore, tGround);
+    const tg = startZ / (-vz);
+    if (tg > 1e-5) tGround = tg;
+  }
+  const ttlCore = tGround < Infinity ? Math.min(ttlHoriz, tGround) : ttlHoriz;
+  const groundLimited = tGround < Infinity && ttlHoriz + 1e-9 > tGround;
+  let timeToLive = ttlCore * ttlMargin + ttlPad;
+  // If ground is the limiting factor, do not let ttlMargin extend flight past z=0 (xy would keep moving past impact).
+  if (groundLimited) {
+    const padG = opt.groundHitPad ?? 0.04;
+    timeToLive = Math.min(timeToLive, tGround + padG);
   }
   return {
     vx,
     vy,
     vz,
-    timeToLive: ttlCore * ttlMargin + ttlPad,
+    timeToLive: Math.max(0.04, timeToLive),
     pathLen3: L
   };
 }

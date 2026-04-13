@@ -187,3 +187,20 @@ export function getGen1SpeciesName(dex) {
   const d = Math.max(1, Math.min(151, Number(dex) || 1));
   return GEN1_LINES[d - 1] || `Species ${d}`;
 }
+
+/**
+ * Pokemon Showdown cry URL stem (e.g. bulbasaur.mp3), national dex 1..151.
+ * Matches files under `audio/cries/gen1/NNN-<slug>.mp3` from scripts/download-gen1-cries-showdown.ps1.
+ * @param {number} dex
+ * @returns {string}
+ */
+export function getGen1ShowdownCrySlug(dex) {
+  const d = Math.max(1, Math.min(151, Number(dex) || 1));
+  if (d === 29) return 'nidoranf';
+  if (d === 32) return 'nidoranm';
+  return getGen1SpeciesName(d)
+    .toLowerCase()
+    .replace(/'/g, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, '');
+}

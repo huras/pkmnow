@@ -33,6 +33,7 @@ import {
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
+import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
   grassFireTryIgniteAt,
@@ -79,23 +80,24 @@ function pushParticle(p) {
 }
 
 /**
- * Burst FX at tile center (matches play aim) on the ground plane x,y; `effectZ` is world height (tiles).
+ * Burst FX at the given world tile coords (sub-tile ok — matches projectile impact, not snapped to cell center).
+ * `effectZ` is world height (tiles).
  */
 export function spawnHitParticles(x, y, effectZ) {
-  const tcx = Math.floor(x) + 0.5;
-  const tcy = Math.floor(y) + 0.5;
   const zz = Number(effectZ) || 0;
   const budget = Math.min(8, MAX_PARTICLES - activeParticles.length);
   for (let i = 0; i < budget; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    const offA = Math.random() * Math.PI * 2;
+    const velA = Math.random() * Math.PI * 2;
     const speed = 2 + Math.random() * 4;
     const life = 0.28 + Math.random() * 0.28;
+    const r0 = Math.random() * 0.22;
     pushParticle({
       type: 'burst',
-      x: tcx,
-      y: tcy,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
+      x: x + Math.cos(offA) * r0,
+      y: y + Math.sin(offA) * r0,
+      vx: Math.cos(velA) * speed,
+      vy: Math.sin(velA) * speed,
       z: zz + 0.5,
       vz: 4 + Math.random() * 3,
       life,
@@ -152,16 +154,14 @@ function checkPlayerHit(proj, player) {
 /** @param {number | null | undefined} effectZ — impact height; default `proj.z` (spawn altitude). */
 function spawnIncinerateShards(proj, pushProjectileRef, effectZ) {
   const z0 = effectZ !== undefined && effectZ !== null ? Number(effectZ) || 0 : proj.z || 0;
-  const tcx = Math.floor(proj.x) + 0.5;
-  const tcy = Math.floor(proj.y) + 0.5;
   const count = 10;
   for (let i = 0; i < count; i++) {
     const a = (i / count) * Math.PI * 2;
     const speed = 8.8 + Math.random() * 1.8;
     pushProjectileRef({
       type: 'incinerateShard',
-      x: tcx,
-      y: tcy,
+      x: proj.x,
+      y: proj.y,
       vx: Math.cos(a) * speed,
       vy: Math.sin(a) * speed,
       z: z0,
@@ -523,6 +523,7 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castPoisonStingOnce(entity.x, entity.y, playerX, playerY, entity, opts);
   }
   entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT;
+  playWildAttackCry(entity);
 }
 
 /**
@@ -614,6 +615,13 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const proj = activeProjectiles[i];
+
+    proj.x += proj.vx * dt;
+    proj.y += proj.vy * dt;
+    if (Number.isFinite(proj.vz)) {
+      proj.z += proj.vz * dt;
+    }
+
     proj.timeToLive -= dt;
     if (proj.timeToLive <= 0) {
       if (proj.type === 'incinerateCore') {
@@ -625,14 +633,12 @@ export function updateMoves(dt, wildPokemonList, data, player) {
         applySplashToWild(proj, wildList, 0);
       }
       if (data) {
-        const zz = Number(proj.z) || 0;
+        const zz = Math.max(0, Number(proj.z) || 0);
         if (grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
-          const tcx = Math.floor(proj.x) + 0.5;
-          const tcy = Math.floor(proj.y) + 0.5;
           pushParticle({
             type: 'grassFire',
-            x: tcx,
-            y: tcy,
+            x: proj.x,
+            y: proj.y,
             vx: 0,
             vy: 0,
             z: 0.06,
@@ -645,12 +651,6 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       }
       activeProjectiles.splice(i, 1);
       continue;
-    }
-
-    proj.x += proj.vx * dt;
-    proj.y += proj.vy * dt;
-    if (Number.isFinite(proj.vz)) {
-      proj.z += proj.vz * dt;
     }
 
     const trailType =

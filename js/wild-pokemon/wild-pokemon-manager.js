@@ -9,6 +9,7 @@ import {
   probeSpriteCollabPortraitPrefix
 } from '../pokemon/spritecollab-portraits.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
+import { playWildEmotionCry } from '../pokemon/pokemon-cries.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
@@ -314,6 +315,7 @@ function setEmotion(entity, type, persist = false, portraitSlug) {
   entity.emotionPersist = persist;
   entity.emotionPortraitSlug = resolvedSlug;
   ensureSpriteCollabPortraitLoaded(imageCache, entity.dexId ?? 1, resolvedSlug).catch(() => {});
+  playWildEmotionCry(entity, type, resolvedSlug);
 }
 
 function updateWildMotion(entity, dt, data, playerX, playerY) {
