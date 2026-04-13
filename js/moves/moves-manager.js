@@ -29,9 +29,8 @@ import {
 } from './zelda-ported-moves.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import {
-  clampFloorAimToMaxRange,
   spawnAlongHypotTowardGround,
-  velocityFromToGround
+  velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
 import {
@@ -437,15 +436,17 @@ export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
     const speed = 11.5 + (i % 3) * 0.6;
     const rawTx = sourceX + Math.cos(a) * maxRing;
     const rawTy = sourceY + Math.sin(a) * maxRing;
-    const pt = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxRing);
-    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, pt.aimX, pt.aimY, 0.22);
-    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, rawTx, rawTy, 0.22);
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
       sp.startX,
       sp.startY,
       sp.startZ,
-      pt.aimX,
-      pt.aimY,
+      rawTx,
+      rawTy,
+      sourceX,
+      sourceY,
       speed,
+      maxRing,
       { ttlMargin: 1.08, ttlPad: 0.08 }
     );
     const isEmber = i % 2 === 0;

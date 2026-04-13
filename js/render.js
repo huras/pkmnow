@@ -673,43 +673,49 @@ export function render(canvas, data, options = {}) {
 
       if (firePhase && (layers.base || layers.top)) {
         const burning = firePhase === 'burning';
-        const fillBase = burning ? 'rgba(58,26,10,0.82)' : 'rgba(7,5,4,0.92)';
-        const fillTop = burning ? 'rgba(44,18,7,0.86)' : 'rgba(4,3,2,0.94)';
-        const drawScorchedFull = (fill, y0, hFull) => {
-          ctx.fillStyle = fill;
-          ctx.fillRect(snapPx(tx), snapPx(y0), tileW, hFull);
-        };
-        const drawScorchedOverlayStrip = (fill, y0, hFull) => {
-          const sh = hFull * barFrac;
-          const sy = y0 + hFull * (1 - barFrac);
-          ctx.fillStyle = fill;
-          ctx.fillRect(snapPx(tx), snapPx(sy), tileW, sh);
-        };
-        const drawScorchedLayer = (fill, y0, hFull) => {
-          if (playerTopOverlay) drawScorchedOverlayStrip(fill, y0, hFull);
-          else drawScorchedFull(fill, y0, hFull);
-        };
-        /** Base grass is blitted in a 2×tileH quad; lower half sits over baked terrain — scorch only upper half so chão stays unchanged. */
-        const baseGrassY0 = ty - tileH;
-        const baseBurnScorchH = tileH;
-        if (layers.base && !playerTopOverlay) {
-          drawScorchedLayer(fillBase, baseGrassY0, baseBurnScorchH);
-        }
-        if (lodDetail < 2 && layers.top) {
-          drawScorchedLayer(fillTop, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
-        }
-        if (burning) {
-          ctx.save();
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.fillStyle = 'rgba(255,130,40,0.14)';
-          if (layers.base && !playerTopOverlay) {
-            drawScorchedLayer('rgba(255,130,40,0.14)', baseGrassY0, baseBurnScorchH);
+        /** Mesmas sprites da grama: `ctx.filter` respeita o alpha do PNG (só folha escurece). */
+        const blitGrassFramesForFire = () => {
+          if (layers.base) {
+            const gv = getGrassVariant(tile.biomeId);
+            const gTiles = GRASS_TILES[gv];
+            let baseId = gTiles.original;
+            if (gv === 'lotus' && gTiles.grass2 != null) {
+              const ftPick = foliageType(mx, my, data.seed);
+              baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
+            }
+            if (baseId != null) {
+              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+              const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
+              blitGrassQuad(frame, ty - tileH, tileH * 2);
+            }
           }
           if (lodDetail < 2 && layers.top) {
-            drawScorchedLayer('rgba(255,110,30,0.12)', ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+            const vt = getGrassVariant(tile.biomeId);
+            const vTiles = GRASS_TILES[vt];
+            const topId = vTiles.originalTop;
+            if (topId) {
+              const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+              const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
+              blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+            }
           }
-          ctx.restore();
+        };
+        ctx.save();
+        ctx.filter = burning
+          ? 'brightness(0.62) saturate(1.9) sepia(1) hue-rotate(-10deg) contrast(1.1)'
+          : 'brightness(0.24) contrast(1.25) saturate(0.55) sepia(0.4)';
+        blitGrassFramesForFire();
+        ctx.filter = 'none';
+        if (burning) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = playerTopOverlay ? 0.14 * PLAYER_TILE_GRASS_OVERLAY_ALPHA : 0.16;
+          ctx.filter = 'brightness(1.65) sepia(1) hue-rotate(-22deg) saturate(2.2)';
+          blitGrassFramesForFire();
+          ctx.filter = 'none';
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = 1;
         }
+        ctx.restore();
         if (playerTopOverlay) {
           ctx.restore();
         }

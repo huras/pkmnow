@@ -4,9 +4,8 @@ import {
   FIRE_FRAME_W
 } from './move-constants.js';
 import {
-  clampFloorAimToMaxRange,
   spawnAlongHypotTowardGround,
-  velocityFromToGround
+  velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 
 /** @param {number} n */
@@ -42,7 +41,6 @@ export function castEmberVolley(
   const cp = clamp01(chargePower);
 
   const maxRangeTiles = fromWild ? 9 : 12;
-  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxRangeTiles);
 
   const speed = (fromWild ? 13 : 15) * speedMul * (1 + 0.2 * cp);
   const spreadTiles = (fromWild ? 0.55 : 0.85) * spreadMul * (1 + 0.35 * cp);
@@ -50,22 +48,24 @@ export function castEmberVolley(
   const spawnOff = 0.35;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
 
-  const aimCenter = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, spawnOff);
+  const aimCenter = spawnAlongHypotTowardGround(sourceX, sourceY, z0, targetX, targetY, spawnOff);
 
   for (let i = 0; i < count; i++) {
     const ang = Math.random() * Math.PI * 2;
     const rad = Math.random() * spreadTiles;
-    const rawFx = aim.aimX + Math.cos(ang) * rad;
-    const rawFy = aim.aimY + Math.sin(ang) * rad;
-    const tgt = clampFloorAimToMaxRange(sourceX, sourceY, rawFx, rawFy, maxRangeTiles);
+    const rawFx = targetX + Math.cos(ang) * rad;
+    const rawFy = targetY + Math.sin(ang) * rad;
 
-    const { vx, vy, vz, timeToLive } = velocityFromToGround(
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
       aimCenter.startX,
       aimCenter.startY,
       aimCenter.startZ,
-      tgt.aimX,
-      tgt.aimY,
+      rawFx,
+      rawFy,
+      sourceX,
+      sourceY,
       speed,
+      maxRangeTiles,
       { ttlMargin: 1.15, ttlPad: 0.15 }
     );
 

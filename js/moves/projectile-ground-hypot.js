@@ -66,3 +66,78 @@ export function velocityFromToGround(startX, startY, startZ, tx, ty, speed, opt 
     pathLen3: L
   };
 }
+
+/**
+ * Smallest t>0 where horizontal distance from (originX,originY) to (startX+vx*t, startY+vy*t) equals maxRadius,
+ * if such t exists; else a safe fallback from horizontal speed.
+ */
+function timeToReachHorizontalRadius(originX, originY, startX, startY, vx, vy, maxRadius) {
+  const ox = startX - originX;
+  const oy = startY - originY;
+  const a = vx * vx + vy * vy;
+  if (a < 1e-14) {
+    if (Math.hypot(ox, oy) >= maxRadius) return 0.05;
+    return 1.2;
+  }
+  const b = 2 * (ox * vx + oy * vy);
+  const c = ox * ox + oy * oy - maxRadius * maxRadius;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) {
+    return Math.max(0.12, maxRadius / (Math.hypot(vx, vy) + 1e-9));
+  }
+  const s = Math.sqrt(disc);
+  const t1 = (-b - s) / (2 * a);
+  const t2 = (-b + s) / (2 * a);
+  const hits = [t1, t2].filter((t) => t > 1e-5);
+  if (!hits.length) return Math.max(0.12, maxRadius / (Math.hypot(vx, vy) + 1e-9));
+  return Math.min(...hits);
+}
+
+/**
+ * Aim direction uses the true floor point (tx, ty) — do not clamp the target for the ray.
+ * Projectile dies once horizontal distance from (rangeOriginX, rangeOriginY) reaches maxHorizontalTiles
+ * (same gameplay cap as {@link clampFloorAimToMaxRange}, without bending the 3D trajectory when flying high).
+ */
+export function velocityFromToGroundWithHorizontalRangeFrom(
+  startX,
+  startY,
+  startZ,
+  targetX,
+  targetY,
+  rangeOriginX,
+  rangeOriginY,
+  speed,
+  maxHorizontalTiles,
+  opt = {}
+) {
+  const ttlMargin = opt.ttlMargin ?? 1.12;
+  const ttlPad = opt.ttlPad ?? 0.1;
+  const sz = Number(startZ) || 0;
+  const dx = targetX - startX;
+  const dy = targetY - startY;
+  const dz = 0 - sz;
+  const L = Math.hypot(dx, dy, dz) || 1e-6;
+  const vx = (dx / L) * speed;
+  const vy = (dy / L) * speed;
+  const vz = (dz / L) * speed;
+  let ttlCore = timeToReachHorizontalRadius(
+    rangeOriginX,
+    rangeOriginY,
+    startX,
+    startY,
+    vx,
+    vy,
+    maxHorizontalTiles
+  );
+  if (opt.capAtGroundZ !== false && vz < -1e-6 && startZ > 1e-5) {
+    const tGround = startZ / (-vz);
+    if (tGround > 1e-5) ttlCore = Math.min(ttlCore, tGround);
+  }
+  return {
+    vx,
+    vy,
+    vz,
+    timeToLive: ttlCore * ttlMargin + ttlPad,
+    pathLen3: L
+  };
+}

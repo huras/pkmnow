@@ -1,8 +1,4 @@
-import {
-  clampFloorAimToMaxRange,
-  spawnAlongHypotTowardGround,
-  velocityFromToGround
-} from './projectile-ground-hypot.js';
+import { spawnAlongHypotTowardGround, velocityFromToGroundWithHorizontalRangeFrom } from './projectile-ground-hypot.js';
 
 function clamp01(n) {
   return n < 0 ? 0 : n > 1 ? 1 : n;
@@ -40,19 +36,21 @@ export function castPoisonStingFan(sourceX, sourceY, targetX, targetY, sourceEnt
 export function castPoisonStingOnce(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
   const maxRange = fromWild ? 10 : 11;
-  const aim = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxRange);
 
   const speed = 14;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
-  const spawn = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aim.aimX, aim.aimY, 0.4);
+  const spawn = spawnAlongHypotTowardGround(sourceX, sourceY, z0, targetX, targetY, 0.4);
 
-  const { vx, vy, vz, timeToLive } = velocityFromToGround(
+  const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
     spawn.startX,
     spawn.startY,
     spawn.startZ,
-    aim.aimX,
-    aim.aimY,
+    targetX,
+    targetY,
+    sourceX,
+    sourceY,
     speed,
+    maxRange,
     { ttlMargin: 1.05, ttlPad: 0.12 }
   );
   const angle = Math.atan2(vy, vx);
