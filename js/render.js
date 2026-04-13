@@ -59,6 +59,7 @@ import {
 
 import {
   PLAY_CHUNK_SIZE,
+  PLAY_BAKE_TILE_PX,
   WATER_ANIM_SRC_W,
   WATER_ANIM_SRC_H,
   VEG_MULTITILE_OVERLAP_PX,
@@ -66,6 +67,7 @@ import {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
   PLAYER_TILE_GRASS_OVERLAY_ALPHA
 } from './render/render-constants.js';
+import { computePlayViewState } from './render/play-view-camera.js';
 import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
@@ -120,8 +122,8 @@ export function render(canvas, data, options = {}) {
   let startX = 0, startY = 0, endX = width, endY = height;
 
   if (appMode === 'play') {
-    tileW = 40;
-    tileH = 40;
+    tileW = PLAY_BAKE_TILE_PX;
+    tileH = PLAY_BAKE_TILE_PX;
   } else {
     tileW = cw / width;
     tileH = ch / height;
@@ -148,6 +150,20 @@ export function render(canvas, data, options = {}) {
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
 
+    const playerDexForCam = player.dexId || 94;
+    const playCam = computePlayViewState({
+      cw,
+      ch,
+      vx,
+      vy,
+      playerZ: player.z ?? 0,
+      flightActive: !!player.flightActive,
+      framingHeightTiles: POKEMON_HEIGHTS[playerDexForCam] || 1.1
+    });
+    tileW = playCam.effTileW;
+    tileH = playCam.effTileH;
+    const lodDetail = playCam.lodDetail;
+
     /** Must match `updatePlayer`: walk/dig sheet while grounded and moving or digging. */
     const isPlayerWalkingAnim =
       !!player.grounded &&
@@ -157,48 +173,56 @@ export function render(canvas, data, options = {}) {
     const overlayMy = Math.floor(vy);
     const shouldDrawPlayerOverlay = isPlayerIdleOnWaitingFrame() || isMovingHorizontal;
 
-    // Área visível em tiles (com pequena margem para tops de árvores)
-    const viewW = cw / tileW;
-    const viewH = ch / tileH;
-    const startXTiles = Math.floor(vx - viewW / 2) - 2;
-    const startYTiles = Math.floor(vy - viewH / 2) - 2;
-    const endXTiles = Math.ceil(vx + viewW / 2) + 2;
-    const endYTiles = Math.ceil(vy + viewH / 2) + 2;
-
-    startX = Math.max(0, startXTiles);
-    startY = Math.max(0, startYTiles);
-    endX = Math.min(width * CHUNK_SIZE, endXTiles);
-    endY = Math.min(height * CHUNK_SIZE, endYTiles);
+    startX = Math.max(0, playCam.startXTiles);
+    startY = Math.max(0, playCam.startYTiles);
+    endX = Math.min(width * CHUNK_SIZE, playCam.endXTiles);
+    endY = Math.min(height * CHUNK_SIZE, playCam.endYTiles);
 
     // Identifica todos os tiles cobertos por scatter (árvores largas/altas) no viewport
     // REMOVIDO: buildScatterFootprintNoGrassSet era O(N^2) no render loop. 
     // Agora o suppressionSet é calculado uma única vez no bakeChunk.
 
-    // Identifica quais blocos 8x8 intersectam o viewport
-    const cStartX = Math.floor(startX / PLAY_CHUNK_SIZE);
-    const cStartY = Math.floor(startY / PLAY_CHUNK_SIZE);
-    const cEndX = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
-    const cEndY = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+    // Blocos 8×8: viewport + padding extra ao dar zoom (evita falhas à volta do canvas).
+    const maxChunkXi = Math.floor((width * CHUNK_SIZE - 1) / PLAY_CHUNK_SIZE);
+    const maxChunkYi = Math.floor((height * CHUNK_SIZE - 1) / PLAY_CHUNK_SIZE);
+    const padC = playCam.chunkPad;
+    let cStartX = Math.max(0, Math.floor(startX / PLAY_CHUNK_SIZE) - padC);
+    let cStartY = Math.max(0, Math.floor(startY / PLAY_CHUNK_SIZE) - padC);
+    let cEndX = Math.min(maxChunkXi, Math.floor((endX - 1) / PLAY_CHUNK_SIZE) + padC);
+    let cEndY = Math.min(maxChunkYi, Math.floor((endY - 1) / PLAY_CHUNK_SIZE) + padC);
 
-    // Sincroniza o deslocamento da camada estática com a translação global arredondada
-    const currentTransX = Math.round(cw / 2 - (vx + 0.5) * tileW);
-    const currentTransY = Math.round(ch / 2 - (vy + 0.5) * tileH);
+    const currentTransX = playCam.currentTransX;
+    const currentTransY = playCam.currentTransY;
+    const chunkDrawScale = playCam.viewScale;
+
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = chunkDrawScale < 0.999;
 
     for (let cy = cStartY; cy <= cEndY; cy++) {
       for (let cx = cStartX; cx <= cEndX; cx++) {
         const key = `${cx},${cy}`;
         let chunk = playChunkMap.get(key);
         if (!chunk) {
-          chunk = bakeChunk(cx, cy, data, tileW, tileH);
+          chunk = bakeChunk(cx, cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX);
           playChunkMap.set(key, chunk);
         }
+        const destW = Math.max(1, Math.ceil(chunk.canvas.width * chunkDrawScale - 1e-6));
+        const destH = Math.max(1, Math.ceil(chunk.canvas.height * chunkDrawScale - 1e-6));
         ctx.drawImage(
           chunk.canvas,
+          0,
+          0,
+          chunk.canvas.width,
+          chunk.canvas.height,
           currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
-          currentTransY + cy * PLAY_CHUNK_SIZE * tileH
+          currentTransY + cy * PLAY_CHUNK_SIZE * tileH,
+          destW,
+          destH
         );
       }
     }
+
+    ctx.imageSmoothingEnabled = prevSmoothing;
 
     ctx.translate(currentTransX, currentTransY);
 
@@ -267,15 +291,17 @@ export function render(canvas, data, options = {}) {
     };
 
     const time = options.settings?.time || 0;
+    const canopyAnimTime = lodDetail >= 2 ? 0 : lodDetail >= 1 ? time * 0.65 : time;
 
 
     // PASS 0: Oceano — animação water-tile.png (faixa 16×16 por frame, empilhados em Y)
     const waterImg = imageCache.get('tilesets/water-tile.png');
-    if (waterImg && waterImg.naturalWidth >= WATER_ANIM_SRC_W && waterImg.naturalHeight >= WATER_ANIM_SRC_H) {
+    if (lodDetail < 2 && waterImg && waterImg.naturalWidth >= WATER_ANIM_SRC_W && waterImg.naturalHeight >= WATER_ANIM_SRC_H) {
       const waterFrames = Math.floor(waterImg.naturalHeight / WATER_ANIM_SRC_H);
       if (waterFrames >= 1) {
         const t = options.settings?.time ?? 0;
-        const tick = Math.floor(t * 3.5);
+        const waterTickRate = lodDetail >= 1 ? 2.4 : 3.5;
+        const tick = Math.floor(t * waterTickRate);
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = true;
@@ -317,6 +343,7 @@ export function render(canvas, data, options = {}) {
     const forEachAbovePlayerTile = (fn) => {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
+          if (lodDetail >= 2 && (mx + my) % 2 !== 0) continue;
           const tile = getCached(mx, my);
           if (!tile || tile.heightStep < 1) continue;
 
@@ -432,7 +459,8 @@ export function render(canvas, data, options = {}) {
               baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
             }
             if (baseId != null) {
-              const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
+              const timeGrassLow = lodDetail >= 1 ? time * 0.65 : time;
+              const fIdx = AnimationRenderer.getFrameIndex(timeGrassLow, mx, my);
               const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
               blitGrassQuad(frame, ty - tileH, tileH * 2);
             }
@@ -440,26 +468,29 @@ export function render(canvas, data, options = {}) {
         }
       }
 
-      const vt = getGrassVariant(tile.biomeId);
-      const vTiles = GRASS_TILES[vt];
-      const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
-      if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
-        const topId = vTiles.originalTop;
-        if (topId) {
-          const items = BIOME_VEGETATION[tile.biomeId] || [];
-          const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
-          const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-          const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+      if (lodDetail < 2) {
+        const vt = getGrassVariant(tile.biomeId);
+        const vTiles = GRASS_TILES[vt];
+        const { scale: vs, threshold: vt_th } = getGrassParams(tile.biomeId);
+        if (vTiles && foliageDensity(mx, my, data.seed, vs) >= vt_th && !tile.isRoad && !tile.isCity) {
+          const topId = vTiles.originalTop;
+          if (topId) {
+            const items = BIOME_VEGETATION[tile.biomeId] || [];
+            const treeT_chk = getTreeType(tile.biomeId, mx - 1, my, data.seed);
+            const isFT = !!treeT_chk && (mx + my) % 3 === 0 && foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+            const isFN = !!treeT_chk && (mx + my) % 3 === 1 && foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
-          const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
-          const cy = Math.floor(my / PLAY_CHUNK_SIZE);
-          const chunk = playChunkMap.get(`${cx},${cy}`);
-          const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
+            const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
+            const cy = Math.floor(my / PLAY_CHUNK_SIZE);
+            const chunk = playChunkMap.get(`${cx},${cy}`);
+            const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
 
-          if (!isFT && !isFN && !isOccupiedByObject) {
-            const fIdx = AnimationRenderer.getFrameIndex(time, mx, my);
-            const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
-            blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+            if (!isFT && !isFN && !isOccupiedByObject) {
+              const timeGrass = lodDetail >= 1 ? time * 0.65 : time;
+              const fIdx = AnimationRenderer.getFrameIndex(timeGrass, mx, my);
+              const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
+              blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
+            }
           }
         }
       }
@@ -906,7 +937,7 @@ export function render(canvas, data, options = {}) {
           if (topPart) {
             const wind = scatterHasWindSway(itemKey);
             const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
-              time,
+              canopyAnimTime,
               itemKey,
               originX,
               originY,
@@ -916,7 +947,7 @@ export function render(canvas, data, options = {}) {
               atlasCols,
               tileW,
               tileH,
-              wind
+              lodDetail < 2 && wind
             );
             const px = snapPx(originX * tileW + (cols * tileW) / 2);
             const py = snapPx(originY * tileH + tileH);
@@ -934,7 +965,7 @@ export function render(canvas, data, options = {}) {
           // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
           if (ids.top) {
             const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
-              time,
+              canopyAnimTime,
               treeType,
               originX,
               originY,

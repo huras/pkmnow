@@ -11,6 +11,12 @@ export const WATER_ANIM_SRC_H = 16;
 /** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles. */
 export const PLAY_CHUNK_SIZE = 8;
 
+/** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
+export const PLAY_BAKE_TILE_PX = 40;
+
+/** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
+export const PLAY_CAMERA_Z_REF = 28;
+
 /**
  * E / W / S / SE / SW from player tile (+y = south). S / SE / SW: full grass only after the sprite.
  * E / W: full grass in PASS 5a (under sprite) always; bottom-strip overlay after sprite on idle waiting frame only (player tile same).
