@@ -11,7 +11,7 @@ function speciesHasDedicatedDigSheetMeta(dexId) {
 }
 
 /** Only load optional action sheets when metadata explicitly declares the slice. */
-function speciesHasDedicatedSliceMeta(dexId, sliceKey) {
+export function speciesHasDedicatedSliceMeta(dexId, sliceKey) {
   const m = getDexAnimMeta(dexId);
   return !!(m && Object.prototype.hasOwnProperty.call(m, sliceKey));
 }
@@ -45,6 +45,29 @@ function loadOne(imageCache, src, fallbackSrc) {
   return p;
 }
 
+/** Optional sheet: on failure do not cache (so combat HUD can detect missing asset). */
+function loadOptionalSheet(imageCache, src) {
+  if (imageCache.has(src)) return Promise.resolve();
+  const existing = inflight.get(src);
+  if (existing) return existing;
+
+  const p = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(src, img);
+      inflight.delete(src);
+      resolve();
+    };
+    img.onerror = () => {
+      inflight.delete(src);
+      resolve();
+    };
+    img.src = src;
+  });
+  inflight.set(src, p);
+  return p;
+}
+
 /**
  * Lazy-load species sheets (same layout as Gengar). Missing files fall back to Gengar assets.
  * @param {Map<string, HTMLImageElement>} imageCache same as render.imageCache
@@ -58,6 +81,8 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   const hurt = `tilesets/pokemon/${id}_hurt.png`;
   const sleep = `tilesets/pokemon/${id}_sleep.png`;
   const faint = `tilesets/pokemon/${id}_faint.png`;
+  const charge = `tilesets/pokemon/${id}_charge.png`;
+  const shoot = `tilesets/pokemon/${id}_shoot.png`;
   const tasks = [
     loadOne(imageCache, walk, FALLBACK_WALK),
     loadOne(imageCache, idle, FALLBACK_IDLE)
@@ -74,6 +99,12 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   if (speciesHasDedicatedSliceMeta(dexId, 'faint')) {
     tasks.push(loadOne(imageCache, faint, idle));
   }
+  if (speciesHasDedicatedSliceMeta(dexId, 'charge')) {
+    tasks.push(loadOptionalSheet(imageCache, charge));
+  }
+  if (speciesHasDedicatedSliceMeta(dexId, 'shoot')) {
+    tasks.push(loadOptionalSheet(imageCache, shoot));
+  }
   return Promise.all(tasks);
 }
 
@@ -87,6 +118,8 @@ export function getPokemonSheetPaths(dexId) {
     hurt: `tilesets/pokemon/${id}_hurt.png`,
     sleep: `tilesets/pokemon/${id}_sleep.png`,
     faint: `tilesets/pokemon/${id}_faint.png`,
+    charge: `tilesets/pokemon/${id}_charge.png`,
+    shoot: `tilesets/pokemon/${id}_shoot.png`,
     fallbackWalk: FALLBACK_WALK,
     fallbackIdle: FALLBACK_IDLE
   };
@@ -95,15 +128,19 @@ export function getPokemonSheetPaths(dexId) {
 /**
  * @param {Map<string, HTMLImageElement>} imageCache
  * @param {number} dexId
- * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined }}
+ * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined, charge?: HTMLImageElement | undefined, shoot?: HTMLImageElement | undefined }}
  */
 export function getResolvedSheets(imageCache, dexId) {
-  const { walk, idle, dig, hurt, sleep, faint, fallbackWalk, fallbackIdle } = getPokemonSheetPaths(dexId);
+  const { walk, idle, dig, hurt, sleep, faint, charge, shoot, fallbackWalk, fallbackIdle } = getPokemonSheetPaths(dexId);
   const w = imageCache.get(walk) || imageCache.get(fallbackWalk);
   const useDedicatedDig = speciesHasDedicatedDigSheetMeta(dexId);
   const useDedicatedHurt = speciesHasDedicatedSliceMeta(dexId, 'hurt');
   const useDedicatedSleep = speciesHasDedicatedSliceMeta(dexId, 'sleep');
   const useDedicatedFaint = speciesHasDedicatedSliceMeta(dexId, 'faint');
+  const useChargeAsset =
+    speciesHasDedicatedSliceMeta(dexId, 'charge') && !!(imageCache.get(charge)?.naturalWidth || imageCache.get(charge)?.width);
+  const useShootAsset =
+    speciesHasDedicatedSliceMeta(dexId, 'shoot') && !!(imageCache.get(shoot)?.naturalWidth || imageCache.get(shoot)?.width);
   const idleSheet = imageCache.get(idle) || imageCache.get(fallbackIdle);
   const digSheet = useDedicatedDig ? imageCache.get(dig) || w : w;
   return {
@@ -122,6 +159,10 @@ export function getResolvedSheets(imageCache, dexId) {
     /** Optional sheet for dedicated `faint` timings/frames, fallback to idle. */
     faint: useDedicatedFaint
       ? imageCache.get(faint) || idleSheet
-      : idleSheet
+      : idleSheet,
+    /** Optional `NNN_charge.png` when metadata + file exist. */
+    charge: useChargeAsset ? imageCache.get(charge) : undefined,
+    /** Optional `NNN_shoot.png` when metadata + file exist. */
+    shoot: useShootAsset ? imageCache.get(shoot) : undefined
   };
 }

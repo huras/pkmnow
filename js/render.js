@@ -892,7 +892,10 @@ export function render(canvas, data, options = {}) {
     if (borrowDiglettArt && borrowPlaceholderDex != null) {
       void ensurePokemonSheetsLoaded(imageCache, borrowPlaceholderDex);
     }
-    const { walk: pWalk, idle: pIdle, dig: pDigSelf } = getResolvedSheets(imageCache, playerDex);
+    const { walk: pWalk, idle: pIdle, dig: pDigSelf, charge: pChargeSheet, shoot: pShootSheet } = getResolvedSheets(
+      imageCache,
+      playerDex
+    );
     const diglettSheets =
       borrowDiglettArt && borrowPlaceholderDex != null
         ? getResolvedSheets(imageCache, borrowPlaceholderDex)
@@ -903,8 +906,28 @@ export function render(canvas, data, options = {}) {
       player.digBurrowMode &&
       !isGhostPhaseShiftBurrowEligibleDex(playerDex) &&
       (borrowDiglettArt ? !!pDig : !!pDigSelf || isUndergroundBurrowerDex(playerDex));
-    const pSheet = wantsDigSheet ? pDig || pWalk || pIdle : isPlayerMoving ? pWalk : pIdle;
-    const pmdAnimSlice = wantsDigSheet ? (pDig ? 'dig' : 'walk') : isPlayerMoving ? 'walk' : 'idle';
+    const combatShoot = (player.moveShootAnimSec || 0) > 0 && !!pShootSheet;
+    const combatCharge =
+      !player.digBurrowMode &&
+      (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
+      !playInputState.ctrlLeftHeld &&
+      !!pChargeSheet;
+
+    let pSheet;
+    let pmdAnimSlice;
+    if (wantsDigSheet) {
+      pSheet = pDig || pWalk || pIdle;
+      pmdAnimSlice = pDig ? 'dig' : 'walk';
+    } else if (combatShoot) {
+      pSheet = pShootSheet;
+      pmdAnimSlice = 'shoot';
+    } else if (combatCharge) {
+      pSheet = pChargeSheet;
+      pmdAnimSlice = 'charge';
+    } else {
+      pSheet = isPlayerMoving ? pWalk : pIdle;
+      pmdAnimSlice = isPlayerMoving ? 'walk' : 'idle';
+    }
     const pmdSpecDex =
       wantsDigSheet && borrowDiglettArt && borrowPlaceholderDex != null ? borrowPlaceholderDex : playerDex;
 

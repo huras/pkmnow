@@ -4,7 +4,7 @@ import {
   isPlayerUndergroundBurrowWalkActive,
   speciesUsesBorrowedDiglettDigVisual
 } from './wild-pokemon/underground-burrow.js';
-import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
+import { ensurePokemonSheetsLoaded, getPokemonSheetPaths } from './pokemon/pokemon-asset-loader.js';
 import {
   canWalkMicroTile,
   pivotCellHeightTraversalOk,
@@ -99,7 +99,9 @@ export const player = {
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
-  poisonVisualSec: 0
+  poisonVisualSec: 0,
+  /** Seconds remaining: play `shoot` PMD slice after a successful player cast (if asset exists). */
+  moveShootAnimSec: 0
 };
 
 export function setPlayerSpecies(dexId) {
@@ -114,6 +116,9 @@ export function setPlayerSpecies(dexId) {
   player.digCharge01 = 0;
   player.hp = player.maxHp ?? 100;
   player.projIFrameSec = 0;
+  player.moveShootAnimSec = 0;
+  player._shootAnimTick = 0;
+  player._chargeAnimTick = 0;
 }
 
 export function setPlayerPos(x, y) {
@@ -277,6 +282,15 @@ const DIRECTION_ROW_MAP = {
   left: 6,
   'down-left': 7
 };
+
+function pickPmdSeqFrame(seq, tickInLoop) {
+  let acc = 0;
+  for (let i = 0; i < seq.length; i++) {
+    acc += seq[i];
+    if (tickInLoop <= acc) return i;
+  }
+  return Math.max(0, seq.length - 1);
+}
 
 // tryMovePlayer is now handled directly by inputX/Y in the gameLoop
 export function tryMovePlayer(dx, dy, data) {
@@ -558,60 +572,107 @@ export function updatePlayer(dt, data) {
     dexId: player.dexId ?? 94
   });
 
-  const useWalkLikeAnim =
-    (!!player.grounded && (spd > 0.1 || !!player.digActive)) ||
-    (flightMove &&
-      smoothLevitationFlight &&
-      (spd > 0.1 ||
-        !!playInputState.spaceHeld ||
-        !!playInputState.shiftLeftHeld ||
-        player.z > 0.02));
+  const metaDex = player.dexId ?? 94;
+  const pmdMeta = getDexAnimMeta(metaDex);
+  const sheetPaths = getPokemonSheetPaths(metaDex);
+  const hasChargeAsset = !!(
+    pmdMeta?.charge &&
+    (imageCache.get(sheetPaths.charge)?.naturalWidth || imageCache.get(sheetPaths.charge)?.width)
+  );
+  const hasShootAsset = !!(
+    pmdMeta?.shoot &&
+    (imageCache.get(sheetPaths.shoot)?.naturalWidth || imageCache.get(sheetPaths.shoot)?.width)
+  );
 
-  if (useWalkLikeAnim) {
-    const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;
-    player.totalDistMoved += animSpd * dt;
-    const pmdDexForWalkLike =
-      player.digActive &&
-      speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
-      player.digBurrowMode
-        ? getBorrowDigPlaceholderDex(player.dexId ?? 0)
-        : player.dexId ?? 94;
-    const meta = getDexAnimMeta(pmdDexForWalkLike);
-    const seq = player.digActive
-      ? meta?.dig?.durations || meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk
-      : meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
-    const totalTicks = seq.reduce((a, b) => a + b, 0);
+  const inCombatCharge =
+    hasChargeAsset &&
+    !player.digBurrowMode &&
+    (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
+    !playInputState.ctrlLeftHeld;
 
-    const walkDistanceCycle = 3.5; 
-    const animT = (player.totalDistMoved % walkDistanceCycle) / walkDistanceCycle;
-    const currentTick = animT * totalTicks;
-    
-    let accumulated = 0;
-    player.animFrame = 0;
-    for (let i = 0; i < seq.length; i++) {
-       accumulated += seq[i];
-       if (currentTick <= accumulated) {
-         player.animFrame = i;
-         break;
-       }
-    }
+  const shootRemain0 = player.moveShootAnimSec || 0;
+  const shootPlaying = shootRemain0 > 0 && hasShootAsset && pmdMeta?.shoot?.durations?.length;
+
+  if (shootPlaying) {
+    const seq = pmdMeta.shoot.durations;
+    const total = seq.reduce((a, b) => a + b, 0);
+    player._shootAnimTick = (player._shootAnimTick || 0) + dt * 60;
+    const t = Math.min(player._shootAnimTick, Math.max(0.0001, total - 0.0001));
+    player.animFrame = pickPmdSeqFrame(seq, t);
     player.idleTimer = 0;
+    player.totalDistMoved = 0;
+  } else if (inCombatCharge && pmdMeta?.charge?.durations?.length) {
+    player._shootAnimTick = 0;
+    const seq = pmdMeta.charge.durations;
+    const total = seq.reduce((a, b) => a + b, 0);
+    player._chargeAnimTick = (player._chargeAnimTick || 0) + dt * 60;
+    const loopTick = player._chargeAnimTick % total;
+    player.animFrame = pickPmdSeqFrame(seq, loopTick);
+    player.idleTimer = 0;
+    player.totalDistMoved = 0;
   } else {
-    const meta = getDexAnimMeta(player.dexId);
-    const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
-    const totalTicks = seq.reduce((a, b) => a + b, 0);
-    
-    player.idleTimer += dt * 60;
-    const loopTick = player.idleTimer % totalTicks;
-    
-    let accumulated = 0;
-    player.animFrame = 0;
-    for (let i = 0; i < seq.length; i++) {
-       accumulated += seq[i];
-       if (loopTick <= accumulated) {
-         player.animFrame = i;
-         break;
-       }
+    player._shootAnimTick = 0;
+    player._chargeAnimTick = 0;
+
+    const useWalkLikeAnim =
+      (!!player.grounded && (spd > 0.1 || !!player.digActive)) ||
+      (flightMove &&
+        smoothLevitationFlight &&
+        (spd > 0.1 ||
+          !!playInputState.spaceHeld ||
+          !!playInputState.shiftLeftHeld ||
+          player.z > 0.02));
+
+    if (useWalkLikeAnim) {
+      const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;
+      player.totalDistMoved += animSpd * dt;
+      const pmdDexForWalkLike =
+        player.digActive &&
+        speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
+        player.digBurrowMode
+          ? getBorrowDigPlaceholderDex(player.dexId ?? 0)
+          : player.dexId ?? 94;
+      const meta = getDexAnimMeta(pmdDexForWalkLike);
+      const seq = player.digActive
+        ? meta?.dig?.durations || meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk
+        : meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
+      const totalTicks = seq.reduce((a, b) => a + b, 0);
+
+      const walkDistanceCycle = 3.5;
+      const animT = (player.totalDistMoved % walkDistanceCycle) / walkDistanceCycle;
+      const currentTick = animT * totalTicks;
+
+      let accumulated = 0;
+      player.animFrame = 0;
+      for (let i = 0; i < seq.length; i++) {
+        accumulated += seq[i];
+        if (currentTick <= accumulated) {
+          player.animFrame = i;
+          break;
+        }
+      }
+      player.idleTimer = 0;
+    } else {
+      const meta = getDexAnimMeta(player.dexId);
+      const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
+      const totalTicks = seq.reduce((a, b) => a + b, 0);
+
+      player.idleTimer += dt * 60;
+      const loopTick = player.idleTimer % totalTicks;
+
+      let accumulated = 0;
+      player.animFrame = 0;
+      for (let i = 0; i < seq.length; i++) {
+        accumulated += seq[i];
+        if (loopTick <= accumulated) {
+          player.animFrame = i;
+          break;
+        }
+      }
     }
+  }
+
+  if (shootRemain0 > 0) {
+    player.moveShootAnimSec = Math.max(0, shootRemain0 - dt);
   }
 }

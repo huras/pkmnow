@@ -29,6 +29,16 @@ import {
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
 
+/** Visual window for optional `shoot` PMD slice after a successful player cast. */
+const MOVE_CAST_VIS_SEC = 0.48;
+
+function bumpPlayerMoveCastVisual(sourceEntity) {
+  if (sourceEntity && sourceEntity.dexId != null) {
+    sourceEntity.moveShootAnimSec = Math.max(sourceEntity.moveShootAnimSec || 0, MOVE_CAST_VIS_SEC);
+    sourceEntity._shootAnimTick = 0;
+  }
+}
+
 export const activeProjectiles = [];
 export const activeParticles = [];
 
@@ -172,6 +182,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  return false;
 }
 
 /**
@@ -184,139 +195,168 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
 }
 
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerEmberCooldown > 0) return;
+  if (playerEmberCooldown > 0) return false;
   playerEmberCooldown = 0.2;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castEmberVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerWaterCooldown > 0) return;
+  if (playerWaterCooldown > 0) return false;
   playerWaterCooldown = 0.35;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castWaterBurstVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerPoisonCooldown > 0) return;
+  if (playerPoisonCooldown > 0) return false;
   playerPoisonCooldown = 0.45;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castPoisonStingOnce(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerFlamethrowerCooldown > 0) return;
+  if (playerFlamethrowerCooldown > 0) return false;
   playerFlamethrowerCooldown = 0.7;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerConfusionCooldown > 0) return;
+  if (playerConfusionCooldown > 0) return false;
   playerConfusionCooldown = 0.6;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castConfusion(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerBubbleCooldown > 0) return;
+  if (playerBubbleCooldown > 0) return false;
   playerBubbleCooldown = 0.55;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerWaterGunCooldown > 0) return;
+  if (playerWaterGunCooldown > 0) return false;
   playerWaterGunCooldown = 0.65;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerPsybeamCooldown > 0) return;
+  if (playerPsybeamCooldown > 0) return false;
   playerPsybeamCooldown = 0.75;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerPrismaticLaserCooldown > 0) return;
+  if (playerPrismaticLaserCooldown > 0) return false;
   playerPrismaticLaserCooldown = 1.45;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerPoisonPowderCooldown > 0) return;
+  if (playerPoisonPowderCooldown > 0) return false;
   playerPoisonPowderCooldown = 0.95;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castPoisonPowder(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerIncinerateCooldown > 0) return;
+  if (playerIncinerateCooldown > 0) return false;
   playerIncinerateCooldown = 0.78;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castIncinerate(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerSilkShootCooldown > 0) return;
+  if (playerSilkShootCooldown > 0) return false;
   playerSilkShootCooldown = 0.72;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castSilkShoot(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile
   });
+  return true;
 }
 
 export function castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
-  if (playerEmberCooldown > 0) return;
+  if (playerEmberCooldown > 0) return false;
   playerEmberCooldown = 0.48;
+  bumpPlayerMoveCastVisual(sourceEntity);
   const cp = Math.max(0, Math.min(1, charge01 || 0));
   castEmberVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
     chargePower: Math.max(0.12, cp)
   });
+  return true;
 }
 
 export function castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
-  if (playerWaterCooldown > 0) return;
+  if (playerWaterCooldown > 0) return false;
   playerWaterCooldown = 0.58;
+  bumpPlayerMoveCastVisual(sourceEntity);
   const cp = Math.max(0, Math.min(1, charge01 || 0));
   castWaterBurstVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
     chargePower: Math.max(0.1, cp)
   });
+  return true;
 }
 
 /** Shift + LMB — fan of poison stings. */
 export function castCounterAttack1(sourceX, sourceY, targetX, targetY, sourceEntity) {
-  if (playerCounter1Cooldown > 0) return;
+  if (playerCounter1Cooldown > 0) return false;
   playerCounter1Cooldown = 0.82;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castPoisonStingFan(
     sourceX,
     sourceY,
@@ -326,12 +366,14 @@ export function castCounterAttack1(sourceX, sourceY, targetX, targetY, sourceEnt
     { fromWild: false, pushProjectile },
     0.17
   );
+  return true;
 }
 
 /** Shift + RMB — wide high-pressure water burst. */
 export function castCounterAttack2(sourceX, sourceY, targetX, targetY, sourceEntity) {
-  if (playerCounter2Cooldown > 0) return;
+  if (playerCounter2Cooldown > 0) return false;
   playerCounter2Cooldown = 0.82;
+  bumpPlayerMoveCastVisual(sourceEntity);
   castWaterBurstVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
@@ -341,6 +383,7 @@ export function castCounterAttack2(sourceX, sourceY, targetX, targetY, sourceEnt
     damageMul: 1.2,
     chargePower: 0.25
   });
+  return true;
 }
 
 /**
@@ -349,8 +392,9 @@ export function castCounterAttack2(sourceX, sourceY, targetX, targetY, sourceEnt
  * @param {number} targetY
  */
 export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
-  if (playerUltimateCooldown > 0) return;
+  if (playerUltimateCooldown > 0) return false;
   playerUltimateCooldown = 7.5;
+  bumpPlayerMoveCastVisual(sourceEntity);
   const aimA = Math.atan2(targetY - sourceY, targetX - sourceX);
   const n = 18;
   for (let i = 0; i < n; i++) {
@@ -380,6 +424,7 @@ export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
       sheetFrames: isEmber ? 4 : 1
     });
   }
+  return true;
 }
 
 /**

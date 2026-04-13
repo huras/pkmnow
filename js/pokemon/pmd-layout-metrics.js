@@ -31,11 +31,12 @@ export function resolvePmdFrameSpec(sheet, isMoving, dexId) {
  * Frame spec for an explicit slice (e.g. dig sheet uses `dig` timings, fallback to walk).
  * @param {HTMLImageElement} sheet
  * @param {number} dexId
- * @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'} sliceKey
+ * @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'} sliceKey
  */
 export function resolvePmdFrameSpecForSlice(sheet, dexId, sliceKey) {
   const modeMeta = getDexAnimSlice(dexId, sliceKey);
-  const fallbackCols = sliceKey === 'idle' || sliceKey === 'sleep' ? 8 : 4;
+  const fallbackCols =
+    sliceKey === 'idle' || sliceKey === 'sleep' ? 8 : 4;
   const animCols = modeMeta?.durations?.length || fallbackCols;
   const sw = Math.max(
     1,
