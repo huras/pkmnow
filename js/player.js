@@ -49,7 +49,7 @@ const FLIGHT_LEVITATION_VERT_SPEED = 7.2;
 const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38;
 const FLIGHT_LEVITATION_FRICTION_MULT = 0.82;
 
-/** Sprint (Left Ctrl while moving, Minecraft-style: clears when movement stops). */
+/** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
 const RUN_SPEED_CAP_MULT = 2;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */

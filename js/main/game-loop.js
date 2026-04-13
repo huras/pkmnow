@@ -138,6 +138,11 @@ export function createGameLoop(api) {
 export function registerPlayKeyboard(api) {
   const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, player } = api;
 
+  /** Same cardinal twice within this window enables sprint; clears when movement stops (game loop). */
+  const RUN_DOUBLE_TAP_MS = 320;
+  let runTapDir = /** @type {'up'|'down'|'left'|'right'|null} */ (null);
+  let runTapAt = 0;
+
   /** Capture phase: run before browser default actions (e.g. Ctrl+W close tab). */
   window.addEventListener(
     'keydown',
@@ -176,9 +181,6 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
         e.stopPropagation();
       }
-      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
-        e.preventDefault();
-      }
 
       if (e.code === 'Space') {
         playInputState.spaceHeld = true;
@@ -198,16 +200,19 @@ export function registerPlayKeyboard(api) {
         playInputState.shiftRightHeld = true;
       }
 
-      if (e.code === 'ControlLeft' && !e.repeat) {
-        const movingIntent =
-          heldKeys.has('up') || heldKeys.has('down') || heldKeys.has('left') || heldKeys.has('right');
-        if (movingIntent) {
-          player.runMode = true;
-        }
-      }
-
       const dir = keyToDir(e.key);
       if (dir) {
+        if (!e.repeat) {
+          const now = performance.now();
+          if (runTapDir === dir && now - runTapAt <= RUN_DOUBLE_TAP_MS) {
+            player.runMode = true;
+            runTapDir = null;
+            runTapAt = 0;
+          } else {
+            runTapDir = dir;
+            runTapAt = now;
+          }
+        }
         heldKeys.add(dir);
         if (getCurrentData()) refreshPlayModeInfoBar(true);
       }

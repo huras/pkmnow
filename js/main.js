@@ -267,7 +267,8 @@ function enterPlayMode(gx, gy) {
   btnExport.classList.add('hidden');
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
-  infoBar.innerHTML = "<b style='color:#fff'>Mova-se com WASD ou Setas. Aperte ESC para sair.</b>";
+  infoBar.innerHTML =
+    "<b style='color:#fff'>Mova-se com WASD ou Setas. Toque duas vezes na mesma direção para correr. ESC para sair.</b>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
