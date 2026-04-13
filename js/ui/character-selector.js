@@ -7,6 +7,7 @@ import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
+import { getPlayerMoveCooldownRemaining } from '../moves/moves-manager.js';
 
 export class CharacterSelector {
   constructor(containerId) {
@@ -54,6 +55,36 @@ export class CharacterSelector {
     gVal.textContent = aboveGround.toFixed(1);
     sVal.textContent =
       aboveSea === 0 ? '0' : (aboveSea > 0 ? '+' : '') + aboveSea.toFixed(1);
+  }
+
+  /** Clears move cooldown labels (e.g. when leaving play mode). */
+  clearPlayMovesCooldownHud() {
+    const movesEl = this.container?.querySelector('#current-player-moves');
+    if (!movesEl) return;
+    for (const chip of movesEl.querySelectorAll('.move-chip[data-move-id]')) {
+      const cdEl = chip.querySelector('.move-chip__cd');
+      if (cdEl) cdEl.textContent = '';
+      chip.classList.remove('move-chip--cooldown');
+    }
+  }
+
+  /** Live cooldown text for each moveset chip (play mode; game loop). */
+  updatePlayMovesCooldownHud() {
+    const movesEl = this.container?.querySelector('#current-player-moves');
+    if (!movesEl) return;
+    for (const chip of movesEl.querySelectorAll('.move-chip[data-move-id]')) {
+      const id = chip.getAttribute('data-move-id');
+      const cdEl = chip.querySelector('.move-chip__cd');
+      if (!cdEl || !id) continue;
+      const cd = getPlayerMoveCooldownRemaining(id);
+      if (cd <= 0.008) {
+        cdEl.textContent = '';
+        chip.classList.remove('move-chip--cooldown');
+      } else {
+        cdEl.textContent = `${cd.toFixed(1)}s`;
+        chip.classList.add('move-chip--cooldown');
+      }
+    }
   }
 
   render() {
@@ -105,7 +136,7 @@ export class CharacterSelector {
         <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
           <div class="player-moves-title">Moves</div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB/RMB = 1st/2nd · Left Ctrl + click = 3rd/4th</div>
+          <div class="player-moves-help">LMB/RMB = 1st/2nd · LCtrl+click = 3rd/4th · MMB = Ultimate</div>
         </div>
 
         <div class="search-container">
@@ -257,9 +288,14 @@ export class CharacterSelector {
     if (movesEl) {
       const moves = getPokemonMoveset(player.dexId);
       const hotkeys = ['LMB', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
-      movesEl.innerHTML = moves
-        .map((m, i) => `<span class="move-chip" title="${getMoveLabel(m)}"><b>${hotkeys[i] || '—'}</b> ${getMoveLabel(m)}</span>`)
+      const slotsHtml = moves
+        .map(
+          (m, i) =>
+            `<span class="move-chip" data-move-id="${m}" title="${getMoveLabel(m)}"><span class="move-chip__main"><b>${hotkeys[i] || '—'}</b> ${getMoveLabel(m)}</span><span class="move-chip__cd" aria-live="polite"></span></span>`
+        )
         .join('');
+      const ultimateHtml = `<span class="move-chip move-chip--ultimate" data-move-id="ultimate" title="Nova ring (fire + water) toward cursor"><span class="move-chip__main"><b>MMB</b> Ultimate</span><span class="move-chip__cd" aria-live="polite"></span></span>`;
+      movesEl.innerHTML = slotsHtml + ultimateHtml;
     }
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');

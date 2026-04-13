@@ -168,7 +168,10 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   refreshPlayModeInfoBar,
   getPlayFpsEl: () => playFpsEl,
   player,
-  onPlayHudFrame: (data) => playCharacterSelector?.updatePlayAltitudeHud(data)
+  onPlayHudFrame: (data) => {
+    playCharacterSelector?.updatePlayAltitudeHud(data);
+    playCharacterSelector?.updatePlayMovesCooldownHud();
+  }
 });
 
 registerPlayKeyboard({
@@ -326,6 +329,7 @@ btnBackToMap.addEventListener('click', () => {
 
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);
+  playCharacterSelector?.clearPlayMovesCooldownHud();
   resizeCanvas();
   updateView();
 });

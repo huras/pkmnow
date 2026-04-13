@@ -439,6 +439,44 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
  * @param {object | null} _data reserved for terrain/water queries (ground embers, etc.)
  * @param {import('../player.js').player} player
  */
+/**
+ * Remaining player cooldown (seconds) for a move id. Used by play HUD chips.
+ * @param {string} moveId
+ * @returns {number}
+ */
+export function getPlayerMoveCooldownRemaining(moveId) {
+  switch (moveId) {
+    case 'ember':
+      return playerEmberCooldown;
+    case 'waterBurst':
+      return playerWaterCooldown;
+    case 'poisonSting':
+      return playerPoisonCooldown;
+    case 'flamethrower':
+      return playerFlamethrowerCooldown;
+    case 'confusion':
+      return playerConfusionCooldown;
+    case 'bubble':
+      return playerBubbleCooldown;
+    case 'waterGun':
+      return playerWaterGunCooldown;
+    case 'psybeam':
+      return playerPsybeamCooldown;
+    case 'prismaticLaser':
+      return playerPrismaticLaserCooldown;
+    case 'poisonPowder':
+      return playerPoisonPowderCooldown;
+    case 'incinerate':
+      return playerIncinerateCooldown;
+    case 'silkShoot':
+      return playerSilkShootCooldown;
+    case 'ultimate':
+      return playerUltimateCooldown;
+    default:
+      return 0;
+  }
+}
+
 export function updateMoves(dt, wildPokemonList, _data, player) {
   updatePlayerCombatTimers(dt);
   playerEmberCooldown = Math.max(0, playerEmberCooldown - dt);

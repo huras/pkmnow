@@ -264,8 +264,9 @@ body.play-mode-active .character-selector .play-pointer-mode-bar {
 
 .move-chip {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 0.68rem;
@@ -273,6 +274,41 @@ body.play-mode-active .character-selector .play-pointer-mode-bar {
   color: #f5f8ff;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.move-chip--ultimate {
+  border-color: rgba(186, 148, 255, 0.45);
+  background: rgba(120, 80, 200, 0.12);
+}
+
+.move-chip--ultimate.move-chip--cooldown {
+  border-color: rgba(255, 184, 108, 0.5);
+  background: rgba(255, 120, 40, 0.1);
+}
+
+.move-chip--cooldown {
+  border-color: rgba(255, 184, 108, 0.45);
+  background: rgba(255, 120, 40, 0.08);
+}
+
+.move-chip__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.move-chip__cd {
+  margin-left: auto;
+  min-width: 2.1em;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #ffb86c;
+}
+
+.move-chip__cd:empty {
+  min-width: 0;
 }
 
 .move-chip b {
