@@ -80,7 +80,7 @@ export function wireSpatialMediaElement(audio) {
   panner.distanceModel = 'inverse';
   panner.refDistance = 0.75;
   panner.maxDistance = 890;
-  panner.rolloffFactor = 1.05;
+  panner.rolloffFactor = 0.75;
   panner.coneInnerAngle = 360;
   panner.coneOuterAngle = 360;
 

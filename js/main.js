@@ -37,6 +37,7 @@ import {
   playScreenPixelsToWorldTileCoords,
   clearPlayCameraSnapshot
 } from './render/play-camera-snapshot.js';
+import { stopBiomeBgm } from './audio/biome-bgm.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -341,6 +342,7 @@ function enterPlayMode(gx, gy) {
 }
 
 btnBackToMap.addEventListener('click', () => {
+  stopBiomeBgm();
   clearPlayCameraSnapshot();
   appMode = 'map';
   btnExport.classList.remove('hidden');
