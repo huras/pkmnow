@@ -46,6 +46,7 @@ export function formatObjectSetsFlags(f) {
 }
 
 export function openDebugModal(info) {
+  if (!debugModalEl || !debugContentEl) return;
   lastDebugInfo = info;
   lastDetailDebugInfo = null;
   setDebugModalCopyButtons('tile');
@@ -455,6 +456,7 @@ export function openDebugModal(info) {
  * @param {object} payload - from `buildPlayModeDetailDebugPayload`
  */
 export function openDetailDebugModal(payload) {
+  if (!debugModalEl || !debugContentEl) return;
   lastDetailDebugInfo = payload;
   lastDebugInfo = null;
   setDebugModalCopyButtons('detail');

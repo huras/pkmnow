@@ -1,3 +1,5 @@
+import { isPlayShell } from './main/app-shell.js';
+import { setPlayPointerMode } from './main/play-pointer-mode.js';
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import {
@@ -50,6 +52,10 @@ import {
   PRESET_HOUR,
   wrapHours
 } from './main/world-time-of-day.js';
+
+if (isPlayShell()) {
+  setPlayPointerMode('game');
+}
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -264,7 +270,7 @@ registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,
   refreshPlayModeInfoBar,
-  onEscapePlay: () => btnBackToMap.click(),
+  onEscapePlay: () => btnBackToMap?.click?.(),
   onPlaySocialAction: (action) => {
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);
@@ -412,8 +418,8 @@ function enterPlayMode(gx, gy) {
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;
   appMode = 'play';
-  btnExport.classList.add('hidden');
-  btnBackToMap.classList.remove('hidden');
+  btnExport?.classList.add('hidden');
+  btnBackToMap?.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML =
     "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
@@ -436,12 +442,12 @@ function enterPlayMode(gx, gy) {
   startGameLoop();
 }
 
-btnBackToMap.addEventListener('click', () => {
+btnBackToMap?.addEventListener('click', () => {
   stopBiomeBgm();
   clearPlayCameraSnapshot();
   appMode = 'map';
-  btnExport.classList.remove('hidden');
-  btnBackToMap.classList.add('hidden');
+  btnExport?.classList.remove('hidden');
+  btnBackToMap?.classList.add('hidden');
   minimap.classList.add('hidden');
   infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
   playDetailColliderHighlight = null;
@@ -499,7 +505,7 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-if (btnDebugClose) {
+if (btnDebugClose && debugModal) {
   btnDebugClose.addEventListener('click', () => {
     debugModal.classList.remove('is-open');
   });
