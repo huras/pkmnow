@@ -30,6 +30,7 @@ import { circleAabbIntersectsRect } from './main/play-collider-overlay-cache.js'
 import { isGroundDigLatchEligible, isPlayerIdleOnWaitingFrame } from './player.js';
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
+import { wildSexHudLabel } from './pokemon/pokemon-sex.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
 import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
@@ -991,7 +992,8 @@ export function render(canvas, data, options = {}) {
         hp: we.hp,
         maxHp: we.maxHp,
         deadState: we.deadState,
-        hurtTimer: we.hurtTimer
+        hurtTimer: we.hurtTimer,
+        sexHud: wildSexHudLabel(we.sex)
       });
 
       if (emotionPayload) {
@@ -1337,6 +1339,19 @@ export function render(canvas, data, options = {}) {
       const barH = Math.max(3, Math.floor(tileH * 0.08));
       const x = Math.floor(item.cx - barW * 0.5);
       const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - 6);
+      if (item.sexHud) {
+        const fontPx = Math.max(9, Math.floor(tileH * 0.14));
+        ctx.save();
+        ctx.font = `${fontPx}px 'JetBrains Mono',ui-monospace,monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.lineWidth = Math.max(2, Math.ceil(fontPx * 0.12));
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.strokeText(item.sexHud, item.cx, y - 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText(item.sexHud, item.cx, y - 1);
+        ctx.restore();
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
       ctx.fillStyle = hp01 > 0.5 ? '#63e86f' : hp01 > 0.22 ? '#ffd54a' : '#ff6363';

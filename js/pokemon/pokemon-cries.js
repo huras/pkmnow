@@ -8,6 +8,16 @@ import {
 
 /** Two slots per dex so overlapping wild cries do not cancel each other. */
 const POOL_SIZE = 2;
+
+/** Global loudness boost (cries were tuned a bit quiet vs spatial + MP3). */
+const CRY_VOL_BOOST = 1.22;
+
+/** Default cry level when no envelope is passed. */
+const CRY_DEFAULT_VOL = 0.74;
+
+function clampCryVol(v) {
+  return Math.max(0, Math.min(1, v * CRY_VOL_BOOST));
+}
 /** @type {Map<number, HTMLAudioElement[]>} */
 const pools = new Map();
 
@@ -93,7 +103,11 @@ function attachCryEnvelope(audio, curve) {
     } else {
       t = Math.min(1, Math.max(0, audio.currentTime / fallbackDur));
     }
-    audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * t));
+    /** Fade-out stays louder longer; fade-in reaches full level a bit earlier. */
+    let volBlend = t;
+    if (v1 < v0 - 1e-4) volBlend = t * t;
+    else if (v1 > v0 + 1e-4) volBlend = 1 - (1 - t) * (1 - t);
+    audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * volBlend));
     audio.playbackRate = Math.max(0.55, Math.min(1.45, r0 + (r1 - r0) * t));
   };
 
@@ -182,12 +196,12 @@ export function playPokemonCry(dex, opts = {}) {
   let r0;
   let r1;
   if (env) {
-    v0 = env.volumeFrom ?? opts.volume ?? 0.52;
-    v1 = env.volumeTo ?? v0;
+    v0 = clampCryVol(env.volumeFrom ?? opts.volume ?? CRY_DEFAULT_VOL);
+    v1 = clampCryVol(env.volumeTo ?? env.volumeFrom ?? opts.volume ?? CRY_DEFAULT_VOL);
     r0 = env.rateFrom ?? opts.playbackRate ?? 1;
     r1 = env.rateTo ?? r0;
   } else {
-    const vol = opts.volume != null ? opts.volume : 0.52;
+    const vol = clampCryVol(opts.volume != null ? opts.volume : CRY_DEFAULT_VOL);
     const rate = opts.playbackRate != null ? opts.playbackRate : 1;
     v0 = v1 = vol;
     r0 = r1 = rate;
@@ -239,8 +253,8 @@ function attachHurtTailEnvelope(audio, startTime, fallbackDur) {
   clearCryEnvelope(audio);
   const ac = new AbortController();
   audio._cryEnvelopeAbort = ac;
-  const v0 = 0.58;
-  const v1 = 0.22;
+  const v0 = clampCryVol(0.78);
+  const v1 = clampCryVol(0.38);
   const r0 = 1.06;
   const r1 = 0.9;
 
@@ -249,7 +263,8 @@ function attachHurtTailEnvelope(audio, startTime, fallbackDur) {
     const end = d && Number.isFinite(d) && d > startTime + 0.04 ? d : startTime + fallbackDur;
     const denom = Math.max(0.05, end - startTime);
     const u = Math.min(1, Math.max(0, (audio.currentTime - startTime) / denom));
-    audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * u));
+    const uVol = u * u;
+    audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * uVol));
     audio.playbackRate = Math.max(0.55, Math.min(1.45, r0 + (r1 - r0) * u));
   };
 
@@ -287,7 +302,7 @@ export function playWildDamageHurtCry(entity) {
       /* ignore */
     }
     a.playbackRate = 1.02;
-    a.volume = 0.58;
+    a.volume = clampCryVol(0.78);
 
     void resumeSpatialAudioContext();
     const graph = wireSpatialMediaElement(a);

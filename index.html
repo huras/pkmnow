@@ -1,175 +1,32 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-app-shell="marketing">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gerador de região — Fase 2</title>
+    <title>Gerador de região — entrada</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css" />
-    <link rel="stylesheet" href="css/biomes-modal.css" />
-    <link rel="stylesheet" href="css/pokemon-db.css" />
-    <link rel="stylesheet" href="css/character-selector.css" />
+    <link rel="stylesheet" href="css/landing.css" />
   </head>
   <body>
-    <div class="app">
-      <div id="character-selector-container"></div>
-      <h1>Gerador procedural</h1>
-
-      <div class="toolbar">
-        <div class="field">
-          <label for="seed">Seed</label>
-          <input type="text" id="seed" value="demo" autocomplete="off" spellcheck="false" />
-        </div>
-        <button type="button" id="generate">Gerar</button>
-        <button type="button" id="btnSettings" title="Configurações de Ruído" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">⚙️</button>
-        <button type="button" id="btnBiomes" title="Explorador de Biomas" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">📊</button>
-        <a href="pokemon-anim-lab.html" style="display:inline-flex; align-items:center; padding:0.45rem 0.8rem; text-decoration:none; border-radius:6px; border:1px solid #4a4a52; background:transparent; color:var(--text); font-size:0.8rem; font-weight:600;">PMD lab</a>
+    <main class="landing">
+      <p class="landing-badge">Experimento procedural</p>
+      <h1>Gerador de região</h1>
+      <p class="landing-lead">
+        Gere um mapa, explore em modo jogo ou abra a ferramenta completa com debug, import/export e ajustes finos do mundo.
+      </p>
+      <div class="landing-actions">
+        <a class="landing-btn landing-btn--primary" href="play.html">Jogar</a>
+        <a class="landing-btn landing-btn--secondary" href="debug-play.html">Ferramentas e debug</a>
       </div>
-      
-      <div class="toolbar-secondary">
-        <div class="field-group">
-          <strong>View:</strong>
-          <label class="radio-label"><input type="radio" name="viewType" value="biomes" checked> Biomas</label>
-          <label class="radio-label"><input type="radio" name="viewType" value="elevation"> Elevação</label>
-          <label class="radio-label"><input type="radio" name="viewType" value="moisture"> Umidade</label>
-        </div>
-        <div class="field-group">
-          <strong>Overlays:</strong>
-          <label class="check-label"><input type="checkbox" id="chkRotas" checked> Rotas</label>
-          <label class="check-label"><input type="checkbox" id="chkGrafo" checked> Grafo</label>
-          <label class="check-label"><input type="checkbox" id="chkCurvas"> Curvas de Nível</label>
-          <label class="check-label" title="Modo jogo: ~37×37 tiles ao redor do jogador (tecla C). Cache acelera props scatter."><input type="checkbox" id="chkPlayColliders"> Colisores</label>
-        </div>
-        <input type="file" id="importFile" class="hidden" accept=".json">
-        <button type="button" id="importBtn" class="btn-secondary">Importar JSON</button>
-        <button type="button" id="exportBtn" class="btn-secondary">Exportar JSON</button>
-        <button type="button" id="btnBackToMap" class="btn-secondary hidden">Voltar ao Mapa</button>
-      </div>
-
-      <div class="map-wrap">
-        <div id="hud-info">Mova o mouse sobre o mapa para ver os detalhes do terreno</div>
-        <canvas id="map" width="512" height="512" aria-label="Pré-visualização do mapa gerado"></canvas>
-        <canvas id="minimap" class="hidden" width="128" height="128" aria-label="Minimapa da região"></canvas>
-        <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
-        <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">
-          <div class="play-bgm-now-playing-title">Now playing</div>
-          <div id="play-bgm-now-playing-track" class="play-bgm-now-playing-track">—</div>
-          <div id="play-bgm-now-playing-status" class="play-bgm-now-playing-status">Idle</div>
-        </div>
-        <div id="play-world-time" class="play-world-time" aria-label="World time of day (test)">
-          <div class="play-world-time-title">World time</div>
-          <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
-          <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
-          <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
-          <div class="play-world-time-presets">
-            <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
-          </div>
-          <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
-          <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
-        </div>
-      </div>
-      </div>
-    </div>
-
-    <!-- Modal de Configurações -->
-    <div id="settingsModal" class="modal hidden">
-      <div class="modal-content">
-        <h3>Configurações do Mundo</h3>
-        <div class="config-row">
-          <label>Nível do Mar (Land/Water)</label>
-          <input type="range" id="cfgWaterLevel" min="20" max="60" value="21">
-        </div>
-        <div class="config-row">
-          <label>Escala Elevação (Coastlines)</label>
-          <input type="range" id="cfgElevation" min="10" max="60" value="24">
-        </div>
-        <div class="config-row">
-          <label>Oitavas de detalhe (elevação suave, degraus)</label>
-          <input type="range" id="cfgElevationDetailOctaves" min="0" max="5" value="2">
-        </div>
-        <div class="config-row">
-          <label>Força do detalhe (quanto “sobe/desce” suave; padrão 34)</label>
-          <input type="range" id="cfgElevationDetailStrength" min="10" max="80" value="34" title="Valor ÷1000 somado em cada oitava (ex.: 34 → ±~3,4% na 1ª camada)">
-        </div>
-        <div class="config-row">
-          <label>Escala Temperatura (Norte/Sul)</label>
-          <input type="range" id="cfgTemperature" min="10" max="60" value="60">
-        </div>
-        <div class="config-row">
-          <label>Escala Umidade (Deserto/Planta)</label>
-          <input type="range" id="cfgMoisture" min="10" max="60" value="28">
-        </div>
-        <div class="config-row">
-          <label>Corte para Deserto (Umidade)</label>
-          <input type="range" id="cfgDesertMoisture" min="10" max="60" value="38">
-        </div>
-        <div class="config-row">
-          <label>Corte para Floresta (Umidade)</label>
-          <input type="range" id="cfgForestMoisture" min="40" max="90" value="58">
-        </div>
-        <div class="config-row">
-          <label>Frequência de Anomalias</label>
-          <input type="range" id="cfgAnomaly" min="5" max="50" value="32">
-        </div>
-        <div class="config-row">
-          <label>Qtd. Cidades</label>
-          <input type="range" id="cfgCities" min="4" max="30" value="22">
-        </div>
-        <div class="config-row">
-          <label>Qtd. Ginásios</label>
-          <input type="range" id="cfgGyms" min="2" max="12" value="10">
-        </div>
-        <div class="modal-footer">
-          <button type="button" id="btnExportWorldSettings" class="btn-secondary">Exportar Config JSON</button>
-          <button type="button" id="btnApplySettings" class="btn-primary">Aplicar e Gerar</button>
-          <button type="button" id="btnCloseSettings" class="btn-secondary">Fechar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Play mode: context menu (teleport / debug) -->
-    <div id="play-context-menu" class="play-context-menu" hidden aria-hidden="true" role="menu">
-      <button type="button" class="play-context-menu-item" id="play-ctx-teleport" role="menuitem">Teleport player here</button>
-      <button type="button" class="play-context-menu-item" id="play-ctx-debug" role="menuitem">Debug tile</button>
-      <button type="button" class="play-context-menu-item" id="play-ctx-view-detail-data" role="menuitem" hidden>View detail data…</button>
-      <button type="button" class="play-context-menu-item" id="play-ctx-show-detail-collider" role="menuitem" hidden>Show detail collider</button>
-      <button type="button" class="play-context-menu-item" id="play-ctx-clear-detail-collider" role="menuitem" hidden>Clear detail highlight</button>
-    </div>
-
-    <!-- Debug Modal (Planet Genesis) -->
-    <div id="tile-debug-modal" class="tile-debug-modal" aria-hidden="true">
-        <div class="tile-debug-card">
-            <div class="tile-debug-header">
-                <div class="hud-title" id="tile-debug-title">Raw Data Dump</div>
-                <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn-hud" id="tile-debug-copy-json">COPY JSON</button>
-                    <button type="button" class="btn-hud hidden" id="tile-debug-copy-detail-json">COPY DETAIL JSON</button>
-                    <button type="button" class="btn-hud" id="tile-debug-close">CLOSE</button>
-                </div>
-            </div>
-            <div class="tile-debug-body" id="tile-debug-content"></div>
-        </div>
-    </div>
-
-    <!-- Modal de Explorador de Biomas -->
-    <div id="biomesModal" class="modal hidden">
-      <div class="modal-content biomes-modal-content">
-        <div class="tile-debug-header">
-          <div class="hud-title">Explorador de Biomas</div>
-          <button type="button" class="btn-hud" id="btnCloseBiomes">Fechar</button>
-        </div>
-        <div class="biomes-grid" id="biomesGrid">
-          <!-- Conteúdo gerado via JS -->
-        </div>
-      </div>
-    </div>
-
-    <script type="module" src="js/main.js"></script>
+      <p class="landing-note">
+        A página <strong>Jogar</strong> carrega o mesmo núcleo (<code>js/main.js</code>) com interface reduzida. A página <strong>Debug</strong> é o fluxo antigo do gerador.
+      </p>
+      <footer class="landing-footer">
+        Lab de animação: <a href="pokemon-anim-lab.html">PMD lab</a>
+      </footer>
+    </main>
   </body>
 </html>

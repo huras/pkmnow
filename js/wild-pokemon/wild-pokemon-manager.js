@@ -27,6 +27,8 @@ import {
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
+import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
+import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
 import { tryCastWildMove } from '../moves/moves-manager.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
@@ -328,13 +330,15 @@ function ensureSocialMemory(entity) {
   return entity.socialMemory;
 }
 
-function pushRecentNearbyEvent(entity, type, intensity = 1) {
+function pushRecentNearbyEvent(entity, type, intensity = 1, meta) {
   ensureSocialMemory(entity);
-  entity.recentNearbyEvents.push({
+  const evt = {
     type: String(type || ''),
     intensity: Number.isFinite(intensity) ? intensity : 0,
     ttl: WILD_SOCIAL_EVENT_TTL_SEC
-  });
+  };
+  if (meta && meta.subjectDex != null) evt.subjectDex = Math.floor(Number(meta.subjectDex)) || 0;
+  entity.recentNearbyEvents.push(evt);
   if (entity.recentNearbyEvents.length > WILD_SOCIAL_EVENT_MAX) {
     entity.recentNearbyEvents.splice(0, entity.recentNearbyEvents.length - WILD_SOCIAL_EVENT_MAX);
   }
@@ -348,6 +352,32 @@ function getNearbyEventIntensity(entity, eventType) {
     if (evt.type === eventType) total += Number(evt.intensity) || 0;
   }
   return total;
+}
+
+function getAllySpeciesHurtIntensity(entity) {
+  const myDex = entity.dexId ?? 1;
+  const list = entity.recentNearbyEvents;
+  if (!Array.isArray(list) || !list.length) return 0;
+  let total = 0;
+  for (const evt of list) {
+    if (evt.type !== 'ally_species_hurt') continue;
+    if (evt.subjectDex != null && evt.subjectDex !== myDex) continue;
+    total += Number(evt.intensity) || 0;
+  }
+  return total;
+}
+
+function broadcastNearbySpeciesAllyHurt(worldX, worldY, victimDex, intensity = 1, ignoreEntity = null) {
+  const vd = Math.floor(Number(victimDex)) || 1;
+  for (const e of entitiesByKey.values()) {
+    if (e === ignoreEntity) continue;
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+    if ((e.dexId ?? 1) !== vd) continue;
+    const dist = Math.hypot(e.x - worldX, e.y - worldY);
+    if (dist > WILD_SOCIAL_NEARBY_EVENT_RADIUS) continue;
+    const scaled = intensity * clamp(1 - dist / WILD_SOCIAL_NEARBY_EVENT_RADIUS, 0.25, 1);
+    pushRecentNearbyEvent(e, 'ally_species_hurt', scaled, { subjectDex: vd });
+  }
 }
 
 function decaySocialMemory(entity, dt) {
@@ -367,13 +397,23 @@ function decaySocialMemory(entity, dt) {
   memory.retreatSignal = decayTowardZero(memory.retreatSignal, WILD_SOCIAL_SIGNAL_DECAY_PER_SEC);
   memory.reactionCooldown = Math.max(0, (memory.reactionCooldown || 0) - smoothStep);
 
-  if (!Array.isArray(entity.recentNearbyEvents) || !entity.recentNearbyEvents.length) return;
-  const kept = [];
-  for (const evt of entity.recentNearbyEvents) {
-    evt.ttl = (evt.ttl || 0) - smoothStep;
-    if (evt.ttl > 0) kept.push(evt);
+  if (!Array.isArray(entity.recentNearbyEvents) || !entity.recentNearbyEvents.length) {
+    entity.recentNearbyEvents = [];
+  } else {
+    const kept = [];
+    for (const evt of entity.recentNearbyEvents) {
+      evt.ttl = (evt.ttl || 0) - smoothStep;
+      if (evt.ttl > 0) kept.push(evt);
+    }
+    entity.recentNearbyEvents = kept;
   }
-  entity.recentNearbyEvents = kept;
+
+  entity.provoked01 = Math.max(0, (entity.provoked01 || 0) - smoothStep * 0.3);
+  entity.wildTempAggressiveSec = Math.max(0, (entity.wildTempAggressiveSec || 0) - smoothStep);
+  const allyStrain = getAllySpeciesHurtIntensity(entity);
+  if (allyStrain >= 0.85) {
+    entity.wildTempAggressiveSec = Math.min(22, Math.max(entity.wildTempAggressiveSec || 0, 6.5));
+  }
 }
 
 function trackPlayerProximitySignals(entity, distToPlayer, dt) {
@@ -500,7 +540,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.animMoving = false;
     return;
   }
-  const beh = entity.behavior;
+  const beh = getEffectiveWildBehavior(entity);
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
   const distP = Math.hypot(dxP, dyP);
@@ -909,6 +949,10 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     // 15% chance to spawn sleeping (if they don't immediately wake up)
     const spawnSleep = Math.random() < 0.15;
 
+    const sexSalt =
+      (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ sx * 37 ^ sy * 41 ^ mx * 19 ^ my * 23) | 0;
+    const sex = rollWildSex(dex, sexSalt >>> 0);
+
     const entity = {
       key: k,
       macroX: mx,
@@ -924,6 +968,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       vx: 0,
       vy: 0,
       dexId: dex,
+      sex,
+      provoked01: 0,
+      wildTempAggressiveSec: 0,
       animMeta: getDexAnimMeta(dex),
       facing: 'down',
       animRow: 0,
@@ -1004,6 +1051,11 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         memory.affinity = clamp(memory.affinity - 0.35, -2.5, 3);
         pushRecentNearbyEvent(this, 'player_damage', 1.3);
         broadcastNearbyPlayerEvent(this.x, this.y, 'player_damage', 0.85, this);
+        broadcastNearbySpeciesAllyHurt(this.x, this.y, this.dexId ?? 1, 1.05, this);
+        this.provoked01 = clamp((this.provoked01 || 0) + 0.42, 0, 3);
+        if (this.provoked01 >= 0.38) {
+          this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 4.8));
+        }
 
         if (amount > 0) playWildDamageHurtCry(this);
       }
@@ -1164,6 +1216,22 @@ function chooseEmotionByOutcome(action, outcome, memory) {
   return action.balloonType ?? 7;
 }
 
+/** Small, tunable modifiers — keeps social reactions slightly sex-aware without hard stereotypes. */
+function socialSexIntentMul(entity, intent) {
+  const s = entity?.sex;
+  if (!s || s === 'genderless') return { affinity: 1, threat: 1 };
+  if (intent === 'scary') {
+    return s === 'female' ? { affinity: 1, threat: 1.07 } : { affinity: 1, threat: 1.02 };
+  }
+  if (intent === 'assertive') {
+    return s === 'male' ? { affinity: 0.99, threat: 1.05 } : { affinity: 1, threat: 1.03 };
+  }
+  if (intent === 'calming') {
+    return s === 'female' ? { affinity: 1.05, threat: 1 } : { affinity: 1.02, threat: 1 };
+  }
+  return { affinity: 1, threat: 1 };
+}
+
 function applySocialReactionToWild(entity, action, player, influence) {
   if (!entity || !action || !player) return false;
   if ((entity.spawnPhase ?? 1) < 0.5 || entity.isDespawning || entity.deadState) return false;
@@ -1172,6 +1240,7 @@ function applySocialReactionToWild(entity, action, player, influence) {
   if (memory.reactionCooldown > 0) return false;
 
   const behavior = entity.behavior || getSpeciesBehavior(entity.dexId ?? 1);
+  const eff = getEffectiveWildBehavior(entity);
   const playerCfg = getPokemonConfig(player.dexId ?? 1);
   const wildCfg = getPokemonConfig(entity.dexId ?? 1);
   const playerHeight = Number(playerCfg?.heightTiles) || 2.1;
@@ -1189,7 +1258,9 @@ function applySocialReactionToWild(entity, action, player, influence) {
     action.intent === 'assertive' || action.intent === 'scary' ? Math.max(0, sizeDelta) : 0;
   const calmingFactor = action.intent === 'calming' ? Math.max(0, sizeDelta) : 0;
 
-  const affinityDelta =
+  const sexM = socialSexIntentMul(entity, action.intent);
+
+  let affinityDelta =
     (intentDelta.affinity * behaviorMul.affinityMul +
       friendlyNearby * 0.08 -
       hostileNearby * 0.06 +
@@ -1197,7 +1268,7 @@ function applySocialReactionToWild(entity, action, player, influence) {
       memory.approachSignal * 0.04 -
       intimidationFactor * 0.08) *
     influence;
-  const threatDelta =
+  let threatDelta =
     (intentDelta.threat * behaviorMul.threatMul +
       hostileNearby * 0.2 +
       memory.approachSignal * 0.18 -
@@ -1211,6 +1282,9 @@ function applySocialReactionToWild(entity, action, player, influence) {
       hostileNearby * 0.07) *
     influence;
 
+  affinityDelta *= sexM.affinity;
+  threatDelta *= sexM.threat;
+
   memory.affinity = clamp(memory.affinity + affinityDelta, -2.6, 3.1);
   memory.threat = clamp(memory.threat + threatDelta, 0, 3.8);
   memory.curiosity = clamp(memory.curiosity + curiosityDelta, -2, 3.2);
@@ -1218,6 +1292,14 @@ function applySocialReactionToWild(entity, action, player, influence) {
   const intentEventType = action.intent === 'scary' || action.intent === 'assertive' ? 'hostile_social' : 'friendly_social';
   pushRecentNearbyEvent(entity, intentEventType, 0.8 * influence);
   pushRecentNearbyEvent(entity, `social_${action.id}`, 0.7 * influence);
+
+  if (action.intent === 'assertive' || action.intent === 'scary') {
+    const bump = (action.intent === 'scary' ? 0.26 : 0.17) * influence;
+    entity.provoked01 = clamp((entity.provoked01 || 0) + bump, 0, 3);
+    if (entity.provoked01 >= 0.52) {
+      entity.wildTempAggressiveSec = Math.min(22, Math.max(entity.wildTempAggressiveSec || 0, 5.0));
+    }
+  }
 
   const moodScore =
     memory.affinity +
@@ -1234,7 +1316,7 @@ function applySocialReactionToWild(entity, action, player, influence) {
     entity.vy = 0;
     outcome = 'deescalate';
   } else if (moodScore <= -0.65) {
-    if (behavior.archetype === 'aggressive' && (action.intent === 'assertive' || action.intent === 'scary')) {
+    if (eff.archetype === 'aggressive' && (action.intent === 'assertive' || action.intent === 'scary')) {
       entity.aiState = 'approach';
       outcome = 'approach';
     } else {
@@ -1345,7 +1427,12 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
   best.targetY = null;
   memory.threat = clamp(memory.threat + 0.55, 0, 3.5);
   memory.affinity = clamp(memory.affinity - 0.2, -2.5, 3);
+  best.provoked01 = clamp((best.provoked01 || 0) + 0.52, 0, 3);
+  if (best.provoked01 >= 0.35) {
+    best.wildTempAggressiveSec = Math.min(22, Math.max(best.wildTempAggressiveSec || 0, 4.2));
+  }
   pushRecentNearbyEvent(best, 'player_field_move', 1.0);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.7, best);
+  broadcastNearbySpeciesAllyHurt(best.x, best.y, best.dexId ?? 1, 0.78, best);
   return { hit: true, dexId: best.dexId };
 }

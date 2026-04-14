@@ -151,7 +151,7 @@ export const POKEMON_CONFIG = {
   130: { name: 'Gyarados', types: ['water', 'flying'], heightTiles: 8, baseSpeed: 81 },
   131: { name: 'Lapras', types: ['water', 'ice'], heightTiles: 3.5, baseSpeed: 60 },
   132: { name: 'Ditto', types: ['normal'], heightTiles: 2, baseSpeed: 48 },
-  133: { name: 'Eevee', types: ['normal'], heightTiles: 2.5, baseSpeed: 55 },
+  133: { name: 'Eevee', types: ['normal'], heightTiles: 1.9, baseSpeed: 55 },
   134: { name: 'Vaporeon', types: ['water'], heightTiles: 3, baseSpeed: 65 },
   135: { name: 'Jolteon', types: ['electric'], heightTiles: 3, baseSpeed: 130 },
   136: { name: 'Flareon', types: ['fire'], heightTiles: 2.5, baseSpeed: 65 },

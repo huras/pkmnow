@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-app-shell="play">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jogar — região procedural</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/character-selector.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div id="character-selector-container"></div>
+      <h1 class="play-shell-title">Explorar região</h1>
+
+      <div class="toolbar play-shell-toolbar">
+        <div class="field">
+          <label for="seed">Seed</label>
+          <input type="text" id="seed" value="demo" autocomplete="off" spellcheck="false" />
+        </div>
+        <button type="button" id="generate">Gerar</button>
+        <button type="button" id="btnBackToMap" class="btn-secondary hidden">Voltar ao mapa</button>
+        <a href="debug-play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Ferramentas / debug</a>
+        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Início</a>
+      </div>
+
+      <div class="map-wrap">
+        <div id="hud-info">Gere o mundo e clique no mapa para entrar no modo jogo.</div>
+        <canvas id="map" width="512" height="512" aria-label="Mapa e jogo"></canvas>
+        <canvas id="minimap" class="hidden" width="128" height="128" aria-label="Minimapa da região"></canvas>
+        <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
+        <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">
+          <div class="play-bgm-now-playing-title">Now playing</div>
+          <div id="play-bgm-now-playing-track" class="play-bgm-now-playing-track">—</div>
+          <div id="play-bgm-now-playing-status" class="play-bgm-now-playing-status">Idle</div>
+        </div>
+        <div id="play-world-time" class="play-world-time" aria-label="World time of day (test)">
+          <div class="play-world-time-title">World time</div>
+          <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
+          <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
+          <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
+          <div class="play-world-time-presets">
+            <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
+            <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
+            <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
+            <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
+          </div>
+          <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
+          <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

@@ -541,85 +541,93 @@ if (btnDebugCopyDetail) {
   });
 }
 
-btnSettings.addEventListener('click', () => {
-  settingsModal.classList.remove('hidden');
-  document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
-  document.getElementById('cfgElevation').value = currentConfig.elevationScale;
-  document.getElementById('cfgElevationDetailOctaves').value =
-    currentConfig.elevationDetailOctaves ?? DEFAULT_CONFIG.elevationDetailOctaves;
-  document.getElementById('cfgElevationDetailStrength').value = Math.round(
-    (currentConfig.elevationDetailStrength ?? DEFAULT_CONFIG.elevationDetailStrength) * 1000
-  );
-  document.getElementById('cfgTemperature').value = currentConfig.temperatureScale;
-  document.getElementById('cfgMoisture').value = currentConfig.moistureScale;
-  document.getElementById('cfgDesertMoisture').value = (currentConfig.desertMoisture || 0.38) * 100;
-  document.getElementById('cfgForestMoisture').value = (currentConfig.forestMoisture || 0.58) * 100;
-  document.getElementById('cfgAnomaly').value = currentConfig.anomalyScale;
-  document.getElementById('cfgCities').value = currentConfig.cityCount;
-  document.getElementById('cfgGyms').value = currentConfig.gymCount;
-});
+function wireDebugGeneratorChrome() {
+  if (btnSettings && settingsModal) {
+    btnSettings.addEventListener('click', () => {
+      settingsModal.classList.remove('hidden');
+      document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
+      document.getElementById('cfgElevation').value = currentConfig.elevationScale;
+      document.getElementById('cfgElevationDetailOctaves').value =
+        currentConfig.elevationDetailOctaves ?? DEFAULT_CONFIG.elevationDetailOctaves;
+      document.getElementById('cfgElevationDetailStrength').value = Math.round(
+        (currentConfig.elevationDetailStrength ?? DEFAULT_CONFIG.elevationDetailStrength) * 1000
+      );
+      document.getElementById('cfgTemperature').value = currentConfig.temperatureScale;
+      document.getElementById('cfgMoisture').value = currentConfig.moistureScale;
+      document.getElementById('cfgDesertMoisture').value = (currentConfig.desertMoisture || 0.38) * 100;
+      document.getElementById('cfgForestMoisture').value = (currentConfig.forestMoisture || 0.58) * 100;
+      document.getElementById('cfgAnomaly').value = currentConfig.anomalyScale;
+      document.getElementById('cfgCities').value = currentConfig.cityCount;
+      document.getElementById('cfgGyms').value = currentConfig.gymCount;
+    });
+  }
 
-btnCloseSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
+  btnCloseSettings?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
 
-if (btnExportWorldSettings) {
-  btnExportWorldSettings.addEventListener('click', () => {
-    const exportData = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      config: currentConfig
+  if (btnExportWorldSettings) {
+    btnExportWorldSettings.addEventListener('click', () => {
+      const exportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        config: currentConfig
+      };
+      const safeSeed = String(seedInput.value || 'world').replace(/[^\w-]+/g, '_');
+      downloadJsonFile(`world-settings-${safeSeed}.json`, exportData);
+    });
+  }
+
+  btnApplySettings?.addEventListener('click', () => {
+    currentConfig = {
+      ...DEFAULT_CONFIG,
+      ...currentConfig,
+      waterLevel: parseInt(document.getElementById('cfgWaterLevel').value, 10) / 100,
+      elevationScale: parseInt(document.getElementById('cfgElevation').value, 10),
+      elevationDetailOctaves: parseInt(document.getElementById('cfgElevationDetailOctaves').value, 10),
+      elevationDetailStrength:
+        parseInt(document.getElementById('cfgElevationDetailStrength').value, 10) / 1000,
+      elevationDetailPersistence:
+        currentConfig.elevationDetailPersistence ?? DEFAULT_CONFIG.elevationDetailPersistence,
+      temperatureScale: parseInt(document.getElementById('cfgTemperature').value, 10),
+      moistureScale: parseInt(document.getElementById('cfgMoisture').value, 10),
+      desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value, 10) / 100,
+      forestMoisture: parseInt(document.getElementById('cfgForestMoisture').value, 10) / 100,
+      anomalyScale: parseInt(document.getElementById('cfgAnomaly').value, 10),
+      cityCount: parseInt(document.getElementById('cfgCities').value, 10),
+      gymCount: parseInt(document.getElementById('cfgGyms').value, 10)
     };
-    const safeSeed = String(seedInput.value || 'world').replace(/[^\w-]+/g, '_');
-    downloadJsonFile(`world-settings-${safeSeed}.json`, exportData);
+    settingsModal?.classList.add('hidden');
+    run();
   });
+
+  if (btnImport && importFile) {
+    btnImport.addEventListener('click', () => importFile.click());
+
+    importFile.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (data.seed && data.config) {
+            seedInput.value = data.seed;
+            currentConfig = { ...DEFAULT_CONFIG, ...data.config };
+            run();
+            infoBar.innerHTML = "<b style='color:#00ff00'>MUNDO IMPORTADO!</b>";
+          } else {
+            alert('Arquivo JSON inválido ou formato antigo.');
+          }
+        } catch (err) {
+          alert('Erro ao ler JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
 }
 
-btnApplySettings.addEventListener('click', () => {
-  currentConfig = {
-    ...DEFAULT_CONFIG,
-    ...currentConfig,
-    waterLevel: parseInt(document.getElementById('cfgWaterLevel').value, 10) / 100,
-    elevationScale: parseInt(document.getElementById('cfgElevation').value, 10),
-    elevationDetailOctaves: parseInt(document.getElementById('cfgElevationDetailOctaves').value, 10),
-    elevationDetailStrength:
-      parseInt(document.getElementById('cfgElevationDetailStrength').value, 10) / 1000,
-    elevationDetailPersistence:
-      currentConfig.elevationDetailPersistence ?? DEFAULT_CONFIG.elevationDetailPersistence,
-    temperatureScale: parseInt(document.getElementById('cfgTemperature').value, 10),
-    moistureScale: parseInt(document.getElementById('cfgMoisture').value, 10),
-    desertMoisture: parseInt(document.getElementById('cfgDesertMoisture').value, 10) / 100,
-    forestMoisture: parseInt(document.getElementById('cfgForestMoisture').value, 10) / 100,
-    anomalyScale: parseInt(document.getElementById('cfgAnomaly').value, 10),
-    cityCount: parseInt(document.getElementById('cfgCities').value, 10),
-    gymCount: parseInt(document.getElementById('cfgGyms').value, 10)
-  };
-  settingsModal.classList.add('hidden');
-  run();
-});
-
-btnImport.addEventListener('click', () => importFile.click());
-
-importFile.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    try {
-      const data = JSON.parse(event.target.result);
-      if (data.seed && data.config) {
-        seedInput.value = data.seed;
-        currentConfig = { ...DEFAULT_CONFIG, ...data.config };
-        run();
-        infoBar.innerHTML = "<b style='color:#00ff00'>MUNDO IMPORTADO!</b>";
-      } else {
-        alert('Arquivo JSON inválido ou formato antigo.');
-      }
-    } catch (err) {
-      alert('Erro ao ler JSON: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-});
+wireDebugGeneratorChrome();
 
 if (btnExport) {
   btnExport.addEventListener('click', () => {
@@ -688,7 +696,9 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
 });
 
 loadTilesetImages().then(async () => {
-  new BiomesModal();
+  if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {
+    new BiomesModal();
+  }
   playCharacterSelector = new CharacterSelector('character-selector-container');
   playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);

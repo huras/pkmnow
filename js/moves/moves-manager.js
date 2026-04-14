@@ -43,6 +43,10 @@ import {
   getPokemonHurtboxRadiusTiles,
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
+import {
+  getEffectiveWildBehavior,
+  getWildAggressiveMoveCooldownMultiplier
+} from '../wild-pokemon/wild-effective-behavior.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -513,9 +517,9 @@ export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
  */
 export function tryCastWildMove(entity, playerX, playerY, dt) {
   if (!entity || entity.isDespawning || (entity.spawnPhase ?? 1) < 0.5) return;
-  if (entity.behavior?.archetype !== 'aggressive') return;
+  const beh = getEffectiveWildBehavior(entity);
+  if (beh.archetype !== 'aggressive') return;
   if (entity.aiState !== 'approach') return;
-  const beh = entity.behavior;
   const dx = entity.x - playerX;
   const dy = entity.y - playerY;
   const distP = Math.hypot(dx, dy);
@@ -552,7 +556,7 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
   } else {
     castPoisonStingOnce(entity.x, entity.y, playerX, playerY, entity, opts);
   }
-  entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT;
+  entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT * getWildAggressiveMoveCooldownMultiplier(entity);
   playWildAttackCry(entity);
 }
 
