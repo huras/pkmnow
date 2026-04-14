@@ -6,7 +6,7 @@
 
 import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
-import { CHUNK_SIZE, getMicroTile, foliageDensity } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile, foliageDensity } from './chunking.js';
 import { getRoleForCell, isTerrainInnerCornerRole, parseShape, seededHash } from './tessellation-logic.js';
 import {
   scatterSolidBaseBlocksMicroTile,
@@ -197,7 +197,7 @@ export function getMicroTileRole(mx, my, data) {
   const set = TERRAIN_SETS[setName];
   if (!set) return null;
   const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= tile.heightStep;
-  return getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, set.type);
+  return getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAbove, set.type);
 }
 
 export function getBaseTerrainSpriteId(mx, my, data) {
@@ -287,8 +287,8 @@ export function getFoliageOverlayTileId(mx, my, data) {
   const fRole = getRoleForCell(
     my,
     mx,
-    data.height * CHUNK_SIZE,
-    data.width * CHUNK_SIZE,
+    data.height * MACRO_TILE_STRIDE,
+    data.width * MACRO_TILE_STRIDE,
     landForRole,
     foliageSet.type
   );
@@ -341,8 +341,8 @@ export function getLakeLotusFoliageWalkRole(mx, my, data) {
   return getRoleForCell(
     my,
     mx,
-    data.height * CHUNK_SIZE,
-    data.width * CHUNK_SIZE,
+    data.height * MACRO_TILE_STRIDE,
+    data.width * MACRO_TILE_STRIDE,
     isPoolWater,
     foliageSet.type
   );
@@ -384,7 +384,7 @@ export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
   const set = TERRAIN_SETS[BIOME_TO_TERRAIN[rootTile.biomeId] || 'grass'];
   if (set) {
     const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= rootTile.heightStep;
-    const role = getRoleForCell(rootY, rootX, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, set.type);
+    const role = getRoleForCell(rootY, rootX, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, checkAtOrAbove, set.type);
     if (role !== 'CENTER') return false;
   }
   return true;
@@ -405,8 +405,8 @@ export function getFormalTreeTrunkCircle(rootX, my, data) {
  * World-space (micro tile coords, float): true if point lies inside a formal trunk circle.
  */
 export function formalTreeTrunkBlocksWorldPoint(wx, wy, data) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
 
   const ix = Math.floor(wx);
@@ -440,8 +440,8 @@ export function getFormalTreeTrunkWorldXSpan(rootX, my, data) {
  * (Tile center can be clear while the strip still clips the cell — matches gameplay samples.)
  */
 export function formalTreeTrunkOverlapsMicroCell(mx, my, data) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
 
   for (let trunkMy = Math.max(0, my - 2); trunkMy <= Math.min(microH - 1, my + 2); trunkMy++) {
@@ -514,8 +514,8 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
  * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, itemKey: string }}
  */
 export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const seed = data.seed;
   const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
@@ -604,8 +604,8 @@ export function getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, dat
  * @param {'tree' | 'nonTreeSolid' | 'any'} which
  */
 function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
 
   const ix = Math.floor(wx);
@@ -649,8 +649,8 @@ export function scatterNonTreeSolidCircleBlocksWorldPoint(wx, wy, data) {
  * @param {'tree' | 'nonTreeSolid' | 'any'} which
  */
 function scatterPhysicsCirclesOverlapMicroCell(mx, my, data, which) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
 
   const originMemo = new Map();
@@ -695,8 +695,8 @@ export function scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data) {
  * @returns {Array<{ cx: number, cy: number, r: number }>}
  */
 export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const ix = Math.floor(wx);
   const iy = Math.floor(wy);
   const seen = new Set();
@@ -777,7 +777,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
   /** @type {string | null} */
   let cacheKey = null;
   if (walkProbeCache && ignoreTreeTrunks) {
-    if (mx >= 0 && mx < data.width * CHUNK_SIZE && my >= 0 && my < data.height * CHUNK_SIZE) {
+    if (mx >= 0 && mx < data.width * MACRO_TILE_STRIDE && my >= 0 && my < data.height * MACRO_TILE_STRIDE) {
       const fol = cachedFoliageOverlayId === undefined ? 'u' : String(cachedFoliageOverlayId);
       cacheKey =
         srcX !== undefined && srcY !== undefined
@@ -793,7 +793,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
     return ok;
   };
 
-  if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
+  if (mx < 0 || mx >= data.width * MACRO_TILE_STRIDE || my < 0 || my >= data.height * MACRO_TILE_STRIDE) {
     return false;
   }
 
@@ -853,7 +853,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
 export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTrunks = false) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
-  if (mx < 0 || mx >= data.width * CHUNK_SIZE || my < 0 || my >= data.height * CHUNK_SIZE) {
+  if (mx < 0 || mx >= data.width * MACRO_TILE_STRIDE || my < 0 || my >= data.height * MACRO_TILE_STRIDE) {
     return false;
   }
 

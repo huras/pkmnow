@@ -10,7 +10,7 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE
 } from '../biome-tiles.js';
-import { CHUNK_SIZE, getMicroTile, foliageDensity, foliageType } from '../chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile, foliageDensity, foliageType } from '../chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from '../tessellation-data.js';
 import {
   getRoleForCell,
@@ -97,8 +97,8 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
     }
   }
 
-  const gx = Math.floor(mx / CHUNK_SIZE);
-  const gy = Math.floor(my / CHUNK_SIZE);
+  const gx = Math.floor(mx / MACRO_TILE_STRIDE);
+  const gy = Math.floor(my / MACRO_TILE_STRIDE);
   let macroIdx = -1;
   const isMacroValid = gx >= 0 && gx < data.width && gy >= 0 && gy < data.height;
   if (isMacroValid) macroIdx = gy * data.width + gx;
@@ -229,8 +229,8 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
 
     let occupiedByScatter = false;
     const scatterItems = BIOME_VEGETATION[tile.biomeId] || [];
-    const microWDbg = data.width * CHUNK_SIZE;
-    const microHDbg = data.height * CHUNK_SIZE;
+    const microWDbg = data.width * MACRO_TILE_STRIDE;
+    const microHDbg = data.height * MACRO_TILE_STRIDE;
     const getTdbg = (tx, ty) => getMicroTile(tx, ty, data);
     const validOriginMemoDbg = new Map();
     if (!tile.isRoad && !tile.isCity) {
@@ -471,7 +471,7 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
         const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
         if (setForRole) {
           const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= t.heightStep;
-          const role = getRoleForCell(ny, nx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+          const role = getRoleForCell(ny, nx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, checkAtOrAbove, setForRole.type);
           if (role !== 'CENTER') blockers.push(`papel_terreno=${role}`);
         }
         const right = getMicroTile(nx + 1, ny, data);

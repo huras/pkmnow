@@ -10,7 +10,7 @@ import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos } from './player.js';
 import { speciesHasFlyingType } from './pokemon/pokemon-type-helpers.js';
-import { CHUNK_SIZE, getMicroTile } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
   configureTileDebugModal,
@@ -103,8 +103,8 @@ function refreshPlayModeInfoBar(force = false) {
   const bio = Object.values(BIOMES).find((b) => b.id === bId);
   const encounters = getEncounters(bId);
   let prefix = '';
-  const macroX = Math.floor(player.x / CHUNK_SIZE);
-  const macroY = Math.floor(player.y / CHUNK_SIZE);
+  const macroX = Math.floor(player.x / MACRO_TILE_STRIDE);
+  const macroY = Math.floor(player.y / MACRO_TILE_STRIDE);
   if (currentData.graph) {
     const city = currentData.graph.nodes.find(
       (n) => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1
@@ -157,6 +157,7 @@ function getSettings() {
 }
 
 function updateView() {
+  refreshPlayPointerWorldFromLastClientIfHovering();
   if (currentData) render(canvas, currentData, { settings: getSettings(), hover: lastHoverTile });
 }
 
@@ -243,30 +244,52 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
+/** Last pointer client coords on window (play); used to reproject aim/hover every frame while camera moves. */
+let playPointerLastClientX = 0;
+let playPointerLastClientY = 0;
+
+/** World aim under cursor in play (also used by `pointermove` while LMB/RMB held / captured). */
+function syncPlayPointerWorldFromClient(clientX, clientY) {
+  if (!currentData || appMode !== 'play') return;
+  playPointerLastClientX = clientX;
+  playPointerLastClientY = clientY;
+  const rect = canvas.getBoundingClientRect();
+  const mouseClientX = clientX - rect.left;
+  const mouseClientY = clientY - rect.top;
+  const mousePxX = (mouseClientX / rect.width) * canvas.width;
+  const mousePxY = (mouseClientY / rect.height) * canvas.height;
+  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+    canvas.width,
+    canvas.height,
+    mousePxX,
+    mousePxY,
+    player
+  );
+  playInputState.mouseX = worldX;
+  playInputState.mouseY = worldY;
+  playInputState.mouseValid = true;
+  lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
+}
+
+/** Recompute world under cursor when the play camera moves but the mouse has not (hover ring + aim). */
+function refreshPlayPointerWorldFromLastClientIfHovering() {
+  if (!currentData || appMode !== 'play' || !playInputState.mouseValid) return;
+  syncPlayPointerWorldFromClient(playPointerLastClientX, playPointerLastClientY);
+}
 
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
+
+  if (appMode === 'play') {
+    syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+    return;
+  }
 
   const rect = canvas.getBoundingClientRect();
   const mouseClientX = e.clientX - rect.left;
   const mouseClientY = e.clientY - rect.top;
   const mousePxX = (mouseClientX / rect.width) * canvas.width;
   const mousePxY = (mouseClientY / rect.height) * canvas.height;
-
-  if (appMode === 'play') {
-    const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
-      canvas.width,
-      canvas.height,
-      mousePxX,
-      mousePxY,
-      player
-    );
-    playInputState.mouseX = worldX;
-    playInputState.mouseY = worldY;
-    playInputState.mouseValid = true;
-    lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
-    return;
-  }
 
   const gx = Math.floor((mouseClientX / rect.width) * currentData.width);
   const gy = Math.floor((mouseClientY / rect.height) * currentData.height);
@@ -285,6 +308,11 @@ canvas.addEventListener('mousemove', (e) => {
   });
 });
 
+canvas.addEventListener('pointermove', (e) => {
+  if (!currentData || appMode !== 'play') return;
+  syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+});
+
 canvas.addEventListener('mouseleave', () => {
   if (appMode === 'play') playInputState.mouseValid = false;
   if (currentData && appMode === 'map') updateView();
@@ -292,7 +320,7 @@ canvas.addEventListener('mouseleave', () => {
 
 function enterPlayMode(gx, gy) {
   resetWildPokemonManager();
-  setPlayerPos(gx * CHUNK_SIZE + CHUNK_SIZE / 2, gy * CHUNK_SIZE + CHUNK_SIZE / 2);
+  setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;
   appMode = 'play';
   btnExport.classList.add('hidden');

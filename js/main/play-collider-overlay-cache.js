@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, getMicroTile } from '../chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import {
   canWalkMicroTile,
   formalTreeTrunkOverlapsMicroCell,
@@ -38,8 +38,8 @@ export function circleAabbIntersectsRect(cx, cy, r, x0, y0, x1, y1) {
  * @param {boolean} overlayFeetMoving - same idea as `isPlayerWalkingAnim` in render (feet offset for walk)
  */
 export function buildPlayColliderOverlayCache(data, player, imageCache, overlayFeetMoving) {
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const seed = data.seed;
   const anchorMx = Math.floor(player.x);
   const anchorMy = Math.floor(player.y);

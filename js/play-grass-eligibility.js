@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, foliageDensity, foliageType } from './chunking.js';
+import { MACRO_TILE_STRIDE, foliageDensity, foliageType } from './chunking.js';
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { getRoleForCell } from './tessellation-logic.js';
 import {
@@ -20,8 +20,8 @@ import { PLAY_CHUNK_SIZE } from './render/render-constants.js';
 export function playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile) {
   const tile = getTile(mx, my);
   if (!tile || tile.heightStep < 1) return false;
-  const microRows = data.height * CHUNK_SIZE;
-  const microCols = data.width * CHUNK_SIZE;
+  const microRows = data.height * MACRO_TILE_STRIDE;
+  const microCols = data.width * MACRO_TILE_STRIDE;
   const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
   if (gateSet) {
     const checkAtOrAbove = (r, c) => (getTile(c, r)?.heightStep ?? -1) >= tile.heightStep;
@@ -43,8 +43,8 @@ export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) 
   const tile = getTile(mx, my);
   if (!tile) return out;
 
-  const microRows = data.height * CHUNK_SIZE;
-  const microCols = data.width * CHUNK_SIZE;
+  const microRows = data.height * MACRO_TILE_STRIDE;
+  const microCols = data.width * MACRO_TILE_STRIDE;
 
   const gv = getGrassVariant(tile.biomeId);
   const gTiles = GRASS_TILES[gv];

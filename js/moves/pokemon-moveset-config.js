@@ -15,7 +15,8 @@ export const MOVE_LABELS = Object.freeze({
   poisonSting: 'Poison Sting',
   poisonPowder: 'Poison Powder',
   incinerate: 'Incinerate',
-  silkShoot: 'Silk Shoot'
+  silkShoot: 'Silk Shoot',
+  ultimate: 'Ultimate'
 });
 
 const TYPE_PRESETS = Object.freeze({

@@ -1,4 +1,4 @@
-import { getMicroTile, foliageDensity, CHUNK_SIZE } from './chunking.js';
+import { getMicroTile, foliageDensity, MACRO_TILE_STRIDE } from './chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { getRoleForCell, seededHash, parseShape, terrainRoleAllowsScatter2CContinuation } from './tessellation-logic.js';
 import {
@@ -147,8 +147,8 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
  */
 export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
   const seed = data.seed;
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const getT = (x, y) => getMicroTile(x, y, data);
   const here = getT(mx, my);
   if (!here || here.heightStep < 1 || here.isRoad || here.isCity) return false;
@@ -187,8 +187,8 @@ export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
 export function buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data, memo = null) {
   const set = new Set();
   const seed = data.seed;
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const getT = (x, y) => getMicroTile(x, y, data);
 
   const ox0Min = Math.max(0, startX - MAX_SCATTER_COLS_FOOTPRINT + 1);
@@ -240,8 +240,8 @@ export function buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data
  */
 export function analyzeScatterPass2Base(mx, my, data) {
   const seed = data.seed;
-  const microW = data.width * CHUNK_SIZE;
-  const microH = data.height * CHUNK_SIZE;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
   const getT = (x, y) => getMicroTile(x, y, data);
   const originMemo = new Map();
 

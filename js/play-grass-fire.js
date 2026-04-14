@@ -2,19 +2,21 @@ import { getMicroTile } from './chunking.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
 import { playChunkMap } from './render/play-chunk-cache.js';
 
-/** Seconds active burn before switching to charred (gameplay + scorched “burning” look). */
-export const GRASS_FIRE_BURN_PHASE_SEC = 3.25;
+/** Seconds active burn (orange fire look) before switching to charred black. */
+export const GRASS_FIRE_BURN_PHASE_SEC = 10;
 /** Grass-fire particle lifetime (slightly longer than burn so flames don’t vanish first). */
-export const GRASS_FIRE_PARTICLE_SEC = GRASS_FIRE_BURN_PHASE_SEC + 0.65;
-/** Seconds charred ground before regrowth. */
-const CHARRED_REGROW_SEC = 16;
+export const GRASS_FIRE_PARTICLE_SEC = GRASS_FIRE_BURN_PHASE_SEC + 0.85;
+/** Full black charred look before regrowth blend begins. */
+export const GRASS_FIRE_CHARRED_SOLID_SEC = 2.5;
+/** Seconds to blend charred → normal grass (not instant). */
+export const GRASS_FIRE_REGROW_BLEND_SEC = 12;
 /** Max |z| (tiles) for projectile end to count as ground impact. */
 const GROUND_Z_MAX = 0.55;
 
 const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
 const WATER_PROJECTILE_TYPES = new Set(['waterShot', 'waterGunShot', 'bubbleShot']);
 
-/** @typedef {{ phase: 'burning' | 'charred', phaseEndAt: number }} GrassFireTileState */
+/** @typedef {{ phase: 'burning', phaseEndAt: number } | { phase: 'charred', startedAtMs: number }} GrassFireTileState */
 
 /** @type {Map<string, GrassFireTileState>} */
 const tileStates = new Map();
@@ -37,6 +39,20 @@ export function grassFireSuppressesAnimatedGrassAt(mx, my) {
 /** @returns {'burning' | 'charred' | null} */
 export function grassFireVisualPhaseAt(mx, my) {
   return tileStates.get(tileKey(mx, my))?.phase ?? null;
+}
+
+/**
+ * During `charred`: 0 = solid black window, (0,1) = regrowth blend, 1 = fully restored (tile cleared next tick).
+ * @returns {number | null} null if not charred
+ */
+export function grassFireCharredRegrowth01(mx, my) {
+  const st = tileStates.get(tileKey(mx, my));
+  if (!st || st.phase !== 'charred') return null;
+  const elapsed = (performance.now() - st.startedAtMs) / 1000;
+  if (elapsed < GRASS_FIRE_CHARRED_SOLID_SEC) return 0;
+  const blendT = elapsed - GRASS_FIRE_CHARRED_SOLID_SEC;
+  if (blendT >= GRASS_FIRE_REGROW_BLEND_SEC) return 1;
+  return blendT / GRASS_FIRE_REGROW_BLEND_SEC;
 }
 
 function tileKey(mx, my) {
@@ -93,7 +109,7 @@ export function grassFireTryExtinguishAt(worldX, worldY, projZ, projType, data) 
 }
 
 /**
- * Throttled phase transitions (wall-clock `phaseEndAt`, safe when off-screen).
+ * Throttled phase transitions (burn uses `phaseEndAt`; charred uses `startedAtMs` + solid + blend duration).
  * @param {number} dt
  * @param {object | null} _data unused; reserved for future biome rules
  */
@@ -103,13 +119,17 @@ export function updateGrassFire(dt, _data, _playerX, _playerY) {
   throttleAccSec = 0;
 
   const now = performance.now();
+  const charredTotalSec = GRASS_FIRE_CHARRED_SOLID_SEC + GRASS_FIRE_REGROW_BLEND_SEC;
   const entries = [...tileStates.entries()];
   for (const [k, st] of entries) {
-    if (now < st.phaseEndAt) continue;
     if (st.phase === 'burning') {
-      tileStates.set(k, { phase: 'charred', phaseEndAt: now + CHARRED_REGROW_SEC * 1000 });
-    } else {
-      tileStates.delete(k);
+      if (now < st.phaseEndAt) continue;
+      tileStates.set(k, { phase: 'charred', startedAtMs: now });
+      continue;
+    }
+    if (st.phase === 'charred') {
+      const elapsed = (now - st.startedAtMs) / 1000;
+      if (elapsed >= charredTotalSec) tileStates.delete(k);
     }
   }
 }

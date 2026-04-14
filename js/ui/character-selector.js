@@ -7,13 +7,34 @@ import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
-import { getPlayerMoveCooldownRemaining } from '../moves/moves-manager.js';
+import {
+  getPlayerMoveCooldownRemaining,
+  getPlayerMoveCooldownUiMax
+} from '../moves/moves-manager.js';
+
+const SKILL_ICON_BASE = 'skill-icons';
+const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
+
+function moveAbbrevFromLabel(label) {
+  const parts = String(label || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  const one = parts[0] || '?';
+  return one.slice(0, 2).toUpperCase();
+}
 
 export class CharacterSelector {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
     this.allSpecies = [];
     this.isOpen = false;
+    /** @type {'full' | 'minimal'} */
+    this.layoutMode =
+      localStorage.getItem(LAYOUT_STORAGE_KEY) === 'minimal' ? 'minimal' : 'full';
     
     for (let i = 1; i <= 151; i++) {
       this.allSpecies.push({
@@ -28,7 +49,34 @@ export class CharacterSelector {
   init() {
     this.render();
     this.attachEvents();
+    this.applyLayoutMode();
     this.updatePreview().catch(() => {});
+  }
+
+  /** @param {'full' | 'minimal'} mode */
+  setLayoutMode(mode) {
+    this.layoutMode = mode === 'minimal' ? 'minimal' : 'full';
+    localStorage.setItem(LAYOUT_STORAGE_KEY, this.layoutMode);
+    this.applyLayoutMode();
+  }
+
+  applyLayoutMode() {
+    const root = this.container?.querySelector('.character-selector');
+    const btn = this.container?.querySelector('#character-selector-layout-toggle');
+    if (!root) return;
+    const minimal = this.layoutMode === 'minimal';
+    root.classList.toggle('character-selector--minimal', minimal);
+    if (btn) {
+      btn.setAttribute('aria-pressed', minimal ? 'true' : 'false');
+      btn.setAttribute(
+        'aria-label',
+        minimal ? 'Show full character panel' : 'Use minimal character panel'
+      );
+      btn.title = minimal
+        ? 'Show search, move hints, and right-click mode'
+        : 'Hide search, move hints, and right-click mode';
+      btn.textContent = minimal ? 'Full' : 'Min';
+    }
   }
 
   /** Play mode: ground = `player.z`; sea = `heightStep` + `z` (0 beach, − ocean). Both always on-screen. */
@@ -57,32 +105,39 @@ export class CharacterSelector {
       aboveSea === 0 ? '0' : (aboveSea > 0 ? '+' : '') + aboveSea.toFixed(1);
   }
 
-  /** Clears move cooldown labels (e.g. when leaving play mode). */
+  /** Clears move cooldown UI (e.g. when leaving play mode). */
   clearPlayMovesCooldownHud() {
     const movesEl = this.container?.querySelector('#current-player-moves');
     if (!movesEl) return;
-    for (const chip of movesEl.querySelectorAll('.move-chip[data-move-id]')) {
-      const cdEl = chip.querySelector('.move-chip__cd');
-      if (cdEl) cdEl.textContent = '';
-      chip.classList.remove('move-chip--cooldown');
+    for (const slot of movesEl.querySelectorAll('.move-slot[data-move-id]')) {
+      const sweep = slot.querySelector('.move-slot__sweep');
+      const timer = slot.querySelector('.move-slot__timer');
+      if (sweep) sweep.style.setProperty('--cd-p', '0');
+      if (timer) timer.textContent = '';
+      slot.classList.remove('move-slot--on-cd');
     }
   }
 
-  /** Live cooldown text for each moveset chip (play mode; game loop). */
+  /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
   updatePlayMovesCooldownHud() {
     const movesEl = this.container?.querySelector('#current-player-moves');
     if (!movesEl) return;
-    for (const chip of movesEl.querySelectorAll('.move-chip[data-move-id]')) {
-      const id = chip.getAttribute('data-move-id');
-      const cdEl = chip.querySelector('.move-chip__cd');
-      if (!cdEl || !id) continue;
+    for (const slot of movesEl.querySelectorAll('.move-slot[data-move-id]')) {
+      const id = slot.getAttribute('data-move-id');
+      const sweep = slot.querySelector('.move-slot__sweep');
+      const timer = slot.querySelector('.move-slot__timer');
+      if (!id || !sweep || !timer) continue;
       const cd = getPlayerMoveCooldownRemaining(id);
+      const max = Math.max(0.02, getPlayerMoveCooldownUiMax(id));
       if (cd <= 0.008) {
-        cdEl.textContent = '';
-        chip.classList.remove('move-chip--cooldown');
+        sweep.style.setProperty('--cd-p', '0');
+        timer.textContent = '';
+        slot.classList.remove('move-slot--on-cd');
       } else {
-        cdEl.textContent = `${cd.toFixed(1)}s`;
-        chip.classList.add('move-chip--cooldown');
+        const p = Math.min(1, cd / max);
+        sweep.style.setProperty('--cd-p', String(p));
+        timer.textContent = cd >= 10 ? String(Math.round(cd)) : cd.toFixed(1);
+        slot.classList.add('move-slot--on-cd');
       }
     }
   }
@@ -99,6 +154,14 @@ export class CharacterSelector {
             <span class="player-name" id="current-player-name">${activeName}</span>
             <div class="player-types" id="current-player-types"></div>
           </div>
+          <button
+            type="button"
+            class="character-selector__layout-toggle"
+            id="character-selector-layout-toggle"
+            aria-pressed="false"
+            aria-label="Use minimal character panel"
+            title="Hide search, move hints, and right-click mode"
+          >Min</button>
         </div>
 
         <div
@@ -188,6 +251,13 @@ export class CharacterSelector {
         searchInput.blur();
       }
     });
+
+    const layoutBtn = this.container.querySelector('#character-selector-layout-toggle');
+    if (layoutBtn) {
+      layoutBtn.addEventListener('click', () => {
+        this.setLayoutMode(this.layoutMode === 'minimal' ? 'full' : 'minimal');
+      });
+    }
   }
 
   syncPlayPointerModeRadios() {
@@ -250,7 +320,8 @@ export class CharacterSelector {
         const id = parseInt(item.dataset.id, 10);
         this.selectSpecies(id);
         resultsList.classList.remove('active');
-        this.container.querySelector('#species-search').value = '';
+        const si = this.container.querySelector('#species-search');
+        if (si) si.value = '';
       });
     });
   }
@@ -260,7 +331,7 @@ export class CharacterSelector {
     setPlayerSpecies(id);
     
     // 2. Clear focus/search
-    this.container.querySelector('#species-search').blur();
+    this.container.querySelector('#species-search')?.blur();
 
     // 3. Ensure assets are loading/loaded
     await ensurePokemonSheetsLoaded(imageCache, id);
@@ -288,14 +359,32 @@ export class CharacterSelector {
     if (movesEl) {
       const moves = getPokemonMoveset(player.dexId);
       const hotkeys = ['LMB', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
+      const slotHtml = (moveId, hk, title) => {
+        const label = getMoveLabel(moveId);
+        const abbrev = moveAbbrevFromLabel(label);
+        const src = `${SKILL_ICON_BASE}/${moveId}.png`;
+        const uClass = moveId === 'ultimate' ? ' move-slot--ultimate' : '';
+        return `<div class="move-slot${uClass}" data-move-id="${moveId}" title="${title || label}">
+          <div class="move-slot__icon-wrap" data-abbrev="${abbrev}">
+            <img class="move-slot__icon" src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async" />
+            <span class="move-slot__sweep" aria-hidden="true" style="--cd-p:0"></span>
+            <span class="move-slot__timer" aria-live="polite"></span>
+          </div>
+          <span class="move-slot__key">${hk}</span>
+        </div>`;
+      };
       const slotsHtml = moves
-        .map(
-          (m, i) =>
-            `<span class="move-chip" data-move-id="${m}" title="${getMoveLabel(m)}"><span class="move-chip__main"><b>${hotkeys[i] || '—'}</b> ${getMoveLabel(m)}</span><span class="move-chip__cd" aria-live="polite"></span></span>`
-        )
+        .map((m, i) => slotHtml(m, hotkeys[i] || '—', `${getMoveLabel(m)} (${hotkeys[i]})`))
         .join('');
-      const ultimateHtml = `<span class="move-chip move-chip--ultimate" data-move-id="ultimate" title="Nova ring (fire + water) toward cursor"><span class="move-chip__main"><b>MMB</b> Ultimate</span><span class="move-chip__cd" aria-live="polite"></span></span>`;
+      const ultimateHtml = slotHtml('ultimate', 'MMB', 'Ultimate — nova ring toward cursor');
+      movesEl.classList.add('player-moves-list--slots');
       movesEl.innerHTML = slotsHtml + ultimateHtml;
+      for (const img of movesEl.querySelectorAll('.move-slot__icon')) {
+        img.addEventListener('error', () => {
+          img.classList.add('move-slot__icon--missing');
+          img.removeAttribute('src');
+        });
+      }
     }
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');

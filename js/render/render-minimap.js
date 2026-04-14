@@ -1,5 +1,5 @@
 import { BIOMES } from '../biomes.js';
-import { CHUNK_SIZE } from '../chunking.js';
+import { MACRO_TILE_STRIDE } from '../chunking.js';
 
 let minimapBaseCacheCanvas = null;
 let minimapBaseCacheData = null;
@@ -52,8 +52,8 @@ export function renderMinimap(canvas, data, player) {
 
   const tileW = w / data.width;
   const tileH = h / data.height;
-  const macroPx = player.x / CHUNK_SIZE;
-  const macroPy = player.y / CHUNK_SIZE;
+  const macroPx = player.x / MACRO_TILE_STRIDE;
+  const macroPy = player.y / MACRO_TILE_STRIDE;
   ctx.fillStyle = '#ff0000';
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;

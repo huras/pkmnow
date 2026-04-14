@@ -1,4 +1,10 @@
 import { padDex3, getGen1ShowdownCrySlug } from './gen1-name-to-dex.js';
+import {
+  resumeSpatialAudioContext,
+  wireSpatialMediaElement,
+  setSpatialSourceWorldPosition,
+  centerSpatialSourceOnListener
+} from '../audio/spatial-audio.js';
 
 /** Two slots per dex so overlapping wild cries do not cancel each other. */
 const POOL_SIZE = 2;
@@ -9,6 +15,54 @@ const pools = new Map();
 const nextEmotionCryByEntity = new WeakMap();
 /** @type {WeakMap<object, number>} */
 const nextAttackCryByEntity = new WeakMap();
+
+/** Wild mon currently playing cry (emotion, attack, or hurt tail) — one slot per entity. */
+/** @type {WeakMap<object, HTMLAudioElement>} */
+const activeCryAudioByEntity = new WeakMap();
+
+/**
+ * Hard-stop any cry tied to this entity (emotion / attack / hurt).
+ * @param {object | null | undefined} entity
+ */
+export function stopOngoingCryForEntity(entity) {
+  if (!entity) return;
+  const a = activeCryAudioByEntity.get(entity);
+  if (!a) return;
+  activeCryAudioByEntity.delete(entity);
+  if (a._cryBindAbort) {
+    a._cryBindAbort.abort();
+    a._cryBindAbort = null;
+  }
+  clearCryEnvelope(a);
+  try {
+    a.pause();
+  } catch {
+    /* ignore */
+  }
+  try {
+    a.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @param {object} entity
+ * @param {HTMLAudioElement} audio
+ */
+function bindActiveCryToEntity(entity, audio) {
+  if (audio._cryBindAbort) audio._cryBindAbort.abort();
+  const ac = new AbortController();
+  audio._cryBindAbort = ac;
+  activeCryAudioByEntity.set(entity, audio);
+  const done = () => {
+    if (audio._cryBindAbort === ac) audio._cryBindAbort = null;
+    if (activeCryAudioByEntity.get(entity) === audio) activeCryAudioByEntity.delete(entity);
+    clearCryEnvelope(audio);
+  };
+  audio.addEventListener('ended', done, { once: true, signal: ac.signal });
+  audio.addEventListener('error', done, { once: true, signal: ac.signal });
+}
 
 /** @param {HTMLAudioElement} audio */
 function clearCryEnvelope(audio) {
@@ -117,6 +171,8 @@ export function playPokemonCry(dex, opts = {}) {
   const minGap = opts.minGapSec ?? 1.25;
   if (!canPlayLane(entity, lane)) return false;
 
+  if (entity) stopOngoingCryForEntity(entity);
+
   const a = borrowAudio(dex);
   clearCryEnvelope(a);
 
@@ -145,10 +201,20 @@ export function playPokemonCry(dex, opts = {}) {
     /* ignore */
   }
 
+  void resumeSpatialAudioContext();
+  const graph = wireSpatialMediaElement(a);
+  if (entity && Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+    setSpatialSourceWorldPosition(graph, entity.x, entity.y, Number(entity.z) || 0);
+  } else {
+    centerSpatialSourceOnListener(graph);
+  }
+
   const p = a.play();
   if (p !== undefined && typeof p.catch === 'function') {
     p.catch(() => {});
   }
+  if (entity) bindActiveCryToEntity(entity, a);
+
   noteLane(entity, lane, minGap);
 
   if (env || v0 !== v1 || r0 !== r1) {
@@ -161,6 +227,90 @@ export function playPokemonCry(dex, opts = {}) {
     });
   }
   return true;
+}
+
+/**
+ * Linear envelope over the **remaining** clip from `startTime` to `duration` (hurt tail).
+ * @param {HTMLAudioElement} audio
+ * @param {number} startTime
+ * @param {number} fallbackDur
+ */
+function attachHurtTailEnvelope(audio, startTime, fallbackDur) {
+  clearCryEnvelope(audio);
+  const ac = new AbortController();
+  audio._cryEnvelopeAbort = ac;
+  const v0 = 0.58;
+  const v1 = 0.22;
+  const r0 = 1.06;
+  const r1 = 0.9;
+
+  const tick = () => {
+    const d = audio.duration;
+    const end = d && Number.isFinite(d) && d > startTime + 0.04 ? d : startTime + fallbackDur;
+    const denom = Math.max(0.05, end - startTime);
+    const u = Math.min(1, Math.max(0, (audio.currentTime - startTime) / denom));
+    audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * u));
+    audio.playbackRate = Math.max(0.55, Math.min(1.45, r0 + (r1 - r0) * u));
+  };
+
+  const done = () => {
+    clearCryEnvelope(audio);
+  };
+
+  audio.addEventListener('timeupdate', tick, { signal: ac.signal });
+  audio.addEventListener('ended', done, { once: true, signal: ac.signal });
+  audio.addEventListener('error', done, { once: true, signal: ac.signal });
+}
+
+/**
+ * On damage: stop this wild Pokémon's cry, then play from the midpoint to the end (hurt sting).
+ * @param {object | null | undefined} entity
+ */
+export function playWildDamageHurtCry(entity) {
+  if (!entity) return;
+  const dex = entity.dexId ?? 1;
+  stopOngoingCryForEntity(entity);
+
+  const a = borrowAudio(dex);
+  clearCryEnvelope(a);
+
+  const fallbackHalf = 0.36;
+
+  const beginHurtTail = () => {
+    if (a.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    const d = a.duration;
+    const hurtStart =
+      d && Number.isFinite(d) && d > 0.1 ? d * 0.5 : fallbackHalf;
+    try {
+      a.currentTime = hurtStart;
+    } catch {
+      /* ignore */
+    }
+    a.playbackRate = 1.02;
+    a.volume = 0.58;
+
+    void resumeSpatialAudioContext();
+    const graph = wireSpatialMediaElement(a);
+    if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+      setSpatialSourceWorldPosition(graph, entity.x, entity.y, Number(entity.z) || 0);
+    } else {
+      centerSpatialSourceOnListener(graph);
+    }
+
+    const p = a.play();
+    if (p !== undefined && typeof p.catch === 'function') p.catch(() => {});
+    bindActiveCryToEntity(entity, a);
+    const remain =
+      d && Number.isFinite(d) && d > hurtStart + 0.04 ? d - hurtStart : fallbackHalf;
+    attachHurtTailEnvelope(a, hurtStart, remain);
+  };
+
+  if (a.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    beginHurtTail();
+  } else {
+    a.addEventListener('loadedmetadata', beginHurtTail, { once: true });
+    void a.load();
+  }
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
 import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
+import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -90,6 +91,7 @@ export function createGameLoop(api) {
     if (currentData && getAppMode() === 'play') {
       const pvx = player.visualX ?? player.x;
       const pvy = player.visualY ?? player.y;
+      syncSpatialListenerFromPlayer(player);
       syncWildPokemonWindow(currentData, pvx, pvy);
       updateWildPokemon(dt, currentData, pvx, pvy);
       updatePlayPointerCombat(dt, player);

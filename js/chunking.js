@@ -1,7 +1,8 @@
 import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
-export const CHUNK_SIZE = 16;
+/** Play (micro) tiles per generator macro cell: terrain sampling, world bounds, minimap grid. */
+export const MACRO_TILE_STRIDE = 48;
 export const LAND_STEPS = 12;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
 export const SEA_LEVEL = 0.3;
@@ -40,8 +41,8 @@ export function elevationToStep(e) {
  */
 export function getHeightStepAt(mx, my, macroData) {
     const { width, height, cells } = macroData;
-    const gx = mx / CHUNK_SIZE;
-    const gy = my / CHUNK_SIZE;
+    const gx = mx / MACRO_TILE_STRIDE;
+    const gy = my / MACRO_TILE_STRIDE;
     const ix = Math.floor(gx);
     const iy = Math.floor(gy);
     const tx = gx - ix;
@@ -64,9 +65,9 @@ export function getHeightStepAt(mx, my, macroData) {
 export function getMicroTile(mx, my, macroData) {
     const { width, height, cells, temperature, moisture, anomaly, seed, config } = macroData;
 
-    // Interpolação Bilinear: Os centros macro ficam alinhados aos múltiplos de CHUNK_SIZE
-    const gx = mx / CHUNK_SIZE;
-    const gy = my / CHUNK_SIZE;
+    // Interpolação Bilinear: Os centros macro ficam alinhados aos múltiplos de MACRO_TILE_STRIDE
+    const gx = mx / MACRO_TILE_STRIDE;
+    const gy = my / MACRO_TILE_STRIDE;
 
     const ix = Math.floor(gx);
     const iy = Math.floor(gy);
@@ -229,8 +230,20 @@ export function getMicroTile(mx, my, macroData) {
         }
 
         if (macroData.roadTraffic && macroData.roadTraffic[macroIdx] > 0) {
-            const localX = mx % CHUNK_SIZE;
-            const localY = my % CHUNK_SIZE;
+            // Road corridor in local micro-tiles: centered on the macro cell, widths match the old stride-16
+            // layout (4-tile spine + 1-tile pad). Fine for current MACRO_TILE_STRIDE; revisit if we want a
+            // wider spine proportional to stride (e.g. floor(stride / 8)) for huge macro cells.
+            const stride = MACRO_TILE_STRIDE;
+            const localX = mx % stride;
+            const localY = my % stride;
+            /** Road spine half-width in micro-tiles (4-wide at stride 16: was [6,10)). Scales with stride. */
+            const roadHalfInner = 2;
+            const roadC = Math.floor(stride / 2);
+            const roadInnerLo = roadC - roadHalfInner;
+            const roadInnerHi = roadC + roadHalfInner;
+            /** One tile wider band for elevation relief (was [5,11) at stride 16). */
+            const roadPadLo = roadInnerLo - 1;
+            const roadPadHi = roadInnerHi + 1;
 
             const myMask = macroData.roadMasks ? macroData.roadMasks[macroIdx] : 0xFFFFFFFF;
             const getMask = (nx, ny) => (macroData.roadMasks ? macroData.roadMasks[ny * width + nx] : 0xFFFFFFFF);
@@ -240,22 +253,22 @@ export function getMicroTile(mx, my, macroData) {
             const hasPathE = macroCX < width - 1 && (myMask & getMask(macroCX + 1, macroCY)) !== 0;
             const hasPathW = macroCX > 0 && (myMask & getMask(macroCX - 1, macroCY)) !== 0;
 
-            const inCenter = localX >= 6 && localX < 10 && localY >= 6 && localY < 10;
-            const inN = hasPathN && localX >= 6 && localX < 10 && localY < 6;
-            const inS = hasPathS && localX >= 6 && localX < 10 && localY >= 10;
-            const inE = hasPathE && localY >= 6 && localY < 10 && localX >= 10;
-            const inW = hasPathW && localY >= 6 && localY < 10 && localX < 6;
+            const inCenter =
+                localX >= roadInnerLo && localX < roadInnerHi && localY >= roadInnerLo && localY < roadInnerHi;
+            const inN = hasPathN && localX >= roadInnerLo && localX < roadInnerHi && localY < roadInnerLo;
+            const inS = hasPathS && localX >= roadInnerLo && localX < roadInnerHi && localY >= roadInnerHi;
+            const inE = hasPathE && localY >= roadInnerLo && localY < roadInnerHi && localX >= roadInnerHi;
+            const inW = hasPathW && localY >= roadInnerLo && localY < roadInnerHi && localX < roadInnerLo;
 
-            // --- ORTHOGONAL RELIEF STRAIGHTENING (5-10 range for padding) ---
-            // --- ORTHOGONAL RELIEF STRAIGHTENING (5-10 range for padding) ---
-            const nlx_raw = ((mx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-            const nly_raw = ((my % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const nlx_raw = ((mx % stride) + stride) % stride;
+            const nly_raw = ((my % stride) + stride) % stride;
 
-            const inCenterPadding = nlx_raw >= 5 && nlx_raw < 11 && nly_raw >= 5 && nly_raw < 11;
-            const inNPadding = hasPathN && nlx_raw >= 5 && nlx_raw < 11 && nly_raw < 6;
-            const inSPadding = hasPathS && nlx_raw >= 5 && nlx_raw < 11 && nly_raw >= 10;
-            const inEPadding = hasPathE && nly_raw >= 5 && nly_raw < 11 && nlx_raw >= 10;
-            const inWPadding = hasPathW && nly_raw >= 5 && nly_raw < 11 && nlx_raw < 6;
+            const inCenterPadding =
+                nlx_raw >= roadPadLo && nlx_raw < roadPadHi && nly_raw >= roadPadLo && nly_raw < roadPadHi;
+            const inNPadding = hasPathN && nlx_raw >= roadPadLo && nlx_raw < roadPadHi && nly_raw < roadInnerLo;
+            const inSPadding = hasPathS && nlx_raw >= roadPadLo && nlx_raw < roadPadHi && nly_raw >= roadInnerHi;
+            const inEPadding = hasPathE && nly_raw >= roadPadLo && nly_raw < roadPadHi && nlx_raw >= roadInnerHi;
+            const inWPadding = hasPathW && nly_raw >= roadPadLo && nly_raw < roadPadHi && nlx_raw < roadInnerLo;
 
             const isVerticalRoadArea = (hasPathN || hasPathS) && !hasPathE && !hasPathW;
             const isHorizontalRoadArea = (hasPathE || hasPathW) && !hasPathN && !hasPathS;
@@ -267,8 +280,8 @@ export function getMicroTile(mx, my, macroData) {
                 // Stair detection needs axis-locking (to stay straight) but not full-snapping
                 const getH_Axis = (dx, dy, axisLockX, axisLockY) => {
                     const nmx = mx + dx, nmy = my + dy;
-                    const ntx = tx + dx / CHUNK_SIZE;
-                    const nty = ty + dy / CHUNK_SIZE;
+                    const ntx = tx + dx / MACRO_TILE_STRIDE;
+                    const nty = ty + dy / MACRO_TILE_STRIDE;
                     const nsx = ntx * ntx * (3 - 2 * ntx);
                     const nsy = nty * nty * (3 - 2 * nty);
 

@@ -4,6 +4,7 @@ import {
   FIRE_FRAME_W
 } from './move-constants.js';
 import {
+  clampFloorAimToMaxRange,
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
@@ -55,17 +56,19 @@ export function castEmberVolley(
     const rad = Math.random() * spreadTiles;
     const rawFx = targetX + Math.cos(ang) * rad;
     const rawFy = targetY + Math.sin(ang) * rad;
+    const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawFx, rawFy, maxRangeTiles);
+    const maxHorizForTtl = Math.max(0.12, Math.min(maxRangeTiles, dist0));
 
     const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
       aimCenter.startX,
       aimCenter.startY,
       aimCenter.startZ,
-      rawFx,
-      rawFy,
+      aimX,
+      aimY,
       sourceX,
       sourceY,
       speed,
-      maxRangeTiles,
+      maxHorizForTtl,
       { ttlMargin: 1.15, ttlPad: 0.15 }
     );
 

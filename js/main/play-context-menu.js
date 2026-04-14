@@ -1,4 +1,4 @@
-import { CHUNK_SIZE } from '../chunking.js';
+import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { setPlayerPos } from '../player.js';
 import { getPlayPointerMode } from './play-pointer-mode.js';
 import { tryPlayerFieldMoveOnTile } from '../wild-pokemon/wild-pokemon-manager.js';
@@ -118,8 +118,8 @@ export function installPlayContextMenu(opts) {
     const mx = Math.floor(worldX);
     const my = Math.floor(worldY);
 
-    const maxMX = currentData.width * CHUNK_SIZE;
-    const maxMY = currentData.height * CHUNK_SIZE;
+    const maxMX = currentData.width * MACRO_TILE_STRIDE;
+    const maxMY = currentData.height * MACRO_TILE_STRIDE;
     if (mx < 0 || my < 0 || mx >= maxMX || my >= maxMY) return;
 
     if (getPlayPointerMode() === 'game') {

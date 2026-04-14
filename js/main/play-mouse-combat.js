@@ -1,13 +1,19 @@
 import { playInputState } from './play-input-state.js';
+import { setPlayerFacingFromWorldAimDelta } from '../player.js';
 import {
   castMoveById,
   castMoveChargedById,
-  castUltimate
+  castUltimate,
+  tryCastPlayerFlamethrowerStreamPuff
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
+
+function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
+  setPlayerFacingFromWorldAimDelta(player, tx - sx, ty - sy);
+}
 
 let leftHeld = false;
 let rightHeld = false;
@@ -16,21 +22,22 @@ let rightDownAt = 0;
 /** Left Ctrl held when primary/secondary button went down (locks “no charge build” for that press). */
 let leftShiftAtDown = false;
 let rightShiftAtDown = false;
+/** True after at least one flamethrower puff this LMB press (hold-stream). */
+let leftFlameStreamedThisPress = false;
+let rightFlameStreamedThisPress = false;
 
 function combatModifierHeld() {
   return !!playInputState.ctrlLeftHeld;
 }
 
-/** World aim used for LMB/RMB casts and HUD — same as a shot fired now. */
+/** World aim for LMB/RMB / hotkeys / debug — continuous sub-tile coords (matches screen→world). */
 export function aimAtCursor(player) {
   if (!playInputState.mouseValid) {
     return { tx: player.x + 1, ty: player.y, sx: player.x, sy: player.y };
   }
   const wx = playInputState.mouseX;
   const wy = playInputState.mouseY;
-  const tx = Math.floor(wx) + 0.5;
-  const ty = Math.floor(wy) + 0.5;
-  return { tx, ty, sx: player.x, sy: player.y };
+  return { tx: wx, ty: wy, sx: player.x, sy: player.y };
 }
 
 /** @type {Record<string, string>} */
@@ -59,6 +66,7 @@ export function castMappedMoveByHotkey(code, player) {
   const moveId = HOTKEY_TO_MOVE_ID[code];
   if (!moveId || !player) return false;
   const { sx, sy, tx, ty } = aimAtCursor(player);
+  if (moveId === 'flamethrower') applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
   castMoveById(moveId, sx, sy, tx, ty, player);
   return true;
 }
@@ -78,11 +86,23 @@ function resolveSlots(player) {
  * @param {import('../player.js').player} player
  */
 export function updatePlayPointerCombat(dt, player) {
-  if (leftHeld && !combatModifierHeld()) {
+  if (!player) return;
+  const slots = resolveSlots(player);
+  const mod = combatModifierHeld();
+  if (leftHeld && !mod && slots.leftTap !== 'flamethrower') {
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
   }
-  if (rightHeld && !combatModifierHeld()) {
+  if (rightHeld && !mod && slots.rightTap !== 'flamethrower') {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
+  }
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  if (leftHeld && !mod && slots.leftTap === 'flamethrower') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) leftFlameStreamedThisPress = true;
+  }
+  if (rightHeld && !mod && slots.rightTap === 'flamethrower') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
   }
 }
 
@@ -109,6 +129,7 @@ export function installPlayPointerCombat(deps) {
         leftHeld = true;
         leftDownAt = performance.now();
         leftShiftAtDown = sh;
+        leftFlameStreamedThisPress = false;
         playInputState.chargeLeft01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
@@ -116,6 +137,7 @@ export function installPlayPointerCombat(deps) {
         rightHeld = true;
         rightDownAt = performance.now();
         rightShiftAtDown = sh;
+        rightFlameStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 1) {
@@ -140,6 +162,11 @@ export function installPlayPointerCombat(deps) {
       const slots = resolveSlots(player);
       if (leftShiftAtDown || shUp) {
         castMoveById(slots.leftShift, sx, sy, tx, ty, player);
+      } else if (slots.leftTap === 'flamethrower') {
+        if (!leftFlameStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
+        }
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.leftTap, sx, sy, tx, ty, player);
       } else {
@@ -154,6 +181,11 @@ export function installPlayPointerCombat(deps) {
       const slots = resolveSlots(player);
       if (rightShiftAtDown || shUp) {
         castMoveById(slots.rightShift, sx, sy, tx, ty, player);
+      } else if (slots.rightTap === 'flamethrower') {
+        if (!rightFlameStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
+        }
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.rightTap, sx, sy, tx, ty, player);
       } else {

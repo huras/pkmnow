@@ -9,7 +9,7 @@
  * by chunking.js (height/biome overrides) and render.js (building sprites).
  */
 
-import { CHUNK_SIZE, elevationToStep, getHeightStepAt } from './chunking.js';
+import { MACRO_TILE_STRIDE, elevationToStep, getHeightStepAt } from './chunking.js';
 import { seededHash } from './tessellation-logic.js';
 
 /* ── Building dimensions (in micro-tiles, 16×16 px each) ── */
@@ -60,8 +60,8 @@ function seededLayout(sx, sy, i, seed) {
  */
 export function buildCityLayouts(graph, macroData, seed) {
   const { width, height } = macroData;
-  const microW = width * CHUNK_SIZE;
-  const microH = height * CHUNK_SIZE;
+  const microW = width * MACRO_TILE_STRIDE;
+  const microH = height * MACRO_TILE_STRIDE;
 
   const layouts = [];
   const footprintSet = new Set();       // all tiles inside the city circle
@@ -73,8 +73,8 @@ export function buildCityLayouts(graph, macroData, seed) {
   const cityBiomeMap = new Map();    // "mx,my" → biomeId override (unused for now, reserved)
 
   for (const node of graph.nodes) {
-    const cx = node.x * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
-    const cy = node.y * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
+    const cx = node.x * MACRO_TILE_STRIDE + Math.floor(MACRO_TILE_STRIDE / 2);
+    const cy = node.y * MACRO_TILE_STRIDE + Math.floor(MACRO_TILE_STRIDE / 2);
 
     // Determine importance-based sizing
     const importance = node.importance ?? seededHash(node.x, node.y, seed + 888) * 10;

@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 260px;
+  width: 300px;
   padding: 16px;
   background: rgba(32, 32, 36, 0.95);
   backdrop-filter: blur(16px) saturate(180%);
@@ -31,6 +31,32 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.character-selector__layout-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.character-selector__layout-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.character-selector__layout-toggle[aria-pressed="true"] {
+  border-color: rgba(230, 0, 18, 0.45);
+  background: rgba(230, 0, 18, 0.12);
 }
 
 .player-preview-pill {
@@ -81,6 +107,8 @@
   flex-direction: column;
   justify-content: center;
   gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .player-name {
@@ -211,6 +239,16 @@ body.play-mode-active .character-selector .play-pointer-mode-bar {
   display: flex;
 }
 
+body.play-mode-active .character-selector.character-selector--minimal .play-pointer-mode-bar {
+  display: none;
+}
+
+/* Minimal layout: hide species search, move hotkey tutorial, and right-click mode bar */
+.character-selector--minimal .search-container,
+.character-selector--minimal .player-moves-help {
+  display: none;
+}
+
 .play-pointer-mode-bar__label {
   opacity: 0.6;
   margin-right: 2px;
@@ -262,59 +300,119 @@ body.play-mode-active .character-selector .play-pointer-mode-bar {
   gap: 6px;
 }
 
-.move-chip {
-  display: inline-flex;
-  flex-direction: row;
+/* League-style skill row: fixed slot size so cooldown text never reflows the panel */
+.player-moves-list--slots {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px 4px;
+  min-height: 76px;
+  align-items: start;
+}
+
+.move-slot {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #f5f8ff;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.move-chip--ultimate {
-  border-color: rgba(186, 148, 255, 0.45);
-  background: rgba(120, 80, 200, 0.12);
-}
-
-.move-chip--ultimate.move-chip--cooldown {
-  border-color: rgba(255, 184, 108, 0.5);
-  background: rgba(255, 120, 40, 0.1);
-}
-
-.move-chip--cooldown {
-  border-color: rgba(255, 184, 108, 0.45);
-  background: rgba(255, 120, 40, 0.08);
-}
-
-.move-chip__main {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.move-chip__cd {
-  margin-left: auto;
-  min-width: 2.1em;
-  text-align: right;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.58rem;
-  font-weight: 800;
-  color: #ffb86c;
-}
-
-.move-chip__cd:empty {
+  gap: 4px;
   min-width: 0;
+  cursor: default;
 }
 
-.move-chip b {
+.move-slot--ultimate .move-slot__icon-wrap {
+  border-color: rgba(200, 160, 255, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 10px rgba(160, 100, 255, 0.25);
+}
+
+.move-slot--ultimate.move-slot--on-cd .move-slot__icon-wrap {
+  border-color: rgba(255, 184, 108, 0.55);
+}
+
+.move-slot__icon-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(155deg, #424250, #1c1c24);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.move-slot__icon-wrap::before {
+  content: attr(data-abbrev);
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.move-slot__icon-wrap:has(.move-slot__icon--missing)::before {
+  display: flex;
+}
+
+.move-slot__icon {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.move-slot__icon--missing {
+  display: none;
+}
+
+/* --cd-p = remaining cd / max (0–1); dark wedge shrinks as cooldown expires */
+.move-slot__sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: conic-gradient(
+    from -90deg at 50% 50%,
+    rgba(0, 0, 0, 0.78) 0deg,
+    rgba(0, 0, 0, 0.78) calc(var(--cd-p, 0) * 360deg),
+    transparent calc(var(--cd-p, 0) * 360deg)
+  );
+}
+
+.move-slot__timer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.6rem;
-  color: #a5dcff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f5f8ff;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000;
+  pointer-events: none;
+  min-height: 1.2em;
+}
+
+.move-slot__key {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: #9fd4ff;
+  text-align: center;
+  line-height: 1.15;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .player-moves-help {

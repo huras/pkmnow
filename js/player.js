@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, getMicroTile } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import {
   getBorrowDigPlaceholderDex,
   isPlayerUndergroundBurrowWalkActive,
@@ -195,8 +195,8 @@ function burrowFeetTileExists(pivotX, pivotY, data) {
   const { x: fx, y: fy } = worldFeetFromPivotCell(pivotX, pivotY, imageCache, player.dexId || 94, true);
   const mx = Math.floor(fx);
   const my = Math.floor(fy);
-  const gw = data.width * CHUNK_SIZE;
-  const gh = data.height * CHUNK_SIZE;
+  const gw = data.width * MACRO_TILE_STRIDE;
+  const gh = data.height * MACRO_TILE_STRIDE;
   if (mx < 0 || mx >= gw || my < 0 || my >= gh) return false;
   return getMicroTile(mx, my, data) != null;
 }
@@ -260,7 +260,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
   for (const p of points) {
     const mx = Math.floor(p.x);
     const my = Math.floor(p.y);
-    if (mx < 0 || my < 0 || mx >= data.width * CHUNK_SIZE || my >= data.height * CHUNK_SIZE) return false;
+    if (mx < 0 || my < 0 || mx >= data.width * MACRO_TILE_STRIDE || my >= data.height * MACRO_TILE_STRIDE) return false;
 
     // Chamamos canWalkMicroTile SEM srcX/srcY para ignorar o check de "heightStepMismatch".
     // Isso permite que um ombro do player sobreponha um tile de altura diferente sem travar.
@@ -282,6 +282,24 @@ const DIRECTION_ROW_MAP = {
   left: 6,
   'down-left': 7
 };
+
+/** atan2(+y down): sector index 0 = right, … 7 = up-right (matches `DIRECTION_ROW_MAP` / PMD rows). */
+const AIM_SECTOR_TO_FACING = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
+
+/**
+ * Sets `facing` + `animRow` from a world-space aim vector (e.g. stream moves toward cursor).
+ * Call after `updatePlayer` in the same frame so the renderer sees the correct row immediately.
+ */
+export function setPlayerFacingFromWorldAimDelta(player, dx, dy) {
+  if (!player) return;
+  if (dx * dx + dy * dy < 1e-6) return;
+  const a = Math.atan2(dy, dx);
+  const t = (a + Math.PI * 2) % (Math.PI * 2);
+  const sector = Math.floor((t + Math.PI / 8) / (Math.PI / 4)) % 8;
+  const key = AIM_SECTOR_TO_FACING[sector];
+  player.facing = key;
+  player.animRow = DIRECTION_ROW_MAP[key] || 0;
+}
 
 function pickPmdSeqFrame(seq, tickInLoop) {
   let acc = 0;

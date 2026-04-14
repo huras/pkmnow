@@ -8,6 +8,21 @@ const VIEW_SCALE_LAMBDA = 11;
 /** Keep shadow + sprite band inside this fraction of canvas height (Smash-style). */
 const FRAMED_VERTICAL_FRAC = 0.86;
 
+/**
+ * During flight (airborne): place ground shadow at this fraction of canvas height (0 = top, 1 = bottom).
+ * 0.5 = vertical center. Tune with {@link FLIGHT_CAM_TOP_PAD_PX}.
+ */
+export const FLIGHT_CAM_SHADOW_Y_FRAC = 0.5;
+
+/**
+ * During flight: minimum distance from canvas top to the top of the framed sprite band (px).
+ * Larger values leave more empty sky above the Pokémon.
+ */
+export const FLIGHT_CAM_TOP_PAD_PX = 40;
+
+/** Only apply flight framing when airborne above this z (tiles), to avoid jitter on the ground. */
+const FLIGHT_CAM_Z_EPS = 0.02;
+
 let smoothedViewScale = 1;
 let lastPerfMs = 0;
 /** @type {0|1|2} */
@@ -112,7 +127,17 @@ export function computePlayViewState(p) {
   const { yLo, yHi } = verticalFramingWorldYBounds(effTileH, z, framingHeightTiles, vy);
   const midY = (yLo + yHi) * 0.5;
   const currentTransX = Math.round(cw / 2 - (vx + 0.5) * effTileW);
-  const currentTransY = Math.round(ch / 2 - midY);
+
+  let currentTransY;
+  if (flightActive && z > FLIGHT_CAM_Z_EPS) {
+    const vc = vy + 0.5;
+    const shadowMidPx = vc * effTileH;
+    const transShadow = ch * FLIGHT_CAM_SHADOW_Y_FRAC - shadowMidPx;
+    const transTopMin = FLIGHT_CAM_TOP_PAD_PX - yLo;
+    currentTransY = Math.round(Math.max(transShadow, transTopMin));
+  } else {
+    currentTransY = Math.round(ch / 2 - midY);
+  }
 
   return {
     bakeTilePx: PLAY_BAKE_TILE_PX,

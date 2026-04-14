@@ -69,6 +69,9 @@ let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
 
+/** Seconds between player flamethrower stream puffs (hold-to-spray). */
+const FLAMETHROWER_STREAM_INTERVAL = 0.072;
+
 function pushProjectile(p) {
   while (activeProjectiles.length >= MAX_PROJECTILES) activeProjectiles.shift();
   activeProjectiles.push(p);
@@ -258,15 +261,24 @@ export function castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity
   return true;
 }
 
-export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+/**
+ * One flamethrower stream puff toward floor aim (short cooldown). Used for hold-stream and hotkey taps.
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerFlamethrowerCooldown > 0) return false;
-  playerFlamethrowerCooldown = 0.7;
+  playerFlamethrowerCooldown = FLAMETHROWER_STREAM_INTERVAL;
   bumpPlayerMoveCastVisual(sourceEntity);
   castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
-    pushProjectile
+    pushProjectile,
+    streamPuff: true
   });
   return true;
+}
+
+export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -527,7 +539,44 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
 }
 
 /**
- * Remaining player cooldown (seconds) for a move id. Used by play HUD chips.
+ * Max cooldown per move for HUD clock (use longest variant where applicable). Keep in sync with cast assignments.
+ * @param {string} moveId
+ */
+export function getPlayerMoveCooldownUiMax(moveId) {
+  switch (moveId) {
+    case 'ember':
+      return 0.48;
+    case 'waterBurst':
+      return 0.58;
+    case 'poisonSting':
+      return 0.45;
+    case 'flamethrower':
+      return FLAMETHROWER_STREAM_INTERVAL;
+    case 'confusion':
+      return 0.6;
+    case 'bubble':
+      return 0.55;
+    case 'waterGun':
+      return 0.65;
+    case 'psybeam':
+      return 0.75;
+    case 'prismaticLaser':
+      return 1.45;
+    case 'poisonPowder':
+      return 0.95;
+    case 'incinerate':
+      return 0.78;
+    case 'silkShoot':
+      return 0.72;
+    case 'ultimate':
+      return 7.5;
+    default:
+      return 1;
+  }
+}
+
+/**
+ * Remaining player cooldown (seconds) for a move id. Used by play HUD.
  * @param {string} moveId
  * @returns {number}
  */
@@ -666,7 +715,9 @@ export function updateMoves(dt, wildPokemonList, data, player) {
                 ? 'psyTrail'
                 : proj.type === 'prismaticShot'
                   ? 'laserTrail'
-          : null;
+                  : proj.type === 'flamethrowerShot'
+                    ? 'emberTrail'
+                    : null;
     if (trailType && proj.trailAcc != null) {
       proj.trailAcc += dt;
       const interval =

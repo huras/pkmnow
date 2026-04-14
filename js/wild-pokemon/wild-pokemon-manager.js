@@ -1,4 +1,9 @@
-import { CHUNK_SIZE, getMicroTile } from '../chunking.js';
+import { getMicroTile, MACRO_TILE_STRIDE } from '../chunking.js';
+import {
+  WILD_WANDER_RADIUS_TILES,
+  WILD_MACRO_SUBDIVISION,
+  WILD_MAX_SIMULTANEOUS_SLOTS
+} from './wild-pokemon-constants.js';
 import { seededHashInt } from '../tessellation-logic.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
@@ -9,7 +14,7 @@ import {
   probeSpriteCollabPortraitPrefix
 } from '../pokemon/spritecollab-portraits.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
-import { playWildEmotionCry } from '../pokemon/pokemon-cries.js';
+import { playWildEmotionCry, playWildDamageHurtCry } from '../pokemon/pokemon-cries.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
@@ -39,13 +44,70 @@ const SKY_SPECIES = new Set([
   149  // Dragonite
 ]);
 
-/** Janela 3×3 de overview tiles (macro) em torno do player. */
+/** Janela (2r+1)² células macro em torno do player; cada macro tem até N² slots (`WILD_MACRO_SUBDIVISION` em constants). */
 export const WILD_WINDOW_RADIUS = 2;
+
+function wildSubdivN() {
+  const n = Math.max(1, Math.floor(Number(WILD_MACRO_SUBDIVISION)) || 1);
+  return Math.min(16, n);
+}
+
+function wildSlotKey(mx, my, sx, sy) {
+  return `${mx},${my},${sx},${sy}`;
+}
+
+function wildSlotCenterSqDist(mx, my, sx, sy, px, py, cellW) {
+  const cx = mx * MACRO_TILE_STRIDE + (sx + 0.5) * cellW;
+  const cy = my * MACRO_TILE_STRIDE + (sy + 0.5) * cellW;
+  const dx = cx - px;
+  const dy = cy - py;
+  return dx * dx + dy * dy;
+}
+
+/**
+ * Candidate slots in the full macro window, capped to {@link WILD_MAX_SIMULTANEOUS_SLOTS}
+ * by keeping those closest to the player (avoids despawning mons you're next to when trimming).
+ */
+function buildWildNeededSlotKeys(w, h, pmx, pmy, subN, cellW, playerMicroX, playerMicroY) {
+  const budget = Math.max(8, Math.floor(Number(WILD_MAX_SIMULTANEOUS_SLOTS)) || 64);
+  const R = WILD_WINDOW_RADIUS;
+  /** @type {{ mx: number, my: number, sx: number, sy: number, d2: number }[]} */
+  const slots = [];
+  for (let dy = -R; dy <= R; dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      const mx = pmx + dx;
+      const my = pmy + dy;
+      if (mx < 0 || my < 0 || mx >= w || my >= h) continue;
+      for (let sy = 0; sy < subN; sy++) {
+        for (let sx = 0; sx < subN; sx++) {
+          const d2 = wildSlotCenterSqDist(mx, my, sx, sy, playerMicroX, playerMicroY, cellW);
+          slots.push({ mx, my, sx, sy, d2 });
+        }
+      }
+    }
+  }
+  if (slots.length <= budget) {
+    const needed = new Set();
+    for (const s of slots) needed.add(wildSlotKey(s.mx, s.my, s.sx, s.sy));
+    return needed;
+  }
+  slots.sort((a, b) => {
+    if (a.d2 !== b.d2) return a.d2 - b.d2;
+    if (a.mx !== b.mx) return a.mx - b.mx;
+    if (a.my !== b.my) return a.my - b.my;
+    if (a.sx !== b.sx) return a.sx - b.sx;
+    return a.sy - b.sy;
+  });
+  const needed = new Set();
+  for (let i = 0; i < budget; i++) {
+    const s = slots[i];
+    needed.add(wildSlotKey(s.mx, s.my, s.sx, s.sy));
+  }
+  return needed;
+}
 
 const SALT_SPAWN = 0x574c4450;
 
-/** Raio de vagueio em coordenadas micro (~meio overview tile). */
-const WANDER_RADIUS = CHUNK_SIZE * 1.26; // ~3x
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
 const WANDER_IDLE_MIN = 0.35;
@@ -103,8 +165,8 @@ function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTreeTrunk
     const ft = worldFeetFromPivotCell(destX, destY, imageCache, entity.dexId ?? 1, true);
     const mx = Math.floor(ft.x);
     const my = Math.floor(ft.y);
-    const gw = data.width * CHUNK_SIZE;
-    const gh = data.height * CHUNK_SIZE;
+    const gw = data.width * MACRO_TILE_STRIDE;
+    const gh = data.height * MACRO_TILE_STRIDE;
     if (mx < 0 || mx >= gw || my < 0 || my >= gh) return false;
     return getMicroTile(mx, my, data) != null;
   }
@@ -435,10 +497,10 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
 
     // Waypoint Logic: Pick a target and walk toward it
     if (entity.targetX === null || entity.targetY === null) {
-      // Pick a random destination within WANDER_RADIUS that is walkable
+      // Pick a random destination within WILD_WANDER_RADIUS_TILES that is walkable
       for (let attempt = 0; attempt < 10; attempt++) {
         const ang = Math.random() * Math.PI * 2;
-        const dist = Math.random() * WANDER_RADIUS;
+        const dist = Math.random() * WILD_WANDER_RADIUS_TILES;
         const tx = entity.centerX + Math.cos(ang) * dist;
         const ty = entity.centerY + Math.sin(ang) * dist;
         const wanderEntity =
@@ -520,11 +582,11 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
   const dx = entity.x - entity.centerX;
   const dy = entity.y - entity.centerY;
   const dist = Math.hypot(dx, dy);
-  if (dist > WANDER_RADIUS && dist > 1e-6) {
+  if (dist > WILD_WANDER_RADIUS_TILES && dist > 1e-6) {
     const nxc = dx / dist;
     const nyc = dy / dist;
-    const clampedX = entity.centerX + nxc * WANDER_RADIUS;
-    const clampedY = entity.centerY + nyc * WANDER_RADIUS;
+    const clampedX = entity.centerX + nxc * WILD_WANDER_RADIUS_TILES;
+    const clampedY = entity.centerY + nyc * WILD_WANDER_RADIUS_TILES;
 
     if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity))) {
       entity.x = clampedX;
@@ -613,7 +675,7 @@ function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSwee
 }
 
 /**
- * Mantém no máximo (2r+1)² overview tiles; só spawns novos ao entrar na janela.
+ * Mantém slots na janela macro (2r+1)² × N²; se exceder o orçamento, mantém só os mais próximos do jogador.
  * @param {object} data mapa gerado
  * @param {number} playerMicroX tile micro X
  * @param {number} playerMicroY tile micro Y
@@ -623,18 +685,12 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
 
   const w = data.width;
   const h = data.height;
-  const pmx = Math.floor(playerMicroX / CHUNK_SIZE);
-  const pmy = Math.floor(playerMicroY / CHUNK_SIZE);
+  const pmx = Math.floor(playerMicroX / MACRO_TILE_STRIDE);
+  const pmy = Math.floor(playerMicroY / MACRO_TILE_STRIDE);
+  const subN = wildSubdivN();
+  const cellW = MACRO_TILE_STRIDE / subN;
 
-  const needed = new Set();
-  for (let dy = -WILD_WINDOW_RADIUS; dy <= WILD_WINDOW_RADIUS; dy++) {
-    for (let dx = -WILD_WINDOW_RADIUS; dx <= WILD_WINDOW_RADIUS; dx++) {
-      const mx = pmx + dx;
-      const my = pmy + dy;
-      if (mx < 0 || my < 0 || mx >= w || my >= h) continue;
-      needed.add(`${mx},${my}`);
-    }
-  }
+  const needed = buildWildNeededSlotKeys(w, h, pmx, pmy, subN, cellW, playerMicroX, playerMicroY);
 
   for (const [k, ent] of entitiesByKey.entries()) {
     if (!needed.has(k)) {
@@ -661,10 +717,14 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       continue;
     }
 
-    const [mx, my] = k.split(',').map(Number);
+    const parts = k.split(',').map(Number);
+    const mx = parts[0];
+    const my = parts[1];
+    const sx = parts.length >= 4 ? parts[2] : 0;
+    const sy = parts.length >= 4 ? parts[3] : 0;
     const biomeId = data.biomes[my * w + mx];
     const pool = getEncounters(biomeId);
-    const basePick = seededHashInt(mx, my, data.seed ^ SALT_SPAWN) % pool.length;
+    const basePick = seededHashInt(mx * 4099 + sx, my * 4013 + sy, data.seed ^ SALT_SPAWN) % pool.length;
     let pick = basePick;
     if (pool.length > 1) {
       let used = usedPickIndexesByBiome.get(biomeId);
@@ -686,13 +746,14 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const dex = encounterNameToDex(pool[pick]);
     if (dex == null) continue;
 
-    const centerX = (mx + 0.5) * CHUNK_SIZE;
-    const centerY = (my + 0.5) * CHUNK_SIZE;
-    const jx = (seededHashInt(mx + 31, my + 11, data.seed) % 1000) / 1000 - 0.5;
-    const jy = (seededHashInt(mx + 71, my + 3, data.seed) % 1000) / 1000 - 0.5;
+    const centerX = mx * MACRO_TILE_STRIDE + (sx + 0.5) * cellW;
+    const centerY = my * MACRO_TILE_STRIDE + (sy + 0.5) * cellW;
+    const jitterR = Math.min(5, cellW * 0.42);
+    const jx = (seededHashInt(mx + 31 + sx * 17, my + 11 + sy * 13, data.seed) % 1000) / 1000 - 0.5;
+    const jy = (seededHashInt(mx + 71 + sx * 7, my + 3 + sy * 19, data.seed) % 1000) / 1000 - 0.5;
 
-    let spawnX = centerX + jx * 5;
-    let spawnY = centerY + jy * 5;
+    let spawnX = centerX + jx * jitterR;
+    let spawnY = centerY + jy * jitterR;
 
     // Attempt to find a valid walkable tile for wild pokemon (allows water/lava, blocks trees/cliffs)
     const spawnFt = worldFeetFromPivotCell(spawnX, spawnY, imageCache, dex, false);
@@ -739,6 +800,8 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       key: k,
       macroX: mx,
       macroY: my,
+      subX: sx,
+      subY: sy,
       biomeId,
       pickIndex: pick,
       centerX,
@@ -803,11 +866,13 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
           this.isDespawning = true;
         }
         this.hitFlashTimer = 0.2; // flash for 200ms
-        
+
         // Flee on hit if not already fleeing
         if (this.aiState !== 'flee' && this.aiState !== 'sleep') {
           this.aiState = 'flee';
         }
+
+        if (amount > 0) playWildDamageHurtCry(this);
       }
     };
     entitiesByKey.set(k, entity);
@@ -819,12 +884,20 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
   }
 }
 
+/** Skip heavy wander pathing when far (sleep/flee/approach/alert still run every frame). */
+const WILD_WANDER_LOD_SKIP_DIST = 40;
+
 export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
   const toDelete = [];
   for (const [k, e] of entitiesByKey.entries()) {
     const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
     const isCloseEnough = distToPlayer < 24;
+    const skipWanderMotion =
+      distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
+      e.aiState === 'wander' &&
+      !e.isDespawning &&
+      (e.spawnPhase ?? 1) >= 0.5;
 
     // Transition spawn phase
     if (e.isDespawning) {
@@ -845,7 +918,13 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     }
 
     integrateWildPokemonVertical(e, dt);
-    updateWildMotion(e, dt, data, playerX, playerY);
+    if (!skipWanderMotion) {
+      updateWildMotion(e, dt, data, playerX, playerY);
+    } else {
+      e.vx = 0;
+      e.vy = 0;
+      e.animMoving = false;
+    }
     if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - dt);
     advanceWildPokemonAnim(e, dt);
     
@@ -875,8 +954,8 @@ const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
  */
 export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
   if (!data || !player) return { hit: false };
-  const maxMX = data.width * CHUNK_SIZE;
-  const maxMY = data.height * CHUNK_SIZE;
+  const maxMX = data.width * MACRO_TILE_STRIDE;
+  const maxMY = data.height * MACRO_TILE_STRIDE;
   if (mx < 0 || my < 0 || mx >= maxMX || my >= maxMY) return { hit: false };
 
   const tx = mx + 0.5;

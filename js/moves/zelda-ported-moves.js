@@ -7,6 +7,7 @@ import {
   LASER_TRAIL_INTERVAL
 } from './move-constants.js';
 import {
+  clampFloorAimToMaxRange,
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
@@ -19,29 +20,39 @@ function pushLinearProjectile(pushProjectile, spec) {
  * Zelda Ember counterpart exists in `ember-move.js`; this file ports the rest.
  * Every cast is adapted to this project's tile-based projectile format.
  */
+/**
+ * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ * — `streamPuff`: short burst for held-stream cadence (player); false = wider volley (e.g. wild).
+ */
 export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  const { fromWild = false, pushProjectile } = opts;
+  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
   const maxR = fromWild ? 8.5 : 10;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
-  const count = 11;
+  const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const baseA = Math.atan2(base.aimY - sourceY, base.aimX - sourceX);
+  const count = streamPuff ? 4 : 11;
+  const spreadMag = streamPuff ? 0.16 : 0.26;
+  const dmg = streamPuff ? (fromWild ? 2 : 2.5) : fromWild ? 3 : 4;
   for (let i = 0; i < count; i++) {
-    const spread = (Math.random() - 0.5) * 0.26;
-    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const spread = (Math.random() - 0.5) * spreadMag;
+    const a = baseA + spread;
+    const dist = Math.max(0.15, base.dist0) * (0.9 + Math.random() * 0.2);
+    const rawTx = sourceX + Math.cos(a) * dist;
+    const rawTy = sourceY + Math.sin(a) * dist;
+    const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
     const speed = 16 + Math.random() * 2;
-    const reach = 5.0;
-    const rawTx = sourceX + Math.cos(a) * reach;
-    const rawTy = sourceY + Math.sin(a) * reach;
-    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, rawTx, rawTy, 0.35);
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.35);
     const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
       sp.startX,
       sp.startY,
       sp.startZ,
-      rawTx,
-      rawTy,
+      aimX,
+      aimY,
       sourceX,
       sourceY,
       speed,
-      maxR,
+      maxHorizForTtl,
       { ttlMargin: 1.05, ttlPad: 0.1 }
     );
     pushLinearProjectile(pushProjectile, {
@@ -52,9 +63,9 @@ export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntit
       vy,
       vz,
       z: sp.startZ,
-      radius: 0.25,
+      radius: streamPuff ? 0.22 : 0.25,
       timeToLive,
-      damage: fromWild ? 3 : 4,
+      damage: dmg,
       sourceEntity,
       fromWild,
       hitsWild: !fromWild,
@@ -318,17 +329,19 @@ export function castIncinerate(sourceX, sourceY, targetX, targetY, sourceEntity,
   const { fromWild = false, pushProjectile } = opts;
   const maxR = fromWild ? 9 : 11;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
-  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, targetX, targetY, 0.35);
+  const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const maxHorizForTtl = Math.max(0.15, Math.min(maxR, dist0));
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.35);
   const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
     sp.startX,
     sp.startY,
     sp.startZ,
-    targetX,
-    targetY,
+    aimX,
+    aimY,
     sourceX,
     sourceY,
     12.8,
-    maxR,
+    maxHorizForTtl,
     { ttlMargin: 1.06, ttlPad: 0.08 }
   );
   pushLinearProjectile(pushProjectile, {

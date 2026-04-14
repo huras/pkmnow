@@ -11,7 +11,7 @@ import {
   usesPoolAutotileMaskForFoliage,
   isSortableScatter
 } from '../biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, LAND_STEPS, foliageDensity } from '../chunking.js';
+import { getMicroTile, MACRO_TILE_STRIDE, LAND_STEPS, foliageDensity } from '../chunking.js';
 import { imageCache } from '../image-cache.js';
 import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { getRoleForCell, seededHash, parseShape, terrainRoleAllowsScatter2CContinuation } from '../tessellation-logic.js';
@@ -98,8 +98,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
     }
   }
 
-  const microHBake = data.height * CHUNK_SIZE;
-  const microWBake = data.width * CHUNK_SIZE;
+  const microHBake = data.height * MACRO_TILE_STRIDE;
+  const microWBake = data.width * MACRO_TILE_STRIDE;
   // Água (heightStep < 1): o loop seguinte usa level ≥ 0 e `tile.heightStep < level` → estes tiles
   // nunca eram desenhados, só a cor do PASS 1 (oceano sólido sem autotile).
   for (let my = startY; my < endY; my++) {
@@ -172,7 +172,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
             else role = 'CENTER';
           } else {
             const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
-            role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAbove, biomeSet.type);
+            role = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAbove, biomeSet.type);
           }
           const centerId = biomeSet.roles?.CENTER ?? biomeSet.centerId;
           const tileId = role ? (biomeSet.roles[role] ?? centerId) : null;
@@ -251,7 +251,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                   const landForFoliageRole = usesPoolAutotileMaskForFoliage(foliageSetName)
                     ? isFoliagePoolTile
                     : isFoliageSafeAt;
-                  const fRole = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, landForFoliageRole, foliageSet.type);
+                  const fRole = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, landForFoliageRole, foliageSet.type);
                   const fTileId = foliageSet.roles[fRole] ?? foliageSet.roles.CENTER ?? foliageSet.centerId;
                   if (img && fTileId != null) {
                     octx.drawImage(
@@ -284,7 +284,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
               const t = getCachedTile(c, r);
               return (t?.heightStep ?? -99) >= level && t?.isRoad && !t?.roadFeature?.startsWith('stair');
             };
-            const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveRoad, roadSet.type);
+            const role = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAboveRoad, roadSet.type);
             const tileId = role ? (roadSet.roles[role] ?? roadSet.roles.CENTER ?? roadSet.centerId) : null;
             if (img && tileId != null) {
               octx.drawImage(
@@ -314,7 +314,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                 const t = getCachedTile(c, r);
                 return (t?.heightStep ?? -99) >= tile.heightStep && t?.isRoad && t?.roadFeature === tile.roadFeature;
               };
-              const role = getRoleForCell(my, mx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, isAtOrAboveStair, stairSet.type);
+              const role = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAboveStair, stairSet.type);
               const tileId = role ? (stairSet.roles[role] ?? stairSet.roles.CENTER ?? stairSet.centerId) : null;
               if (tileId != null) {
                 octx.drawImage(
@@ -341,7 +341,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
   // Scan original position up to 4 tiles West and 4 tiles North (for 3x3 or larger spillover)
   for (let myScan = startY - 4; myScan < endY; myScan++) {
     for (let mxScan = startX - 4; mxScan < endX; mxScan++) {
-      if (mxScan < 0 || myScan < 0 || mxScan >= data.width * CHUNK_SIZE || myScan >= data.height * CHUNK_SIZE) continue;
+      if (mxScan < 0 || myScan < 0 || mxScan >= data.width * MACRO_TILE_STRIDE || myScan >= data.height * MACRO_TILE_STRIDE) continue;
 
       const tile = getCachedTile(mxScan, myScan);
       if (!tile || tile.heightStep < 1) continue;
@@ -358,8 +358,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
           ? getRoleForCell(
               myScan,
               mxScan,
-              data.height * CHUNK_SIZE,
-              data.width * CHUNK_SIZE,
+              data.height * MACRO_TILE_STRIDE,
+              data.width * MACRO_TILE_STRIDE,
               (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep,
               setRoot.type
             )
@@ -396,8 +396,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
               mxScan,
               myScan,
               data.seed,
-              data.width * CHUNK_SIZE,
-              data.height * CHUNK_SIZE,
+              data.width * MACRO_TILE_STRIDE,
+              data.height * MACRO_TILE_STRIDE,
               (c, r) => getCachedTile(c, r),
               validOriginMemo
             )
@@ -436,7 +436,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                         const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[destTile.biomeId] || 'grass'];
                         if (setForRole) {
                           const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-                          const roleDest = getRoleForCell(ty, tx, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type);
+                          const roleDest = getRoleForCell(ty, tx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, checkAtOrAbove, setForRole.type);
                           allowDest = terrainRoleAllowsScatter2CContinuation(roleDest);
                         }
                       } else {
@@ -444,7 +444,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                         if (setForRole) {
                           const checkAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
                           if (
-                            getRoleForCell(myScan, mxScan, data.height * CHUNK_SIZE, data.width * CHUNK_SIZE, checkAtOrAbove, setForRole.type) !==
+                            getRoleForCell(myScan, mxScan, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, checkAtOrAbove, setForRole.type) !==
                             'CENTER'
                           )
                             allowDest = false;

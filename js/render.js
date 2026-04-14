@@ -16,7 +16,7 @@ import {
   scatterHasWindSway,
   isSortableScatter
 } from './biome-tiles.js';
-import { getMicroTile, CHUNK_SIZE, foliageDensity, foliageType } from './chunking.js';
+import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity, foliageType } from './chunking.js';
 import {
   canWalkMicroTile,
   formalTreeTrunkOverlapsMicroCell,
@@ -77,7 +77,11 @@ import { computePlayViewState } from './render/play-view-camera.js';
 import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
-import { clearGrassFireStateForNewMap, grassFireVisualPhaseAt } from './play-grass-fire.js';
+import {
+  clearGrassFireStateForNewMap,
+  grassFireVisualPhaseAt,
+  grassFireCharredRegrowth01
+} from './play-grass-fire.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
@@ -426,16 +430,16 @@ export function render(canvas, data, options = {}) {
 
     startX = Math.max(0, playCam.startXTiles);
     startY = Math.max(0, playCam.startYTiles);
-    endX = Math.min(width * CHUNK_SIZE, playCam.endXTiles);
-    endY = Math.min(height * CHUNK_SIZE, playCam.endYTiles);
+    endX = Math.min(width * MACRO_TILE_STRIDE, playCam.endXTiles);
+    endY = Math.min(height * MACRO_TILE_STRIDE, playCam.endYTiles);
 
     // Identifica todos os tiles cobertos por scatter (árvores largas/altas) no viewport
     // REMOVIDO: buildScatterFootprintNoGrassSet era O(N^2) no render loop. 
     // Agora o suppressionSet é calculado uma única vez no bakeChunk.
 
     // Blocos 8×8: viewport + padding extra ao dar zoom (evita falhas à volta do canvas).
-    const maxChunkXi = Math.floor((width * CHUNK_SIZE - 1) / PLAY_CHUNK_SIZE);
-    const maxChunkYi = Math.floor((height * CHUNK_SIZE - 1) / PLAY_CHUNK_SIZE);
+    const maxChunkXi = Math.floor((width * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
+    const maxChunkYi = Math.floor((height * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const padC = playCam.chunkPad;
     let cStartX = Math.max(0, Math.floor(startX / PLAY_CHUNK_SIZE) - padC);
     let cStartY = Math.max(0, Math.floor(startY / PLAY_CHUNK_SIZE) - padC);
@@ -502,8 +506,8 @@ export function render(canvas, data, options = {}) {
       const pCol = options.settings?.player;
       const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
       const cy = pCol ? Math.floor(pCol.y) : startY + Math.floor((endY - startY) / 2);
-      const microWPre = width * CHUNK_SIZE;
-      const microHPre = height * CHUNK_SIZE;
+      const microWPre = width * MACRO_TILE_STRIDE;
+      const microHPre = height * MACRO_TILE_STRIDE;
       const ox0p = Math.max(0, Math.max(startX, cx - COLL_OVERLAY_RAD) - 10);
       const ox1p = Math.min(microWPre, Math.min(endX, cx + COLL_OVERLAY_RAD + 1) + 10);
       const oy0p = Math.max(0, Math.max(startY, cy - COLL_OVERLAY_RAD) - 12);
@@ -600,7 +604,7 @@ export function render(canvas, data, options = {}) {
           const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
           if (gateSet) {
             const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-            if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
+            if (getRoleForCell(my, mx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
           }
 
           const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
@@ -634,7 +638,7 @@ export function render(canvas, data, options = {}) {
       const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
       if (gateSet) {
         const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-        if (getRoleForCell(my, mx, height * CHUNK_SIZE, width * CHUNK_SIZE, checkAtOrAbove, gateSet.type) !== 'CENTER') return false;
+        if (getRoleForCell(my, mx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) !== 'CENTER') return false;
       }
       return true;
     };
@@ -670,8 +674,12 @@ export function render(canvas, data, options = {}) {
 
       const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
       const firePhase = grassFireVisualPhaseAt(mx, my);
+      const charredRegrowU =
+        firePhase === 'charred' ? (grassFireCharredRegrowth01(mx, my) ?? 0) : 0;
+      const showFireOverlay =
+        firePhase && (layers.base || layers.top) && !(firePhase === 'charred' && charredRegrowU >= 1);
 
-      if (firePhase && (layers.base || layers.top)) {
+      if (showFireOverlay) {
         const burning = firePhase === 'burning';
         /** Mesmas sprites da grama: `ctx.filter` respeita o alpha do PNG (só folha escurece). */
         const blitGrassFramesForFire = () => {
@@ -700,13 +708,13 @@ export function render(canvas, data, options = {}) {
             }
           }
         };
-        ctx.save();
-        ctx.filter = burning
-          ? 'brightness(0.62) saturate(1.9) sepia(1) hue-rotate(-10deg) contrast(1.1)'
-          : 'brightness(0.24) contrast(1.25) saturate(0.55) sepia(0.4)';
-        blitGrassFramesForFire();
-        ctx.filter = 'none';
+        const charredFilter = 'brightness(0.24) contrast(1.25) saturate(0.55) sepia(0.4)';
         if (burning) {
+          ctx.save();
+          ctx.filter =
+            'brightness(0.62) saturate(1.9) sepia(1) hue-rotate(-10deg) contrast(1.1)';
+          blitGrassFramesForFire();
+          ctx.filter = 'none';
           ctx.globalCompositeOperation = 'lighter';
           ctx.globalAlpha = playerTopOverlay ? 0.14 * PLAYER_TILE_GRASS_OVERLAY_ALPHA : 0.16;
           ctx.filter = 'brightness(1.65) sepia(1) hue-rotate(-22deg) saturate(2.2)';
@@ -714,8 +722,25 @@ export function render(canvas, data, options = {}) {
           ctx.filter = 'none';
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1;
+          ctx.restore();
+        } else {
+          const u = Math.max(0, Math.min(1, charredRegrowU));
+          ctx.save();
+          if (u <= 0) {
+            ctx.filter = charredFilter;
+            blitGrassFramesForFire();
+            ctx.filter = 'none';
+          } else {
+            ctx.globalAlpha = 1 - u;
+            ctx.filter = charredFilter;
+            blitGrassFramesForFire();
+            ctx.filter = 'none';
+            ctx.globalAlpha = u;
+            blitGrassFramesForFire();
+            ctx.globalAlpha = 1;
+          }
+          ctx.restore();
         }
-        ctx.restore();
         if (playerTopOverlay) {
           ctx.restore();
         }
@@ -781,7 +806,7 @@ export function render(canvas, data, options = {}) {
     const sortableScanPad = lodDetail >= 2 ? 2 : 4;
     for (let myScan = startY - sortableScanPad; myScan < endY; myScan++) {
       for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
-        if (mxScan < 0 || myScan < 0 || mxScan >= width * CHUNK_SIZE || myScan >= height * CHUNK_SIZE) continue;
+        if (mxScan < 0 || myScan < 0 || mxScan >= width * MACRO_TILE_STRIDE || myScan >= height * MACRO_TILE_STRIDE) continue;
         const t = getCached(mxScan, myScan);
         if (!t || t.heightStep < 1) continue;
 
@@ -809,7 +834,7 @@ export function render(canvas, data, options = {}) {
             const isSortable = isSortableScatter(itemKey);
             // Even if not "sortable" (like grass), we check for "tops" that need sorting
             const objSet = OBJECT_SETS[itemKey];
-            if (objSet && validScatterOriginMicro(mxScan, myScan, data.seed, width * CHUNK_SIZE, height * CHUNK_SIZE, (c, r) => getCached(c, r))) {
+            if (objSet && validScatterOriginMicro(mxScan, myScan, data.seed, width * MACRO_TILE_STRIDE, height * MACRO_TILE_STRIDE, (c, r) => getCached(c, r))) {
                const { cols, rows } = parseShape(objSet.shape);
                const hasTop = objSet.parts.some(p => p.role === 'top' || p.role === 'tops');
                if (isSortable || hasTop) {
@@ -1435,8 +1460,8 @@ export function render(canvas, data, options = {}) {
     }
 
     // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
-    const microW = width * CHUNK_SIZE;
-    const microH = height * CHUNK_SIZE;
+    const microW = width * MACRO_TILE_STRIDE;
+    const microH = height * MACRO_TILE_STRIDE;
     for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
       const mx = overlayMx + dx;
       const my = overlayMy + dy;
@@ -1577,8 +1602,8 @@ export function render(canvas, data, options = {}) {
           }
         }
 
-        const microWColOv = width * CHUNK_SIZE;
-        const microHColOv = height * CHUNK_SIZE;
+        const microWColOv = width * MACRO_TILE_STRIDE;
+        const microHColOv = height * MACRO_TILE_STRIDE;
         const scatterPhyMemo = new Map();
         ctx.lineWidth = 2;
         for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
@@ -1709,8 +1734,8 @@ export function render(canvas, data, options = {}) {
     {
       const collMx = player.x;
       const collMy = player.y;
-      const microWCol = width * CHUNK_SIZE;
-      const microHCol = height * CHUNK_SIZE;
+      const microWCol = width * MACRO_TILE_STRIDE;
+      const microHCol = height * MACRO_TILE_STRIDE;
       if (collMx >= 0 && collMy >= 0 && collMx < microWCol && collMy < microHCol) {
         const collCx = snapPx((collMx + 0.5) * tileW);
         const collCyGround = snapPx((collMy + 0.5) * tileH);

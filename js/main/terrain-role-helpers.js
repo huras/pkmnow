@@ -1,5 +1,5 @@
 import { BIOME_TO_TERRAIN } from '../biome-tiles.js';
-import { CHUNK_SIZE, getMicroTile } from '../chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { TERRAIN_SETS } from '../tessellation-data.js';
 import { getRoleForCell } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
@@ -31,8 +31,8 @@ export function computeTerrainRoleAndSprite(mx, my, data, surfaceLevel) {
   const setName = terrainSetNameForMicroTile(tile);
   const set = TERRAIN_SETS[setName];
   if (!set) return { setName, set: null, role: null, spriteId: null };
-  const H = data.height * CHUNK_SIZE;
-  const W = data.width * CHUNK_SIZE;
+  const H = data.height * MACRO_TILE_STRIDE;
+  const W = data.width * MACRO_TILE_STRIDE;
   const isAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= surfaceLevel;
   const role = getRoleForCell(my, mx, H, W, isAtOrAbove, set.type);
   const spriteId =
