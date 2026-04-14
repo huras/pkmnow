@@ -20,6 +20,17 @@ export const FLIGHT_CAM_SHADOW_Y_FRAC = 0.5;
  */
 export const FLIGHT_CAM_TOP_PAD_PX = 40;
 
+/**
+ * During flight zoom fit only: extra world-tile span **above** the sprite head so
+ * `scaleFit` zooms out enough for shadow-at-center + Pokémon-high framing (with {@link FLIGHT_CAM_TOP_PAD_PX}).
+ */
+export const FLIGHT_CAM_ZOOM_SKY_TILES = 0.55;
+
+/**
+ * During flight: multiply {@link FRAMED_VERTICAL_FRAC} for zoom fit only (values below 1 zoom out slightly).
+ */
+export const FLIGHT_CAM_ZOOM_VERTICAL_FRAC_MUL = 0.9;
+
 /** Only apply flight framing when airborne above this z (tiles), to avoid jitter on the ground. */
 const FLIGHT_CAM_Z_EPS = 0.02;
 
@@ -49,6 +60,25 @@ function verticalFramingSpanCoeff(z, framingHeightTiles, vy) {
   const wHead = wFeet - H;
   const wFeetHi = wFeet + 0.1;
   const yLoC = Math.min(wShadowLo, wHead, wFeet);
+  const yHiC = Math.max(wShadowHi, wHead, wFeet, wFeetHi);
+  return Math.max(0.08, yHiC - yLoC);
+}
+
+/**
+ * Vertical span (tile-row units) used only for `scaleFit` while airborne in flight:
+ * same band as {@link verticalFramingSpanCoeff} plus extra sky above the head so zoom
+ * matches shadow-centered / sprite-high translation.
+ */
+function verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy) {
+  const vc = vy + 0.5;
+  const zClamped = Math.max(0, z);
+  const H = Math.max(0.6, framingHeightTiles);
+  const wShadowLo = vc - 0.18;
+  const wShadowHi = vc + 0.18;
+  const wFeet = vc - zClamped;
+  const wHead = wFeet - H;
+  const wFeetHi = wFeet + 0.1;
+  const yLoC = Math.min(wShadowLo, wHead, wFeet) - FLIGHT_CAM_ZOOM_SKY_TILES;
   const yHiC = Math.max(wShadowHi, wHead, wFeet, wFeetHi);
   return Math.max(0.08, yHiC - yLoC);
 }
@@ -96,8 +126,16 @@ export function computePlayViewState(p) {
     Math.min(1, VIEW_SCALE_MIN + (1 - VIEW_SCALE_MIN) * (1 - t) - flightTighten)
   );
 
-  const K = verticalFramingSpanCoeff(z, framingHeightTiles, vy);
-  const scaleFit = (ch * FRAMED_VERTICAL_FRAC) / (PLAY_BAKE_TILE_PX * K);
+  const flightZoom =
+    flightActive && z > FLIGHT_CAM_Z_EPS
+      ? verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy)
+      : verticalFramingSpanCoeff(z, framingHeightTiles, vy);
+  const K = flightZoom;
+  const zoomVerticalFrac =
+    flightActive && z > FLIGHT_CAM_Z_EPS
+      ? FRAMED_VERTICAL_FRAC * FLIGHT_CAM_ZOOM_VERTICAL_FRAC_MUL
+      : FRAMED_VERTICAL_FRAC;
+  const scaleFit = (ch * zoomVerticalFrac) / (PLAY_BAKE_TILE_PX * K);
   const targetScale = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeel, scaleFit));
 
   smoothedViewScale += (targetScale - smoothedViewScale) * (1 - Math.exp(-VIEW_SCALE_LAMBDA * dt));

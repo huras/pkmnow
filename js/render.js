@@ -40,6 +40,10 @@ import {
   worldFeetFromPivotCell
 } from './pokemon/pmd-layout-metrics.js';
 import {
+  getPokemonHurtboxCenterWorldXY,
+  getPokemonHurtboxRadiusTiles
+} from './pokemon/pokemon-combat-hurtbox.js';
+import {
   speciesHasFlyingType,
   speciesHasGroundType,
   speciesHasSmoothLevitationFlight
@@ -315,6 +319,30 @@ function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, image
   ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
   ctx.fillRect(fcx - 2, fcyBody - 2, 4, 4);
+}
+
+/** Combat hurtbox (damage) — sprite-centered XY, same z lift as body circle; not walk feet. */
+function drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx) {
+  const zLift = Math.max(0, Number(item.airZ) || 0);
+  const dex = item.dexId ?? 94;
+  const { hx, hy } = getPokemonHurtboxCenterWorldXY(item.x, item.y, dex);
+  const hr = getPokemonHurtboxRadiusTiles(dex);
+  const hcx = snapPx(hx * tileW);
+  const hcy = snapPx(hy * tileH - zLift * tileH);
+  const rx = Math.max(2, hr * tileW);
+  const ry = Math.max(2, hr * tileH);
+
+  ctx.strokeStyle = 'rgba(255, 130, 55, 0.92)';
+  ctx.fillStyle = 'rgba(255, 100, 40, 0.07)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.ellipse(hcx, hcy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255, 200, 140, 0.95)';
+  ctx.fillRect(hcx - 2, hcy - 2, 4, 4);
 }
 
 export {
@@ -1631,6 +1659,7 @@ export function render(canvas, data, options = {}) {
       for (const item of renderItems) {
         if (item.type === 'player' || item.type === 'wild') {
           drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
+          drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx);
         } else if (item.type === 'scatter' || item.type === 'tree') {
           ctx.fillStyle = 'rgba(255, 80, 255, 0.65)';
           ctx.fillRect(item.originX * tileW + tileW / 2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);
@@ -1642,6 +1671,7 @@ export function render(canvas, data, options = {}) {
       for (const item of renderItems) {
         if (item.type === 'player' || item.type === 'wild') {
           drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
+          drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx);
         }
       }
       ctx.restore();

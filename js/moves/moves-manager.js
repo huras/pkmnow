@@ -8,7 +8,6 @@ import {
   SILK_TRAIL_INTERVAL,
   LASER_TRAIL_INTERVAL,
   COLLISION_BROAD_PHASE_TILES,
-  PROJECTILE_Z_HIT_TOLERANCE_TILES,
   WILD_MOVE_COOLDOWN_DEFAULT,
   FIRE_FRAME_W,
   FIRE_FRAME_H
@@ -39,6 +38,11 @@ import {
   grassFireTryIgniteAt,
   GRASS_FIRE_PARTICLE_SEC
 } from '../play-grass-fire.js';
+import {
+  getPokemonHurtboxCenterWorldXY,
+  getPokemonHurtboxRadiusTiles,
+  projectileZInPokemonHurtbox
+} from '../pokemon/pokemon-combat-hurtbox.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -126,20 +130,14 @@ function spawnTrailParticle(px, py, trailType, baseZ = 0) {
   });
 }
 
-function checkCollision(px, py, pr, target) {
-  const targetR = 0.5;
-  const dist = Math.hypot(target.x - px, target.y - py);
-  return dist < pr + targetR;
+/** XY overlap for damage: projectile circle vs target hurt radius (tiles), not walk collider. */
+function checkDamageHitCircle(px, py, projRadius, targetX, targetY, targetHurtRadiusTiles) {
+  const dist = Math.hypot(targetX - px, targetY - py);
+  return dist < projRadius + targetHurtRadiusTiles;
 }
 
 function broadPhaseOk(px, py, tx, ty) {
   return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
-}
-
-function zHitAligned(projZ, targetZ) {
-  const pz = Number(projZ) || 0;
-  const tz = Number(targetZ) || 0;
-  return Math.abs(pz - tz) <= PROJECTILE_Z_HIT_TOLERANCE_TILES;
 }
 
 /**
@@ -149,9 +147,12 @@ function checkPlayerHit(proj, player) {
   if (!proj.hitsPlayer) return false;
   const px = player.visualX ?? player.x;
   const py = player.visualY ?? player.y;
-  if (!broadPhaseOk(proj.x, proj.y, px, py)) return false;
-  if (!zHitAligned(proj.z, player.z ?? 0)) return false;
-  return checkCollision(proj.x, proj.y, proj.radius, { x: px, y: py });
+  const dex = player.dexId ?? 1;
+  const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
+  if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return false;
+  if (!projectileZInPokemonHurtbox(proj.z, dex, player.z ?? 0)) return false;
+  const hurtR = getPokemonHurtboxRadiusTiles(dex);
+  return checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR);
 }
 
 /** @param {number | null | undefined} effectZ — impact height; default `proj.z` (spawn altitude). */
@@ -188,7 +189,12 @@ function applySplashToWild(proj, wildList, splashZ) {
   const sz = splashZ !== undefined ? Number(splashZ) || 0 : proj.z || 0;
   for (const wild of wildList) {
     if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
-    if (Math.hypot(wild.x - proj.x, wild.y - proj.y) <= r && zHitAligned(sz, wild.z ?? 0)) {
+    const splashDex = wild.dexId ?? 1;
+    const { hx: shx, hy: shy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, splashDex);
+    if (
+      Math.hypot(shx - proj.x, shy - proj.y) <= r &&
+      projectileZInPokemonHurtbox(sz, splashDex, wild.z ?? 0)
+    ) {
       if (wild.takeDamage) wild.takeDamage(d);
     }
   }
@@ -759,10 +765,13 @@ export function updateMoves(dt, wildPokemonList, data, player) {
         if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) {
           continue;
         }
-        if (!broadPhaseOk(proj.x, proj.y, wild.x, wild.y)) continue;
         const wz = wild.z ?? 0;
-        if (!zHitAligned(proj.z, wz)) continue;
-        if (checkCollision(proj.x, proj.y, proj.radius, wild)) {
+        const wDex = wild.dexId ?? 1;
+        const { hx, hy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, wDex);
+        if (!broadPhaseOk(proj.x, proj.y, hx, hy)) continue;
+        if (!projectileZInPokemonHurtbox(proj.z, wDex, wz)) continue;
+        const hurtR = getPokemonHurtboxRadiusTiles(wDex);
+        if (checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) {
           if (wild.takeDamage) wild.takeDamage(proj.damage);
           spawnHitParticles(proj.x, proj.y, wz);
           if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
