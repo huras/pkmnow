@@ -160,12 +160,39 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     ctx.fillRect(-Math.max(3, tileW * 0.16), -Math.max(2, tileH * 0.07), Math.max(7, tileW * 0.32), Math.max(4, tileH * 0.14));
     ctx.restore();
   } else if (p.type === 'prismaticShot') {
-    const colors = ['#ff1744', '#ff9100', '#ffee58', '#40c4ff', '#7c4dff'];
-    const idx = Math.floor(((time * 25) % colors.length + colors.length) % colors.length);
-    ctx.fillStyle = colors[idx];
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
-    ctx.fill();
+    const ang = Math.atan2(p.vy || 0, p.vx || 1);
+    const hueBase = (Number(p.rainbowHue0) || 0) + time * 220;
+    if (p.laserStream) {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ang);
+      const len = Math.max(10, tileW * 0.62);
+      const th = Math.max(2.2, tileH * 0.055);
+      const h0 = hueBase % 360;
+      const h1 = (hueBase + 72) % 360;
+      const h2 = (hueBase + 144) % 360;
+      const grd = ctx.createLinearGradient(-len * 0.5, 0, len * 0.5, 0);
+      grd.addColorStop(0, `hsla(${h0}, 100%, 62%, 0.25)`);
+      grd.addColorStop(0.35, `hsla(${h1}, 100%, 56%, 0.92)`);
+      grd.addColorStop(0.65, `hsla(${h2}, 100%, 64%, 0.92)`);
+      grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.22)`);
+      ctx.fillStyle = grd;
+      ctx.shadowColor = `hsla(${(h1 + 40) % 360}, 100%, 65%, 0.85)`;
+      ctx.shadowBlur = 14;
+      ctx.fillRect(-len * 0.5, -th * 0.5, len, th);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.55)`;
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(-len * 0.5, -th * 0.5, len, th);
+      ctx.restore();
+    } else {
+      const colors = ['#ff1744', '#ff9100', '#ffee58', '#40c4ff', '#7c4dff'];
+      const idx = Math.floor(((time * 25 + (p.rainbowHue0 || 0)) % colors.length + colors.length) % colors.length);
+      ctx.fillStyle = colors[idx];
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (p.type === 'poisonPowderShot') {
     ctx.fillStyle = 'rgba(120,255,140,0.55)';
     ctx.beginPath();
@@ -265,9 +292,10 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
     ctx.fill();
   } else if (p.type === 'laserTrail') {
-    ctx.fillStyle = '#ffd6ff';
+    const hue = ((p.x + p.y) * 47 + performance.now() * 0.08) % 360;
+    ctx.fillStyle = `hsla(${hue}, 92%, 68%, ${0.35 + 0.55 * a})`;
     ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.09) * a, 0, Math.PI * 2);
+    ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
     ctx.fill();
   } else {
     ctx.fillStyle = '#ffff88';

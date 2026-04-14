@@ -76,6 +76,9 @@ let playerSilkShootCooldown = 0;
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.072;
 
+/** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
+const PRISMATIC_STREAM_INTERVAL = 0.076;
+
 function pushProjectile(p) {
   while (activeProjectiles.length >= MAX_PROJECTILES) activeProjectiles.shift();
   activeProjectiles.push(p);
@@ -283,6 +286,22 @@ export function tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, t
   return true;
 }
 
+/**
+ * One prismatic laser stream puff (hold / hotkey). Same idea as flamethrower stream.
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerPrismaticLaserCooldown > 0) return false;
+  playerPrismaticLaserCooldown = PRISMATIC_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    streamPuff: true
+  });
+  return true;
+}
+
 export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   return tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
@@ -332,14 +351,7 @@ export function castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity
 }
 
 export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerPrismaticLaserCooldown > 0) return false;
-  playerPrismaticLaserCooldown = 1.45;
-  bumpPlayerMoveCastVisual(sourceEntity);
-  castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
-    fromWild: false,
-    pushProjectile
-  });
-  return true;
+  return tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -567,7 +579,7 @@ export function getPlayerMoveCooldownUiMax(moveId) {
     case 'psybeam':
       return 0.75;
     case 'prismaticLaser':
-      return 1.45;
+      return PRISMATIC_STREAM_INTERVAL;
     case 'poisonPowder':
       return 0.95;
     case 'incinerate':

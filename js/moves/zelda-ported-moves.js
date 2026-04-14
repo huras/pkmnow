@@ -237,11 +237,67 @@ export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, op
   });
 }
 
+/**
+ * Rainbow laser: player hold-stream uses `streamPuff` (short bursts like flamethrower); wild = wide volley.
+ * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ */
 export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  const { fromWild = false, pushProjectile } = opts;
-  const maxR = fromWild ? 12 : 15;
+  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
+  const maxR = fromWild ? 12 : streamPuff ? 10 : 15;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
-  const count = 12;
+
+  if (streamPuff && !fromWild) {
+    const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+    const baseA = Math.atan2(base.aimY - sourceY, base.aimX - sourceX);
+    const count = 5;
+    const spreadMag = 0.11;
+    const dmg = 2.35;
+    for (let i = 0; i < count; i++) {
+      const spread = (Math.random() - 0.5) * spreadMag;
+      const a = baseA + spread;
+      const dist = Math.max(0.15, base.dist0) * (0.9 + Math.random() * 0.2);
+      const rawTx = sourceX + Math.cos(a) * dist;
+      const rawTy = sourceY + Math.sin(a) * dist;
+      const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+      const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
+      const speed = 19 + Math.random() * 2.8;
+      const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.42);
+      const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
+        sp.startX,
+        sp.startY,
+        sp.startZ,
+        aimX,
+        aimY,
+        sourceX,
+        sourceY,
+        speed,
+        maxHorizForTtl,
+        { ttlMargin: 1.05, ttlPad: 0.08 }
+      );
+      pushLinearProjectile(pushProjectile, {
+        type: 'prismaticShot',
+        x: sp.startX,
+        y: sp.startY,
+        vx,
+        vy,
+        vz,
+        z: sp.startZ,
+        radius: 0.18,
+        timeToLive,
+        damage: dmg,
+        sourceEntity,
+        fromWild,
+        hitsWild: !fromWild,
+        hitsPlayer: !!fromWild,
+        trailAcc: LASER_TRAIL_INTERVAL * (i / count),
+        laserStream: true,
+        rainbowHue0: (i * 61 + sourceX * 17 + sourceY * 13) % 360
+      });
+    }
+    return;
+  }
+
+  const count = fromWild ? 10 : 12;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.08;
     const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
@@ -276,7 +332,9 @@ export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEnt
       fromWild,
       hitsWild: !fromWild,
       hitsPlayer: !!fromWild,
-      trailAcc: LASER_TRAIL_INTERVAL * (i / count)
+      trailAcc: LASER_TRAIL_INTERVAL * (i / count),
+      laserStream: false,
+      rainbowHue0: (i * 41) % 360
     });
   }
 }

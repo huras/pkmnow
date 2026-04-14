@@ -4,7 +4,8 @@ import {
   castMoveById,
   castMoveChargedById,
   castUltimate,
-  tryCastPlayerFlamethrowerStreamPuff
+  tryCastPlayerFlamethrowerStreamPuff,
+  tryCastPlayerPrismaticStreamPuff
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
 
@@ -25,6 +26,13 @@ let rightShiftAtDown = false;
 /** True after at least one flamethrower puff this LMB press (hold-stream). */
 let leftFlameStreamedThisPress = false;
 let rightFlameStreamedThisPress = false;
+/** True after at least one prismatic laser stream puff this press. */
+let leftPrismaticStreamedThisPress = false;
+let rightPrismaticStreamedThisPress = false;
+
+function isHoldStreamMoveId(moveId) {
+  return moveId === 'flamethrower' || moveId === 'prismaticLaser';
+}
 
 function combatModifierHeld() {
   return !!playInputState.ctrlLeftHeld;
@@ -66,7 +74,9 @@ export function castMappedMoveByHotkey(code, player) {
   const moveId = HOTKEY_TO_MOVE_ID[code];
   if (!moveId || !player) return false;
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (moveId === 'flamethrower') applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+  if (moveId === 'flamethrower' || moveId === 'prismaticLaser') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+  }
   castMoveById(moveId, sx, sy, tx, ty, player);
   return true;
 }
@@ -89,10 +99,10 @@ export function updatePlayPointerCombat(dt, player) {
   if (!player) return;
   const slots = resolveSlots(player);
   const mod = combatModifierHeld();
-  if (leftHeld && !mod && slots.leftTap !== 'flamethrower') {
+  if (leftHeld && !mod && !isHoldStreamMoveId(slots.leftTap)) {
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
   }
-  if (rightHeld && !mod && slots.rightTap !== 'flamethrower') {
+  if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap)) {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
   }
   const { sx, sy, tx, ty } = aimAtCursor(player);
@@ -103,6 +113,14 @@ export function updatePlayPointerCombat(dt, player) {
   if (rightHeld && !mod && slots.rightTap === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
+  }
+  if (leftHeld && !mod && slots.leftTap === 'prismaticLaser') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) leftPrismaticStreamedThisPress = true;
+  }
+  if (rightHeld && !mod && slots.rightTap === 'prismaticLaser') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
   }
 }
 
@@ -130,6 +148,7 @@ export function installPlayPointerCombat(deps) {
         leftDownAt = performance.now();
         leftShiftAtDown = sh;
         leftFlameStreamedThisPress = false;
+        leftPrismaticStreamedThisPress = false;
         playInputState.chargeLeft01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
@@ -138,6 +157,7 @@ export function installPlayPointerCombat(deps) {
         rightDownAt = performance.now();
         rightShiftAtDown = sh;
         rightFlameStreamedThisPress = false;
+        rightPrismaticStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 1) {
@@ -167,6 +187,11 @@ export function installPlayPointerCombat(deps) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
         }
+      } else if (slots.leftTap === 'prismaticLaser') {
+        if (!leftPrismaticStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
+        }
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.leftTap, sx, sy, tx, ty, player);
       } else {
@@ -185,6 +210,11 @@ export function installPlayPointerCombat(deps) {
         if (!rightFlameStreamedThisPress) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
+        }
+      } else if (slots.rightTap === 'prismaticLaser') {
+        if (!rightPrismaticStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
         }
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.rightTap, sx, sy, tx, ty, player);
