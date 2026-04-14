@@ -43,7 +43,8 @@ function isPlayMovementKeyEvent(e) {
  *   refreshPlayModeInfoBar: () => void,
  *   getPlayFpsEl: () => HTMLElement | null,
  *   player: import('../player.js').player,
- *   onPlayHudFrame?: (data: object | null) => void
+ *   onPlayHudFrame?: (data: object | null) => void,
+ *   advanceWorldTime?: (dt: number) => void
  * }} api
  */
 export function createGameLoop(api) {
@@ -55,7 +56,8 @@ export function createGameLoop(api) {
     refreshPlayModeInfoBar,
     getPlayFpsEl,
     player,
-    onPlayHudFrame
+    onPlayHudFrame,
+    advanceWorldTime
   } = api;
 
   function gameLoop(timestamp) {
@@ -63,6 +65,7 @@ export function createGameLoop(api) {
     const dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
     setGameTime(timestamp / 1000);
+    if (getAppMode() === 'play') advanceWorldTime?.(dt);
 
     let inX = 0;
     let inY = 0;

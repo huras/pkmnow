@@ -1903,6 +1903,16 @@ export function render(canvas, data, options = {}) {
       ctx.restore();
     }
 
+    const tint = options.settings?.dayCycleTint;
+    if (tint && typeof tint.r === 'number') {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgb(${tint.r},${tint.g},${tint.b})`;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    }
+
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
   }

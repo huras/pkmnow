@@ -38,6 +38,14 @@ import {
   clearPlayCameraSnapshot
 } from './render/play-camera-snapshot.js';
 import { stopBiomeBgm } from './audio/biome-bgm.js';
+import {
+  advanceWorldHours,
+  dayPhaseLabelEn,
+  getDayCycleTintRgb,
+  getDayPhaseFromHours,
+  PRESET_HOUR,
+  wrapHours
+} from './main/world-time-of-day.js';
 
 const canvas = document.getElementById('map');
 const minimap = document.getElementById('minimap');
@@ -65,6 +73,10 @@ const debugContent = document.getElementById('tile-debug-content');
 const btnDebugClose = document.getElementById('tile-debug-close');
 const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
+const playWorldTimeSlider = document.getElementById('play-world-time-slider');
+const playWorldTimeRun = document.getElementById('play-world-time-run');
+const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
+const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 
 let currentData = null;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
@@ -72,6 +84,11 @@ let playCharacterSelector = null;
 let appMode = 'map';
 let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
+/** World clock for day phases (hours in [0, 24)). */
+let worldHours = 12;
+let worldTimeRunning = false;
+/** @type {string | null} */
+let lastWorldTimePanelPhase = null;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
 
@@ -131,6 +148,31 @@ function refreshPlayModeInfoBar(force = false) {
   infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
 }
 
+function readWorldHoursPerRealSec() {
+  const el = document.getElementById('play-world-time-speed');
+  const v = parseFloat(String(el?.value ?? '0.5'));
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+function syncPlayWorldTimePanel() {
+  if (appMode !== 'play') return;
+  if (!playWorldTimePhaseEl || !playWorldTimeHourEl) return;
+  const wh = wrapHours(worldHours);
+  const phase = getDayPhaseFromHours(wh);
+  if (phase !== lastWorldTimePanelPhase) {
+    lastWorldTimePanelPhase = phase;
+    playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
+  }
+  playWorldTimeHourEl.textContent = `${wh.toFixed(2)} h`;
+  if (playWorldTimeSlider) {
+    const stepped = Math.round(wh / 0.05) * 0.05;
+    const sVal = parseFloat(playWorldTimeSlider.value);
+    if (!Number.isFinite(sVal) || Math.abs(sVal - stepped) > 1e-4) {
+      playWorldTimeSlider.value = String(stepped);
+    }
+  }
+}
+
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
@@ -143,6 +185,8 @@ function getSettings() {
   } else {
     clearPlayColliderOverlayCache();
   }
+  const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
+  const dayCycleTint = getDayCycleTintRgb(dayPhase);
   return {
     viewType,
     overlayPaths,
@@ -153,7 +197,10 @@ function getSettings() {
     playDetailColliderHighlight,
     appMode,
     player,
-    time: gameTime
+    time: gameTime,
+    dayPhase,
+    worldHours: wrapHours(worldHours),
+    dayCycleTint
   };
 }
 
@@ -172,9 +219,14 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   refreshPlayModeInfoBar,
   getPlayFpsEl: () => playFpsEl,
   player,
+  advanceWorldTime: (dt) => {
+    if (appMode !== 'play') return;
+    worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
+  },
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
+    syncPlayWorldTimePanel();
   }
 });
 
@@ -331,6 +383,10 @@ function enterPlayMode(gx, gy) {
     "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Debug menu: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
+
+  if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
+  lastWorldTimePanelPhase = null;
+  syncPlayWorldTimePanel();
 
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
@@ -542,6 +598,32 @@ btnGenerate.addEventListener('click', run);
 seedInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') run();
 });
+
+playWorldTimeSlider?.addEventListener('input', () => {
+  const v = parseFloat(playWorldTimeSlider.value);
+  if (!Number.isFinite(v)) return;
+  worldHours = wrapHours(v);
+  lastWorldTimePanelPhase = null;
+  syncPlayWorldTimePanel();
+  updateView();
+});
+
+playWorldTimeRun?.addEventListener('change', () => {
+  worldTimeRunning = !!playWorldTimeRun.checked;
+});
+
+function wireWorldTimePreset(id, hour) {
+  document.getElementById(id)?.addEventListener('click', () => {
+    worldHours = hour;
+    lastWorldTimePanelPhase = null;
+    syncPlayWorldTimePanel();
+    updateView();
+  });
+}
+wireWorldTimePreset('play-world-preset-dawn', PRESET_HOUR.dawn);
+wireWorldTimePreset('play-world-preset-day', PRESET_HOUR.day);
+wireWorldTimePreset('play-world-preset-afternoon', PRESET_HOUR.afternoon);
+wireWorldTimePreset('play-world-preset-night', PRESET_HOUR.night);
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
 document.getElementById('chkPlayColliders')?.addEventListener('change', () => {

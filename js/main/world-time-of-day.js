@@ -1,0 +1,87 @@
+/** @typedef {'dawn' | 'day' | 'afternoon' | 'night'} DayPhase */
+
+/** Inclusive start hour on 24h clock (night wraps midnight). */
+export const PHASE_DAWN_START = 6;
+export const PHASE_DAY_START = 10;
+export const PHASE_AFTERNOON_START = 17;
+export const PHASE_NIGHT_START = 22;
+
+/** Snap targets for the dev panel (hours in [0, 24)). */
+export const PRESET_HOUR = {
+  dawn: 7,
+  day: 12,
+  afternoon: 19,
+  night: 1
+};
+
+/**
+ * @param {number} h hour in [0, 24)
+ * @returns {DayPhase}
+ */
+export function getDayPhaseFromHours(h) {
+  const x = wrapHours(h);
+  if (x >= PHASE_NIGHT_START || x < PHASE_DAWN_START) return 'night';
+  if (x < PHASE_DAY_START) return 'dawn';
+  if (x < PHASE_AFTERNOON_START) return 'day';
+  return 'afternoon';
+}
+
+/**
+ * @param {number} h
+ * @returns {number} hour in [0, 24)
+ */
+export function wrapHours(h) {
+  let x = h % 24;
+  if (x < 0) x += 24;
+  return x;
+}
+
+/**
+ * Multiply-layer tint for canvas (identity when day / white).
+ * @param {DayPhase} phase
+ * @returns {{ r: number, g: number, b: number } | null} null = skip draw
+ */
+export function getDayCycleTintRgb(phase) {
+  switch (phase) {
+    case 'night':
+      return { r: 148, g: 168, b: 228 };
+    case 'dawn':
+      return { r: 255, g: 228, b: 210 };
+    case 'afternoon':
+      return { r: 255, g: 218, b: 190 };
+    case 'day':
+    default:
+      return null;
+  }
+}
+
+/**
+ * @param {number} worldHours
+ * @param {number} dt
+ * @param {boolean} running
+ * @param {number} hoursPerRealSecond
+ * @returns {number}
+ */
+export function advanceWorldHours(worldHours, dt, running, hoursPerRealSecond) {
+  if (!running || hoursPerRealSecond <= 0) return wrapHours(worldHours);
+  return wrapHours(worldHours + dt * hoursPerRealSecond);
+}
+
+/**
+ * @param {DayPhase} phase
+ * @returns {string}
+ */
+export function dayPhaseLabelEn(phase) {
+  switch (phase) {
+    case 'dawn':
+      return 'Dawn';
+    case 'day':
+      return 'Day';
+    case 'afternoon':
+      return 'Afternoon';
+    case 'night':
+      return 'Night';
+    default:
+      return String(phase);
+  }
+}
