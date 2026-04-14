@@ -202,6 +202,12 @@ export class CharacterSelector {
           <div class="player-moves-help">LMB/RMB = 1st/2nd · LCtrl+click = 3rd/4th · MMB = Ultimate</div>
         </div>
 
+        <div
+          id="character-social-numpad"
+          class="play-social-overlay play-social-overlay--panel social-numpad-box"
+          aria-label="Social interactions via numpad"
+        ></div>
+
         <div class="search-container">
           <span class="search-icon">🔍</span>
           <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
@@ -267,6 +273,10 @@ export class CharacterSelector {
     for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
       if (el instanceof HTMLInputElement) el.checked = el.value === mode;
     }
+  }
+
+  getSocialOverlayElement() {
+    return this.container?.querySelector('#character-social-numpad') || null;
   }
 
   async showResults(query) {

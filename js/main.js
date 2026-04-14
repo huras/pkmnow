@@ -83,8 +83,10 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
-const playSocialOverlayEl = document.getElementById('play-social-overlay');
-const playSocialOverlay = createPlaySocialOverlay(playSocialOverlayEl);
+let playSocialOverlay = {
+  flashAction: () => {},
+  clearActive: () => {}
+};
 
 let currentData = null;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
@@ -682,6 +684,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
 loadTilesetImages().then(async () => {
   new BiomesModal();
   playCharacterSelector = new CharacterSelector('character-selector-container');
+  playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   run();
