@@ -12,6 +12,7 @@ import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-co
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
+import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -204,11 +205,12 @@ export function createGameLoop(api) {
  *   getCurrentData: () => object | null,
  *   refreshPlayModeInfoBar: () => void,
  *   onEscapePlay: () => void,
+ *   onPlaySocialAction?: (action: import('../social/social-actions.js').SocialAction) => void,
  *   player: import('../player.js').player
  * }} api
  */
 export function registerPlayKeyboard(api) {
-  const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, player } = api;
+  const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, onPlaySocialAction, player } = api;
 
   /** Same cardinal twice within this window enables sprint; clears when movement stops (game loop). */
   const RUN_DOUBLE_TAP_MS = 320;
@@ -273,6 +275,12 @@ export function registerPlayKeyboard(api) {
       }
       if (e.code === 'ControlLeft') {
         playInputState.ctrlLeftHeld = true;
+      }
+
+      const socialAction = !e.repeat ? getSocialActionByNumpadCode(e.code) : null;
+      if (socialAction) {
+        e.preventDefault();
+        onPlaySocialAction?.(socialAction);
       }
 
       const dir = keyToDir(e.key);

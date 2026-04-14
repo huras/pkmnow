@@ -381,6 +381,88 @@ body.play-mode-active {
   gap: 6px;
 }
 
+.play-social-overlay {
+  display: none;
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 900;
+  width: min(420px, calc(100vw - 160px));
+  padding: 8px 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: #e8e8ec;
+  background: rgba(0, 0, 0, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity 0.2s ease;
+}
+
+.play-social-overlay.is-active {
+  opacity: 1;
+}
+
+.app.play-mode-active .map-wrap .play-social-overlay {
+  display: block;
+}
+
+.play-social-overlay-title {
+  margin-bottom: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ad8ff;
+}
+
+.play-social-overlay-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.play-social-overlay-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.play-social-overlay-item.is-active {
+  border-color: rgba(255, 215, 90, 0.85);
+  background: rgba(255, 215, 90, 0.2);
+}
+
+.play-social-overlay-key {
+  min-width: 16px;
+  color: #b7d8ff;
+  font-weight: 700;
+}
+
+.play-social-overlay-emoji {
+  font-size: 0.9rem;
+}
+
+.play-social-overlay-label {
+  font-size: 0.66rem;
+  color: #e6edf7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.play-social-overlay-last {
+  margin-top: 6px;
+  min-height: 1.1em;
+  color: #c8f5c4;
+}
+
 .play-world-time-title {
   font-weight: 700;
   text-transform: uppercase;

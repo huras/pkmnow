@@ -1,6 +1,9 @@
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
-import { resetWildPokemonManager } from './wild-pokemon/wild-pokemon-manager.js';
+import {
+  resetWildPokemonManager,
+  triggerPlayerSocialAction
+} from './wild-pokemon/wild-pokemon-manager.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
@@ -8,7 +11,7 @@ import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { getEncounters } from './ecodex.js';
-import { player, setPlayerPos } from './player.js';
+import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
 import { speciesHasFlyingType } from './pokemon/pokemon-type-helpers.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
@@ -25,6 +28,7 @@ import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
+import { createPlaySocialOverlay } from './main/play-social-overlay.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
 import {
   buildPlayColliderOverlayCache,
@@ -79,6 +83,8 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
+const playSocialOverlayEl = document.getElementById('play-social-overlay');
+const playSocialOverlay = createPlaySocialOverlay(playSocialOverlayEl);
 
 let currentData = null;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
@@ -257,6 +263,12 @@ registerPlayKeyboard({
   getCurrentData: () => currentData,
   refreshPlayModeInfoBar,
   onEscapePlay: () => btnBackToMap.click(),
+  onPlaySocialAction: (action) => {
+    if (appMode !== 'play') return;
+    playSocialOverlay.flashAction(action.id);
+    showPlayerSocialEmotion(action);
+    triggerPlayerSocialAction(action, player, currentData);
+  },
   player
 });
 
@@ -402,7 +414,7 @@ function enterPlayMode(gx, gy) {
   btnBackToMap.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Debug menu: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
@@ -414,6 +426,7 @@ function enterPlayMode(gx, gy) {
 
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
+  playSocialOverlay.clearActive();
 
   playCharacterSelector?.syncPlayPointerModeRadios();
 
@@ -433,6 +446,7 @@ btnBackToMap.addEventListener('click', () => {
 
   document.body.classList.remove('play-mode-active');
   document.querySelector('.app').classList.remove('play-mode-active');
+  playSocialOverlay.clearActive();
 
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);

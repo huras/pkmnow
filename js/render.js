@@ -1012,6 +1012,29 @@ export function render(canvas, data, options = {}) {
     }
 
     const playerDex = player.dexId || 94;
+    const playerIndicatorSortY = vy + 0.49;
+    const collMx = player.x;
+    const collMy = player.y;
+    const microWCol = width * MACRO_TILE_STRIDE;
+    const microHCol = height * MACRO_TILE_STRIDE;
+    if (collMx >= 0 && collMy >= 0 && collMx < microWCol && collMy < microHCol) {
+      renderItems.push({
+        type: 'playerAimIndicator',
+        sortY: playerIndicatorSortY,
+        collMx,
+        collMy
+      });
+    }
+    const playerEmotionPayload =
+      player.socialEmotionType !== null && typeof player.socialEmotionType === 'number'
+        ? {
+            type: player.socialEmotionType,
+            age: player.socialEmotionAge || 0,
+            portraitSlug:
+              player.socialEmotionPortraitSlug ||
+              defaultPortraitSlugForBalloon(player.socialEmotionType)
+          }
+        : null;
 
     const phDex = getBorrowDigPlaceholderDex(playerDex);
     const inDigCharge = latchGround && player.digCharge01 > 0 && !player.digBurrowMode;
@@ -1136,6 +1159,23 @@ export function render(canvas, data, options = {}) {
         pivotY: dh * PMD_MON_SHEET.pivotYFrac,
         targetHeightTiles
       });
+      if (playerEmotionPayload) {
+        const playerFootSortY = vy + 0.5;
+        const playerEmotionSortY = Math.max(playerFootSortY + 0.018, Math.floor(vy) + 1.008);
+        renderItems.push({
+          type: 'playerEmotion',
+          sortY: playerEmotionSortY,
+          x: vx,
+          y: vy,
+          cx: snapPx((vx + 0.5) * tileW),
+          cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
+          pivotY: dh * PMD_MON_SHEET.pivotYFrac,
+          spawnPhase: 1,
+          spawnType: null,
+          dexId: playerDex,
+          emotion: playerEmotionPayload
+        });
+      }
     }
 
     for (const proj of activeProjectiles) {
@@ -1380,7 +1420,7 @@ export function render(canvas, data, options = {}) {
           snapPx(item.dw),
           snapPx(item.dh)
         );
-      } else if (item.type === 'wildEmotion') {
+      } else if (item.type === 'wildEmotion' || item.type === 'playerEmotion') {
         ctx.globalAlpha = item.spawnPhase;
         let spawnYOffset = 0;
         if (item.spawnPhase < 1) {
@@ -1389,6 +1429,65 @@ export function render(canvas, data, options = {}) {
           else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
         }
         drawWildEmotionOverlay(ctx, item, spawnYOffset);
+      } else if (item.type === 'playerAimIndicator') {
+        const collCx = snapPx((item.collMx + 0.5) * tileW);
+        const collCyGround = snapPx((item.collMy + 0.5) * tileH);
+        const pz = Math.max(0, Number(player.z) || 0);
+        const collCyBody = snapPx((item.collMy + 0.5) * tileH - pz * tileH);
+        const collR = Math.min(tileW, tileH) * 0.5;
+        ctx.strokeStyle = 'rgba(0, 240, 200, 0.92)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(collCx, collCyGround, Math.max(1, collR - 1), 0, Math.PI * 2);
+        ctx.stroke();
+        {
+          const { tx, ty } = aimAtCursor(player);
+          const pcx = player.x + 0.5;
+          const pcy = player.y + 0.5;
+          let dx = (tx - pcx) * tileW;
+          let dy = (ty - pcy) * tileH;
+          if (Math.hypot(dx, dy) < 1e-4) {
+            dx = tileW;
+            dy = 0;
+          }
+          const ang = Math.atan2(dy, dx);
+          ctx.save();
+          ctx.setLineDash([]);
+          ctx.translate(collCx, collCyGround);
+          ctx.rotate(ang);
+          const ring = Math.max(2, collR + 2);
+          ctx.fillStyle = 'rgba(110, 185, 255, 0.92)';
+          ctx.strokeStyle = 'rgba(20, 55, 120, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          const tip = ring + 11;
+          const inner = ring - 2;
+          ctx.moveTo(tip, 0);
+          ctx.lineTo(inner, -6);
+          ctx.lineTo(inner - 2.5, 0);
+          ctx.lineTo(inner, 6);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        if (pz > 0.02) {
+          ctx.strokeStyle = 'rgba(160, 255, 235, 0.65)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(collCx, collCyGround);
+          ctx.lineTo(collCx, collCyBody);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(0, 240, 200, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(collCx, collCyBody, Math.max(1, collR * 0.42), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, itemKey } = item;
         const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
@@ -1518,6 +1617,21 @@ export function render(canvas, data, options = {}) {
     // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
     const microW = width * MACRO_TILE_STRIDE;
     const microH = height * MACRO_TILE_STRIDE;
+    const playerFracY = vy - overlayMy;
+    const playerTouchesSouthTile = playerFracY >= 0.68;
+    const preferSouthBottomOverlay =
+      shouldDrawPlayerOverlay &&
+      playerTouchesSouthTile &&
+      overlayMx >= 0 &&
+      overlayMy + 1 >= 0 &&
+      overlayMx < microW &&
+      overlayMy + 1 < microH &&
+      overlayMx >= startX &&
+      overlayMx < endX &&
+      overlayMy + 1 >= startY &&
+      overlayMy + 1 < endY &&
+      passesAbovePlayerTileGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy)) &&
+      passesAbovePlayerTileGate(overlayMx, overlayMy + 1, getCached(overlayMx, overlayMy + 1));
     for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
       const mx = overlayMx + dx;
       const my = overlayMy + dy;
@@ -1530,12 +1644,23 @@ export function render(canvas, data, options = {}) {
       const tile = getCached(mx, my);
       if (!passesAbovePlayerTileGate(mx, my, tile)) continue;
       const tw = Math.ceil(tileW), th = Math.ceil(tileH), tx = Math.floor(mx * tileW), ty = Math.floor(my * tileH);
-      drawGrass5aForCell(mx, my, tile, tw, th, tx, ty, isEw ? 'playerTopOverlay' : undefined);
+      const useSouthBottomOverlay = preferSouthBottomOverlay && dx === 0 && dy === 1;
+      drawGrass5aForCell(
+        mx,
+        my,
+        tile,
+        tw,
+        th,
+        tx,
+        ty,
+        isEw || useSouthBottomOverlay ? 'playerTopOverlay' : undefined
+      );
     }
 
     // Player tile: bottom strip over sprite on waiting or horizontal-move frame
     if (
       shouldDrawPlayerOverlay &&
+      !preferSouthBottomOverlay &&
       overlayMx >= 0 &&
       overlayMy >= 0 &&
       overlayMx < microW &&
@@ -1785,77 +1910,6 @@ export function render(canvas, data, options = {}) {
       ctx.fillStyle = 'rgba(140, 255, 160, 0.12)';
       ctx.fillRect(detailColliderDbg.mx * tileW, detailColliderDbg.my * tileH, twG, thG);
       ctx.restore();
-    }
-
-    // Indicador de colisão: círculo = 1 tile no centro da célula lógica (player.x, player.y) = chão;
-    // com `player.z` > 0, eixo tracejado até o corpo no ar (mesma convenção que sprite / projéteis).
-    {
-      const collMx = player.x;
-      const collMy = player.y;
-      const microWCol = width * MACRO_TILE_STRIDE;
-      const microHCol = height * MACRO_TILE_STRIDE;
-      if (collMx >= 0 && collMy >= 0 && collMx < microWCol && collMy < microHCol) {
-        const collCx = snapPx((collMx + 0.5) * tileW);
-        const collCyGround = snapPx((collMy + 0.5) * tileH);
-        const pz = Math.max(0, Number(player.z) || 0);
-        const collCyBody = snapPx((collMy + 0.5) * tileH - pz * tileH);
-        const collR = Math.min(tileW, tileH) * 0.5;
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0, 240, 200, 0.92)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.arc(collCx, collCyGround, Math.max(1, collR - 1), 0, Math.PI * 2);
-        ctx.stroke();
-        {
-          const { tx, ty } = aimAtCursor(player);
-          const pcx = player.x + 0.5;
-          const pcy = player.y + 0.5;
-          let dx = (tx - pcx) * tileW;
-          let dy = (ty - pcy) * tileH;
-          if (Math.hypot(dx, dy) < 1e-4) {
-            dx = tileW;
-            dy = 0;
-          }
-          const ang = Math.atan2(dy, dx);
-          ctx.save();
-          ctx.setLineDash([]);
-          ctx.translate(collCx, collCyGround);
-          ctx.rotate(ang);
-          const ring = Math.max(2, collR + 2);
-          ctx.fillStyle = 'rgba(110, 185, 255, 0.92)';
-          ctx.strokeStyle = 'rgba(20, 55, 120, 0.5)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          const tip = ring + 11;
-          const inner = ring - 2;
-          ctx.moveTo(tip, 0);
-          ctx.lineTo(inner, -6);
-          ctx.lineTo(inner - 2.5, 0);
-          ctx.lineTo(inner, 6);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          ctx.restore();
-        }
-        if (pz > 0.02) {
-          ctx.strokeStyle = 'rgba(160, 255, 235, 0.65)';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([3, 4]);
-          ctx.beginPath();
-          ctx.moveTo(collCx, collCyGround);
-          ctx.lineTo(collCx, collCyBody);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.strokeStyle = 'rgba(0, 240, 200, 0.75)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(collCx, collCyBody, Math.max(1, collR * 0.42), 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
     }
 
     if (

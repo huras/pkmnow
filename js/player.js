@@ -28,6 +28,7 @@ import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
+import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
 
 const MAX_SPEED = 3.2;
 const ACCEL = 32.0;
@@ -101,7 +102,11 @@ export const player = {
   /** HUD-only poison indicator after Poison Sting. */
   poisonVisualSec: 0,
   /** Seconds remaining: play `shoot` PMD slice after a successful player cast (if asset exists). */
-  moveShootAnimSec: 0
+  moveShootAnimSec: 0,
+  /** Social emoji balloon rendered above the player. */
+  socialEmotionType: null,
+  socialEmotionAge: 0,
+  socialEmotionPortraitSlug: null
 };
 
 export function setPlayerSpecies(dexId) {
@@ -119,6 +124,9 @@ export function setPlayerSpecies(dexId) {
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
   player._chargeAnimTick = 0;
+  player.socialEmotionType = null;
+  player.socialEmotionAge = 0;
+  player.socialEmotionPortraitSlug = null;
 }
 
 export function setPlayerPos(x, y) {
@@ -143,6 +151,20 @@ export function setPlayerPos(x, y) {
   player.hp = player.maxHp ?? 100;
   player.projIFrameSec = 0;
   player.poisonVisualSec = 0;
+  player.socialEmotionType = null;
+  player.socialEmotionAge = 0;
+  player.socialEmotionPortraitSlug = null;
+}
+
+/**
+ * @param {{ balloonType?: number, portraitSlug?: string | null } | null | undefined} action
+ */
+export function showPlayerSocialEmotion(action) {
+  const balloonType = Number(action?.balloonType);
+  if (!Number.isFinite(balloonType)) return;
+  player.socialEmotionType = Math.max(0, Math.min(9, Math.floor(balloonType)));
+  player.socialEmotionAge = 0;
+  player.socialEmotionPortraitSlug = action?.portraitSlug ? String(action.portraitSlug) : null;
 }
 
 /**
@@ -692,5 +714,14 @@ export function updatePlayer(dt, data) {
 
   if (shootRemain0 > 0) {
     player.moveShootAnimSec = Math.max(0, shootRemain0 - dt);
+  }
+
+  if (player.socialEmotionType !== null) {
+    player.socialEmotionAge = (player.socialEmotionAge || 0) + dt;
+    if (player.socialEmotionAge > WILD_EMOTION_NONPERSIST_CLEAR_SEC) {
+      player.socialEmotionType = null;
+      player.socialEmotionAge = 0;
+      player.socialEmotionPortraitSlug = null;
+    }
   }
 }
