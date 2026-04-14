@@ -297,6 +297,7 @@ const entitiesByKey = new Map();
 
 export function resetWildPokemonManager() {
   entitiesByKey.clear();
+  wildUpdateFrameCounter = 0;
 }
 
 function pickAnimFrame(seq, tickInLoop) {
@@ -505,7 +506,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
         const ty = entity.centerY + Math.sin(ang) * dist;
         const wanderEntity =
           isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
-        if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false)) {
+        if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
           entity.targetX = tx;
           entity.targetY = ty;
           break;
@@ -588,7 +589,7 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     const clampedX = entity.centerX + nxc * WILD_WANDER_RADIUS_TILES;
     const clampedY = entity.centerY + nyc * WILD_WANDER_RADIUS_TILES;
 
-    if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity))) {
+    if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity), true)) {
       entity.x = clampedX;
       entity.y = clampedY;
     }
@@ -659,7 +660,7 @@ function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSwee
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
     // Increased lookahead to avoid "shoveling" into props (radius-aware)
-    if (wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne)) {
+    if (wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne, true)) {
       entity.vx = vx;
       entity.vy = vy;
       entity.stuckTimer = 0; // Clear stuck state on successful move
@@ -848,6 +849,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       hurtTimer: 0,
       hurtAnimTimer: 0,
       hitFlashTimer: 0,
+      _lodDtAccum: 0,
+      _lodOffset:
+        seededHashInt(mx * 211 + sx * 37, my * 223 + sy * 41, data.seed ^ 0x6c6f64) % WILD_UPDATE_CADENCE_FAR,
       takeDamage: function(amount) {
         this.hp -= amount;
         this.hurtTimer = 0.28;
@@ -886,13 +890,54 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
 
 /** Skip heavy wander pathing when far (sleep/flee/approach/alert still run every frame). */
 const WILD_WANDER_LOD_SKIP_DIST = 40;
+/** Interaction-priority ring: keep nearby mons fully responsive. */
+const WILD_INTERACTION_PRIORITY_DIST = 26;
+/** Mid ring keeps reduced cadence while still feeling alive. */
+const WILD_INTERACTION_MID_DIST = 48;
+const WILD_UPDATE_CADENCE_MID = 2;
+const WILD_UPDATE_CADENCE_FAR = 4;
+/** Prevent huge simulation jumps when accumulated dt is consumed. */
+const WILD_LOD_DT_CAP = 0.12;
+
+let wildUpdateFrameCounter = 0;
+
+function nextWildUpdateFrame() {
+  wildUpdateFrameCounter = (wildUpdateFrameCounter + 1) % 1_000_000_000;
+  return wildUpdateFrameCounter;
+}
+
+function wildNeedsFullRateUpdate(entity, distToPlayer) {
+  return (
+    distToPlayer <= WILD_INTERACTION_PRIORITY_DIST ||
+    entity.aiState !== 'wander' ||
+    entity.isDespawning ||
+    (entity.spawnPhase ?? 1) < 1 ||
+    entity.hurtTimer > 0 ||
+    entity.hitFlashTimer > 0 ||
+    !!entity.deadState
+  );
+}
+
+function wildCadenceForDistance(distToPlayer) {
+  if (distToPlayer <= WILD_INTERACTION_MID_DIST) return WILD_UPDATE_CADENCE_MID;
+  return WILD_UPDATE_CADENCE_FAR;
+}
 
 export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
   const toDelete = [];
+  const frameNo = nextWildUpdateFrame();
   for (const [k, e] of entitiesByKey.entries()) {
     const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
     const isCloseEnough = distToPlayer < 24;
+    const fullRate = wildNeedsFullRateUpdate(e, distToPlayer);
+    const cadence = fullRate ? 1 : wildCadenceForDistance(distToPlayer);
+    const lodOffset = e._lodOffset ?? 0;
+    const processThisFrame = cadence === 1 || ((frameNo + lodOffset) % cadence === 0);
+    e._lodDtAccum = (e._lodDtAccum || 0) + dt;
+    if (!processThisFrame) continue;
+    const stepDt = Math.min(WILD_LOD_DT_CAP, e._lodDtAccum);
+    e._lodDtAccum = 0;
     const skipWanderMotion =
       distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
       e.aiState === 'wander' &&
@@ -902,34 +947,34 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     // Transition spawn phase
     if (e.isDespawning) {
       if (e.deadTimer > 0) {
-        e.deadTimer = Math.max(0, e.deadTimer - dt);
+        e.deadTimer = Math.max(0, e.deadTimer - stepDt);
       }
       if (e.deadTimer <= 0) {
         // Faster despawn to clean up quickly
-        e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - dt * 2.0);
+        e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - stepDt * 2.0);
       }
       if (e.spawnPhase <= 0) toDelete.push(k);
     } else {
       // Only start the spawn animation when the player is relatively close (within view distance)
       if (isCloseEnough || e.spawnPhase > 0) {
         // Slower spawn (approx 1.4s) for better visual impact
-        e.spawnPhase = Math.min(1, (e.spawnPhase ?? 0) + dt * 0.7);
+        e.spawnPhase = Math.min(1, (e.spawnPhase ?? 0) + stepDt * 0.7);
       }
     }
 
-    integrateWildPokemonVertical(e, dt);
+    integrateWildPokemonVertical(e, stepDt);
     if (!skipWanderMotion) {
-      updateWildMotion(e, dt, data, playerX, playerY);
+      updateWildMotion(e, stepDt, data, playerX, playerY);
     } else {
       e.vx = 0;
       e.vy = 0;
       e.animMoving = false;
     }
-    if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - dt);
-    advanceWildPokemonAnim(e, dt);
+    if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - stepDt);
+    advanceWildPokemonAnim(e, stepDt);
     
     if (e.hitFlashTimer > 0) {
-      e.hitFlashTimer -= dt;
+      e.hitFlashTimer -= stepDt;
       if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
     }
   }

@@ -10,7 +10,7 @@ export const WILD_MACRO_SUBDIVISION = 4;
  * Max wild slot keys active at once. If (2r+1)²×N² exceeds this, the **nearest** slots to the player
  * are kept (avoids despawning mons you are interacting with in favour of distant empty slots).
  */
-export const WILD_MAX_SIMULTANEOUS_SLOTS = 13;
+export const WILD_MAX_SIMULTANEOUS_SLOTS = 24;
 
 /**
  * Max wander distance from each slot's center in micro tiles (tune down when {@link WILD_MACRO_SUBDIVISION} is large).

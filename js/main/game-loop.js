@@ -11,6 +11,7 @@ import { updateGrassFire } from '../play-grass-fire.js';
 import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
+import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -58,6 +59,7 @@ export function createGameLoop(api) {
   } = api;
 
   function gameLoop(timestamp) {
+    const tLoopStart = performance.now();
     const dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
     setGameTime(timestamp / 1000);
@@ -86,35 +88,88 @@ export function createGameLoop(api) {
       player.inputY = 0;
     }
 
+    const updateBreakdown = {
+      updPlayerMs: 0,
+      updWildWindowMs: 0,
+      updWildMs: 0,
+      updPointerMs: 0,
+      updMovesMs: 0,
+      updGrassFireMs: 0,
+      updBgmMs: 0,
+      updHudMs: 0
+    };
+
     const currentData = getCurrentData();
+    const tUpdPlayer0 = performance.now();
     updatePlayer(dt, currentData);
+    updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
 
     if (currentData && getAppMode() === 'play') {
       const pvx = player.visualX ?? player.x;
       const pvy = player.visualY ?? player.y;
       syncSpatialListenerFromPlayer(player);
+      const tWildWindow0 = performance.now();
       syncWildPokemonWindow(currentData, pvx, pvy);
+      updateBreakdown.updWildWindowMs = performance.now() - tWildWindow0;
+      const tWild0 = performance.now();
       updateWildPokemon(dt, currentData, pvx, pvy);
+      updateBreakdown.updWildMs = performance.now() - tWild0;
+      const tPointer0 = performance.now();
       updatePlayPointerCombat(dt, player);
+      updateBreakdown.updPointerMs = performance.now() - tPointer0;
+      const tMoves0 = performance.now();
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
+      updateBreakdown.updMovesMs = performance.now() - tMoves0;
+      const tGrassFire0 = performance.now();
       updateGrassFire(dt, currentData, pvx, pvy);
+      updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
+      const tBgm0 = performance.now();
       syncBiomeBgm(currentData, player);
+      updateBreakdown.updBgmMs = performance.now() - tBgm0;
+      const tHud0 = performance.now();
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
+      updateBreakdown.updHudMs = performance.now() - tHud0;
     }
 
-    const tFrameStart = performance.now();
+    const tRenderStart = performance.now();
     updateView();
+    const tRenderEnd = performance.now();
     const playFpsEl = getPlayFpsEl();
     if (getAppMode() === 'play' && playFpsEl) {
       const tEnd = performance.now();
-      const frameMs = tEnd - tFrameStart;
+      const frameMs = tEnd - tLoopStart;
       playFpsSampleTimes.push(tEnd);
       const cutoff = tEnd - 1000;
       while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
       const fps = playFpsSampleTimes.length;
       const lod = getPlayLodDetail();
-      playFpsEl.textContent = `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms`;
+      const updateMs = tRenderStart - tLoopStart;
+      const renderMs = tRenderEnd - tRenderStart;
+      const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown);
+      const stablePct = perf.stableRatio01 * 100;
+      const heavyUpdateSlices = [
+        ['ply', perf.p95UpdPlayerMsStable],
+        ['wnd', perf.p95UpdWildWindowMsStable],
+        ['wld', perf.p95UpdWildMsStable],
+        ['ptr', perf.p95UpdPointerMsStable],
+        ['mov', perf.p95UpdMovesMsStable],
+        ['grs', perf.p95UpdGrassFireMsStable],
+        ['bgm', perf.p95UpdBgmMsStable],
+        ['hud', perf.p95UpdHudMsStable]
+      ]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+        .join(' | ');
+      playFpsEl.textContent =
+        `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
+        ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
+        ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
+        ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
+        ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
+        ` · upd top ${heavyUpdateSlices}` +
+        ` · stable ${stablePct.toFixed(0)}%`;
     }
     if (getAppMode() === 'play') {
       animFrameId = requestAnimationFrame(gameLoop);
@@ -123,6 +178,9 @@ export function createGameLoop(api) {
 
   function startGameLoop() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
+    resetPlayPerfProfiler();
+    playFpsSampleTimes.length = 0;
+    lastTimestamp = performance.now();
     animFrameId = requestAnimationFrame(gameLoop);
   }
 
