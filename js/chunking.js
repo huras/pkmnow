@@ -1,12 +1,16 @@
-import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
+import {
+  getBiome,
+  getBiomeWithAnomalies,
+  BIOMES,
+  resolveWaterLevel,
+  BEACH_ELEVATION_BAND
+} from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
 /** Play (micro) tiles per generator macro cell: terrain sampling, world bounds, minimap grid. */
 export const MACRO_TILE_STRIDE = 48;
 export const LAND_STEPS = 12;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
-export const SEA_LEVEL = 0.3;
-export const BEACH_UPPER = 0.32;
 
 function lerp(a, b, t) {
     return a * (1 - t) + b * t;
@@ -19,20 +23,27 @@ function getMacroVal(grid, x, y, width, height) {
 }
 
 /**
- * Converte elevação contínua em degrau discreto.
- * Abaixo de SEA_LEVEL: retorna -1..-WATER_STEPS (mais negativo = mais fundo)
- * Beach: retorna 0
- * Acima: retorna 1..LAND_STEPS
+ * Converte elevação contínua em degrau discreto (alinhado a `getBiome`: `waterLevel` + `BEACH_ELEVATION_BAND`).
+ * Abaixo de `waterLevel`: -WATER_STEPS..-1 (mais negativo = mais fundo)
+ * Faixa de praia [waterLevel, waterLevel + BEACH_ELEVATION_BAND): 0
+ * Acima: 1..LAND_STEPS
+ * @param {number} e — elevação 0..1
+ * @param {number} [waterLevel] — nível do mar (0..1); se omitido, usa o mesmo fallback que `resolveWaterLevel({})`
  */
-export function elevationToStep(e) {
-    if (e < SEA_LEVEL) {
-        // Mapeia 0..SEA_LEVEL para -WATER_STEPS..-1
-        const t = e / SEA_LEVEL; // 0..1
+export function elevationToStep(e, waterLevel) {
+    const wl = waterLevel !== undefined && waterLevel !== null ? Number(waterLevel) : resolveWaterLevel({});
+    const w = Number.isFinite(wl) ? Math.max(1e-4, Math.min(0.98, wl)) : resolveWaterLevel({});
+    const beachUpper = w + BEACH_ELEVATION_BAND;
+
+    if (e < w) {
+        const t = Math.min(1, Math.max(0, e / w));
         return -WATER_STEPS + Math.floor(t * WATER_STEPS);
     }
-    if (e < BEACH_UPPER) return 0; // Praia
-    // Mapeia BEACH_UPPER..1.0 para 1..LAND_STEPS
-    const t = (e - BEACH_UPPER) / (1.0 - BEACH_UPPER);
+    if (e < beachUpper) return 0;
+    const landLo = beachUpper;
+    const denom = 1.0 - landLo;
+    if (denom <= 1e-6) return LAND_STEPS;
+    const t = (e - landLo) / denom;
     return Math.min(LAND_STEPS, 1 + Math.floor(t * LAND_STEPS));
 }
 
@@ -40,7 +51,8 @@ export function elevationToStep(e) {
  * Funcao auxiliar para pegar apenas a altura de um micro-tile sem recursao.
  */
 export function getHeightStepAt(mx, my, macroData) {
-    const { width, height, cells } = macroData;
+    const { width, height, cells, config } = macroData;
+    const waterLevel = resolveWaterLevel(config || {});
     const gx = mx / MACRO_TILE_STRIDE;
     const gy = my / MACRO_TILE_STRIDE;
     const ix = Math.floor(gx);
@@ -55,7 +67,7 @@ export function getHeightStepAt(mx, my, macroData) {
     const e01 = getMacroVal(cells, ix, iy + 1, width, height);
     const e11 = getMacroVal(cells, ix + 1, iy + 1, width, height);
     const e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), sy);
-    return elevationToStep(e);
+    return elevationToStep(e, waterLevel);
 }
 
 /**
@@ -64,6 +76,7 @@ export function getHeightStepAt(mx, my, macroData) {
  */
 export function getMicroTile(mx, my, macroData) {
     const { width, height, cells, temperature, moisture, anomaly, seed, config } = macroData;
+    const waterLevel = resolveWaterLevel(config || {});
 
     // Interpolação Bilinear: Os centros macro ficam alinhados aos múltiplos de MACRO_TILE_STRIDE
     const gx = mx / MACRO_TILE_STRIDE;
@@ -91,7 +104,7 @@ export function getMicroTile(mx, my, macroData) {
     const eTop = lerp(e00, e10, sx);
     const eBot = lerp(e01, e11, sx);
     let e = lerp(eTop, eBot, sy);
-    let heightStep = elevationToStep(e);
+    let heightStep = elevationToStep(e, waterLevel);
 
     const noiseVal = (seededHash(mx, my, seed) - 0.5);
 
@@ -289,7 +302,7 @@ export function getMicroTile(mx, my, macroData) {
                     if (axisLockX) nx = 0.5;
                     if (axisLockY) ny = 0.5;
 
-                    return elevationToStep(lerp(lerp(e00, e10, nx), lerp(e01, e11, nx), ny));
+                    return elevationToStep(lerp(lerp(e00, e10, nx), lerp(e01, e11, nx), ny), waterLevel);
                 };
 
                 // 1. Horizontal Jumps (stair columns): lock Y to macro-center to keep the column straight
@@ -327,7 +340,7 @@ export function getMicroTile(mx, my, macroData) {
                     else if (isHorizontalRoadArea) { e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), 0.5); }
                     else if (inCenterPadding) { e = lerp(lerp(e00, e10, 0.5), lerp(e01, e11, 0.5), 0.5); }
                 }
-                heightStep = elevationToStep(e);
+                heightStep = elevationToStep(e, waterLevel);
             }
 
             if (inCenter || inN || inS || inE || inW) {
@@ -340,7 +353,7 @@ export function getMicroTile(mx, my, macroData) {
                 }
 
                 // Feature Detection: Bridges remain (Stairs already handled above)
-                if (e < SEA_LEVEL) {
+                if (e < waterLevel) {
                     roadFeature = 'wooden-bridge';
                     heightStep = 8;
                 }

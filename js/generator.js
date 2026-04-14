@@ -1,14 +1,14 @@
 import { createRng, stringToSeed } from './rng.js';
 import { generateWorldGraph, calculateImportance } from './graph.js';
 import { findPath } from './pathfind.js';
-import { getBiome, getBiomeWithAnomalies, BIOMES } from './biomes.js';
+import { getBiome, getBiomeWithAnomalies, BIOMES, resolveWaterLevel, DEFAULT_WATER_LEVEL } from './biomes.js';
 import { applyMorphologicalCleanup } from './tessellation-logic.js';
 import { generateCityName, generateRouteName } from './names.js';
 import { placeLandmarks } from './landmarks.js';
 import { buildCityLayouts } from './city-layout.js';
 
 export const DEFAULT_CONFIG = {
-  waterLevel: 0.21,
+  waterLevel: DEFAULT_WATER_LEVEL,
   elevationScale: 24,
   /** Oitavas de ruído fractal para mapas macro (Elevation, Temp, Moisture). */
   fbmOctaves: 3,
@@ -157,9 +157,10 @@ export function generate(seedInput, customConfig = {}) {
 
   // Pós-processamento de Morfologia: Evitar tiles isolados que quebram o autotiler
   // de 13 papéis. Rodamos um cleanup básico na terra.
+  const wlLand = resolveWaterLevel(config);
   const isLandAt = (r, c) => {
     if (r < 0 || r >= height || c < 0 || c >= width) return false;
-    return elevation[r * width + c] >= (config.waterLevel || 0.38); 
+    return elevation[r * width + c] >= wlLand;
   };
   const setLandAt = (r, c, isLand) => {
     if (!isLand) elevation[r * width + c] = 0.25; // Garante que vira água

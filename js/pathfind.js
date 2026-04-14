@@ -3,6 +3,8 @@
  * desconto ao passar por outras cidades (exceto origem/destino da rota atual).
  */
 
+import { DEFAULT_WATER_LEVEL } from './biomes.js';
+
 /**
  * @param {number} x1
  * @param {number} y1
@@ -70,7 +72,7 @@ function neighborMoveCost(
 function normalizeOpts(pathOpts) {
   const o = pathOpts ?? {};
   return {
-    waterLevel: typeof o.waterLevel === 'number' ? o.waterLevel : 0.38,
+    waterLevel: typeof o.waterLevel === 'number' ? o.waterLevel : DEFAULT_WATER_LEVEL,
     roadKeys: o.roadKeys ?? new Set(),
     cityKeys: o.cityKeys ?? new Set(),
     cityThroughMultiplier:

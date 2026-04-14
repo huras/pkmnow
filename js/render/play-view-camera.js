@@ -39,6 +39,17 @@ let lastPerfMs = 0;
 /** @type {0|1|2} */
 let lodDetail = 0;
 
+/** Debug (e.g. `debug-play.html`): keep vegetation / grass passes on full detail regardless of zoom. */
+let forceLod0Always = false;
+
+export function setPlayForceLod0Always(on) {
+  forceLod0Always = !!on;
+}
+
+export function getPlayForceLod0Always() {
+  return forceLod0Always;
+}
+
 /** Last play LOD from `computePlayViewState` (0 = full detail, vegetation animates). */
 export function getPlayLodDetail() {
   return lodDetail;
@@ -149,6 +160,8 @@ export function computePlayViewState(p) {
   if (s >= 0.9) lodDetail = 0;
   else if (s >= 0.68 && lodDetail === 2) lodDetail = 1;
   else if (s >= 0.86 && lodDetail === 1) lodDetail = 0;
+
+  if (forceLod0Always) lodDetail = 0;
 
   /** Far LOD: fewer offscreen chunks + slightly tighter tile margin (big win when zoomed out). */
   const chunkPad = lodDetail >= 2 ? 1 : s < 0.92 ? 2 : s < 0.99 ? 1 : 0;

@@ -42,13 +42,16 @@ const GROUND_R = 0.32; // Raio de colisão
 export const PLAYER_FLIGHT_MAX_Z_TILES = 28;
 const FLIGHT_MAX_Z = PLAYER_FLIGHT_MAX_Z_TILES;
 /** Winged Flying-type: snappier / “flappy” feel. */
-const FLIGHT_WINGED_VERT_SPEED = 13;
-const FLIGHT_WINGED_MAX_SPEED_MULT = 2.15;
+const FLIGHT_WINGED_VERT_SPEED = 3;
+/** Horizontal speed cap while flying (× `MAX_SPEED`); tuned vs ground. */
+const FLIGHT_WINGED_MAX_SPEED_MULT = 2.15 * 3;
 const FLIGHT_WINGED_FRICTION_MULT = 0.42;
 /** Mewtwo / Mew levitation: calmer horizontal + vertical (see `speciesHasSmoothLevitationFlight`). */
 const FLIGHT_LEVITATION_VERT_SPEED = 7.2;
-const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38;
-const FLIGHT_LEVITATION_FRICTION_MULT = 0.82;
+const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 3;
+const FLIGHT_LEVITATION_FRICTION_MULT = 0.19;
+/** Horizontal input acceleration while in creative flight (ground uses full `ACCEL`). */
+const FLIGHT_ACCEL_MULT = 0.45;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
 const RUN_SPEED_CAP_MULT = 2;
@@ -420,9 +423,10 @@ export function updatePlayer(dt, data) {
     else if (player.inputX > 0 && player.inputY > 0) player.facing = 'down-right';
     else if (player.inputX < 0 && player.inputY > 0) player.facing = 'down-left';
 
-    // Accelerate
-    player.vx += player.inputX * ACCEL * dt;
-    player.vy += player.inputY * ACCEL * dt;
+    // Accelerate (flight: gentler horizontal accel than on foot)
+    const accelMul = flightMove ? FLIGHT_ACCEL_MULT : 1;
+    player.vx += player.inputX * ACCEL * accelMul * dt;
+    player.vy += player.inputY * ACCEL * accelMul * dt;
   } else {
     // Friction
     const spd = Math.hypot(player.vx, player.vy);

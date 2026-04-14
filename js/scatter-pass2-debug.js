@@ -7,6 +7,7 @@ import {
   getTreeType,
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
+  tileSurfaceAllowsScatterVegetation
 } from './biome-tiles.js';
 
 const MAX_SCATTER_ROWS_PASS2 = 8;
@@ -23,7 +24,7 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
   if (memo && memo.has(memoKey)) return memo.get(memoKey);
 
   const nTile = getT(mx, my);
-  if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) {
+  if (!tileSurfaceAllowsScatterVegetation(nTile)) {
     if (memo) memo.set(memoKey, false);
     return false;
   }
@@ -151,7 +152,7 @@ export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
   const microH = data.height * MACRO_TILE_STRIDE;
   const getT = (x, y) => getMicroTile(x, y, data);
   const here = getT(mx, my);
-  if (!here || here.heightStep < 1 || here.isRoad || here.isCity) return false;
+  if (!tileSurfaceAllowsScatterVegetation(here)) return false;
   if ((BIOME_VEGETATION[here.biomeId] || []).length === 0) return false;
 
   for (let oy0 = my; oy0 >= my - MAX_SCATTER_ROWS_PASS2 + 1 && oy0 >= 0; oy0--) {
@@ -161,7 +162,7 @@ export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
       if (dmx < 0 || dmy < 0) continue;
 
       const nTile = getT(ox0, oy0);
-      if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+      if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
       if (here.heightStep !== nTile.heightStep) continue;
 
       if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
@@ -199,7 +200,7 @@ export function buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data
   for (let oy0 = oy0Min; oy0 < oy0Max; oy0++) {
     for (let ox0 = ox0Min; ox0 < ox0Max; ox0++) {
       const nTile = getT(ox0, oy0);
-      if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+      if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
       if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
 
@@ -263,10 +264,10 @@ export function analyzeScatterPass2Base(mx, my, data) {
   let terrainAtDestAllowsContinuation = true;
   const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
 
-  if (tile.heightStep < 1) {
+  if (!tileSurfaceAllowsScatterVegetation(tile)) {
     centerRoleOk = false;
     terrainAtDestAllowsContinuation = false;
-    centerFailReasons.push('heightStep < 1');
+    centerFailReasons.push('superfície sem scatter (água/step inválido)');
   } else if (setForRole) {
     // IMPORTANTE: isAtOrAbove deve ser consistente com o render.js (ignora biomas, foca em degrau)
     const checkAtOrAbove = (r, c) => (getT(c, r)?.heightStep ?? -99) >= tile.heightStep;
@@ -380,8 +381,8 @@ export function analyzeScatterPass2Base(mx, my, data) {
 
   if (tile.isRoad || tile.isCity) {
     reasons2C.push('gate 2C: estrada ou cidade');
-  } else if (tile.heightStep < 1) {
-    reasons2C.push(...centerFailReasons.filter((r) => r.includes('heightStep')));
+  } else if (!tileSurfaceAllowsScatterVegetation(tile)) {
+    reasons2C.push(...centerFailReasons.filter((r) => r.includes('scatter') || r.includes('step')));
   } else if (!terrainAtDestAllowsContinuation) {
     reasons2C.push(
       `gate 2C: papel terreno dest=${destTerrainRole ?? '—'} bloqueia continuação (aceita CENTER/IN, bloqueia OUT/EDGE)`
@@ -399,7 +400,7 @@ export function analyzeScatterPass2Base(mx, my, data) {
         if (oy0 < 0 || oy0 >= microH) break;
 
         const nTile = getT(ox0, oy0);
-        if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+        if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
         if (tile.heightStep !== nTile.heightStep) continue;
 
         const treeFormalOrigin = getTreeType(nTile.biomeId);
@@ -566,7 +567,7 @@ function explain2CForDox(mx, my, dox, tile, getT, seed, microW, microH, memo = n
     if (oy0 < 0 || oy0 >= microH) break;
 
     const nTile = getT(ox0, oy0);
-    if (!nTile || nTile.heightStep < 1 || nTile.isRoad || nTile.isCity) continue;
+    if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
     if (tile.heightStep !== nTile.heightStep) continue;
 
     const treeFormalOrigin = getTreeType(nTile.biomeId);

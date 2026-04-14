@@ -25,6 +25,25 @@ export const BIOMES = {
   TOWN_STREET: { id: 19, name: "Rua de Vila", color: "#907050" },
 };
 
+/** Faixa de elevação (0–1) acima de `waterLevel` tratada como praia em `getBiome` — alinhar com `elevationToStep` em `chunking.js`. */
+export const BEACH_ELEVATION_BAND = 0.05;
+
+/** Fallback when `config.waterLevel` is missing — must match `DEFAULT_CONFIG` in `generator.js`. */
+export const DEFAULT_WATER_LEVEL = 0.21;
+
+/**
+ * Nível do mar efetivo (0–1) a partir do `config` do mundo; fallback alinhado ao gerador/UI.
+ * @param {object} [config]
+ * @returns {number}
+ */
+export function resolveWaterLevel(config = {}) {
+  const w = config.waterLevel;
+  if (w !== undefined && w !== null && Number.isFinite(Number(w))) {
+    return Math.max(1e-4, Math.min(0.98, Number(w)));
+  }
+  return DEFAULT_WATER_LEVEL;
+}
+
 /**
  * lookup biome based on elevation (e), temperature (t), and moisture (m).
  * all inputs normalized 0-1.
@@ -34,7 +53,7 @@ export const BIOMES = {
  * @param {Object} config - (optional) config with thresholds
  */
 export function getBiome(e, t, m, config = {}) {
-  const waterLevel = config.waterLevel !== undefined ? config.waterLevel : 0.38;
+  const waterLevel = resolveWaterLevel(config);
   const desertMoisture = config.desertMoisture !== undefined ? config.desertMoisture : 0.33;
   const forestMoisture = config.forestMoisture !== undefined ? config.forestMoisture : 0.66;
 
@@ -42,7 +61,7 @@ export function getBiome(e, t, m, config = {}) {
   if (e < waterLevel) return BIOMES.OCEAN;
   
   // Praia (margem estreita acima da água)
-  if (e < waterLevel + 0.05) return BIOMES.BEACH;
+  if (e < waterLevel + BEACH_ELEVATION_BAND) return BIOMES.BEACH;
   
   // Montanhas Altas
   if (e > 0.8) return BIOMES.PEAK;
@@ -75,7 +94,7 @@ export function getBiomeWithAnomalies(e, t, m, a, config = {}) {
 
     // Regras de Anomalia (Biomas Místicos)
     if (a > 0.6) {
-        const waterLevel = config.waterLevel !== undefined ? config.waterLevel : 0.38;
+        const waterLevel = resolveWaterLevel(config);
         const isLand = e >= waterLevel;
         if (isLand) {
             if (e > 0.7 && t > 0.6) {

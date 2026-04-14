@@ -44,6 +44,15 @@ export const BIOME_VEGETATION = {
   [BIOMES.SNOW.id]: ['large-light-blue-crystal [2x2]', 'baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['large-purple-crystal [2x2]', 'large-pink-crystal [2x2]', 'small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
+  /** Tufts / cascos / areia — o que era overlay “dirt” + costa; sem folhagem de terreno `jogador sandy`. */
+  [BIOMES.BEACH.id]: [
+    'beach-dirt-turf [1x1]',
+    'small-grass [1x1]',
+    'mushroom-1 [1x1]',
+    'sand-grass [1x1]',
+    'pointy-sea-shell [1x1]',
+    'fold-sea-shell [1x1]'
+  ],
   [BIOMES.DESERT.id]: ['big-cactus-1 [2x2]', 'small-cactus [1x1]'],
   [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
   [BIOMES.CITY.id]: ['white-daisy [1x1]', 'blue-daisy [1x1]', 'pink-daisy [1x1]', 'small-grass [1x1]'],
@@ -58,6 +67,16 @@ export const BIOME_VEGETATION = {
     'fern [1x1]', 'mushroom-1 [1x1]'
   ],
 };
+
+/**
+ * Onde bake/render permitem scatter (e gates alinhados): terra firme (heightStep ≥ 1) ou **praia** no degrau 0
+ * (faixa litoral em `elevationToStep`; oceano fica com heightStep negativo).
+ */
+export function tileSurfaceAllowsScatterVegetation(tile) {
+  if (!tile || tile.isRoad || tile.isCity) return false;
+  if (tile.heightStep >= 1) return true;
+  return tile.biomeId === BIOMES.BEACH.id && tile.heightStep === 0;
+}
 
 /**
  * Scatter com pedra/cristal não deve balançar com "vento" no render.
@@ -113,7 +132,7 @@ export const TREE_TILES = {
 
 /** Biomes que NÃO recebem grama */
 export const NO_GRASS_BIOMES = new Set([
-  BIOMES.OCEAN.id, BIOMES.MOUNTAIN.id, BIOMES.PEAK.id,
+  BIOMES.OCEAN.id, BIOMES.BEACH.id, BIOMES.MOUNTAIN.id, BIOMES.PEAK.id,
   BIOMES.ICE.id, BIOMES.VOLCANO.id, BIOMES.CITY.id,
   BIOMES.CITY_STREET.id, BIOMES.TOWN.id, BIOMES.TOWN_STREET.id
 ]);
@@ -142,7 +161,8 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.TAIGA.id]: "jogador light grass",
   [BIOMES.ICE.id]: "jogador frozen-rocky",
   [BIOMES.DESERT.id]: "jogador sandy",
-  [BIOMES.BEACH.id]: "jogador sandy",
+  /** Detalhe de solo arenoso vem do scatter (`BIOME_VEGETATION`), não de folhagem de terreno. */
+  [BIOMES.BEACH.id]: null,
   [BIOMES.SAVANNA.id]: "jogador orange-grass",
   [BIOMES.VOLCANO.id]: "lava-lake-dirt",
   [BIOMES.GHOST_WOODS.id]: "above dense-bushes",
@@ -161,7 +181,6 @@ export function getGrassVariant(biomeId) {
   if (isLakeLotusFoliageTerrainSet(BIOME_TO_FOLIAGE[biomeId])) return 'lotus';
   if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TUNDRA.id || biomeId === BIOMES.TAIGA.id) return 'ice';
   if (biomeId === BIOMES.DESERT.id || biomeId === BIOMES.SAVANNA.id) return 'desert';
-  if (biomeId === BIOMES.BEACH.id) return 'dirt';
   return 'default';
 }
 

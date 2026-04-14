@@ -9,7 +9,8 @@ import {
   TREE_NOISE_SCALE,
   FOLIAGE_DENSITY_THRESHOLD,
   usesPoolAutotileMaskForFoliage,
-  isSortableScatter
+  isSortableScatter,
+  tileSurfaceAllowsScatterVegetation
 } from '../biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, LAND_STEPS, foliageDensity } from '../chunking.js';
 import { imageCache } from '../image-cache.js';
@@ -344,7 +345,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       if (mxScan < 0 || myScan < 0 || mxScan >= data.width * MACRO_TILE_STRIDE || myScan >= data.height * MACRO_TILE_STRIDE) continue;
 
       const tile = getCachedTile(mxScan, myScan);
-      if (!tile || tile.heightStep < 1) continue;
+      if (!tileSurfaceAllowsScatterVegetation(tile)) continue;
 
       const treeType = getTreeType(tile.biomeId, mxScan, myScan, data.seed);
       const isFormalRoot = (tx, ty) =>

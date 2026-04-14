@@ -3,6 +3,8 @@
  * Garante conectividade via MST + validação BFS e reparo defensivo.
  */
 
+import { DEFAULT_WATER_LEVEL } from './biomes.js';
+
 /**
  * @typedef {{ id: number, x: number, y: number, isGym: boolean }} GraphNode
  * @typedef {{ u: number, v: number }} GraphEdge
@@ -72,10 +74,10 @@ function manhattanOkFromAll(x, y, existing) {
  * @param {number} count
  * @param {number} margin
  * @param {Float32Array} terrainCells - elevação; terra se ≥ waterLevel
- * @param {number} [waterLevel=0.38] - alinhado ao gerador (água abaixo disto)
+ * @param {number} [waterLevel] - alinhado ao gerador (água abaixo disto); default = `DEFAULT_WATER_LEVEL`
  * @returns {GraphNode[]}
  */
-export function placeCityNodes(rng, gridW, gridH, count, margin, terrainCells, waterLevel = 0.38) {
+export function placeCityNodes(rng, gridW, gridH, count, margin, terrainCells, waterLevel = DEFAULT_WATER_LEVEL) {
   const nodes = [];
   const spanW = Math.max(1, gridW - 2 * margin);
   const spanH = Math.max(1, gridH - 2 * margin);
@@ -279,7 +281,7 @@ export function generateWorldGraph(rng, gridW, gridH, terrainCells, opts = {}) {
   const cityCount = opts.cityCount ?? 14;
   const gymCount = opts.gymCount ?? 8;
   const extraEdges = opts.extraEdges ?? 3;
-  const waterLevel = opts.waterLevel ?? 0.38;
+  const waterLevel = opts.waterLevel ?? DEFAULT_WATER_LEVEL;
 
   // 1. Posicionamento: terra (elevação) + Manhattan ≥ 5 entre cidades
   const nodes = placeCityNodes(rng, gridW, gridH, cityCount, margin, terrainCells, waterLevel);

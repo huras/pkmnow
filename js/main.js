@@ -43,6 +43,7 @@ import {
   playScreenPixelsToWorldTileCoords,
   clearPlayCameraSnapshot
 } from './render/play-camera-snapshot.js';
+import { setPlayForceLod0Always } from './render/play-view-camera.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import {
   advanceWorldHours,
@@ -545,7 +546,7 @@ function wireDebugGeneratorChrome() {
   if (btnSettings && settingsModal) {
     btnSettings.addEventListener('click', () => {
       settingsModal.classList.remove('hidden');
-      document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel || 0.38) * 100;
+      document.getElementById('cfgWaterLevel').value = (currentConfig.waterLevel ?? DEFAULT_CONFIG.waterLevel) * 100;
       document.getElementById('cfgElevation').value = currentConfig.elevationScale;
       document.getElementById('cfgElevationDetailOctaves').value =
         currentConfig.elevationDetailOctaves ?? DEFAULT_CONFIG.elevationDetailOctaves;
@@ -694,6 +695,15 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   }
   updateView();
 });
+
+function syncForceLod0FromUi() {
+  setPlayForceLod0Always(!!document.getElementById('chkForceLod0')?.checked);
+}
+document.getElementById('chkForceLod0')?.addEventListener('change', () => {
+  syncForceLod0FromUi();
+  updateView();
+});
+syncForceLod0FromUi();
 
 loadTilesetImages().then(async () => {
   if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {

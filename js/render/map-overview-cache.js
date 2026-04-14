@@ -1,4 +1,4 @@
-import { BIOMES } from '../biomes.js';
+import { BIOMES, resolveWaterLevel } from '../biomes.js';
 import { elevationToStep } from '../chunking.js';
 
 let mapOverviewCacheCanvas = null;
@@ -39,12 +39,13 @@ export function drawCachedMapOverview(ctx, params) {
     overlayContours ? 1 : 0
   ].join('|');
 
-  if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
+    if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
     mapOverviewCacheCanvas = document.createElement('canvas');
     mapOverviewCacheCanvas.width = cw;
     mapOverviewCacheCanvas.height = ch;
     mapOverviewCacheKey = mapCacheKey;
     const mctx = mapOverviewCacheCanvas.getContext('2d');
+    const wlOverview = resolveWaterLevel(data.config || {});
     if (mctx) {
       mctx.imageSmoothingEnabled = false;
       if (mctx.webkitImageSmoothingEnabled !== undefined) mctx.webkitImageSmoothingEnabled = false;
@@ -61,7 +62,7 @@ export function drawCachedMapOverview(ctx, params) {
           if (viewType === 'elevation') {
             const val = cells[idx];
             const colorVal = Math.floor(Math.max(0, Math.min(1, val)) * 255);
-            mctx.fillStyle = val < 0.3 ? `rgb(0,0,${colorVal})` : `rgb(${colorVal},${colorVal},${colorVal})`;
+            mctx.fillStyle = val < wlOverview ? `rgb(0,0,${colorVal})` : `rgb(${colorVal},${colorVal},${colorVal})`;
           } else {
             mctx.fillStyle = biomeColorById.get(bId) || '#000';
           }
@@ -124,9 +125,9 @@ export function drawCachedMapOverview(ctx, params) {
         mctx.lineWidth = 1;
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
-            const hStep = elevationToStep(cells[y * width + x]);
+            const hStep = elevationToStep(cells[y * width + x], wlOverview);
             if (x < width - 1) {
-              const hr = elevationToStep(cells[y * width + (x + 1)]);
+              const hr = elevationToStep(cells[y * width + (x + 1)], wlOverview);
               if (hStep !== hr) {
                 mctx.beginPath();
                 mctx.moveTo((x + 1) * tileW, y * tileH);
@@ -135,7 +136,7 @@ export function drawCachedMapOverview(ctx, params) {
               }
             }
             if (y < height - 1) {
-              const hd = elevationToStep(cells[(y + 1) * width + x]);
+              const hd = elevationToStep(cells[(y + 1) * width + x], wlOverview);
               if (hStep !== hd) {
                 mctx.beginPath();
                 mctx.moveTo(x * tileW, (y + 1) * tileH);

@@ -14,7 +14,8 @@ import {
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
   scatterHasWindSway,
-  isSortableScatter
+  isSortableScatter,
+  tileSurfaceAllowsScatterVegetation
 } from './biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity, foliageType } from './chunking.js';
 import {
@@ -865,7 +866,7 @@ export function render(canvas, data, options = {}) {
       for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
         if (mxScan < 0 || myScan < 0 || mxScan >= width * MACRO_TILE_STRIDE || myScan >= height * MACRO_TILE_STRIDE) continue;
         const t = getCached(mxScan, myScan);
-        if (!t || t.heightStep < 1) continue;
+        if (!tileSurfaceAllowsScatterVegetation(t)) continue;
 
         // 1. Formal Trees
         const treeType = getTreeType(t.biomeId, mxScan, myScan, data.seed);
