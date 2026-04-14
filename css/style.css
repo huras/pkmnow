@@ -307,6 +307,146 @@ body.play-mode-active {
   top: calc(0.6rem + 0.6rem + 40px + 8px);
 }
 
+.play-bgm-now-playing {
+  display: none;
+  position: absolute;
+  right: 10px;
+  top: calc(0.6rem + 0.6rem + 40px + 36px);
+  z-index: 1201;
+  width: min(320px, calc(100vw - 200px));
+  padding: 8px 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: #e8e8ec;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.app.play-mode-active .map-wrap .play-bgm-now-playing {
+  display: block;
+}
+
+.play-bgm-now-playing-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ad8ff;
+  font-size: 0.65rem;
+  margin-bottom: 4px;
+}
+
+.play-bgm-now-playing-track {
+  color: #f9f3d2;
+  font-weight: 700;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.play-bgm-now-playing-status {
+  color: #b6cde7;
+  font-size: 0.66rem;
+  opacity: 0.95;
+  margin-top: 3px;
+}
+
+/* World time of day — play mode only, bottom-left (minimap is bottom-right) */
+.play-world-time {
+  display: none;
+  position: absolute;
+  left: 10px;
+  top: calc(0.6rem + 0.6rem + 40px + 8px);
+  bottom: auto;
+  z-index: 1201;
+  width: min(220px, calc(100vw - 160px));
+  padding: 10px 12px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: #e8e8ec;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.app.play-mode-active .map-wrap .play-world-time {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.play-world-time-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ad8ff;
+  font-size: 0.65rem;
+}
+
+.play-world-time-phase {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #ffd78a;
+}
+
+.play-world-time-hour {
+  color: #c8f5c4;
+  font-variant-numeric: tabular-nums;
+}
+
+.play-world-time input[type="range"] {
+  width: 100%;
+  margin: 2px 0 0;
+}
+
+.play-world-time-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.play-world-time-preset {
+  padding: 4px 6px;
+  font-size: 0.68rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #2a2a32;
+  color: var(--text);
+}
+
+.play-world-time-preset:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.play-world-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  color: #b8b8c8;
+}
+
+.play-world-time-speed {
+  width: 4.5rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+}
+
 /* MODAL DE CONFIGURAÇÕES */
 .modal {
   position: fixed;

@@ -37,7 +37,7 @@ import {
   playScreenPixelsToWorldTileCoords,
   clearPlayCameraSnapshot
 } from './render/play-camera-snapshot.js';
-import { stopBiomeBgm } from './audio/biome-bgm.js';
+import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -73,6 +73,8 @@ const debugContent = document.getElementById('tile-debug-content');
 const btnDebugClose = document.getElementById('tile-debug-close');
 const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
+const playBgmNowPlayingTrackEl = document.getElementById('play-bgm-now-playing-track');
+const playBgmNowPlayingStatusEl = document.getElementById('play-bgm-now-playing-status');
 const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
@@ -86,9 +88,10 @@ let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
-let worldTimeRunning = false;
+let worldTimeRunning = true;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
+let lastBgmUiSignature = '';
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
 
@@ -150,7 +153,7 @@ function refreshPlayModeInfoBar(force = false) {
 
 function readWorldHoursPerRealSec() {
   const el = document.getElementById('play-world-time-speed');
-  const v = parseFloat(String(el?.value ?? '0.5'));
+  const v = parseFloat(String(el?.value ?? '0.02'));
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
@@ -171,6 +174,24 @@ function syncPlayWorldTimePanel() {
       playWorldTimeSlider.value = String(stepped);
     }
   }
+}
+
+function syncPlayBgmNowPlayingPanel() {
+  if (appMode !== 'play') return;
+  if (!playBgmNowPlayingTrackEl || !playBgmNowPlayingStatusEl) return;
+  const st = getBiomeBgmUiState();
+  const title = st.currentTrackName || '—';
+  const statusText =
+    st.status === 'playing'
+      ? `Playing · biome ${st.playingBiomeId ?? '?'}`
+      : st.status === 'transitioning'
+        ? `Transitioning · target biome ${st.transitionTargetBiome ?? '?'}`
+        : 'Idle';
+  const sig = `${title}|${statusText}`;
+  if (sig === lastBgmUiSignature) return;
+  lastBgmUiSignature = sig;
+  playBgmNowPlayingTrackEl.textContent = title;
+  playBgmNowPlayingStatusEl.textContent = statusText;
 }
 
 function getSettings() {
@@ -227,6 +248,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
     syncPlayWorldTimePanel();
+    syncPlayBgmNowPlayingPanel();
   }
 });
 
@@ -387,6 +409,8 @@ function enterPlayMode(gx, gy) {
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
   syncPlayWorldTimePanel();
+  lastBgmUiSignature = '';
+  syncPlayBgmNowPlayingPanel();
 
   document.body.classList.add('play-mode-active');
   document.querySelector('.app').classList.add('play-mode-active');
@@ -413,6 +437,9 @@ btnBackToMap.addEventListener('click', () => {
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);
   playCharacterSelector?.clearPlayMovesCooldownHud();
+  lastBgmUiSignature = '';
+  if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
+  if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = 'Idle';
   resizeCanvas();
   updateView();
 });

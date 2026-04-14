@@ -406,6 +406,53 @@ export function syncBiomeBgm(data, player) {
   startOrRetargetToBiome(/** @type {number} */ (stableDesiredBiomeId));
 }
 
+/**
+ * @param {string | null | undefined} src
+ * @returns {string | null}
+ */
+function trackNameFromSrc(src) {
+  if (!src) return null;
+  const base = src.split('?')[0] || '';
+  const lastSlash = base.lastIndexOf('/');
+  const raw = lastSlash >= 0 ? base.slice(lastSlash + 1) : base;
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Lightweight state for UI/debug overlays.
+ * @returns {{
+ *   playingBiomeId: number | null,
+ *   stableDesiredBiomeId: number | null,
+ *   transitionTargetBiome: number | null,
+ *   activeSlot: 0 | 1 | null,
+ *   status: 'idle' | 'transitioning' | 'playing',
+ *   currentTrackName: string | null
+ * }}
+ */
+export function getBiomeBgmUiState() {
+  const currentSrc =
+    activeSlot === 0
+      ? (slot0?.audio.currentSrc || slot0?.audio.src)
+      : activeSlot === 1
+        ? (slot1?.audio.currentSrc || slot1?.audio.src)
+        : null;
+  const status =
+    activeSlot == null ? (transitionTargetBiome != null ? 'transitioning' : 'idle') : 'playing';
+  return {
+    playingBiomeId,
+    stableDesiredBiomeId,
+    transitionTargetBiome,
+    activeSlot,
+    status,
+    currentTrackName: trackNameFromSrc(currentSrc)
+  };
+}
+
 /** Call when leaving play mode. */
 export function stopBiomeBgm() {
   biomeCandidate = null;
