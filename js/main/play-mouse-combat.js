@@ -62,6 +62,8 @@ let fieldSkillByDex = loadStoredFieldSkillByDex();
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
 let lastComboDexId = 0;
+let fieldWheelMouseClientX = 0;
+let fieldWheelMouseClientY = 0;
 
 function normalizeFieldSkillId(skillId) {
   return FIELD_SKILLS.includes(String(skillId)) ? String(skillId) : 'tackle';
@@ -181,6 +183,45 @@ function openFieldSkillWheel() {
 function closeFieldSkillWheel() {
   fieldSkillWheelOpen = false;
   syncFieldSkillWheelDom();
+}
+
+function normalizeAngleSigned(rad) {
+  let a = Number(rad) || 0;
+  while (a <= -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
+}
+
+function resolveFieldWheelHoverFromScreenAngle() {
+  if (!fieldSkillWheelRoot) return fieldSkillWheelHoverIndex;
+  const ring = fieldSkillWheelRoot.querySelector('.play-field-skill-wheel__ring');
+  if (!(ring instanceof HTMLElement)) return fieldSkillWheelHoverIndex;
+  const ringRect = ring.getBoundingClientRect();
+  const cx = ringRect.left + ringRect.width * 0.5;
+  const cy = ringRect.top + ringRect.height * 0.5;
+  const dx = fieldWheelMouseClientX - cx;
+  const dy = fieldWheelMouseClientY - cy;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 14) {
+    return fieldSkillWheelHoverIndex;
+  }
+  const mouseAngle = Math.atan2(dy, dx);
+  let bestIdx = fieldSkillWheelHoverIndex;
+  let bestDelta = Infinity;
+  for (let i = 0; i < FIELD_SKILLS.length; i++) {
+    const skillId = FIELD_SKILLS[i];
+    const item = fieldSkillWheelRoot.querySelector(`.play-field-skill-wheel__item[data-skill="${skillId}"]`);
+    if (!(item instanceof HTMLElement)) continue;
+    const ir = item.getBoundingClientRect();
+    const ix = ir.left + ir.width * 0.5;
+    const iy = ir.top + ir.height * 0.5;
+    const itemAngle = Math.atan2(iy - cy, ix - cx);
+    const d = Math.abs(normalizeAngleSigned(mouseAngle - itemAngle));
+    if (d < bestDelta) {
+      bestDelta = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
 }
 
 function resolveCutStyleForDex(dexId) {
@@ -441,14 +482,9 @@ function castSelectedFieldSkill(player, data, charged = false) {
 }
 
 function updateFieldSkillWheelHover(player) {
-  if (!fieldSkillWheelOpen || !player || !playInputState.mouseValid) return;
-  const { sx, sy, tx, ty } = aimAtCursor(player);
-  const dx = tx - sx;
-  const dy = ty - sy;
-  if (Math.hypot(dx, dy) < 0.08) return;
-  const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
-  const sectorSize = (Math.PI * 2) / FIELD_SKILLS.length;
-  const idx = Math.floor((angle + sectorSize * 0.5) / sectorSize) % FIELD_SKILLS.length;
+  void player;
+  if (!fieldSkillWheelOpen) return;
+  const idx = resolveFieldWheelHoverFromScreenAngle();
   if (idx !== fieldSkillWheelHoverIndex) {
     fieldSkillWheelHoverIndex = idx;
     syncFieldSkillWheelDom();
@@ -603,6 +639,18 @@ export function updatePlayPointerCombat(dt, player, data) {
  */
 export function installPlayPointerCombat(deps) {
   const { canvas, getAppMode, getPlayer, getCurrentData } = deps;
+  fieldWheelMouseClientX = window.innerWidth * 0.5;
+  fieldWheelMouseClientY = window.innerHeight * 0.5;
+
+  window.addEventListener(
+    'pointermove',
+    (e) => {
+      fieldWheelMouseClientX = Number(e.clientX) || 0;
+      fieldWheelMouseClientY = Number(e.clientY) || 0;
+      if (fieldSkillWheelOpen) updateFieldSkillWheelHover(getPlayer());
+    },
+    true
+  );
 
   canvas.addEventListener('contextmenu', (e) => {
     if (getAppMode() === 'play' && !e.ctrlKey) e.preventDefault();
@@ -618,6 +666,8 @@ export function installPlayPointerCombat(deps) {
 
       if (e.button === 0) {
         e.preventDefault();
+        fieldWheelMouseClientX = Number(e.clientX) || fieldWheelMouseClientX;
+        fieldWheelMouseClientY = Number(e.clientY) || fieldWheelMouseClientY;
         leftHeld = true;
         leftDownAt = performance.now();
         leftShiftAtDown = sh;
