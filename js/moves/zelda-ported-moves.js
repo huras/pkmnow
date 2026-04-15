@@ -232,6 +232,8 @@ export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, op
     hitsWild: !fromWild,
     hitsPlayer: !!fromWild,
     hasTackleTrait: true,
+    tackleKnockback: fromWild ? 2.7 : 3.25,
+    tackleKnockbackLockSec: fromWild ? 0.24 : 0.32,
     trailAcc: 0,
     psyHitWild: new Set(),
     psyHitDetails: new Set(),

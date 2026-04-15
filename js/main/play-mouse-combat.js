@@ -10,6 +10,7 @@ import {
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
 import { tryBreakCrystalOnPlayerTackle } from './play-crystal-tackle.js';
+import { tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
@@ -186,6 +187,7 @@ export function installPlayPointerCombat(deps) {
           // Idle: mouse-guided tackle, free vector (not 8-way quantized).
           triggerPlayerLmbAttack(player, tx - sx, ty - sy);
         }
+        tryPlayerTackleHitWild(player, getCurrentData?.() ?? null);
         tryBreakCrystalOnPlayerTackle(player, getCurrentData?.() ?? null);
       }
       playInputState.chargeLeft01 = 0;

@@ -34,6 +34,11 @@ import { tryCastWildMove } from '../moves/moves-manager.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { getSocialActionById } from '../social/social-actions.js';
+import {
+  getPokemonHurtboxCenterWorldXY,
+  getPokemonHurtboxRadiusTiles,
+  projectileZInPokemonHurtbox
+} from '../pokemon/pokemon-combat-hurtbox.js';
 
 const SKY_SPECIES = new Set([
   6,   // Charizard
@@ -309,9 +314,67 @@ const WILD_SOCIAL_SIGNAL_DELTA_TILES = 0.85;
 const WILD_SOCIAL_EVENT_TTL_SEC = 10.0;
 const WILD_SOCIAL_EVENT_MAX = 10;
 const WILD_SOCIAL_NEARBY_EVENT_RADIUS = 8.5;
+const PLAYER_SOCIAL_TACKLE_HIT_RADIUS = 2.25;
+const PLAYER_SOCIAL_TACKLE_DAMAGE = 8;
+const PLAYER_SOCIAL_TACKLE_KNOCKBACK = 3.2;
+const PLAYER_TACKLE_WILD_DAMAGE = 12;
+const PLAYER_TACKLE_WILD_KNOCKBACK = 4.15;
+const PLAYER_TACKLE_WILD_SWEEP_RADIUS = 0.34;
+const PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
+const WILD_KNOCKBACK_LOCK_SEC = 0.34;
+const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isTackleSocialAction(action) {
+  if (!action) return false;
+  const id = String(action.id || '').toLowerCase();
+  const label = String(action.label || '').toLowerCase();
+  return id === 'tackle' || id === 'challenge' || id.includes('tackle') || label.includes('tackle');
+}
+
+function applyWildKnockbackFromPoint(entity, fromX, fromY, strength) {
+  if (!entity) return;
+  const dx = (entity.x ?? 0) - (Number(fromX) || 0);
+  const dy = (entity.y ?? 0) - (Number(fromY) || 0);
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = dx / len;
+  const ny = dy / len;
+  const kb = Math.max(0.2, Number(strength) || PLAYER_FIELD_MOVE_KNOCKBACK);
+  const blend = 0.05;
+  entity.vx = (entity.vx || 0) * blend + nx * kb;
+  entity.vy = (entity.vy || 0) * blend + ny * kb;
+  entity.knockbackLockSec = Math.max(entity.knockbackLockSec || 0, WILD_KNOCKBACK_LOCK_SEC);
+  if (entity.aiState !== 'sleep') {
+    entity.aiState = 'alert';
+    entity.alertTimer = Math.max(entity.alertTimer || 0, WILD_KNOCKBACK_LOCK_SEC * 0.9);
+  }
+  entity.targetX = null;
+  entity.targetY = null;
+  entity.wanderTimer = 0;
+  entity.idlePauseTimer = 0;
+}
+
+function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const fx = ax - cx;
+  const fy = ay - cy;
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - r * r;
+  if (a <= 1e-8) return c <= 0 ? 0 : null;
+  if (c <= 0) return 0;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  const sd = Math.sqrt(disc);
+  const t0 = (-b - sd) / (2 * a);
+  const t1 = (-b + sd) / (2 * a);
+  if (t0 >= 0 && t0 <= 1) return t0;
+  if (t1 >= 0 && t1 <= 1) return t1;
+  return null;
 }
 
 function ensureSocialMemory(entity) {
@@ -747,6 +810,28 @@ function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.vx = 0;
     entity.vy = 0;
     entity.animMoving = false;
+    return;
+  }
+  if ((entity.knockbackLockSec || 0) > 0) {
+    entity.knockbackLockSec = Math.max(0, (entity.knockbackLockSec || 0) - dt);
+    const airKb = wildIsAirborne(entity);
+    const nxKb = entity.x + (entity.vx || 0) * dt;
+    const nyKb = entity.y + (entity.vy || 0) * dt;
+    const movedKb = tryApplyWildPokemonMove(entity, nxKb, nyKb, data, airKb);
+    if (!movedKb) {
+      entity.vx *= 0.2;
+      entity.vy *= 0.2;
+    }
+    const damp = Math.exp(-WILD_KNOCKBACK_DAMP_PER_SEC * dt);
+    entity.vx *= damp;
+    entity.vy *= damp;
+    entity.targetX = null;
+    entity.targetY = null;
+    const spKb = Math.hypot(entity.vx || 0, entity.vy || 0);
+    entity.animMoving = spKb > 0.08;
+    if (spKb > 0.06) {
+      entity.facing = getFacingFromAngle(Math.atan2(entity.vy, entity.vx));
+    }
     return;
   }
   const beh = getEffectiveWildBehavior(entity);
@@ -1282,6 +1367,7 @@ function wildNeedsFullRateUpdate(entity, distToPlayer) {
     entity.aiState !== 'wander' ||
     entity.isDespawning ||
     (entity.spawnPhase ?? 1) < 1 ||
+    (entity.knockbackLockSec || 0) > 0 ||
     entity.hurtTimer > 0 ||
     entity.hitFlashTimer > 0 ||
     !!entity.deadState
@@ -1568,6 +1654,14 @@ export function triggerPlayerSocialAction(actionInput, player, data) {
     if (applySocialReactionToWild(entry.entity, action, player, ripple)) reactedCount += 1;
   }
 
+  if (isTackleSocialAction(action) && primaryDist <= PLAYER_SOCIAL_TACKLE_HIT_RADIUS) {
+    if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE);
+    setEmotion(primary, 5, false, 'Pain');
+    applyWildKnockbackFromPoint(primary, px, py, PLAYER_SOCIAL_TACKLE_KNOCKBACK);
+    pushRecentNearbyEvent(primary, 'player_field_move', 1.1);
+    broadcastNearbyPlayerEvent(primary.x, primary.y, 'player_field_move', 0.75, primary);
+  }
+
   const eventType = action.intent === 'scary' || action.intent === 'assertive' ? 'hostile_social' : 'friendly_social';
   broadcastNearbyPlayerEvent(px, py, eventType, 0.45);
   return { consumed: true, reactedCount };
@@ -1607,13 +1701,7 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
 
   const memory = ensureSocialMemory(best);
   setEmotion(best, 5, false);
-  const dx = best.x - player.x;
-  const dy = best.y - player.y;
-  const len = Math.hypot(dx, dy) || 1;
-  best.vx = (dx / len) * PLAYER_FIELD_MOVE_KNOCKBACK;
-  best.vy = (dy / len) * PLAYER_FIELD_MOVE_KNOCKBACK;
-  best.targetX = null;
-  best.targetY = null;
+  applyWildKnockbackFromPoint(best, player.x, player.y, PLAYER_FIELD_MOVE_KNOCKBACK);
   memory.threat = clamp(memory.threat + 0.55, 0, 3.5);
   memory.affinity = clamp(memory.affinity - 0.2, -2.5, 3);
   best.provoked01 = clamp((best.provoked01 || 0) + 0.52, 0, 3);
@@ -1623,5 +1711,59 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
   pushRecentNearbyEvent(best, 'player_field_move', 1.0);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.7, best);
   broadcastNearbySpeciesAllyHurt(best.x, best.y, best.dexId ?? 1, 0.78, best);
+  return { hit: true, dexId: best.dexId };
+}
+
+/**
+ * LMB tackle melee hit against nearest wild along the tackle segment.
+ * @param {{ x?: number, y?: number, z?: number, tackleDirNx?: number, tackleDirNy?: number, _tackleReachTiles?: number } | null | undefined} player
+ * @param {object | null | undefined} data
+ * @returns {{ hit: boolean, dexId?: number }}
+ */
+export function tryPlayerTackleHitWild(player, data) {
+  if (!player || !data) return { hit: false };
+  const px = Number(player.x);
+  const py = Number(player.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return { hit: false };
+
+  let nx = Number(player.tackleDirNx);
+  let ny = Number(player.tackleDirNy);
+  let len = Math.hypot(nx, ny);
+  if (!Number.isFinite(len) || len < 1e-4) {
+    nx = 0;
+    ny = 1;
+    len = 1;
+  }
+  nx /= len;
+  ny /= len;
+
+  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 2);
+  const probeReach = Math.max(0.2, reach - PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES);
+  const ex = px + nx * probeReach;
+  const ey = py + ny * probeReach;
+  const pz = Number(player.z) || 0;
+
+  let best = null;
+  let bestT = Infinity;
+  for (const e of entitiesByKey.values()) {
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+    const dex = e.dexId ?? 1;
+    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
+    const r = getPokemonHurtboxRadiusTiles(dex) + PLAYER_TACKLE_WILD_SWEEP_RADIUS;
+    const t = segmentCircleFirstHitT(px, py, ex, ey, hx, hy, r);
+    if (t == null) continue;
+    if (t < bestT) {
+      bestT = t;
+      best = e;
+    }
+  }
+  if (!best) return { hit: false };
+
+  if (typeof best.takeDamage === 'function') best.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  setEmotion(best, 5, false, 'Pain');
+  applyWildKnockbackFromPoint(best, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);
+  pushRecentNearbyEvent(best, 'player_field_move', 1.18);
+  broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
   return { hit: true, dexId: best.dexId };
 }

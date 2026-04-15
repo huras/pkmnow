@@ -144,6 +144,37 @@ function checkDamageHitCircle(px, py, projRadius, targetX, targetY, targetHurtRa
   return dist < projRadius + targetHurtRadiusTiles;
 }
 
+function applyWildKnockbackFromProjectile(wild, proj) {
+  if (!wild || !proj) return;
+  const kb = Math.max(0.2, Number(proj.tackleKnockback) || 3.1);
+  const kbLock = Math.max(0.08, Number(proj.tackleKnockbackLockSec) || 0.3);
+  const sx =
+    Number.isFinite(proj?.sourceEntity?.x)
+      ? Number(proj.sourceEntity.x)
+      : (Number(proj.x) || 0) - (Number(proj.vx) || 0) * 0.07;
+  const sy =
+    Number.isFinite(proj?.sourceEntity?.y)
+      ? Number(proj.sourceEntity.y)
+      : (Number(proj.y) || 0) - (Number(proj.vy) || 0) * 0.07;
+  const dx = (wild.x ?? 0) - sx;
+  const dy = (wild.y ?? 0) - sy;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = dx / len;
+  const ny = dy / len;
+  const blend = 0.05;
+  wild.vx = (wild.vx || 0) * blend + nx * kb;
+  wild.vy = (wild.vy || 0) * blend + ny * kb;
+  wild.knockbackLockSec = Math.max(wild.knockbackLockSec || 0, kbLock);
+  if (wild.aiState !== 'sleep') {
+    wild.aiState = 'alert';
+    wild.alertTimer = Math.max(wild.alertTimer || 0, kbLock * 0.9);
+  }
+  wild.targetX = null;
+  wild.targetY = null;
+  wild.wanderTimer = 0;
+  wild.idlePauseTimer = 0;
+}
+
 /** Shortest distance from point P to segment A–B (tile XY plane). */
 function distPointToSegmentTiles(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
@@ -765,6 +796,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
           const hurtR = getPokemonHurtboxRadiusTiles(wDex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             if (wild.takeDamage) wild.takeDamage(proj.damage);
+            if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
             spawnHitParticles(hx, hy, wz);
             set.add(wild);
           }
@@ -885,6 +917,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
         const hurtR = getPokemonHurtboxRadiusTiles(wDex);
         if (checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) {
           if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(proj.x, proj.y, wz);
           if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
             applySplashToWild(proj, wildList);
