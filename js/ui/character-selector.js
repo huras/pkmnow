@@ -12,7 +12,7 @@ import {
   getPlayerMoveCooldownRemaining,
   getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
-import { getCrystalLootCount } from '../main/play-crystal-tackle.js';
+import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -28,6 +28,25 @@ function moveAbbrevFromLabel(label) {
   }
   const one = parts[0] || '?';
   return one.slice(0, 2).toUpperCase();
+}
+
+function lootLabelFromItemKey(itemKey) {
+  return String(itemKey || '')
+    .replace(/\s*\[[^\]]*\]\s*/g, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .trim();
+}
+
+function lootEmojiForItemKey(itemKey) {
+  const k = String(itemKey || '').toLowerCase();
+  if (k.includes('crystal')) return '💎';
+  if (k.includes('shell')) return '🐚';
+  if (k.includes('flower')) return '🌸';
+  if (k.includes('mushroom')) return '🍄';
+  if (k.includes('leaf') || k.includes('grass')) return '🌿';
+  if (k.includes('rock')) return '🪨';
+  return '📦';
 }
 
 export class CharacterSelector {
@@ -159,6 +178,8 @@ export class CharacterSelector {
   clearPlayItemsHud() {
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (v) v.textContent = '0';
+    const listEl = this.container?.querySelector('#play-item-loot-list');
+    if (listEl) listEl.innerHTML = '';
   }
 
   /** Live item counters (play mode; game loop). */
@@ -166,6 +187,22 @@ export class CharacterSelector {
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (!v) return;
     v.textContent = String(Math.max(0, getCrystalLootCount() | 0));
+    const listEl = this.container?.querySelector('#play-item-loot-list');
+    if (!listEl) return;
+    const rows = getCollectedDetailInventorySnapshot()
+      .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
+      .slice(0, 4);
+    listEl.innerHTML = rows
+      .map(
+        (r) => `
+          <div class="play-item-hud__row">
+            <span class="play-item-hud__icon" aria-hidden="true">${lootEmojiForItemKey(r.itemKey)}</span>
+            <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
+            <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
+          </div>
+        `
+      )
+      .join('');
   }
 
   /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
@@ -285,6 +322,7 @@ export class CharacterSelector {
             <span class="play-item-hud__label">Crystal Shards</span>
             <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
           </div>
+          <div id="play-item-loot-list"></div>
         </div>
       </div>
     `;

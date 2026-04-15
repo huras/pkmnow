@@ -54,6 +54,8 @@ export const activeSpawnedSmallCrystals = [];
 export const activeCrystalDrops = [];
 let crystalLootCount = 0;
 let crystalDynIdSeq = 1;
+/** @type {Map<string, number>} */
+const collectedDetailInventory = new Map();
 /** @type {Map<string, {
  *   x: number,
  *   y: number,
@@ -90,8 +92,13 @@ export function clearPlayCrystalTackleState() {
   activeCrystalShards.length = 0;
   activeSpawnedSmallCrystals.length = 0;
   activeCrystalDrops.length = 0;
+  collectedDetailInventory.clear();
   crystalLootCount = 0;
   crystalDynIdSeq = 1;
+}
+
+function isCrystalItemKey(itemKey) {
+  return String(itemKey || '').toLowerCase().includes('crystal');
 }
 
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
@@ -277,6 +284,25 @@ function crystalVisualFromItemKey(itemKey) {
   };
 }
 
+function crystalDropVisualFromItemKey(itemKey) {
+  const objSet = OBJECT_SETS[itemKey];
+  if (!objSet) return null;
+  const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+  if (!base?.ids?.length) return null;
+  const shape = parseShape(objSet.shape);
+  const path = TessellationEngine.getImagePath(objSet.file);
+  const cols = path && path.includes('caves') ? 50 : 57;
+  return {
+    itemKey,
+    tileId: base.ids[0],
+    tileIds: [...base.ids],
+    shapeCols: Math.max(1, shape.cols),
+    shapeRows: Math.max(1, shape.rows),
+    cols,
+    imgPath: path || null
+  };
+}
+
 function spawnSmallCrystalChunksFromLarge(rootOx, rootOy, itemKey) {
   const color = crystalColorTokenFromKey(itemKey);
   const smallKey = smallCrystalKeyForColor(color);
@@ -304,7 +330,10 @@ function spawnSmallCrystalChunksFromLarge(rootOx, rootOy, itemKey) {
 }
 
 function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
-  const visual = crystalVisualFromItemKey(itemKey) || crystalVisualFromItemKey('small-blue-crystal [1x1]');
+  const visual =
+    crystalDropVisualFromItemKey(itemKey) ||
+    crystalDropVisualFromItemKey('small-blue-crystal [1x1]') ||
+    crystalVisualFromItemKey('small-blue-crystal [1x1]');
   if (!visual) return;
   const objSet = OBJECT_SETS[itemKey];
   const resolvedStackCount =
@@ -646,7 +675,10 @@ export function updateCrystalDropsAndPickup(dt, player) {
     const dx = px - d.x;
     const dy = py - d.y;
     if (dx * dx + dy * dy <= (d.pickRadius || 0.5) * (d.pickRadius || 0.5)) {
-      crystalLootCount += Math.max(1, Number(d.stackCount) || 1);
+      const stack = Math.max(1, Number(d.stackCount) || 1);
+      const key = String(d.itemKey || 'unknown');
+      collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
+      if (isCrystalItemKey(key)) crystalLootCount += stack;
       activeCrystalDrops.splice(i, 1);
     }
   }
@@ -680,4 +712,17 @@ export function updateBreakableDetailRegeneration(dt, data) {
 
 export function getCrystalLootCount() {
   return crystalLootCount;
+}
+
+/**
+ * Collected pickup totals in current play session.
+ * @returns {Array<{ itemKey: string, count: number }>}
+ */
+export function getCollectedDetailInventorySnapshot() {
+  const out = [];
+  for (const [itemKey, count] of collectedDetailInventory.entries()) {
+    out.push({ itemKey, count: Math.max(0, count | 0) });
+  }
+  out.sort((a, b) => b.count - a.count || a.itemKey.localeCompare(b.itemKey));
+  return out;
 }

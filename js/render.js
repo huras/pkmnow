@@ -1871,14 +1871,30 @@ export function render(canvas, data, options = {}) {
         if (img && d.tileId != null && d.tileId >= 0 && d.cols > 0) {
           const pulse = 0.88 + Math.sin((d.age || 0) * 8 + (d.bobSeed || 0) * 6.28) * 0.12;
           const bob = Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
-          const dw = Math.ceil(tileW * 0.56 * pulse);
-          const dh = Math.ceil(tileH * 0.56 * pulse);
-          const sx = (d.tileId % d.cols) * 16;
-          const sy = Math.floor(d.tileId / d.cols) * 16;
+          const scale = 0.56 * pulse;
+          const tileIds = Array.isArray(d.tileIds) && d.tileIds.length ? d.tileIds : [d.tileId];
+          const shapeCols = Math.max(1, Number(d.shapeCols) || 1);
+          const shapeRows = Math.max(1, Number(d.shapeRows) || Math.ceil(tileIds.length / shapeCols));
+          const tileDw = Math.ceil(tileW * scale);
+          const tileDh = Math.ceil(tileH * scale);
           const px = snapPx(d.x * tileW);
           const py = snapPx(d.y * tileH - bob);
+          const footW = shapeCols * tileW * scale;
+          const footH = shapeRows * tileH * scale;
+          const ox0 = px - footW * 0.5;
+          const oy0 = py - footH * 0.5;
           ctx.globalAlpha = 0.94;
-          ctx.drawImage(img, sx, sy, 16, 16, px - dw * 0.5, py - dh * 0.5, dw, dh);
+          for (let i2 = 0; i2 < tileIds.length; i2++) {
+            const tid = tileIds[i2];
+            if (tid == null || tid < 0) continue;
+            const sx = (tid % d.cols) * 16;
+            const sy = Math.floor(tid / d.cols) * 16;
+            const ox = i2 % shapeCols;
+            const oy = Math.floor(i2 / shapeCols);
+            const dx = snapPx(ox0 + ox * tileW * scale);
+            const dy = snapPx(oy0 + oy * tileH * scale);
+            ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileDw, tileDh);
+          }
           ctx.globalAlpha = 1;
         }
       } else if (item.type === 'projectile') {
