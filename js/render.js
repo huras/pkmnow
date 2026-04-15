@@ -1339,7 +1339,15 @@ export function render(canvas, data, options = {}) {
       };
 
       if (pImg && pImg.naturalWidth) {
-        const side = tileW * 1.14;
+        /** Panel size; stack + plate alphas composite over terrain (see fills — not opaque white). */
+        const PORTRAIT_EMOTION_BOX_TILES = 1.14 * 1.25;
+        /** Uniform multiplier so face + chrome all read as “glass” over the map. */
+        const PORTRAIT_EMOTION_STACK_ALPHA = 0.58;
+        const PORTRAIT_PLATE_FILL = 'rgba(252,250,255,0.5)';
+        const PORTRAIT_SHADOW_FILL = 'rgba(6,8,14,0.38)';
+        const PORTRAIT_STROKE_PLATE = 'rgba(255,255,255,0.55)';
+        const PORTRAIT_STROKE_TAIL = 'rgba(255,255,255,0.48)';
+        const side = tileW * PORTRAIT_EMOTION_BOX_TILES;
         const gap = tileH * 0.07;
         const bx = snapPx(em.cx - side * 0.5);
         const by = snapPx(spriteTopY - side - gap);
@@ -1350,15 +1358,18 @@ export function render(canvas, data, options = {}) {
         const tailHalfW = side * 0.13;
 
         ctx.save();
+        ctx.globalAlpha = PORTRAIT_EMOTION_STACK_ALPHA;
+
+        ctx.save();
         ctx.translate(0, 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.fillStyle = PORTRAIT_SHADOW_FILL;
         roundRectPath(bx, by, side, side, cr);
         ctx.fill();
         ctx.restore();
 
         ctx.save();
         roundRectPath(bx, by, side, side, cr);
-        ctx.fillStyle = 'rgba(252,250,255,0.98)';
+        ctx.fillStyle = PORTRAIT_PLATE_FILL;
         ctx.fill();
         roundRectPath(bx, by, side, side, cr);
         ctx.clip();
@@ -1382,7 +1393,7 @@ export function render(canvas, data, options = {}) {
 
         ctx.save();
         roundRectPath(bx, by, side, side, cr);
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.strokeStyle = PORTRAIT_STROKE_PLATE;
         ctx.lineWidth = 2.5;
         ctx.stroke();
         ctx.restore();
@@ -1393,11 +1404,13 @@ export function render(canvas, data, options = {}) {
         ctx.lineTo(em.cx, tipY);
         ctx.lineTo(midX + tailHalfW, boxBottom);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(252,250,255,0.98)';
+        ctx.fillStyle = PORTRAIT_PLATE_FILL;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.strokeStyle = PORTRAIT_STROKE_TAIL;
         ctx.lineWidth = 2;
         ctx.stroke();
+        ctx.restore();
+
         ctx.restore();
         return;
       }

@@ -45,6 +45,7 @@ import {
 } from './render/play-camera-snapshot.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
+import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -61,7 +62,51 @@ if (isPlayShell()) {
 }
 
 const canvas = document.getElementById('map');
+
+/** Blur inputs / buttons so WASD and hotkeys go to the game after clicking the map. */
+function blurFocusedUiAwayFromCanvas() {
+  const ae = document.activeElement;
+  if (!ae || ae === canvas) return;
+  if (!(ae instanceof HTMLElement)) return;
+  if (
+    ae instanceof HTMLInputElement ||
+    ae instanceof HTMLTextAreaElement ||
+    ae instanceof HTMLSelectElement ||
+    ae instanceof HTMLButtonElement
+  ) {
+    ae.blur();
+    return;
+  }
+  if (ae.isContentEditable) {
+    ae.blur();
+  }
+}
+
+function focusGameCanvas() {
+  if (!canvas) return;
+  try {
+    canvas.focus({ preventScroll: true });
+  } catch {
+    try {
+      canvas.focus();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+if (canvas) {
+  canvas.tabIndex = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.currentTarget !== canvas) return;
+    blurFocusedUiAwayFromCanvas();
+    focusGameCanvas();
+  });
+}
+
 const minimap = document.getElementById('minimap');
+const minimapPanel = document.getElementById('minimap-panel');
+const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
@@ -88,6 +133,9 @@ const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
 const playBgmNowPlayingTrackEl = document.getElementById('play-bgm-now-playing-track');
 const playBgmNowPlayingStatusEl = document.getElementById('play-bgm-now-playing-status');
+const playBgmToastEl = document.getElementById('play-bgm-toast');
+const playBgmToastTrackEl = document.getElementById('play-bgm-toast-track');
+const playBgmToastStatusEl = document.getElementById('play-bgm-toast-status');
 const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
@@ -109,14 +157,80 @@ let worldTimeRunning = true;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
+/** Last track title used for immersive toast dedupe (not the full panel signature). */
+/** @type {string | null} */
+let lastBgmToastTrackKey = null;
+let playBgmToastHideTimer = 0;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
+
+const PLAY_BGM_TOAST_MS = 4600;
+
+function isPlayImmersiveMinimalUi() {
+  return document.querySelector('.app')?.classList.contains('app--play-immersive') ?? false;
+}
+
+function dismissPlayBgmToast() {
+  if (playBgmToastHideTimer) {
+    clearTimeout(playBgmToastHideTimer);
+    playBgmToastHideTimer = 0;
+  }
+  playBgmToastEl?.classList.remove('play-bgm-toast--visible');
+}
+
+function schedulePlayBgmToastHide() {
+  if (!playBgmToastEl?.classList.contains('play-bgm-toast--visible')) return;
+  if (playBgmToastHideTimer) clearTimeout(playBgmToastHideTimer);
+  playBgmToastHideTimer = window.setTimeout(() => {
+    playBgmToastHideTimer = 0;
+    playBgmToastEl?.classList.remove('play-bgm-toast--visible');
+  }, PLAY_BGM_TOAST_MS);
+}
+
+function wirePlayBgmToastUi() {
+  if (!playBgmToastEl || playBgmToastEl.dataset.wired === '1') return;
+  playBgmToastEl.dataset.wired = '1';
+  playBgmToastEl.addEventListener('mouseenter', () => {
+    if (playBgmToastHideTimer) {
+      clearTimeout(playBgmToastHideTimer);
+      playBgmToastHideTimer = 0;
+    }
+  });
+  playBgmToastEl.addEventListener('mouseleave', () => {
+    if (playBgmToastEl.classList.contains('play-bgm-toast--visible')) {
+      schedulePlayBgmToastHide();
+    }
+  });
+  document.getElementById('play-bgm-toast-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dismissPlayBgmToast();
+  });
+}
+
+wirePlayBgmToastUi();
+
+/**
+ * @param {string} trackTitle
+ * @param {string} statusText
+ */
+function showPlayBgmTrackToast(trackTitle, statusText) {
+  if (!playBgmToastEl || !playBgmToastTrackEl || !playBgmToastStatusEl) return;
+  dismissPlayBgmToast();
+  playBgmToastTrackEl.textContent = trackTitle;
+  playBgmToastStatusEl.textContent = statusText;
+  requestAnimationFrame(() => {
+    playBgmToastEl.classList.add('play-bgm-toast--visible');
+    schedulePlayBgmToastHide();
+  });
+}
 
 configureTileDebugModal({
   getCurrentData: () => currentData,
   debugModal,
   debugContent
 });
+
+const minimapAudioUi = installMinimapAudioUi();
 
 let lastHudTileKey = '';
 let lastHudMs = 0;
@@ -209,6 +323,15 @@ function syncPlayBgmNowPlayingPanel() {
   lastBgmUiSignature = sig;
   playBgmNowPlayingTrackEl.textContent = title;
   playBgmNowPlayingStatusEl.textContent = statusText;
+
+  const immersive = isPlayImmersiveMinimalUi();
+  if (!immersive) {
+    lastBgmToastTrackKey = title;
+    dismissPlayBgmToast();
+  } else if (title !== '—' && title !== lastBgmToastTrackKey) {
+    lastBgmToastTrackKey = title;
+    showPlayBgmTrackToast(title, statusText);
+  }
 }
 
 function getSettings() {
@@ -256,6 +379,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   updateView,
   refreshPlayModeInfoBar,
   getPlayFpsEl: () => playFpsEl,
+  getPlayFpsCompact: () => isPlayImmersiveMinimalUi(),
   player,
   advanceWorldTime: (dt) => {
     if (appMode !== 'play') return;
@@ -267,6 +391,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     playCharacterSelector?.updatePlayMovesCooldownHud();
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
+    minimapAudioUi.syncMinimapAudioPopover();
   }
 });
 
@@ -424,7 +549,9 @@ function enterPlayMode(gx, gy) {
   appMode = 'play';
   btnExport?.classList.add('hidden');
   btnBackToMap?.classList.remove('hidden');
-  minimap.classList.remove('hidden');
+  if (minimapPanel) minimapPanel.classList.remove('hidden');
+  else minimap?.classList.remove('hidden');
+  minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML =
     "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged (Ember/água), Psybeam segure = orbe rosa pulsante e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
@@ -435,6 +562,8 @@ function enterPlayMode(gx, gy) {
   snapDayCycleTintSmoothToHours(wrapHours(worldHours));
   syncPlayWorldTimePanel();
   lastBgmUiSignature = '';
+  lastBgmToastTrackKey = null;
+  dismissPlayBgmToast();
   syncPlayBgmNowPlayingPanel();
 
   document.body.classList.add('play-mode-active');
@@ -447,13 +576,19 @@ function enterPlayMode(gx, gy) {
   startGameLoop();
 }
 
+btnMinimapBackToMap?.addEventListener('click', () => {
+  btnBackToMap?.click();
+});
+
 btnBackToMap?.addEventListener('click', () => {
   stopBiomeBgm();
   clearPlayCameraSnapshot();
   appMode = 'map';
   btnExport?.classList.remove('hidden');
   btnBackToMap?.classList.add('hidden');
-  minimap.classList.add('hidden');
+  if (minimapPanel) minimapPanel.classList.add('hidden');
+  else minimap?.classList.add('hidden');
+  minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
   playDetailColliderHighlight = null;
 
@@ -465,6 +600,8 @@ btnBackToMap?.addEventListener('click', () => {
   playCharacterSelector?.updatePlayAltitudeHud(null);
   playCharacterSelector?.clearPlayMovesCooldownHud();
   lastBgmUiSignature = '';
+  lastBgmToastTrackKey = null;
+  dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
   if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = 'Idle';
   resizeCanvas();

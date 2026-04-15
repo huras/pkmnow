@@ -43,10 +43,11 @@ function isPlayMovementKeyEvent(e) {
  *   updateView: () => void,
  *   refreshPlayModeInfoBar: () => void,
  *   getPlayFpsEl: () => HTMLElement | null,
+ *   getPlayFpsCompact?: () => boolean,
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
  *   advanceWorldTime?: (dt: number) => void
- * }} api
+ * }} api When `getPlayFpsCompact` is true, `#play-fps` shows only the rolling FPS (minimal / immersive UI).
  */
 export function createGameLoop(api) {
   const {
@@ -56,6 +57,7 @@ export function createGameLoop(api) {
     updateView,
     refreshPlayModeInfoBar,
     getPlayFpsEl,
+    getPlayFpsCompact,
     player,
     onPlayHudFrame,
     advanceWorldTime
@@ -147,33 +149,38 @@ export function createGameLoop(api) {
       const cutoff = tEnd - 1000;
       while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
       const fps = playFpsSampleTimes.length;
-      const lod = getPlayLodDetail();
-      const updateMs = tRenderStart - tLoopStart;
-      const renderMs = tRenderEnd - tRenderStart;
-      const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown);
-      const stablePct = perf.stableRatio01 * 100;
-      const heavyUpdateSlices = [
-        ['ply', perf.p95UpdPlayerMsStable],
-        ['wnd', perf.p95UpdWildWindowMsStable],
-        ['wld', perf.p95UpdWildMsStable],
-        ['ptr', perf.p95UpdPointerMsStable],
-        ['mov', perf.p95UpdMovesMsStable],
-        ['grs', perf.p95UpdGrassFireMsStable],
-        ['bgm', perf.p95UpdBgmMsStable],
-        ['hud', perf.p95UpdHudMsStable]
-      ]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
-        .join(' | ');
-      playFpsEl.textContent =
-        `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
-        ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
-        ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
-        ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
-        ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
-        ` · upd top ${heavyUpdateSlices}` +
-        ` · stable ${stablePct.toFixed(0)}%`;
+      const compact = getPlayFpsCompact?.() ?? false;
+      if (compact) {
+        playFpsEl.textContent = `${fps} FPS`;
+      } else {
+        const lod = getPlayLodDetail();
+        const updateMs = tRenderStart - tLoopStart;
+        const renderMs = tRenderEnd - tRenderStart;
+        const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown);
+        const stablePct = perf.stableRatio01 * 100;
+        const heavyUpdateSlices = [
+          ['ply', perf.p95UpdPlayerMsStable],
+          ['wnd', perf.p95UpdWildWindowMsStable],
+          ['wld', perf.p95UpdWildMsStable],
+          ['ptr', perf.p95UpdPointerMsStable],
+          ['mov', perf.p95UpdMovesMsStable],
+          ['grs', perf.p95UpdGrassFireMsStable],
+          ['bgm', perf.p95UpdBgmMsStable],
+          ['hud', perf.p95UpdHudMsStable]
+        ]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+          .join(' | ');
+        playFpsEl.textContent =
+          `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
+          ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
+          ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
+          ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
+          ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
+          ` · upd top ${heavyUpdateSlices}` +
+          ` · stable ${stablePct.toFixed(0)}%`;
+      }
     }
     if (getAppMode() === 'play') {
       animFrameId = requestAnimationFrame(gameLoop);

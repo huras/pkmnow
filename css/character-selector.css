@@ -99,12 +99,12 @@
   font-size: 0.78rem;
 }
 
-/* Immersive: hide every direct .app child except selector + map; inside map-wrap keep #map + #minimap only. */
+/* Immersive: hide every direct .app child except selector + map; inside map-wrap keep #map + #minimap-panel only. */
 .app--play-immersive > :not(#character-selector-container):not(.map-wrap) {
   display: none !important;
 }
 
-.app--play-immersive .map-wrap > :not(#map):not(#minimap) {
+.app--play-immersive .map-wrap > :not(#map):not(#minimap-panel):not(#play-fps):not(#play-bgm-toast) {
   display: none !important;
 }
 

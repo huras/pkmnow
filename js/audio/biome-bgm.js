@@ -1,6 +1,7 @@
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
 import { getBiomeBgmUrlsForBiome } from './biome-bgm-tracks.js';
 import { getMicroTile } from '../chunking.js';
+import { getBgmMix01 } from './play-audio-mix-settings.js';
 
 const TUNING = {
   fadeOutSec: 1.15,
@@ -11,7 +12,7 @@ const TUNING = {
   masterLinearGain: 0.34
 };
 
-/** @typedef {{ audio: HTMLAudioElement, gain: GainNode }} BgmSlot */
+/** @typedef {{ audio: HTMLAudioElement, gain: GainNode, userGain: GainNode }} BgmSlot */
 
 /** @type {BgmSlot | null} */
 let slot0 = null;
@@ -61,7 +62,10 @@ function afterMs(fn, ms) {
 }
 
 function ensureSlots() {
-  if (slot0) return;
+  if (slot0) {
+    applyBgmUserMixFromStorage();
+    return;
+  }
   const ctx = getSpatialAudioContext();
   const mk = () => {
     const audio = new Audio();
@@ -69,12 +73,36 @@ function ensureSlots() {
     const source = ctx.createMediaElementSource(audio);
     const gain = ctx.createGain();
     gain.gain.value = 0;
+    const userGain = ctx.createGain();
+    userGain.gain.value = getBgmMix01();
     source.connect(gain);
-    gain.connect(ctx.destination);
-    return { audio, gain };
+    gain.connect(userGain);
+    userGain.connect(ctx.destination);
+    return { audio, gain, userGain };
   };
   slot0 = mk();
   slot1 = mk();
+}
+
+/**
+ * Applies {@link getBgmMix01} to both BGM slots (post-fade trim). Safe to call any time after {@link ensureSlots}.
+ */
+export function applyBgmUserMixFromStorage() {
+  const v = getBgmMix01();
+  if (slot0?.userGain) {
+    try {
+      slot0.userGain.gain.value = v;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (slot1?.userGain) {
+    try {
+      slot1.userGain.gain.value = v;
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
