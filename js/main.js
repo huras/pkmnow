@@ -272,7 +272,7 @@ function refreshPlayModeInfoBar(force = false) {
   const baseAt = computeTerrainRoleAndSprite(mx, my, currentData, tile.heightStep);
   const flyHint =
     speciesHasFlyingType(player.dexId ?? 0) &&
-    ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (Space twice · F · Space↑ Shift↓)`;
+    ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (F toggle · Space/Shift altitude · hops: 2 or 6 flying)`;
   const hp = player.hp ?? player.maxHp ?? 100;
   const maxH = player.maxHp ?? 100;
   const psn =

@@ -138,6 +138,7 @@ function ensureWildPhysicsState(entity) {
   if (entity.vz == null) entity.vz = 0;
   if (entity.grounded == null) entity.grounded = true;
   if (entity.jumping == null) entity.jumping = false;
+  if (entity.jumpSerial == null) entity.jumpSerial = 0;
   if (entity.jumpCooldown == null) entity.jumpCooldown = 0;
   if (entity._blockedMoveFrames == null) entity._blockedMoveFrames = 0;
 }
@@ -162,6 +163,7 @@ function tryWildPokemonJump(entity) {
   entity.vz = WILD_JUMP_IMPULSE;
   entity.grounded = false;
   entity.jumping = true;
+  entity.jumpSerial = (entity.jumpSerial || 0) + 1;
   entity.jumpCooldown = WILD_JUMP_COOLDOWN_SEC;
   entity._blockedMoveFrames = 0;
 }

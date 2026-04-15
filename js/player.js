@@ -36,6 +36,8 @@ const FRICTION = 20.0;
 const GRAVITY = 9.8;
 const JUMP_IMPULSE = 4.5;
 const GROUND_R = 0.32; // Raio de colisão
+const PLAYER_BASE_MAX_JUMPS = 2;
+const PLAYER_FLYING_MAX_JUMPS = 6;
 
 /** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
 /** Creative flight ceiling (world tile units); HUD / UI may import this. */
@@ -105,6 +107,10 @@ export const player = {
   totalDistMoved: 0,
   dexId: initialDex,
   jumping: false,
+  /** Air hops used since last grounded state. */
+  jumpsUsed: 0,
+  /** Monotonic counter; increments on every hop for render FX triggers. */
+  jumpSerial: 0,
   grounded: true,
   /** Sprint until all direction keys released (set from play keyboard). */
   runMode: false,
@@ -175,6 +181,8 @@ export function setPlayerSpecies(dexId) {
   player.socialEmotionPortraitSlug = null;
   player._flightIdleCycleSec = 0;
   player.flightGroundTetherVisible = false;
+  player.jumpsUsed = 0;
+  player.jumpSerial = 0;
 }
 
 export function setPlayerPos(x, y) {
@@ -188,6 +196,8 @@ export function setPlayerPos(x, y) {
   player.z = 0;
   player.grounded = true;
   player.jumping = false;
+  player.jumpsUsed = 0;
+  player.jumpSerial = 0;
   player.totalDistMoved = 0;
   player.animFrame = 0;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
@@ -255,6 +265,7 @@ export function togglePlayerCreativeFlight() {
     player.vz = 0;
     player.digBurrowMode = false;
     player.digCharge01 = 0;
+    player.jumpsUsed = 0;
   }
 }
 
@@ -464,16 +475,9 @@ export function tryMovePlayer(dx, dy, data) {
 export function tryJumpPlayer(data) {
   const canFly = speciesHasFlyingType(player.dexId ?? 0);
   if (canFly && player.flightActive) return false;
-
-  // Double jump (Flying): second Space while airborne starts creative flight.
-  if (canFly && !player.flightActive && !player.grounded && (player.jumping || player.z > 0.05)) {
-    player.flightActive = true;
-    player.jumping = false;
-    player.vz = 0;
-    return true;
-  }
-
-  if (!player.grounded) return false;
+  const maxJumps = canFly ? PLAYER_FLYING_MAX_JUMPS : PLAYER_BASE_MAX_JUMPS;
+  if (player.grounded || player.z <= 0.001) player.jumpsUsed = 0;
+  if ((player.jumpsUsed || 0) >= maxJumps) return false;
   if (isGroundDigLatchEligible()) {
     player.digBurrowMode = false;
     player.digCharge01 = 0;
@@ -481,6 +485,8 @@ export function tryJumpPlayer(data) {
   player.vz = JUMP_IMPULSE;
   player.grounded = false;
   player.jumping = true;
+  player.jumpsUsed = (player.jumpsUsed || 0) + 1;
+  player.jumpSerial = (player.jumpSerial || 0) + 1;
   return true;
 }
 
@@ -731,6 +737,7 @@ export function updatePlayer(dt, data) {
     if (player.z <= 1e-4) {
       player.z = 0;
       player.grounded = true;
+      player.jumpsUsed = 0;
     } else {
       player.grounded = false;
     }
@@ -743,6 +750,7 @@ export function updatePlayer(dt, data) {
       player.vz = 0;
       player.grounded = true;
       player.jumping = false;
+      player.jumpsUsed = 0;
     }
   }
 

@@ -1,5 +1,6 @@
 import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { getPlayLodDetail } from '../render/play-view-camera.js';
+import { getPlayChunkFrameStats } from '../render.js';
 import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
@@ -183,6 +184,16 @@ export function createGameLoop(api) {
           .slice(0, 3)
           .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
           .join(' | ');
+        const chunkStats = getPlayChunkFrameStats();
+        const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
+        const chunkInfo =
+          chunkStats.mode === 'play'
+            ? ` · chk ${chunkStats.drawnVisible}/${chunkStats.totalVisible}` +
+              ` · miss ${chunkStats.missingVisible}` +
+              ` · bake ${chunkStats.bakedThisFrame}/${chunkStats.bakeBudget}` +
+              ` · q ${chunkStats.queueSize}` +
+              chunkBoostTag
+            : '';
         playFpsEl.textContent =
           `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
           ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
@@ -190,7 +201,8 @@ export function createGameLoop(api) {
           ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
           ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
           ` · upd top ${heavyUpdateSlices}` +
-          ` · stable ${stablePct.toFixed(0)}%`;
+          ` · stable ${stablePct.toFixed(0)}%` +
+          chunkInfo;
       }
     }
     if (getAppMode() === 'play') {
