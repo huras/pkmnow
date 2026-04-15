@@ -114,6 +114,26 @@ import {
 
 import './render/render-debug-hotkeys.js';
 
+// Perf: caches persistentes reutilizados por frame (evita realocação + GC pressure).
+const RENDER_TILE_CACHE = new Map();
+const RENDER_SCATTER_ORIGIN_MEMO = new Map();
+/**
+ * Array persistente para itens ordenáveis (Y-sort). Reset via length=0 não reloca storage,
+ * apenas zera o contador — próximos pushes reusam capacidade. Em Jungle com 300+ items/frame,
+ * elimina a realocação do array (objects internos ainda são GC'd, custo menor).
+ */
+const RENDER_SORTABLE_ITEMS = [];
+/**
+ * Tiles cobertos por canopies de trees/scatter-tops neste frame. Populado no scan,
+ * consumido em `passesAbovePlayerTileGate` para evitar que grass overlay do player
+ * desenhe por cima de palmeiras/árvores (bug visual: grama vaza sobre canopy).
+ * Key = bit-packed int32 (mx << 16 | my & 0xFFFF).
+ */
+const CANOPY_COVERED_TILES = new Set();
+function canopyTileKey(mx, my) {
+  return ((mx & 0xFFFF) << 16) | (my & 0xFFFF);
+}
+
 /**
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} p
@@ -616,8 +636,9 @@ export function render(canvas, data, options = {}) {
 
     ctx.translate(currentTransX, currentTransY);
 
-    // Otimização de Frame: Cache de tiles para o viewport atual
-    const tileCache = new Map();
+    // Otimização de Frame: Cache de tiles para o viewport atual (reutiliza Map persistente).
+    RENDER_TILE_CACHE.clear();
+    const tileCache = RENDER_TILE_CACHE;
     const getCached = (mx, my) => {
       const key = (mx << 16) | (my & 0xFFFF);
       if (tileCache.has(key)) return tileCache.get(key);
@@ -770,6 +791,9 @@ export function render(canvas, data, options = {}) {
 
     const passesAbovePlayerTileGate = (mx, my, tile) => {
       if (!tile || tile.heightStep < 1) return false;
+      // Bug fix: se o tile está coberto por canopy de tree/scatter, NÃO desenhar grass overlay
+      // por cima do sprite — a canopy/árvore é quem deve aparecer acima, não a grama.
+      if (CANOPY_COVERED_TILES.has(canopyTileKey(mx, my))) return false;
       const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
       if (gateSet) {
         const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
@@ -939,12 +963,15 @@ export function render(canvas, data, options = {}) {
 
     // PASS 3.5: Sorted Entities pass (Player + Wild Pokémon)
     const wildList = getWildPokemonEntities();
-    const renderItems = [];
+    RENDER_SORTABLE_ITEMS.length = 0;
+    const renderItems = RENDER_SORTABLE_ITEMS;
+    CANOPY_COVERED_TILES.clear();
     
     // --- Collect Sortable Objects (Scatter, Trees, Buildings) ---
     const sortableScanPad = lodDetail >= 2 ? 2 : 4;
-    /** Dedup `validScatterOriginMicro` (footprint + “em cima de outro scatter”) no mesmo frame. */
-    const scatterOriginMemoRender = new Map();
+    /** Dedup `validScatterOriginMicro` (footprint + "em cima de outro scatter") no mesmo frame. */
+    RENDER_SCATTER_ORIGIN_MEMO.clear();
+    const scatterOriginMemoRender = RENDER_SCATTER_ORIGIN_MEMO;
     for (let myScan = startY - sortableScanPad; myScan < endY; myScan++) {
       for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
         if (mxScan < 0 || myScan < 0 || mxScan >= width * MACRO_TILE_STRIDE || myScan >= height * MACRO_TILE_STRIDE) continue;
@@ -964,6 +991,12 @@ export function render(canvas, data, options = {}) {
               sortY: myScan + 1, // matches formal canopy translate Y: originY*tileH + tileH
               biomeId: t.biomeId
             });
+            // Marca tiles cobertos pelo canopy (2 cols × 3 rows: base + 2 rows de canopy acima)
+            // para grass overlay do player não vazar por cima da árvore.
+            for (let dy = -2; dy <= 0; dy++) {
+              CANOPY_COVERED_TILES.add(canopyTileKey(mxScan, myScan + dy));
+              CANOPY_COVERED_TILES.add(canopyTileKey(mxScan + 1, myScan + dy));
+            }
           }
         }
         
@@ -1004,6 +1037,16 @@ export function render(canvas, data, options = {}) {
                    cols,
                    rows
                  });
+                 // Marca tiles cobertos pela canopy/footprint do scatter para evitar
+                 // grass overlay do player vazar sobre palm/large scatter (bug visual).
+                 // Escopo conservador: footprint completo + 2 rows acima (área típica do top).
+                 if (hasTop) {
+                   for (let dy = -2; dy < rows; dy++) {
+                     for (let dx = 0; dx < cols; dx++) {
+                       CANOPY_COVERED_TILES.add(canopyTileKey(mxScan + dx, myScan + dy));
+                     }
+                   }
+                 }
                }
             }
           }

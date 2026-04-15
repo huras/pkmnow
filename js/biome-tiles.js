@@ -81,22 +81,35 @@ export function tileSurfaceAllowsScatterVegetation(tile) {
 /**
  * Scatter com pedra/cristal não deve balançar com "vento" no render.
  * Chaves são nomes de OBJECT_SETS (ex.: "small-dirt-rocks-a [1x1]").
+ * Memoizado: key space é pequeno (~30 itemKeys fixos) e a função roda 200+×/frame em Jungle.
  */
+const WIND_SWAY_MEMO = new Map();
 export function scatterHasWindSway(itemKey) {
+  const cached = WIND_SWAY_MEMO.get(itemKey);
+  if (cached !== undefined) return cached;
   const k = String(itemKey).toLowerCase();
-  if (k.includes('crystal')) return false;
-  if (k.includes('dirt-rock') || k.includes('dirt-rocks')) return false;
-  if (k.includes('big-cactus')) return false;
-  if (k.includes('shell')) return false;
-  return true;
+  const result =
+    !k.includes('crystal') &&
+    !k.includes('dirt-rock') &&
+    !k.includes('dirt-rocks') &&
+    !k.includes('big-cactus') &&
+    !k.includes('shell');
+  WIND_SWAY_MEMO.set(itemKey, result);
+  return result;
 }
 
 /**
  * Scatter com pedra/cristal deve ter sorting no eixo Y com o player.
+ * Memoizado (mesmo motivo).
  */
+const SORTABLE_MEMO = new Map();
 export function isSortableScatter(itemKey) {
+  const cached = SORTABLE_MEMO.get(itemKey);
+  if (cached !== undefined) return cached;
   const k = String(itemKey).toLowerCase();
-  return k.includes('crystal') || k.includes('rock') || k.includes('cactus');
+  const result = k.includes('crystal') || k.includes('rock') || k.includes('cactus');
+  SORTABLE_MEMO.set(itemKey, result);
+  return result;
 }
 
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====

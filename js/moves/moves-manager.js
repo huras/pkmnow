@@ -140,8 +140,10 @@ function spawnTrailParticle(px, py, trailType, baseZ = 0) {
 
 /** XY overlap for damage: projectile circle vs target hurt radius (tiles), not walk collider. */
 function checkDamageHitCircle(px, py, projRadius, targetX, targetY, targetHurtRadiusTiles) {
-  const dist = Math.hypot(targetX - px, targetY - py);
-  return dist < projRadius + targetHurtRadiusTiles;
+  const dx = targetX - px;
+  const dy = targetY - py;
+  const r = projRadius + targetHurtRadiusTiles;
+  return dx * dx + dy * dy < r * r;
 }
 
 function applyWildKnockbackFromProjectile(wild, proj) {
@@ -189,7 +191,9 @@ function distPointToSegmentTiles(px, py, ax, ay, bx, by) {
 }
 
 function broadPhaseOk(px, py, tx, ty) {
-  return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
+  const dx = tx - px;
+  const dy = ty - py;
+  return dx * dx + dy * dy <= COLLISION_BROAD_PHASE_TILES * COLLISION_BROAD_PHASE_TILES;
 }
 
 /**
@@ -243,8 +247,10 @@ function applySplashToWild(proj, wildList, splashZ) {
     if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
     const splashDex = wild.dexId ?? 1;
     const { hx: shx, hy: shy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, splashDex);
+    const sdx = shx - proj.x;
+    const sdy = shy - proj.y;
     if (
-      Math.hypot(shx - proj.x, shy - proj.y) <= r &&
+      sdx * sdx + sdy * sdy <= r * r &&
       projectileZInPokemonHurtbox(sz, splashDex, wild.z ?? 0)
     ) {
       if (wild.takeDamage) wild.takeDamage(d);
@@ -711,27 +717,33 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
 
-  for (let i = activeParticles.length - 1; i >= 0; i--) {
-    const p = activeParticles[i];
-    p.life -= dt;
-    if (p.life <= 0) {
-      activeParticles.splice(i, 1);
-      continue;
+  // Compact-in-place: preserva ordem, O(n) total. Substitui backwards+splice que era O(n²)
+  // no pior caso (cada splice shift O(n) elementos anteriores).
+  {
+    let write = 0;
+    const N = activeParticles.length;
+    for (let read = 0; read < N; read++) {
+      const p = activeParticles[read];
+      p.life -= dt;
+      if (p.life <= 0) continue;
+      if (p.type === 'grassFire') {
+        p.z = 0.08;
+      } else {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.vz -= 30.0 * dt;
+        if (p.z <= 0) {
+          p.z = 0;
+          p.vz = 0;
+          p.vx *= 0.82;
+          p.vy *= 0.82;
+        }
+      }
+      if (write !== read) activeParticles[write] = p;
+      write++;
     }
-    if (p.type === 'grassFire') {
-      p.z = 0.08;
-      continue;
-    }
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.z += p.vz * dt;
-    p.vz -= 30.0 * dt;
-    if (p.z <= 0) {
-      p.z = 0;
-      p.vz = 0;
-      p.vx *= 0.82;
-      p.vy *= 0.82;
-    }
+    activeParticles.length = write;
   }
 
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {

@@ -58,6 +58,15 @@ const phaseCache = new Map();
 
 /**
  * Offset de fase para Math.sin(ωt + phase). Calcula Perlin só no primeiro uso da célula.
+ *
+ * A fase final combina 2 componentes:
+ * 1. **Bias direcional linear** (domina): cria efeito de "onda viajando" diagonalmente pelo mapa.
+ *    Vizinhos balançam quase juntos (diferença pequena = ~0.1 rad = quase mesmo frame).
+ * 2. **Perlin com amplitude reduzida** (π/4 em vez de 2π): adiciona variação orgânica sutil,
+ *    sem jogar vizinhos em fases opostas como antes.
+ *
+ * Antes: Perlin × 2π espalhava fases caoticamente — trees próximas iam em direções opostas.
+ * Agora: trees próximas se movem em sync, padrão de onda coerente emerge naturalmente.
  */
 export function getWindPhaseOffset(mx, my) {
   const key = `${mx},${my}`;
@@ -65,7 +74,11 @@ export function getWindPhaseOffset(mx, my) {
   if (phase !== undefined) return phase;
 
   const n = perlin2(mx * WIND_NOISE_SCALE, my * WIND_NOISE_SCALE);
-  phase = n * Math.PI * 2;
+  // Bias linear: mx contribui mais que my (vento "horizontal"), espaçamento ~6 tiles por ciclo
+  const directionalBias = (mx * 0.18 + my * 0.08);
+  // Perlin reduzido: ±π/4 em vez de ±2π (elimina caos, mantém variação)
+  const perlinJitter = n * Math.PI * 0.25;
+  phase = directionalBias + perlinJitter;
   phaseCache.set(key, phase);
   return phase;
 }

@@ -305,6 +305,67 @@ const DIRECTION_ROW_MAP = {
 /** @type {Map<string, object>} */
 const entitiesByKey = new Map();
 
+/**
+ * Spatial hash grid pra broadcasts O(k) em vez de O(n) sobre todas entidades.
+ * CELL_SIZE=16 cobre WILD_SOCIAL_NEARBY_EVENT_RADIUS=8.5 com 1 célula de vizinhança.
+ * Key = int32 bit-packed (cx << 16 | cy & 0xFFFF). SMI no V8 = hash nativo, sem string alloc.
+ * Suporta coords de -32768 a 32767, suficiente pra mapas reais (~100k tiles).
+ * @type {Map<number, Set<object>>}
+ */
+const spatialGrid = new Map();
+const GRID_CELL_SIZE = 16;
+
+function gridKeyFor(wx, wy) {
+  const cx = Math.floor(wx / GRID_CELL_SIZE);
+  const cy = Math.floor(wy / GRID_CELL_SIZE);
+  return ((cx & 0xFFFF) << 16) | (cy & 0xFFFF);
+}
+
+function gridAdd(e) {
+  const key = gridKeyFor(e.x, e.y);
+  let bucket = spatialGrid.get(key);
+  if (!bucket) {
+    bucket = new Set();
+    spatialGrid.set(key, bucket);
+  }
+  bucket.add(e);
+  e._gridCellKey = key;
+}
+
+function gridRemove(e) {
+  const key = e?._gridCellKey;
+  if (key == null) return;
+  const bucket = spatialGrid.get(key);
+  if (bucket) {
+    bucket.delete(e);
+    if (bucket.size === 0) spatialGrid.delete(key);
+  }
+  e._gridCellKey = null;
+}
+
+function gridUpdateIfMoved(e) {
+  const newKey = gridKeyFor(e.x, e.y);
+  if (newKey === e._gridCellKey) return;
+  gridRemove(e);
+  gridAdd(e);
+}
+
+function* gridQueryRadius(wx, wy, r) {
+  const minCx = Math.floor((wx - r) / GRID_CELL_SIZE);
+  const maxCx = Math.floor((wx + r) / GRID_CELL_SIZE);
+  const minCy = Math.floor((wy - r) / GRID_CELL_SIZE);
+  const maxCy = Math.floor((wy + r) / GRID_CELL_SIZE);
+  for (let cy = minCy; cy <= maxCy; cy++) {
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      const key = ((cx & 0xFFFF) << 16) | (cy & 0xFFFF);
+      const bucket = spatialGrid.get(key);
+      if (bucket) {
+        for (const e of bucket) yield e;
+      }
+    }
+  }
+}
+
 const WILD_SOCIAL_INTERACTION_RADIUS = 9.0;
 const WILD_SOCIAL_RIPPLE_RADIUS = 14.0;
 const WILD_SOCIAL_REACTION_COOLDOWN_SEC = 0.45;
@@ -433,13 +494,18 @@ function getAllySpeciesHurtIntensity(entity) {
 
 function broadcastNearbySpeciesAllyHurt(worldX, worldY, victimDex, intensity = 1, ignoreEntity = null) {
   const vd = Math.floor(Number(victimDex)) || 1;
-  for (const e of entitiesByKey.values()) {
+  const R = WILD_SOCIAL_NEARBY_EVENT_RADIUS;
+  const R2 = R * R;
+  for (const e of gridQueryRadius(worldX, worldY, R)) {
     if (e === ignoreEntity) continue;
     if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
     if ((e.dexId ?? 1) !== vd) continue;
-    const dist = Math.hypot(e.x - worldX, e.y - worldY);
-    if (dist > WILD_SOCIAL_NEARBY_EVENT_RADIUS) continue;
-    const scaled = intensity * clamp(1 - dist / WILD_SOCIAL_NEARBY_EVENT_RADIUS, 0.25, 1);
+    const dx = e.x - worldX;
+    const dy = e.y - worldY;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > R2) continue;
+    const dist = Math.sqrt(d2);
+    const scaled = intensity * clamp(1 - dist / R, 0.25, 1);
     pushRecentNearbyEvent(e, 'ally_species_hurt', scaled, { subjectDex: vd });
   }
 }
@@ -500,18 +566,24 @@ function trackPlayerProximitySignals(entity, distToPlayer, dt) {
 }
 
 function broadcastNearbyPlayerEvent(worldX, worldY, eventType, intensity = 1, ignoreEntity = null) {
-  for (const e of entitiesByKey.values()) {
+  const R = WILD_SOCIAL_NEARBY_EVENT_RADIUS;
+  const R2 = R * R;
+  for (const e of gridQueryRadius(worldX, worldY, R)) {
     if (e === ignoreEntity) continue;
     if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
-    const dist = Math.hypot(e.x - worldX, e.y - worldY);
-    if (dist > WILD_SOCIAL_NEARBY_EVENT_RADIUS) continue;
-    const scaled = intensity * clamp(1 - dist / WILD_SOCIAL_NEARBY_EVENT_RADIUS, 0.2, 1);
+    const dx = e.x - worldX;
+    const dy = e.y - worldY;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > R2) continue;
+    const dist = Math.sqrt(d2);
+    const scaled = intensity * clamp(1 - dist / R, 0.2, 1);
     pushRecentNearbyEvent(e, eventType, scaled);
   }
 }
 
 export function resetWildPokemonManager() {
   entitiesByKey.clear();
+  spatialGrid.clear();
   wildUpdateFrameCounter = 0;
 }
 
@@ -528,6 +600,8 @@ function pruneDebugSummonsIfNeeded() {
   while ([...entitiesByKey.keys()].filter(isDebugSummonKey).length >= DEBUG_SUMMON_MAX) {
     for (const k of entitiesByKey.keys()) {
       if (isDebugSummonKey(k)) {
+        const victim = entitiesByKey.get(k);
+        if (victim) gridRemove(victim);
         entitiesByKey.delete(k);
         break;
       }
@@ -717,6 +791,7 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
   };
   bindStandardWildTakeDamage(entity);
   entitiesByKey.set(key, entity);
+  gridAdd(entity);
   void ensurePokemonSheetsLoaded(imageCache, dex);
   void probeSpriteCollabPortraitPrefix(dex).catch(() => {});
   return true;
@@ -1335,6 +1410,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     };
     bindStandardWildTakeDamage(entity);
     entitiesByKey.set(k, entity);
+    gridAdd(entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
     probeSpriteCollabPortraitPrefix(dex).catch(() => {});
     if (spawnSleep) {
@@ -1429,13 +1505,19 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     }
     if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - stepDt);
     advanceWildPokemonAnim(e, stepDt);
-    
+
     if (e.hitFlashTimer > 0) {
       e.hitFlashTimer -= stepDt;
       if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
     }
+
+    if (!skipWanderMotion) gridUpdateIfMoved(e);
   }
-  for (const k of toDelete) entitiesByKey.delete(k);
+  for (const k of toDelete) {
+    const victim = entitiesByKey.get(k);
+    if (victim) gridRemove(victim);
+    entitiesByKey.delete(k);
+  }
 }
 
 export function getWildPokemonEntities() {

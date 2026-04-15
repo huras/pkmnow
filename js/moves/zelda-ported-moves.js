@@ -80,9 +80,10 @@ export function castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, opt
   const maxR = fromWild ? 8 : 10;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
   const count = 4;
+  const baseAngle = Math.atan2(targetY - sourceY, targetX - sourceX);
   for (let i = 0; i < count; i++) {
     const spread = (i - (count - 1) * 0.5) * 0.12;
-    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const a = baseAngle + spread;
     const reach = 3.6;
     const rawTx = sourceX + Math.cos(a) * reach;
     const rawTy = sourceY + Math.sin(a) * reach;
@@ -124,9 +125,10 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
   const maxR = fromWild ? 9 : 11;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.04;
   const count = 8;
+  const baseAngle = Math.atan2(targetY - sourceY, targetX - sourceX);
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.16;
-    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const a = baseAngle + spread;
     const reach = 4.8;
     const rawTx = sourceX + Math.cos(a) * reach;
     const rawTy = sourceY + Math.sin(a) * reach;
@@ -302,9 +304,10 @@ export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEnt
   }
 
   const count = fromWild ? 10 : 12;
+  const baseAngle = Math.atan2(targetY - sourceY, targetX - sourceX);
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.08;
-    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const a = baseAngle + spread;
     const reach = 5.5;
     const rawTx = sourceX + Math.cos(a) * reach;
     const rawTy = sourceY + Math.sin(a) * reach;
