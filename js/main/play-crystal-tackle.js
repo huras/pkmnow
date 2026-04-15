@@ -6,6 +6,7 @@ import { TessellationEngine } from '../tessellation-engine.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { playChunkMap } from '../render/play-chunk-cache.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
+import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 
@@ -13,6 +14,8 @@ import { scatterItemKeyIsSolid, validScatterOriginMicro } from '../scatter-pass2
 const destroyedCrystalScatterOrigins = new Set();
 /** Formal tree roots `(rootX,my)` cut in current play session. */
 const destroyedFormalTreeRoots = new Set();
+/** @type {Map<string, number>} key `rootX,my` -> regenAtSec */
+const destroyedFormalTreeRegenAtSecByRoot = new Map();
 /** @type {Map<string, {
  *   ox: number,
  *   oy: number,
@@ -29,6 +32,7 @@ const detailBreakStateByOrigin = new Map();
 let detailBreakSweepIter = null;
 let detailBreakSweepCooldownSec = 0;
 const DETAIL_REGEN_AFTER_BREAK_SEC = 80;
+const FORMAL_TREE_REGEN_AFTER_BREAK_SEC = 80;
 const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
 const DETAIL_SWEEP_STEP = 96;
 const DETAIL_SWEEP_INTERVAL_SEC = 0.5;
@@ -90,6 +94,7 @@ export function isPlayFormalTreeRootDestroyed(rootX, my) {
 export function clearPlayCrystalTackleState() {
   destroyedCrystalScatterOrigins.clear();
   destroyedFormalTreeRoots.clear();
+  destroyedFormalTreeRegenAtSecByRoot.clear();
   detailBreakStateByOrigin.clear();
   detailBreakSweepIter = null;
   detailBreakSweepCooldownSec = 0;
@@ -113,8 +118,12 @@ function registerDestroyedCrystalOrigin(rootOx, rootOy) {
   clearScatterSolidBlockCache();
 }
 
-function registerDestroyedFormalTreeRoot(rootX, my) {
-  destroyedFormalTreeRoots.add(`${rootX},${my}`);
+function registerDestroyedFormalTreeRoot(rootX, my, nowSec) {
+  const key = `${rootX},${my}`;
+  destroyedFormalTreeRoots.add(key);
+  destroyedFormalTreeRegenAtSecByRoot.set(key, nowSec + FORMAL_TREE_REGEN_AFTER_BREAK_SEC);
+  enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
 }
 
 function unregisterDestroyedDetailOrigin(rootOx, rootOy) {
@@ -657,7 +666,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, 1, 1, 0, nowSec);
       markDetailHitShake(worldKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-      registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy);
+      registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec);
       if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
       continue;
     }
@@ -767,6 +776,19 @@ export function updateBreakableDetailRegeneration(dt, data) {
     const p = activeDetailHitPulses[i];
     p.age += dt;
     if (p.age >= p.maxAge) activeDetailHitPulses.splice(i, 1);
+  }
+  for (const [key, regenAtSec] of destroyedFormalTreeRegenAtSecByRoot.entries()) {
+    if (!Number.isFinite(regenAtSec) || nowSec >= regenAtSec) {
+      const [sx, sy] = key.split(',');
+      const rootX = Number(sx);
+      const my = Number(sy);
+      destroyedFormalTreeRegenAtSecByRoot.delete(key);
+      destroyedFormalTreeRoots.delete(key);
+      if (Number.isFinite(rootX) && Number.isFinite(my)) {
+        enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+        enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+      }
+    }
   }
 }
 

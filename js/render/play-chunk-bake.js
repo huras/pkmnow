@@ -20,7 +20,7 @@ import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
 import { PLAY_CHUNK_SIZE, VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
-import { isPlayDetailScatterOriginDestroyed } from '../main/play-crystal-tackle.js';
+import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from '../main/play-crystal-tackle.js';
 
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
@@ -354,6 +354,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
 
       // 1. Formal Trees (2x1)
       if (isFormalRoot(mxScan, myScan)) {
+        if (isPlayFormalTreeRootDestroyed(mxScan, myScan)) continue;
         // STRICT HEIGHT CHECK: Formal trees only start on flat ground
         const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         const roleOrig = setRoot

@@ -44,7 +44,7 @@ const TYPE_PRESETS = Object.freeze({
  * @type {Record<number, MoveId[]>}
  */
 export const POKEMON_MOVESET_OVERRIDES = {
-  4: ['ember', 'flamethrower', 'incinerate', 'poisonSting'],
+  4: ['flamethrower', 'ember', 'incinerate', 'poisonSting'],
   6: ['flamethrower', 'incinerate', 'prismaticLaser', 'psybeam'],
   7: ['waterBurst', 'bubble', 'waterGun', 'silkShoot'],
   9: ['waterGun', 'waterBurst', 'bubble', 'confusion'],

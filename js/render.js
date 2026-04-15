@@ -990,7 +990,7 @@ export function render(canvas, data, options = {}) {
 
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
     for (const req of bakeRequests) {
-      if (playChunkMap.has(req.key)) continue;
+      if (playChunkMap.has(req.key) && !req.forceRebake) continue;
       const chunk = bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX);
       playChunkMap.set(req.key, chunk);
     }
@@ -1373,8 +1373,8 @@ export function render(canvas, data, options = {}) {
         // 1. Formal Trees
         const treeType = getTreeType(t.biomeId, mxScan, myScan, data.seed);
         if (treeType && (mxScan + myScan) % 3 === 0 && foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-          if (isPlayFormalTreeRootDestroyed(mxScan, myScan)) continue;
           if (getCached(mxScan + 1, myScan)?.heightStep === t.heightStep) {
+            const isDestroyed = isPlayFormalTreeRootDestroyed(mxScan, myScan);
             renderItems.push({
               type: 'tree',
               treeType,
@@ -1382,7 +1382,8 @@ export function render(canvas, data, options = {}) {
               originY: myScan,
               y: myScan + 0.9, // debug / marker; depth uses canopy pivot
               sortY: myScan + 1, // matches formal canopy translate Y: originY*tileH + tileH
-              biomeId: t.biomeId
+              biomeId: t.biomeId,
+              isDestroyed
             });
           }
         }
@@ -2200,15 +2201,17 @@ export function render(canvas, data, options = {}) {
           }
         }
       } else if (item.type === 'tree') {
-        const { treeType, originX, originY } = item;
+        const { treeType, originX, originY, isDestroyed } = item;
         const ids = TREE_TILES[treeType];
         if (ids) {
+          const stumpBase = TREE_TILES.palm?.base || ids.base;
+          const baseIds = isDestroyed ? stumpBase : ids.base;
           // Draw Base (skipped in bake)
-          drawTile16(ids.base[0], originX * tileW, originY * tileH);
-          drawTile16(ids.base[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
+          drawTile16(baseIds[0], originX * tileW, originY * tileH);
+          drawTile16(baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
           
           // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
-          if (ids.top) {
+          if (!isDestroyed && ids.top) {
             const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
               canopyAnimTime,
               treeType,

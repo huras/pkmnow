@@ -20,12 +20,15 @@ import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
-const FIELD_LMB_CHARGE_MAX_SEC = 1.05;
+const FIELD_LMB_CHARGE_MAX_SEC_DEFAULT = 1.05;
 const FIELD_LMB_CHARGE_MIN_HOLD_MS = 180;
 const FIELD_CUT_COMBO_RESET_SEC = 1.15;
+const FIELD_TACKLE_CHARGE_MAX_SEC = 2.0;
+const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 8.0;
 const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
+const FIELD_SKILL_CUT_ADVANCE_TILES = 0.5;
 const FIELD_SKILL_STRENGTH_RADIUS = 1.9;
 const FIELD_SKILLS = ['tackle', 'cut', 'strength'];
 const FIELD_SKILL_STORAGE_KEY = 'pkmn_field_skill_by_dex';
@@ -240,6 +243,11 @@ function resolveCutProfile(styleId) {
   return { radius: FIELD_SKILL_CUT_RADIUS, damage: 9, knockback: 3.1 };
 }
 
+function resolveFieldLmbChargeMaxSec() {
+  if (selectedFieldSkillId === 'tackle') return FIELD_TACKLE_CHARGE_MAX_SEC;
+  return FIELD_LMB_CHARGE_MAX_SEC_DEFAULT;
+}
+
 function resolveCutComboVariant(styleId, comboStep, charged) {
   if (charged) {
     if (styleId === 'vine') {
@@ -329,6 +337,7 @@ function castPlayerCut(player, data, charged = false) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  player._tackleReachTiles = FIELD_SKILL_CUT_ADVANCE_TILES;
   const nx = Number(player.tackleDirNx) || 0;
   const ny = Number(player.tackleDirNy) || 1;
   const styleId = resolveCutStyleForDex(player.dexId ?? 1);
@@ -407,6 +416,7 @@ function castChargedFieldSpinAttack(player, data) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  player._tackleReachTiles = FIELD_SKILL_CUT_ADVANCE_TILES;
   const nx = Number(player.tackleDirNx) || 0;
   const ny = Number(player.tackleDirNy) || 1;
   const headingRad = Math.atan2(ny, nx || 1e-6);
@@ -451,14 +461,14 @@ function castChargedFieldSpinAttack(player, data) {
   }
 }
 
-function castSelectedFieldSkill(player, data, charged = false) {
+function castSelectedFieldSkill(player, data, charged = false, charge01 = 0) {
   if (!player) return;
-  if (charged) {
+  if (charged && selectedFieldSkillId === 'cut') {
     castChargedFieldSpinAttack(player, data);
     return;
   }
   if (selectedFieldSkillId === 'cut') {
-    castPlayerCut(player, data, charged);
+    castPlayerCut(player, data, false);
     return;
   }
   if (selectedFieldSkillId === 'strength') {
@@ -474,8 +484,10 @@ function castSelectedFieldSkill(player, data, charged = false) {
   } else {
     triggerPlayerLmbAttack(player, tx - sx, ty - sy);
   }
-  if (charged) {
-    player._tackleReachTiles = Math.max(Number(player._tackleReachTiles) || 2, 2.9);
+  if (selectedFieldSkillId === 'tackle') {
+    const u = Math.max(0, Math.min(1, Number(charge01) || 0));
+    const chargedReach = 2 + (FIELD_TACKLE_CHARGE_MAX_REACH_TILES - 2) * u;
+    player._tackleReachTiles = Math.max(2, chargedReach);
   }
   tryPlayerTackleHitWild(player, data);
   tryBreakCrystalOnPlayerTackle(player, data);
@@ -608,7 +620,8 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   updateFieldSkillWheelHover(player);
   if (leftHeld && !combatModifierHeld()) {
-    playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / FIELD_LMB_CHARGE_MAX_SEC);
+    const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec());
+    playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
   } else {
     playInputState.chargeLeft01 = 0;
   }
@@ -705,8 +718,9 @@ export function installPlayPointerCombat(deps) {
         castMoveById(slots.leftShift, sx, sy, tx, ty, player);
       } else {
         const heldMs = now - leftDownAt;
-        const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && (playInputState.chargeLeft01 || 0) >= 0.16;
-        castSelectedFieldSkill(player, getCurrentData?.() ?? null, charged);
+        const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+        const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
+        castSelectedFieldSkill(player, getCurrentData?.() ?? null, charged, charge01);
       }
       playInputState.chargeLeft01 = 0;
     }

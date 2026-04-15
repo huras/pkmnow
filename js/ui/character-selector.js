@@ -6,6 +6,7 @@ import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portrai
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
+import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import {
@@ -308,6 +309,10 @@ export class CharacterSelector {
           <div class="player-field-skill-chip" id="player-field-skill-chip" title="Left click field skill">
             LMB: <span id="player-field-skill-label">Tackle</span>
           </div>
+          <div class="player-field-charge hidden" id="player-field-charge" aria-label="Field move charge">
+            <div class="player-field-charge__bar"><div class="player-field-charge__fill" id="player-field-charge-fill"></div></div>
+            <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
+          </div>
           <div class="player-moves-list" id="current-player-moves"></div>
           <div class="player-moves-help">LMB = field move (hold 1: tackle/cut/strength, hold+release LMB = charge; Cut = 3-hit combo) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
@@ -400,6 +405,19 @@ export class CharacterSelector {
     if (!labelEl) return;
     const skillId = getSelectedFieldSkillForDex(player.dexId);
     labelEl.textContent = getFieldSkillLabel(skillId);
+  }
+
+  updatePlayFieldMoveChargeHud() {
+    const wrap = this.container?.querySelector('#player-field-charge');
+    const fill = this.container?.querySelector('#player-field-charge-fill');
+    const label = this.container?.querySelector('#player-field-charge-label');
+    if (!(wrap instanceof HTMLElement) || !(fill instanceof HTMLElement) || !(label instanceof HTMLElement)) return;
+    const skillId = getSelectedFieldSkillForDex(player.dexId);
+    const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+    const shouldShow = skillId === 'tackle' && p > 0.005;
+    wrap.classList.toggle('hidden', !shouldShow);
+    fill.style.width = `${Math.round(p * 100)}%`;
+    label.textContent = `Tackle Charge ${Math.round(p * 100)}%`;
   }
 
   syncPlayPointerModeRadios() {

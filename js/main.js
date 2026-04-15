@@ -393,6 +393,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
+    playCharacterSelector?.updatePlayFieldMoveChargeHud();
     playCharacterSelector?.updatePlayItemsHud();
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
