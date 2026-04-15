@@ -332,8 +332,10 @@ export function playWildDamageHurtCry(entity) {
   if (a.readyState >= HTMLMediaElement.HAVE_METADATA) {
     beginHurtTail();
   } else {
+    // Do NOT call `a.load()` here: it resets the element and forces a full re-fetch from the
+    // network. On localhost the clip is often already buffered (HAVE_METADATA); on a server
+    // each hurt-cry then sounds like a stutter/reload. `preload="auto"` + existing src load it.
     a.addEventListener('loadedmetadata', beginHurtTail, { once: true });
-    void a.load();
   }
 }
 
