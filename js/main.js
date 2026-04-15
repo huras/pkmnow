@@ -48,9 +48,11 @@ import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
-  getDayCycleTintRgb,
   getDayPhaseFromHours,
+  getSmoothedDayCycleTintForRender,
   PRESET_HOUR,
+  snapDayCycleTintSmoothToHours,
+  tickDayCycleTintSmooth,
   wrapHours
 } from './main/world-time-of-day.js';
 
@@ -222,7 +224,7 @@ function getSettings() {
     clearPlayColliderOverlayCache();
   }
   const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
-  const dayCycleTint = getDayCycleTintRgb(dayPhase);
+  const dayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
   return {
     viewType,
     overlayPaths,
@@ -258,6 +260,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   advanceWorldTime: (dt) => {
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
+    tickDayCycleTintSmooth(dt, wrapHours(worldHours));
   },
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
@@ -429,6 +432,7 @@ function enterPlayMode(gx, gy) {
 
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
+  snapDayCycleTintSmoothToHours(wrapHours(worldHours));
   syncPlayWorldTimePanel();
   lastBgmUiSignature = '';
   syncPlayBgmNowPlayingPanel();
@@ -661,6 +665,7 @@ playWorldTimeSlider?.addEventListener('input', () => {
   const v = parseFloat(playWorldTimeSlider.value);
   if (!Number.isFinite(v)) return;
   worldHours = wrapHours(v);
+  snapDayCycleTintSmoothToHours(worldHours);
   lastWorldTimePanelPhase = null;
   syncPlayWorldTimePanel();
   updateView();
@@ -672,7 +677,8 @@ playWorldTimeRun?.addEventListener('change', () => {
 
 function wireWorldTimePreset(id, hour) {
   document.getElementById(id)?.addEventListener('click', () => {
-    worldHours = hour;
+    worldHours = wrapHours(hour);
+    snapDayCycleTintSmoothToHours(worldHours);
     lastWorldTimePanelPhase = null;
     syncPlayWorldTimePanel();
     updateView();

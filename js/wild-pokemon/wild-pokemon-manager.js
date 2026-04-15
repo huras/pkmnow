@@ -32,6 +32,7 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
 import { tryCastWildMove } from '../moves/moves-manager.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
+import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { getSocialActionById } from '../social/social-actions.js';
 
 const SKY_SPECIES = new Set([
@@ -634,6 +635,7 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     hurtTimer: 0,
     hurtAnimTimer: 0,
     hitFlashTimer: 0,
+    isBoss: false,
     socialMemory: {
       affinity: 0,
       threat: 0,
@@ -1057,15 +1059,17 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     }
   }
 
-  /** @type {Map<number, Set<number>>} biomeId -> used encounter indexes in current window */
-  const usedPickIndexesByBiome = new Map();
+  /** Per macro cell + biome: which encounter pool indices are already taken (reduces same-biome repetition). */
+  const usedPickIndexesByMacroBiome = new Map();
   for (const ent of entitiesByKey.values()) {
     if (typeof ent.biomeId !== 'number' || typeof ent.pickIndex !== 'number') continue;
     if (ent.pickIndex < 0) continue;
-    let set = usedPickIndexesByBiome.get(ent.biomeId);
+    if (typeof ent.macroX !== 'number' || typeof ent.macroY !== 'number') continue;
+    const scopeKey = `${ent.biomeId}|${ent.macroX}|${ent.macroY}`;
+    let set = usedPickIndexesByMacroBiome.get(scopeKey);
     if (!set) {
       set = new Set();
-      usedPickIndexesByBiome.set(ent.biomeId, set);
+      usedPickIndexesByMacroBiome.set(scopeKey, set);
     }
     set.add(ent.pickIndex);
   }
@@ -1084,18 +1088,23 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const sy = parts.length >= 4 ? parts[3] : 0;
     const biomeId = data.biomes[my * w + mx];
     const pool = getEncounters(biomeId);
-    const basePick = seededHashInt(mx * 4099 + sx, my * 4013 + sy, data.seed ^ SALT_SPAWN) % pool.length;
+    const pickScopeKey = `${biomeId}|${mx}|${my}`;
+    const basePick =
+      seededHashInt(mx * 4733 + sx * 997, my * 3623 + sy * 683, data.seed ^ SALT_SPAWN ^ biomeId * 131) %
+      pool.length;
     let pick = basePick;
     if (pool.length > 1) {
-      let used = usedPickIndexesByBiome.get(biomeId);
+      let used = usedPickIndexesByMacroBiome.get(pickScopeKey);
       if (!used) {
         used = new Set();
-        usedPickIndexesByBiome.set(biomeId, used);
+        usedPickIndexesByMacroBiome.set(pickScopeKey, used);
       }
       if (used.has(pick)) {
-        for (let i = 0; i < pool.length; i++) {
-          if (!used.has(i)) {
-            pick = i;
+        const jump = 1 + (seededHashInt(mx * 181 + sx * 13, my * 191 + sy * 17, data.seed ^ pick * 499) % Math.max(1, pool.length - 1));
+        for (let step = 0; step < pool.length; step++) {
+          const tryPick = (pick + step * jump) % pool.length;
+          if (!used.has(tryPick)) {
+            pick = tryPick;
             break;
           }
         }
@@ -1103,8 +1112,13 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       used.add(pick);
     }
 
-    const dex = encounterNameToDex(pool[pick]);
-    if (dex == null) continue;
+    const baseDex = encounterNameToDex(pool[pick]);
+    if (baseDex == null) continue;
+    const bossRoll = rollBossPromotedDex(baseDex, mx, my, sx, sy, data.seed);
+    const dex = bossRoll.dex;
+    const spawnHp = bossRoll.hp;
+    const spawnMaxHp = bossRoll.maxHp;
+    const isBoss = bossRoll.isBoss;
 
     const centerX = mx * MACRO_TILE_STRIDE + (sx + 0.5) * cellW;
     const centerY = my * MACRO_TILE_STRIDE + (sy + 0.5) * cellW;
@@ -1207,8 +1221,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       jumping: false,
       jumpCooldown: 0,
       _blockedMoveFrames: 0,
-      hp: 50,
-      maxHp: 50,
+      isBoss: !!isBoss,
+      hp: spawnHp,
+      maxHp: spawnMaxHp,
       deadState: null, // 'faint' | 'sleep'
       deadTimer: 0,
       deadAnimTimer: 0,

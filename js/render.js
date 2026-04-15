@@ -1003,6 +1003,7 @@ export function render(canvas, data, options = {}) {
         hitFlashTimer: we.hitFlashTimer,
         hp: we.hp,
         maxHp: we.maxHp,
+        isBoss: !!we.isBoss,
         deadState: we.deadState,
         hurtTimer: we.hurtTimer,
         sexHud: wildSexHudLabel(we.sex)
@@ -1349,10 +1350,11 @@ export function render(canvas, data, options = {}) {
     const drawWildHpBar = (item, spawnYOffset) => {
       if (!Number.isFinite(item.hp) || !Number.isFinite(item.maxHp) || item.maxHp <= 0) return;
       const hp01 = Math.max(0, Math.min(1, item.hp / item.maxHp));
-      const barW = Math.max(16, Math.floor(tileW * 0.82));
-      const barH = Math.max(3, Math.floor(tileH * 0.08));
+      const boss = !!item.isBoss;
+      const barW = Math.max(16, Math.floor(tileW * (boss ? 0.98 : 0.82)));
+      const barH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
       const x = Math.floor(item.cx - barW * 0.5);
-      const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - 6);
+      const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - (boss ? 8 : 6));
       if (item.sexHud) {
         const fontPx = Math.max(9, Math.floor(tileH * 0.14));
         ctx.save();
@@ -1368,7 +1370,19 @@ export function render(canvas, data, options = {}) {
       }
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
-      ctx.fillStyle = hp01 > 0.5 ? '#63e86f' : hp01 > 0.22 ? '#ffd54a' : '#ff6363';
+      if (boss) {
+        ctx.strokeStyle = 'rgba(255, 210, 120, 0.95)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 2, y - 2, barW + 4, barH + 4);
+      }
+      ctx.fillStyle =
+        boss && hp01 > 0.5
+          ? '#7ee8ff'
+          : hp01 > 0.5
+            ? '#63e86f'
+            : hp01 > 0.22
+              ? '#ffd54a'
+              : '#ff6363';
       ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
     };
 
