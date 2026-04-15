@@ -6,6 +6,7 @@ import {
   castUltimate,
   spawnFieldCutPsychicSlashFx,
   spawnFieldCutSlashFx,
+  spawnFieldSpinAttackFx,
   spawnFieldCutVineSlashFx,
   tryCastPlayerFlamethrowerStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
@@ -19,6 +20,9 @@ import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
+const FIELD_LMB_CHARGE_MAX_SEC = 1.05;
+const FIELD_LMB_CHARGE_MIN_HOLD_MS = 180;
+const FIELD_CUT_COMBO_RESET_SEC = 1.15;
 const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
@@ -36,6 +40,7 @@ function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
 }
 
 let leftHeld = false;
+let leftDownAt = 0;
 let rightHeld = false;
 let rightDownAt = 0;
 /** Left Ctrl held when primary/secondary button went down (locks “no charge build” for that press). */
@@ -54,6 +59,9 @@ let fieldSkillWheelHoverIndex = 0;
 let fieldSkillWheelRoot = null;
 /** @type {Record<string, 'tackle' | 'cut' | 'strength'>} */
 let fieldSkillByDex = loadStoredFieldSkillByDex();
+let fieldCutComboStep = 0;
+let fieldCutComboTimerSec = 0;
+let lastComboDexId = 0;
 
 function normalizeFieldSkillId(skillId) {
   return FIELD_SKILLS.includes(String(skillId)) ? String(skillId) : 'tackle';
@@ -191,7 +199,92 @@ function resolveCutProfile(styleId) {
   return { radius: FIELD_SKILL_CUT_RADIUS, damage: 9, knockback: 3.1 };
 }
 
-function castPlayerCut(player, data) {
+function resolveCutComboVariant(styleId, comboStep, charged) {
+  if (charged) {
+    if (styleId === 'vine') {
+      return {
+        radiusMul: 1.36,
+        damageAdd: 6,
+        knockbackAdd: 1.5,
+        headingOffsetDeg: 0,
+        centerOffsetMul: 1.22,
+        arcDeg: 136,
+        lifeSec: 0.46
+      };
+    }
+    if (styleId === 'psychic') {
+      return {
+        radiusMul: 1.42,
+        damageAdd: 7,
+        knockbackAdd: 1.7,
+        headingOffsetDeg: 0,
+        centerOffsetMul: 1.26,
+        arcDeg: 142,
+        lifeSec: 0.45
+      };
+    }
+    return {
+      radiusMul: 1.34,
+      damageAdd: 6,
+      knockbackAdd: 1.45,
+      headingOffsetDeg: 0,
+      centerOffsetMul: 1.2,
+      arcDeg: 132,
+      lifeSec: 0.42
+    };
+  }
+  if (comboStep === 1) {
+    return {
+      radiusMul: 0.95,
+      damageAdd: 0,
+      knockbackAdd: 0,
+      headingOffsetDeg: 0,
+      centerOffsetMul: 1.0,
+      arcDeg: 106,
+      lifeSec: 0.28
+    };
+  }
+  if (comboStep === 2) {
+    return {
+      radiusMul: 1.05,
+      damageAdd: 2,
+      knockbackAdd: 0.2,
+      headingOffsetDeg: 28,
+      centerOffsetMul: 0.96,
+      arcDeg: 116,
+      lifeSec: 0.32
+    };
+  }
+  return {
+    radiusMul: 1.18,
+    damageAdd: 3,
+    knockbackAdd: 0.4,
+    headingOffsetDeg: -24,
+    centerOffsetMul: 1.08,
+    arcDeg: 126,
+    lifeSec: 0.36
+  };
+}
+
+function resolveCutComboStep(player, charged) {
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  if (dex !== lastComboDexId) {
+    fieldCutComboStep = 0;
+    fieldCutComboTimerSec = 0;
+    lastComboDexId = dex;
+  }
+  if (charged) {
+    fieldCutComboStep = 0;
+    fieldCutComboTimerSec = 0;
+    return 3;
+  }
+  if (fieldCutComboTimerSec <= 0) fieldCutComboStep = 0;
+  fieldCutComboStep = (fieldCutComboStep % 3) + 1;
+  fieldCutComboTimerSec = FIELD_CUT_COMBO_RESET_SEC;
+  return fieldCutComboStep;
+}
+
+function castPlayerCut(player, data, charged = false) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
@@ -199,33 +292,52 @@ function castPlayerCut(player, data) {
   const ny = Number(player.tackleDirNy) || 1;
   const styleId = resolveCutStyleForDex(player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
-  const headingRad = Math.atan2(ny, nx || 1e-6);
-  const centerX = (player.x ?? sx) + nx * FIELD_SKILL_CUT_CENTER_OFFSET;
-  const centerY = (player.y ?? sy) + ny * FIELD_SKILL_CUT_CENTER_OFFSET;
+  const comboStep = resolveCutComboStep(player, charged);
+  const variant = resolveCutComboVariant(styleId, comboStep, charged);
+  const baseHeadingRad = Math.atan2(ny, nx || 1e-6);
+  const headingRad = baseHeadingRad + ((variant.headingOffsetDeg || 0) * Math.PI) / 180;
+  const useRadius = profile.radius * Math.max(0.4, variant.radiusMul || 1);
+  const useDamage = profile.damage + Math.max(0, variant.damageAdd || 0);
+  const useKnockback = profile.knockback + Math.max(0, variant.knockbackAdd || 0);
+  const centerOffset = FIELD_SKILL_CUT_CENTER_OFFSET * Math.max(0.35, variant.centerOffsetMul || 1);
+  const centerX = (player.x ?? sx) + Math.cos(headingRad) * centerOffset;
+  const centerY = (player.y ?? sy) + Math.sin(headingRad) * centerOffset;
   if (styleId === 'vine') {
-    spawnFieldCutVineSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+    spawnFieldCutVineSlashFx(centerX, centerY, headingRad, {
+      radiusTiles: useRadius,
+      arcDeg: variant.arcDeg,
+      lifeSec: variant.lifeSec
+    });
   } else if (styleId === 'psychic') {
-    spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+    spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, {
+      radiusTiles: useRadius,
+      arcDeg: variant.arcDeg,
+      lifeSec: variant.lifeSec
+    });
   } else {
-    spawnFieldCutSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+    spawnFieldCutSlashFx(centerX, centerY, headingRad, {
+      radiusTiles: useRadius,
+      arcDeg: variant.arcDeg,
+      lifeSec: variant.lifeSec
+    });
   }
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, profile.radius, {
-    damage: profile.damage,
-    knockback: profile.knockback
+  tryPlayerCutHitWildCircle(player, data, centerX, centerY, useRadius, {
+    damage: useDamage,
+    knockback: useKnockback
   });
   const worldHitOnceSet = new Set();
   const spawnedHitOnceSet = new Set();
-  const rays = styleId === 'psychic' ? 12 : 9;
+  const rays = charged ? (styleId === 'psychic' ? 16 : 14) : styleId === 'psychic' ? 12 : 9;
   for (let i = 0; i < rays; i++) {
     const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * profile.radius;
-    const ey = centerY + Math.sin(ang) * profile.radius;
+    const ex = centerX + Math.cos(ang) * useRadius;
+    const ey = centerY + Math.sin(ang) * useRadius;
     tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
   }
-  cutGrassInCircle(centerX, centerY, profile.radius, data);
+  cutGrassInCircle(centerX, centerY, useRadius, data);
 }
 
-function castPlayerStrengthPlaceholder(player, data) {
+function castPlayerStrengthPlaceholder(player, data, charged = false) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
@@ -234,37 +346,95 @@ function castPlayerStrengthPlaceholder(player, data) {
   const centerX = (player.x ?? sx) + nx * 1.25;
   const centerY = (player.y ?? sy) + ny * 1.25;
   // Placeholder until dedicated Strength move exists.
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, FIELD_SKILL_STRENGTH_RADIUS, {
-    damage: 14,
-    knockback: 4.9
+  const chargedMul = charged ? 1.35 : 1;
+  tryPlayerCutHitWildCircle(player, data, centerX, centerY, FIELD_SKILL_STRENGTH_RADIUS * chargedMul, {
+    damage: charged ? 20 : 14,
+    knockback: charged ? 6 : 4.9
   });
   const worldHitOnceSet = new Set();
   const spawnedHitOnceSet = new Set();
-  const rays = 14;
+  const rays = charged ? 20 : 14;
   for (let i = 0; i < rays; i++) {
     const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * FIELD_SKILL_STRENGTH_RADIUS;
-    const ey = centerY + Math.sin(ang) * FIELD_SKILL_STRENGTH_RADIUS;
+    const ex = centerX + Math.cos(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
+    const ey = centerY + Math.sin(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
     tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
   }
 }
 
-function castSelectedFieldSkill(player, data) {
-  if (!player) return;
+function castChargedFieldSpinAttack(player, data) {
+  if (!player || !data) return;
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  const nx = Number(player.tackleDirNx) || 0;
+  const ny = Number(player.tackleDirNy) || 1;
+  const headingRad = Math.atan2(ny, nx || 1e-6);
+  const centerX = Number(player.x ?? sx);
+  const centerY = Number(player.y ?? sy);
+  let radius = 2.05;
+  let damage = 16;
+  let knockback = 5;
+  let styleId = 'slash';
   if (selectedFieldSkillId === 'cut') {
-    castPlayerCut(player, data);
+    const cutStyle = resolveCutStyleForDex(player.dexId ?? 1);
+    const profile = resolveCutProfile(cutStyle);
+    styleId = cutStyle;
+    radius = Math.max(2.1, profile.radius * 1.52);
+    damage = profile.damage + 8;
+    knockback = profile.knockback + 1.8;
+    fieldCutComboStep = 0;
+    fieldCutComboTimerSec = 0;
+  } else if (selectedFieldSkillId === 'strength') {
+    styleId = 'strength';
+    radius = 2.45;
+    damage = 22;
+    knockback = 6.4;
+  }
+  spawnFieldSpinAttackFx(centerX, centerY, headingRad, {
+    radiusTiles: radius,
+    styleId,
+    lifeSec: 0.44
+  });
+  tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius, { damage, knockback });
+  const worldHitOnceSet = new Set();
+  const spawnedHitOnceSet = new Set();
+  const rays = 24;
+  for (let i = 0; i < rays; i++) {
+    const ang = (i / rays) * Math.PI * 2;
+    const ex = centerX + Math.cos(ang) * radius;
+    const ey = centerY + Math.sin(ang) * radius;
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+  }
+  if (selectedFieldSkillId === 'cut') {
+    cutGrassInCircle(centerX, centerY, radius, data);
+  }
+}
+
+function castSelectedFieldSkill(player, data, charged = false) {
+  if (!player) return;
+  if (charged) {
+    castChargedFieldSpinAttack(player, data);
+    return;
+  }
+  if (selectedFieldSkillId === 'cut') {
+    castPlayerCut(player, data, charged);
     return;
   }
   if (selectedFieldSkillId === 'strength') {
-    castPlayerStrengthPlaceholder(player, data);
+    castPlayerStrengthPlaceholder(player, data, charged);
     return;
   }
+  fieldCutComboStep = 0;
+  fieldCutComboTimerSec = 0;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   const hasMoveInput = Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4;
   if (hasMoveInput) {
     triggerPlayerLmbAttack(player);
   } else {
     triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  }
+  if (charged) {
+    player._tackleReachTiles = Math.max(Number(player._tackleReachTiles) || 2, 2.9);
   }
   tryPlayerTackleHitWild(player, data);
   tryBreakCrystalOnPlayerTackle(player, data);
@@ -385,13 +555,27 @@ function resolveSlots(player) {
  */
 export function updatePlayPointerCombat(dt, player, data) {
   if (!player) return;
-  void data;
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  if (dex !== lastComboDexId) {
+    fieldCutComboStep = 0;
+    fieldCutComboTimerSec = 0;
+    lastComboDexId = dex;
+  }
+  if (fieldCutComboTimerSec > 0) {
+    fieldCutComboTimerSec = Math.max(0, fieldCutComboTimerSec - dt);
+    if (fieldCutComboTimerSec <= 0) fieldCutComboStep = 0;
+  }
   if (fieldSkillWheelArmed && !fieldSkillWheelOpen) {
     if (performance.now() - fieldSkillWheelHoldStartMs >= FIELD_SKILL_WHEEL_HOLD_MS) {
       openFieldSkillWheel();
     }
   }
   updateFieldSkillWheelHover(player);
+  if (leftHeld && !combatModifierHeld()) {
+    playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / FIELD_LMB_CHARGE_MAX_SEC);
+  } else {
+    playInputState.chargeLeft01 = 0;
+  }
   const slots = resolveSlots(player);
   const mod = combatModifierHeld();
   if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap) && slots.rightTap !== 'psybeam') {
@@ -435,6 +619,7 @@ export function installPlayPointerCombat(deps) {
       if (e.button === 0) {
         e.preventDefault();
         leftHeld = true;
+        leftDownAt = performance.now();
         leftShiftAtDown = sh;
         playInputState.chargeLeft01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
@@ -469,7 +654,9 @@ export function installPlayPointerCombat(deps) {
       if (leftShiftAtDown || shUp) {
         castMoveById(slots.leftShift, sx, sy, tx, ty, player);
       } else {
-        castSelectedFieldSkill(player, getCurrentData?.() ?? null);
+        const heldMs = now - leftDownAt;
+        const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && (playInputState.chargeLeft01 || 0) >= 0.16;
+        castSelectedFieldSkill(player, getCurrentData?.() ?? null, charged);
       }
       playInputState.chargeLeft01 = 0;
     }

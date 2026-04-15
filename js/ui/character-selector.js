@@ -309,7 +309,7 @@ export class CharacterSelector {
             LMB: <span id="player-field-skill-label">Tackle</span>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = field skill (hold 1: tackle/cut/strength) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
+          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut/strength, hold+release LMB = charge; Cut = 3-hit combo) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div
@@ -531,7 +531,7 @@ export class CharacterSelector {
           const hk = hotkeys[i] || '—';
           const title =
             i === 0
-              ? `${getMoveLabel(m)} — teclas 2–0 e - no play; LMB usa field skill (hold 1: tackle/cut/strength)`
+              ? `${getMoveLabel(m)} — teclas 2–0 e - no play; LMB usa field move (hold 1: tackle/cut/strength, hold+release LMB = charge, Cut combo x3)`
               : `${getMoveLabel(m)} (${hk})`;
           return slotHtml(m, hk, title);
         })

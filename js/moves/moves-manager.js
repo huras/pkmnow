@@ -143,6 +143,24 @@ export function spawnFieldCutSlashFx(centerX, centerY, headingRad, opts = {}) {
   });
 }
 
+export function spawnFieldSpinAttackFx(centerX, centerY, headingRad, opts = {}) {
+  const life = Math.max(0.16, Number(opts.lifeSec) || 0.4);
+  pushParticle({
+    type: 'fieldSpinAttack',
+    styleId: String(opts.styleId || 'slash'),
+    x: Number(centerX) || 0,
+    y: Number(centerY) || 0,
+    z: Math.max(0, Number(opts.z) || 0.08),
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    life,
+    maxLife: life,
+    headingRad: Number(headingRad) || 0,
+    radiusTiles: Math.max(0.6, Number(opts.radiusTiles) || 2)
+  });
+}
+
 /**
  * Burst FX at the given world tile coords (sub-tile ok — matches projectile impact, not snapped to cell center).
  * `effectZ` is world height (tiles).
@@ -771,7 +789,12 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.z = 0.08;
       continue;
     }
-    if (p.type === 'fieldCutVineArc' || p.type === 'fieldCutPsychicArc' || p.type === 'fieldCutSlashArc') {
+    if (
+      p.type === 'fieldCutVineArc' ||
+      p.type === 'fieldCutPsychicArc' ||
+      p.type === 'fieldCutSlashArc' ||
+      p.type === 'fieldSpinAttack'
+    ) {
       continue;
     }
     p.x += p.vx * dt;

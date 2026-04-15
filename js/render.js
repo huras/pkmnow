@@ -417,6 +417,69 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
+  } else if (p.type === 'fieldSpinAttack') {
+    const t = 1 - a;
+    const styleId = String(p.styleId || 'slash');
+    const radius = Math.max(tileW * 0.52, (Number(p.radiusTiles) || 2) * Math.min(tileW, tileH));
+    const sweepStart = (Number(p.headingRad) || 0) + t * (Math.PI * 2.2);
+    const sweepSize = Math.PI * (0.95 + 0.1 * Math.sin(t * Math.PI));
+    let ringColor = [245, 245, 255];
+    let coreColor = [255, 255, 255];
+    if (styleId === 'vine') {
+      ringColor = [136, 255, 126];
+      coreColor = [216, 255, 206];
+    } else if (styleId === 'psychic') {
+      ringColor = [255, 116, 216];
+      coreColor = [255, 182, 232];
+    } else if (styleId === 'strength') {
+      ringColor = [255, 196, 124];
+      coreColor = [255, 232, 184];
+    }
+    ctx.save();
+    ctx.translate(px, py);
+    // Full ring: wide 360 body (thicker than before).
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${ringColor[0]}, ${ringColor[1]}, ${ringColor[2]}, ${0.18 + 0.38 * a})`;
+    ctx.lineWidth = Math.max(3.4, tileW * 0.17);
+    ctx.stroke();
+
+    // Rotating crescent moon slash (filled lune with tapered tips).
+    const sweepEnd = sweepStart + sweepSize;
+    const mid = (sweepStart + sweepEnd) * 0.5;
+    const outerR = radius * 1.02;
+    const innerR = outerR * 0.7;
+    const tipInset = Math.max(0.08, sweepSize * 0.22);
+    const crescentOffset = outerR * 0.2;
+    const offX = Math.cos(mid) * crescentOffset;
+    const offY = Math.sin(mid) * crescentOffset;
+    ctx.beginPath();
+    ctx.arc(0, 0, outerR, sweepStart, sweepEnd);
+    ctx.arc(offX, offY, innerR, sweepEnd - tipInset, sweepStart + tipInset, true);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${coreColor[0]}, ${coreColor[1]}, ${coreColor[2]}, ${0.3 + 0.5 * a})`;
+    ctx.fill();
+
+    // Bright inner edge to emphasize moon-shape tips.
+    ctx.beginPath();
+    ctx.arc(0, 0, outerR * 0.96, sweepStart + tipInset * 0.18, sweepEnd - tipInset * 0.18);
+    ctx.strokeStyle = `rgba(${coreColor[0]}, ${coreColor[1]}, ${coreColor[2]}, ${0.45 + 0.45 * a})`;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(2.2, tileW * 0.09);
+    ctx.stroke();
+    if (styleId === 'vine') {
+      const links = 16;
+      ctx.fillStyle = `rgba(174, 255, 150, ${0.2 + 0.36 * a})`;
+      for (let i = 0; i < links; i++) {
+        const u = i / links;
+        const ang = sweepStart + sweepSize * u;
+        const rr = radius + Math.sin(u * Math.PI * 3.2) * tileW * 0.06;
+        ctx.beginPath();
+        ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, Math.max(1.2, tileW * 0.032), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   } else {
     ctx.fillStyle = '#ffff88';
     ctx.beginPath();

@@ -67,6 +67,8 @@ const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
 const RUN_SPEED_CAP_MULT = 2;
+/** Hold-LMB combat charge: movement stays possible but slower. */
+const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */
 const DIG_IDLE_ANIM_SPEED = 2.8;
@@ -626,8 +628,16 @@ export function updatePlayer(dt, data) {
       ? FLIGHT_LEVITATION_MAX_SPEED_MULT
       : FLIGHT_WINGED_MAX_SPEED_MULT
     : 1;
+  const combatChargeSlowMul =
+    playInputState.chargeLeft01 > 0.02 && !playInputState.ctrlLeftHeld ? LMB_COMBAT_CHARGE_SPEED_MUL : 1;
   const currentMaxSpeed =
-    MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul * flightHorizontalMoveBoost;
+    MAX_SPEED *
+    Math.max(1.0, inputMag) *
+    runMul *
+    terrainSlowMul *
+    flightMul *
+    flightHorizontalMoveBoost *
+    combatChargeSlowMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;

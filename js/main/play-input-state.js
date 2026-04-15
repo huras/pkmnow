@@ -15,7 +15,7 @@ export const playInputState = {
   mouseY: 0,
   /** False until first `mousemove` in play on the canvas (avoids (0,0) aim before hover). */
   mouseValid: false,
-  /** Legacy field (LMB no longer builds charge). Cleared on pointer events. */
+  /** 0-1 while holding LMB in play (field-move charge). */
   chargeLeft01: 0,
   /** 0–1 while holding RMB (no Shift) — charged water shot. */
   chargeRight01: 0,
