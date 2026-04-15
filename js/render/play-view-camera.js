@@ -34,7 +34,21 @@ export const FLIGHT_CAM_ZOOM_VERTICAL_FRAC_MUL = 0.9;
 /** Only apply flight framing when airborne above this z (tiles), to avoid jitter on the ground. */
 const FLIGHT_CAM_Z_EPS = 0.02;
 
+/**
+ * Eases in/out the extra flight zoom span (larger K → wider shot). Without this, K jumps the frame
+ * `z` crosses {@link FLIGHT_CAM_Z_EPS}, `scaleFit` drops sharply, and LOD hysteresis hits ≤0.82 → LOD 1 instantly.
+ */
+const FLIGHT_ZOOM_BLEND_RISE_PER_S = 2.6;
+const FLIGHT_ZOOM_BLEND_FALL_PER_S = 3.2;
+
 let smoothedViewScale = 1;
+/**
+ * Zoom “só para LOD / chunkPad”: ignora `flightTighten`, blend de voo em K e fração vertical de voo,
+ * para LOD 0/1/2 e padding não mudarem só porque `flightActive` ou o blend de enquadramento de voo.
+ */
+let smoothedViewScaleLod = 1;
+/** 0 = ground-style vertical span for zoom fit; 1 = full flight span — smoothed per frame. */
+let flightZoomBlend = 0;
 let lastPerfMs = 0;
 /** @type {0|1|2} */
 let lodDetail = 0;
@@ -136,35 +150,51 @@ export function computePlayViewState(p) {
     VIEW_SCALE_MIN,
     Math.min(1, VIEW_SCALE_MIN + (1 - VIEW_SCALE_MIN) * (1 - t) - flightTighten)
   );
+  const scaleFeelLod = Math.max(
+    VIEW_SCALE_MIN,
+    Math.min(1, VIEW_SCALE_MIN + (1 - VIEW_SCALE_MIN) * (1 - t))
+  );
 
-  const flightZoom =
-    flightActive && z > FLIGHT_CAM_Z_EPS
-      ? verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy)
-      : verticalFramingSpanCoeff(z, framingHeightTiles, vy);
-  const K = flightZoom;
-  const zoomVerticalFrac =
-    flightActive && z > FLIGHT_CAM_Z_EPS
-      ? FRAMED_VERTICAL_FRAC * FLIGHT_CAM_ZOOM_VERTICAL_FRAC_MUL
-      : FRAMED_VERTICAL_FRAC;
+  const wantFlightZoom = flightActive && z > FLIGHT_CAM_Z_EPS;
+  if (wantFlightZoom) {
+    flightZoomBlend = Math.min(1, flightZoomBlend + dt * FLIGHT_ZOOM_BLEND_RISE_PER_S);
+  } else {
+    flightZoomBlend = Math.max(0, flightZoomBlend - dt * FLIGHT_ZOOM_BLEND_FALL_PER_S);
+  }
+
+  const kGround = verticalFramingSpanCoeff(z, framingHeightTiles, vy);
+  const kFlight = verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy);
+  const b = flightZoomBlend * flightZoomBlend * (3 - 2 * flightZoomBlend);
+  const K = kGround * (1 - b) + kFlight * b;
+
+  const zoomVerticalFracGround = FRAMED_VERTICAL_FRAC;
+  const zoomVerticalFracFlight = FRAMED_VERTICAL_FRAC * FLIGHT_CAM_ZOOM_VERTICAL_FRAC_MUL;
+  const zoomVerticalFrac = zoomVerticalFracGround * (1 - b) + zoomVerticalFracFlight * b;
+
   const scaleFit = (ch * zoomVerticalFrac) / (PLAY_BAKE_TILE_PX * K);
   const targetScale = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeel, scaleFit));
 
-  smoothedViewScale += (targetScale - smoothedViewScale) * (1 - Math.exp(-VIEW_SCALE_LAMBDA * dt));
+  const scaleFitLod = (ch * FRAMED_VERTICAL_FRAC) / (PLAY_BAKE_TILE_PX * kGround);
+  const targetScaleLod = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeelLod, scaleFitLod));
+
+  const smoothK = 1 - Math.exp(-VIEW_SCALE_LAMBDA * dt);
+  smoothedViewScale += (targetScale - smoothedViewScale) * smoothK;
+  smoothedViewScaleLod += (targetScaleLod - smoothedViewScaleLod) * smoothK;
 
   const effTileW = PLAY_BAKE_TILE_PX * smoothedViewScale;
   const effTileH = effTileW;
 
-  const s = smoothedViewScale;
-  if (s <= 0.62) lodDetail = 2;
-  else if (s <= 0.82) lodDetail = Math.max(lodDetail, 1);
-  if (s >= 0.9) lodDetail = 0;
-  else if (s >= 0.68 && lodDetail === 2) lodDetail = 1;
-  else if (s >= 0.86 && lodDetail === 1) lodDetail = 0;
+  const sLod = smoothedViewScaleLod;
+  if (sLod <= 0.62) lodDetail = 2;
+  else if (sLod <= 0.82) lodDetail = Math.max(lodDetail, 1);
+  if (sLod >= 0.9) lodDetail = 0;
+  else if (sLod >= 0.68 && lodDetail === 2) lodDetail = 1;
+  else if (sLod >= 0.86 && lodDetail === 1) lodDetail = 0;
 
   if (forceLod0Always) lodDetail = 0;
 
   /** Far LOD: fewer offscreen chunks + slightly tighter tile margin (big win when zoomed out). */
-  const chunkPad = lodDetail >= 2 ? 1 : s < 0.92 ? 2 : s < 0.99 ? 1 : 0;
+  const chunkPad = lodDetail >= 2 ? 1 : sLod < 0.92 ? 2 : sLod < 0.99 ? 1 : 0;
 
   const viewW = cw / effTileW;
   const viewH = ch / effTileH;
@@ -177,18 +207,17 @@ export function computePlayViewState(p) {
 
   const { yLo, yHi } = verticalFramingWorldYBounds(effTileH, z, framingHeightTiles, vy);
   const midY = (yLo + yHi) * 0.5;
-  const currentTransX = Math.round(cw / 2 - (vx + 0.5) * effTileW);
+  const transYGround = ch / 2 - midY;
 
-  let currentTransY;
-  if (flightActive && z > FLIGHT_CAM_Z_EPS) {
-    const vc = vy + 0.5;
-    const shadowMidPx = vc * effTileH;
-    const transShadow = ch * FLIGHT_CAM_SHADOW_Y_FRAC - shadowMidPx;
-    const transTopMin = FLIGHT_CAM_TOP_PAD_PX - yLo;
-    currentTransY = Math.round(Math.max(transShadow, transTopMin));
-  } else {
-    currentTransY = Math.round(ch / 2 - midY);
-  }
+  const vc = vy + 0.5;
+  const shadowMidPx = vc * effTileH;
+  const transShadow = ch * FLIGHT_CAM_SHADOW_Y_FRAC - shadowMidPx;
+  const transTopMin = FLIGHT_CAM_TOP_PAD_PX - yLo;
+  const transYFlight = Math.max(transShadow, transTopMin);
+
+  /** Same smoothstep as K / zoom — avoids Y snap when flight framing toggles vs zoom blend. */
+  const currentTransY = Math.round(transYGround * (1 - b) + transYFlight * b);
+  const currentTransX = Math.round(cw / 2 - (vx + 0.5) * effTileW);
 
   return {
     bakeTilePx: PLAY_BAKE_TILE_PX,

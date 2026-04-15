@@ -310,7 +310,7 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
 /**
  * Play collider overlay: walk feet on the ground plane + optional dashed Z axis + body circle
  * at `item.airZ` tiles high (matches sprite / projectile `z` convention).
- * @param {{ type: string, x: number, y: number, dexId?: number, animMoving?: boolean, airZ?: number }} item
+ * @param {{ type: string, x: number, y: number, dexId?: number, animMoving?: boolean, airZ?: number, showAirGroundTether?: boolean }} item
  */
 function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache) {
   const zLift = Math.max(0, Number(item.airZ) || 0);
@@ -321,7 +321,10 @@ function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, image
   const fcyGround = snapPx(ft.y * tileH);
   const fcyBody = snapPx(ft.y * tileH - zLift * tileH);
 
-  if (zLift > 0.02) {
+  const showAirTether =
+    item.showAirGroundTether !== undefined ? !!item.showAirGroundTether : zLift > 0.02;
+
+  if (zLift > 0.02 && showAirTether) {
     ctx.strokeStyle = 'rgba(200, 255, 220, 0.5)';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([5, 5]);
@@ -471,6 +474,8 @@ export function render(canvas, data, options = {}) {
 
     /** Match `updatePlayer`: walk/dig on ground; Mewtwo/Mew use walk slice while levitating. */
     const flightHudActive = speciesHasFlyingType(playerDexForCam) && player.flightActive;
+    /** Só grama **em cima do jogador / vizinhos do tile** no voo — a grama do mundo (PASS 5a) continua em LOD 0. */
+    const skipPlayerGrassOverlayDuringFlight = flightHudActive;
     const smoothLev = speciesHasSmoothLevitationFlight(playerDexForCam);
     const isPlayerWalkingAnim =
       (!!player.grounded &&
@@ -997,7 +1002,7 @@ export function render(canvas, data, options = {}) {
         sexHud: wildSexHudLabel(we.sex)
       });
 
-      if (emotionPayload) {
+      if (emotionPayload && lodDetail < 2) {
         renderItems.push({
           type: 'wildEmotion',
           sortY: emotionSortY,
@@ -1143,6 +1148,8 @@ export function render(canvas, data, options = {}) {
         x: vx,
         /** World height (tiles) for collider / FX overlay — same as sprite lift. */
         airZ: player.z ?? 0,
+        showAirGroundTether:
+          (player.z ?? 0) <= 0.02 ? false : !flightHudActive || !!player.flightGroundTetherVisible,
         /** Depth sort: world pivot Y (tile center), not logical cell. */
         sortY: vy + 0.5,
         dexId: playerDex,
@@ -1162,7 +1169,7 @@ export function render(canvas, data, options = {}) {
         pivotY: dh * PMD_MON_SHEET.pivotYFrac,
         targetHeightTiles
       });
-      if (playerEmotionPayload) {
+      if (playerEmotionPayload && lodDetail < 2) {
         const playerFootSortY = vy + 0.5;
         const playerEmotionSortY = Math.max(playerFootSortY + 0.018, Math.floor(vy) + 1.008);
         renderItems.push({
@@ -1415,10 +1422,16 @@ export function render(canvas, data, options = {}) {
           drawWildHpBar(item, spawnYOffset);
         }
 
-        // Terrain / Grass Depth Cue (Deferred Overlay)
+        // Terrain / Grass Depth Cue (Deferred Overlay) — omit for player in creative flight
         const targetMx = Math.floor(item.x);
         const targetMy = Math.floor(item.y);
-        if (targetMx >= startX && targetMx < endX && targetMy >= startY && targetMy < endY) {
+        if (
+          (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight) &&
+          targetMx >= startX &&
+          targetMx < endX &&
+          targetMy >= startY &&
+          targetMy < endY
+        ) {
           const t = getCached(targetMx, targetMy);
           if (passesAbovePlayerTileGate(targetMx, targetMy, t)) {
             drawGrass5aForCell(targetMx, targetMy, t, Math.ceil(tileW), Math.ceil(tileH), Math.floor(targetMx * tileW), Math.floor(targetMy * tileH), 'playerTopOverlay');
@@ -1437,14 +1450,16 @@ export function render(canvas, data, options = {}) {
           snapPx(item.dh)
         );
       } else if (item.type === 'wildEmotion' || item.type === 'playerEmotion') {
-        ctx.globalAlpha = item.spawnPhase;
-        let spawnYOffset = 0;
-        if (item.spawnPhase < 1) {
-          if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
-          else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
-          else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+        if (lodDetail < 2) {
+          ctx.globalAlpha = item.spawnPhase;
+          let spawnYOffset = 0;
+          if (item.spawnPhase < 1) {
+            if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
+            else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
+            else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+          }
+          drawWildEmotionOverlay(ctx, item, spawnYOffset);
         }
-        drawWildEmotionOverlay(ctx, item, spawnYOffset);
       } else if (item.type === 'playerAimIndicator') {
         const collCx = snapPx((item.collMx + 0.5) * tileW);
         const collCyGround = snapPx((item.collMy + 0.5) * tileH);
@@ -1488,7 +1503,9 @@ export function render(canvas, data, options = {}) {
           ctx.stroke();
           ctx.restore();
         }
-        if (pz > 0.02) {
+        const showAimAirTether =
+          pz <= 0.02 ? false : !flightHudActive || !!player.flightGroundTetherVisible;
+        if (showAimAirTether) {
           ctx.strokeStyle = 'rgba(160, 255, 235, 0.65)';
           ctx.lineWidth = 1.5;
           ctx.setLineDash([3, 4]);
@@ -1633,6 +1650,7 @@ export function render(canvas, data, options = {}) {
     // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
     const microW = width * MACRO_TILE_STRIDE;
     const microH = height * MACRO_TILE_STRIDE;
+    if (!skipPlayerGrassOverlayDuringFlight) {
     const playerFracY = vy - overlayMy;
     const playerTouchesSouthTile = playerFracY >= 0.68;
     const preferSouthBottomOverlay =
@@ -1692,6 +1710,7 @@ export function render(canvas, data, options = {}) {
         drawGrass5aForCell(overlayMx, overlayMy, tPlayer, twP, thP, txP, tyP, 'playerTopOverlay');
       }
     }
+    } // !skipPlayerGrassOverlayDuringFlight (5a-deferred)
 
     // --- Collider overlay (checkbox or C key): walkability tint + every nearby trunk stroke + entity radii.
     // "Inspect one tree" (context menu) only adds the yellow trunk highlight below + player feet circle here — not all trunks.

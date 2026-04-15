@@ -33,8 +33,8 @@ import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-tim
 const MAX_SPEED = 3.2;
 const ACCEL = 32.0;
 const FRICTION = 20.0;
-const GRAVITY = 45.0;
-const JUMP_IMPULSE = 14.5;
+const GRAVITY = 9.8;
+const JUMP_IMPULSE = 4.5;
 const GROUND_R = 0.32; // Raio de colisão
 
 /** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
@@ -44,14 +44,24 @@ const FLIGHT_MAX_Z = PLAYER_FLIGHT_MAX_Z_TILES;
 /** Winged Flying-type: snappier / “flappy” feel. */
 const FLIGHT_WINGED_VERT_SPEED = 3;
 /** Horizontal speed cap while flying (× `MAX_SPEED`); tuned vs ground. */
-const FLIGHT_WINGED_MAX_SPEED_MULT = 2.15 * 3;
-const FLIGHT_WINGED_FRICTION_MULT = 0.42;
+const FLIGHT_WINGED_MAX_SPEED_MULT = 2.15 * 1.25;
+const FLIGHT_WINGED_FRICTION_MULT = 0.82;
 /** Mewtwo / Mew levitation: calmer horizontal + vertical (see `speciesHasSmoothLevitationFlight`). */
-const FLIGHT_LEVITATION_VERT_SPEED = 7.2;
-const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 3;
-const FLIGHT_LEVITATION_FRICTION_MULT = 0.19;
+const FLIGHT_LEVITATION_VERT_SPEED = 4.2;
+const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 1.25;
+const FLIGHT_LEVITATION_FRICTION_MULT = 0.69;
 /** Horizontal input acceleration while in creative flight (ground uses full `ACCEL`). */
-const FLIGHT_ACCEL_MULT = 0.45;
+const FLIGHT_ACCEL_MULT = 0.95;
+/** Walk / idle PMD cycle advances faster only while actually gaining altitude in creative flight. */
+const FLIGHT_RAISE_HEIGHT_ANIM_MULT = 2.5;
+/** Horizontal flight cap multiplier while moving (WASD); not stacked while actively gaining altitude. */
+const FLIGHT_HORIZONTAL_MOVE_SPEED_MULT = 1.5;
+/** Hover-idle in creative flight: every this many seconds the tether blinks for `FLIGHT_TETHER_IDLE_BLINK_SEC`. */
+const FLIGHT_TETHER_IDLE_CYCLE_SEC = 4;
+/** Last segment of each cycle: tether toggles on/off (strobe) for this long. */
+const FLIGHT_TETHER_IDLE_BLINK_SEC = 1;
+/** Half-periods per second during the blink window (even = ~50% duty). */
+const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
 const RUN_SPEED_CAP_MULT = 2;
@@ -109,7 +119,9 @@ export const player = {
   /** Social emoji balloon rendered above the player. */
   socialEmotionType: null,
   socialEmotionAge: 0,
-  socialEmotionPortraitSlug: null
+  socialEmotionPortraitSlug: null,
+  /** Creative flight: dashed feet↔sprite tether allowed this frame (render / debug overlay). */
+  flightGroundTetherVisible: false
 };
 
 export function setPlayerSpecies(dexId) {
@@ -130,6 +142,8 @@ export function setPlayerSpecies(dexId) {
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
+  player._flightIdleCycleSec = 0;
+  player.flightGroundTetherVisible = false;
 }
 
 export function setPlayerPos(x, y) {
@@ -157,6 +171,8 @@ export function setPlayerPos(x, y) {
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
+  player._flightIdleCycleSec = 0;
+  player.flightGroundTetherVisible = false;
 }
 
 /**
@@ -411,6 +427,18 @@ export function updatePlayer(dt, data) {
     isGroundDigLatchEligible() && !!player.grounded && !isAirborne && (player.digCharge01 > 0 || player.digBurrowMode);
   player.digActive = !!player.grounded && (groundDigVisual || (gh && !!playInputState.shiftLeftHeld));
 
+  const raisingHeightOnFlight =
+    flightMove &&
+    !!playInputState.spaceHeld &&
+    !playInputState.shiftLeftHeld &&
+    player.z < FLIGHT_MAX_Z - 1e-4;
+  const flightHorizontalMoveBoost =
+    flightMove &&
+    (player.inputX !== 0 || player.inputY !== 0) &&
+    !raisingHeightOnFlight
+      ? FLIGHT_HORIZONTAL_MOVE_SPEED_MULT
+      : 1;
+
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {
     // Determine facing
@@ -441,6 +469,18 @@ export function updatePlayer(dt, data) {
       const newSpd = Math.max(0, spd - drop);
       player.vx *= newSpd / spd;
       player.vy *= newSpd / spd;
+    }
+  }
+
+  // Winged flight only: horizontal drag while thrusting (levitation keeps friction on release only).
+  if (flightMove && !smoothLevitationFlight && (player.inputX !== 0 || player.inputY !== 0)) {
+    const spdW = Math.hypot(player.vx, player.vy);
+    if (spdW > 0) {
+      const fr = FRICTION * FLIGHT_WINGED_FRICTION_MULT;
+      const drop = fr * dt;
+      const newSpd = Math.max(0, spdW - drop);
+      player.vx *= newSpd / spdW;
+      player.vy *= newSpd / spdW;
     }
   }
 
@@ -481,7 +521,8 @@ export function updatePlayer(dt, data) {
       ? FLIGHT_LEVITATION_MAX_SPEED_MULT
       : FLIGHT_WINGED_MAX_SPEED_MULT
     : 1;
-  const currentMaxSpeed = MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul;
+  const currentMaxSpeed =
+    MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul * flightHorizontalMoveBoost;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
@@ -607,6 +648,8 @@ export function updatePlayer(dt, data) {
   }
 
   // 4. Update Visual and Animation
+  const raisingFlightAnimMul = raisingHeightOnFlight ? FLIGHT_RAISE_HEIGHT_ANIM_MULT : 1;
+
   player.visualX = player.x;
   player.visualY = player.y;
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
@@ -669,7 +712,7 @@ export function updatePlayer(dt, data) {
 
     if (useWalkLikeAnim) {
       const animSpd = spd > 0.1 ? spd : DIG_IDLE_ANIM_SPEED;
-      player.totalDistMoved += animSpd * dt;
+      player.totalDistMoved += animSpd * dt * raisingFlightAnimMul;
       const pmdDexForWalkLike =
         player.digActive &&
         speciesUsesBorrowedDiglettDigVisual(player.dexId ?? 0) &&
@@ -701,7 +744,7 @@ export function updatePlayer(dt, data) {
       const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
       const totalTicks = seq.reduce((a, b) => a + b, 0);
 
-      player.idleTimer += dt * 60;
+      player.idleTimer += dt * 60 * raisingFlightAnimMul;
       const loopTick = player.idleTimer % totalTicks;
 
       let accumulated = 0;
@@ -727,5 +770,45 @@ export function updatePlayer(dt, data) {
       player.socialEmotionAge = 0;
       player.socialEmotionPortraitSlug = null;
     }
+  }
+
+  // Ground ↔ air tether: while changing height in flight, or each 4s hover-idle the last 1s blinks on/off.
+  if (flightMove) {
+    const raisingHeightDraw =
+      !!playInputState.spaceHeld &&
+      !playInputState.shiftLeftHeld &&
+      player.z < FLIGHT_MAX_Z - 1e-4;
+    const loweringHeightDraw =
+      !!playInputState.shiftLeftHeld &&
+      !playInputState.spaceHeld &&
+      player.z > 1e-4;
+    const verticalFlightAdjust = raisingHeightDraw || loweringHeightDraw;
+    const horizBusy =
+      player.inputX !== 0 ||
+      player.inputY !== 0 ||
+      spdPostMove > 0.12;
+    const tetherBusyFlight = verticalFlightAdjust || horizBusy;
+
+    if (tetherBusyFlight) {
+      player._flightIdleCycleSec = 0;
+    } else {
+      player._flightIdleCycleSec = (player._flightIdleCycleSec || 0) + dt;
+    }
+
+    const c = FLIGHT_TETHER_IDLE_CYCLE_SEC;
+    const b = FLIGHT_TETHER_IDLE_BLINK_SEC;
+    const t = (player._flightIdleCycleSec || 0) % c;
+    const inBlinkWindow = t >= c - b;
+    let idleTetherBlink = false;
+    if (inBlinkWindow && b > 1e-6) {
+      const local01 = (t - (c - b)) / b;
+      const slices = Math.max(2, Math.round(FLIGHT_TETHER_IDLE_BLINK_HZ * 2 * b));
+      idleTetherBlink = Math.floor(local01 * slices) % 2 === 0;
+    }
+
+    player.flightGroundTetherVisible = verticalFlightAdjust || idleTetherBlink;
+  } else {
+    player._flightIdleCycleSec = 0;
+    player.flightGroundTetherVisible = false;
   }
 }

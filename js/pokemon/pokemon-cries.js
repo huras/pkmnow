@@ -12,11 +12,20 @@ const POOL_SIZE = 2;
 /** Global loudness boost (cries were tuned a bit quiet vs spatial + MP3). */
 const CRY_VOL_BOOST = 1.22;
 
+/** Scales all cry volumes vs the boosted range (user: ~75% of previous perceived level). */
+const CRY_VOL_RANGE_SCALE = 0.75;
+
 /** Default cry level when no envelope is passed. */
 const CRY_DEFAULT_VOL = 0.74;
 
+/** Fade-out curve: exponent on `t` in [0,1] — higher = volume stays up longer before tail (slower decay). */
+const CRY_FADE_OUT_T_POWER = 2.75;
+
+/** Hurt-tail fade: exponent on normalized remaining time (same idea as {@link CRY_FADE_OUT_T_POWER}). */
+const CRY_HURT_TAIL_U_POWER = 2.35;
+
 function clampCryVol(v) {
-  return Math.max(0, Math.min(1, v * CRY_VOL_BOOST));
+  return Math.max(0, Math.min(1, v * CRY_VOL_BOOST * CRY_VOL_RANGE_SCALE));
 }
 /** @type {Map<number, HTMLAudioElement[]>} */
 const pools = new Map();
@@ -103,9 +112,9 @@ function attachCryEnvelope(audio, curve) {
     } else {
       t = Math.min(1, Math.max(0, audio.currentTime / fallbackDur));
     }
-    /** Fade-out stays louder longer; fade-in reaches full level a bit earlier. */
+    /** Fade-out: power > 1 keeps level higher longer; fade-in reaches full level a bit earlier. */
     let volBlend = t;
-    if (v1 < v0 - 1e-4) volBlend = t * t;
+    if (v1 < v0 - 1e-4) volBlend = Math.pow(t, CRY_FADE_OUT_T_POWER);
     else if (v1 > v0 + 1e-4) volBlend = 1 - (1 - t) * (1 - t);
     audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * volBlend));
     audio.playbackRate = Math.max(0.55, Math.min(1.45, r0 + (r1 - r0) * t));
@@ -263,7 +272,7 @@ function attachHurtTailEnvelope(audio, startTime, fallbackDur) {
     const end = d && Number.isFinite(d) && d > startTime + 0.04 ? d : startTime + fallbackDur;
     const denom = Math.max(0.05, end - startTime);
     const u = Math.min(1, Math.max(0, (audio.currentTime - startTime) / denom));
-    const uVol = u * u;
+    const uVol = Math.pow(u, CRY_HURT_TAIL_U_POWER);
     audio.volume = Math.max(0, Math.min(1, v0 + (v1 - v0) * uVol));
     audio.playbackRate = Math.max(0.55, Math.min(1.45, r0 + (r1 - r0) * u));
   };
