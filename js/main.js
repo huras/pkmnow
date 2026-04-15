@@ -717,7 +717,8 @@ loadTilesetImages().then(async () => {
   }
   playCharacterSelector = new CharacterSelector('character-selector-container', {
     getCurrentData: () => currentData,
-    getAppMode: () => appMode
+    getAppMode: () => appMode,
+    defaultPlayImmersiveChrome: document.documentElement?.dataset?.appShell === 'play'
   });
   playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);

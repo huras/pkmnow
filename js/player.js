@@ -74,7 +74,10 @@ const DIG_CHARGE_SEC = 0.88;
 const DIG_CHARGE_DECAY = 2.2;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
-const initialDex = parseInt(localStorage.getItem(SAVED_DEX_KEY)) || 94;
+/** Default species when nothing valid is stored (Charmander). */
+const DEFAULT_PLAYER_DEX_ID = 4;
+const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
+const initialDex = Number.isFinite(_savedDex) && _savedDex >= 1 ? _savedDex : DEFAULT_PLAYER_DEX_ID;
 
 export const player = {
   x: 0,

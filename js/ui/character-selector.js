@@ -15,6 +15,7 @@ import {
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
+const IMMERSIVE_CHROME_STORAGE_KEY = 'pkmn_play_immersive_chrome';
 
 function moveAbbrevFromLabel(label) {
   const parts = String(label || '')
@@ -31,7 +32,11 @@ function moveAbbrevFromLabel(label) {
 export class CharacterSelector {
   /**
    * @param {string} containerId
-   * @param {{ getCurrentData?: () => object | null, getAppMode?: () => string }} [opts]
+   * @param {{
+   *   getCurrentData?: () => object | null,
+   *   getAppMode?: () => string,
+   *   defaultPlayImmersiveChrome?: boolean
+   * }} [opts] — if `pkmn_play_immersive_chrome` absent, use `defaultPlayImmersiveChrome` (true on `play.html`).
    */
   constructor(containerId, opts = {}) {
     this.container = document.getElementById(containerId);
@@ -42,7 +47,11 @@ export class CharacterSelector {
     /** @type {'full' | 'minimal'} */
     this.layoutMode =
       localStorage.getItem(LAYOUT_STORAGE_KEY) === 'minimal' ? 'minimal' : 'full';
-    
+    /** Hides shell chrome + panel extras; keeps portrait, name, types, minimap, and this toggle. */
+    const immStored = localStorage.getItem(IMMERSIVE_CHROME_STORAGE_KEY);
+    this.playImmersiveChrome =
+      immStored === '1' ? true : immStored === '0' ? false : !!opts.defaultPlayImmersiveChrome;
+
     for (let i = 1; i <= 151; i++) {
       this.allSpecies.push({
         id: i,
@@ -57,6 +66,7 @@ export class CharacterSelector {
     this.render();
     this.attachEvents();
     this.applyLayoutMode();
+    this.applyPlayImmersiveChrome();
     this.updatePreview().catch(() => {});
   }
 
@@ -65,6 +75,25 @@ export class CharacterSelector {
     this.layoutMode = mode === 'minimal' ? 'minimal' : 'full';
     localStorage.setItem(LAYOUT_STORAGE_KEY, this.layoutMode);
     this.applyLayoutMode();
+  }
+
+  /** Collapses map shell + character panel to portrait / name / types / minimap + one dot control. */
+  setPlayImmersiveChrome(on) {
+    this.playImmersiveChrome = !!on;
+    localStorage.setItem(IMMERSIVE_CHROME_STORAGE_KEY, this.playImmersiveChrome ? '1' : '0');
+    this.applyPlayImmersiveChrome();
+  }
+
+  applyPlayImmersiveChrome() {
+    const app = this.container?.closest?.('.app') ?? this.container?.parentElement;
+    if (app?.classList) app.classList.toggle('app--play-immersive', this.playImmersiveChrome);
+    const btn = this.container?.querySelector('#character-selector-immersive-toggle');
+    if (btn) {
+      btn.setAttribute('aria-pressed', this.playImmersiveChrome ? 'true' : 'false');
+      btn.title = this.playImmersiveChrome ? 'Show full UI' : 'Minimal UI (portrait + minimap)';
+      btn.textContent = this.playImmersiveChrome ? '+' : '·';
+      btn.setAttribute('aria-label', btn.title);
+    }
   }
 
   applyLayoutMode() {
@@ -161,14 +190,24 @@ export class CharacterSelector {
             <span class="player-name" id="current-player-name">${activeName}</span>
             <div class="player-types" id="current-player-types"></div>
           </div>
-          <button
-            type="button"
-            class="character-selector__layout-toggle"
-            id="character-selector-layout-toggle"
-            aria-pressed="false"
-            aria-label="Use minimal character panel"
-            title="Hide search, move hints, and right-click mode"
-          >Min</button>
+          <div class="selector-header__actions">
+            <button
+              type="button"
+              class="character-selector__layout-toggle"
+              id="character-selector-layout-toggle"
+              aria-pressed="false"
+              aria-label="Use minimal character panel"
+              title="Hide search, move hints, and right-click mode"
+            >Min</button>
+            <button
+              type="button"
+              class="character-selector__immersive-toggle"
+              id="character-selector-immersive-toggle"
+              aria-pressed="false"
+              aria-label="Minimal UI (portrait + minimap)"
+              title="Minimal UI (portrait + minimap)"
+            >·</button>
+          </div>
         </div>
 
         <div
@@ -270,6 +309,13 @@ export class CharacterSelector {
     if (layoutBtn) {
       layoutBtn.addEventListener('click', () => {
         this.setLayoutMode(this.layoutMode === 'minimal' ? 'full' : 'minimal');
+      });
+    }
+
+    const immersiveBtn = this.container.querySelector('#character-selector-immersive-toggle');
+    if (immersiveBtn) {
+      immersiveBtn.addEventListener('click', () => {
+        this.setPlayImmersiveChrome(!this.playImmersiveChrome);
       });
     }
   }
