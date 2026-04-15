@@ -451,6 +451,211 @@ export function resetWildPokemonManager() {
   wildUpdateFrameCounter = 0;
 }
 
+/** Keys for play-debug summons: never despawned by {@link syncWildPokemonWindow} slot budget. */
+const DEBUG_SUMMON_KEY_PREFIX = 'debug:';
+const DEBUG_SUMMON_MAX = 16;
+let nextDebugSummonSeq = 1;
+
+function isDebugSummonKey(k) {
+  return typeof k === 'string' && k.startsWith(DEBUG_SUMMON_KEY_PREFIX);
+}
+
+function pruneDebugSummonsIfNeeded() {
+  while ([...entitiesByKey.keys()].filter(isDebugSummonKey).length >= DEBUG_SUMMON_MAX) {
+    for (const k of entitiesByKey.keys()) {
+      if (isDebugSummonKey(k)) {
+        entitiesByKey.delete(k);
+        break;
+      }
+    }
+  }
+}
+
+function bindStandardWildTakeDamage(entity) {
+  entity.takeDamage = function (amount) {
+    const memory = ensureSocialMemory(this);
+    this.hp -= amount;
+    this.hurtTimer = 0.28;
+    this.hurtAnimTimer = 0;
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.hurtTimer = 0;
+      this.deadState = this.animMeta?.faint ? 'faint' : 'sleep';
+      this.deadTimer = 1.35;
+      this.deadAnimTimer = 0;
+      this.aiState = 'sleep';
+      this.animMoving = false;
+      this.vx = 0;
+      this.vy = 0;
+      setEmotion(this, 9, true, 'Pain');
+      this.isDespawning = true;
+    }
+    this.hitFlashTimer = 0.2;
+
+    if (this.aiState !== 'flee' && this.aiState !== 'sleep') {
+      this.aiState = 'flee';
+    }
+
+    memory.threat = clamp(memory.threat + 0.9, 0, 3.5);
+    memory.affinity = clamp(memory.affinity - 0.35, -2.5, 3);
+    pushRecentNearbyEvent(this, 'player_damage', 1.3);
+    broadcastNearbyPlayerEvent(this.x, this.y, 'player_damage', 0.85, this);
+    broadcastNearbySpeciesAllyHurt(this.x, this.y, this.dexId ?? 1, 1.05, this);
+    this.provoked01 = clamp((this.provoked01 || 0) + 0.42, 0, 3);
+    if (this.provoked01 >= 0.38) {
+      this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 4.8));
+    }
+
+    if (amount > 0) playWildDamageHurtCry(this);
+  };
+}
+
+/**
+ * Find a walkable pivot near (ox, oy) in micro-tile world space.
+ * @returns {{ spawnX: number, spawnY: number } | null}
+ */
+function findWalkableWildSpawnNear(data, dex, ox, oy) {
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const candidates = [[ox, oy]];
+  for (let ring = 1; ring <= 12; ring++) {
+    const steps = Math.max(8, ring * 8);
+    for (let i = 0; i < steps; i++) {
+      const ang = (i / steps) * Math.PI * 2;
+      candidates.push([ox + Math.cos(ang) * ring * 0.65, oy + Math.sin(ang) * ring * 0.65]);
+    }
+  }
+  for (const [tx, ty] of candidates) {
+    if (tx < 0.5 || ty < 0.5 || tx >= microW - 0.5 || ty >= microH - 0.5) continue;
+    const ft = worldFeetFromPivotCell(tx, ty, imageCache, dex, false);
+    if (canWildPokemonWalkMicroTile(ft.x, ft.y, data)) return { spawnX: tx, spawnY: ty };
+  }
+  return null;
+}
+
+/**
+ * Play mode: spawn a wild Pokémon by dex at a free tile near the player.
+ * Persists across wild slot sync (see {@link isDebugSummonKey}).
+ * @param {number} dexId
+ * @param {object} data
+ * @param {number} nearWorldX micro X
+ * @param {number} nearWorldY micro Y
+ * @returns {boolean}
+ */
+export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
+  if (!data) return false;
+  const dex = Math.floor(Number(dexId)) || 0;
+  if (!getPokemonConfig(dex)) return false;
+
+  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
+  if (!pos) return false;
+
+  pruneDebugSummonsIfNeeded();
+  const summonSeq = nextDebugSummonSeq++;
+  const key = `${DEBUG_SUMMON_KEY_PREFIX}${summonSeq}`;
+  const spawnX = pos.spawnX;
+  const spawnY = pos.spawnY;
+  const w = data.width;
+  const h = data.height;
+  const macroX = Math.floor(spawnX / MACRO_TILE_STRIDE);
+  const macroY = Math.floor(spawnY / MACRO_TILE_STRIDE);
+  const subN = wildSubdivN();
+  const cellW = MACRO_TILE_STRIDE / subN;
+  const lx = spawnX - macroX * MACRO_TILE_STRIDE;
+  const ly = spawnY - macroY * MACRO_TILE_STRIDE;
+  const subX = Math.max(0, Math.min(subN - 1, Math.floor(lx / cellW)));
+  const subY = Math.max(0, Math.min(subN - 1, Math.floor(ly / cellW)));
+  const biomeId =
+    macroX >= 0 && macroY >= 0 && macroX < w && macroY < h ? data.biomes[macroY * w + macroX] : 0;
+  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ summonSeq * 97) | 0;
+  const sex = rollWildSex(dex, sexSalt >>> 0);
+
+  let spawnType = 'land';
+  if (SKY_SPECIES.has(dex)) {
+    spawnType = 'sky';
+  } else {
+    const overlayId = getFoliageOverlayTileId(Math.floor(spawnX), Math.floor(spawnY), data);
+    const lakeRole = getLakeLotusFoliageWalkRole(Math.floor(spawnX), Math.floor(spawnY), data);
+    const isWater = overlayId !== null || lakeRole !== null;
+    if (isWater) spawnType = 'water';
+    else if (overlayId !== null) spawnType = 'grass';
+  }
+
+  const entity = {
+    key,
+    macroX,
+    macroY,
+    subX,
+    subY,
+    biomeId,
+    pickIndex: -1,
+    centerX: spawnX,
+    centerY: spawnY,
+    x: spawnX,
+    y: spawnY,
+    vx: 0,
+    vy: 0,
+    dexId: dex,
+    sex,
+    provoked01: 0,
+    wildTempAggressiveSec: 0,
+    animMeta: getDexAnimMeta(dex),
+    facing: 'down',
+    animRow: 0,
+    animFrame: 0,
+    idleTimer: 0,
+    _walkPhase: 0,
+    wanderTimer: 0,
+    idlePauseTimer: 0,
+    animMoving: false,
+    behavior: getSpeciesBehavior(dex),
+    aiState: 'wander',
+    alertTimer: 0,
+    emotionType: null,
+    emotionPortraitSlug: null,
+    emotionAge: 0,
+    emotionPersist: false,
+    spawnPhase: 1,
+    isDespawning: false,
+    spawnType,
+    targetX: null,
+    targetY: null,
+    z: 0,
+    vz: 0,
+    grounded: true,
+    jumping: false,
+    jumpCooldown: 0,
+    _blockedMoveFrames: 0,
+    hp: 50,
+    maxHp: 50,
+    deadState: null,
+    deadTimer: 0,
+    deadAnimTimer: 0,
+    hurtTimer: 0,
+    hurtAnimTimer: 0,
+    hitFlashTimer: 0,
+    socialMemory: {
+      affinity: 0,
+      threat: 0,
+      curiosity: 0,
+      approachSignal: 0,
+      retreatSignal: 0,
+      reactionCooldown: 0
+    },
+    recentNearbyEvents: [],
+    lastPlayerDist: null,
+    lastProximitySignalAt: 999,
+    _lodDtAccum: 0,
+    _lodOffset: seededHashInt(macroX * 211 + subX * 37, macroY * 223 + subY * 41, data.seed ^ 0x6c6f64) % 4
+  };
+  bindStandardWildTakeDamage(entity);
+  entitiesByKey.set(key, entity);
+  void ensurePokemonSheetsLoaded(imageCache, dex);
+  void probeSpriteCollabPortraitPrefix(dex).catch(() => {});
+  return true;
+}
+
+
 function pickAnimFrame(seq, tickInLoop) {
   let acc = 0;
   for (let i = 0; i < seq.length; i++) {
@@ -846,6 +1051,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
   const needed = buildWildNeededSlotKeys(w, h, pmx, pmy, subN, cellW, playerMicroX, playerMicroY);
 
   for (const [k, ent] of entitiesByKey.entries()) {
+    if (isDebugSummonKey(k)) continue;
     if (!needed.has(k)) {
       ent.isDespawning = true;
     }
@@ -855,6 +1061,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
   const usedPickIndexesByBiome = new Map();
   for (const ent of entitiesByKey.values()) {
     if (typeof ent.biomeId !== 'number' || typeof ent.pickIndex !== 'number') continue;
+    if (ent.pickIndex < 0) continue;
     let set = usedPickIndexesByBiome.get(ent.biomeId);
     if (!set) {
       set = new Set();
@@ -1021,45 +1228,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       lastProximitySignalAt: 999,
       _lodDtAccum: 0,
       _lodOffset:
-        seededHashInt(mx * 211 + sx * 37, my * 223 + sy * 41, data.seed ^ 0x6c6f64) % WILD_UPDATE_CADENCE_FAR,
-      takeDamage: function(amount) {
-        const memory = ensureSocialMemory(this);
-        this.hp -= amount;
-        this.hurtTimer = 0.28;
-        this.hurtAnimTimer = 0;
-        if (this.hp <= 0) {
-          this.hp = 0;
-          this.hurtTimer = 0;
-          this.deadState = this.animMeta?.faint ? 'faint' : 'sleep';
-          this.deadTimer = 1.35;
-          this.deadAnimTimer = 0;
-          this.aiState = 'sleep';
-          this.animMoving = false;
-          this.vx = 0;
-          this.vy = 0;
-          setEmotion(this, 9, true, 'Pain');
-          this.isDespawning = true;
-        }
-        this.hitFlashTimer = 0.2; // flash for 200ms
-
-        // Flee on hit if not already fleeing
-        if (this.aiState !== 'flee' && this.aiState !== 'sleep') {
-          this.aiState = 'flee';
-        }
-
-        memory.threat = clamp(memory.threat + 0.9, 0, 3.5);
-        memory.affinity = clamp(memory.affinity - 0.35, -2.5, 3);
-        pushRecentNearbyEvent(this, 'player_damage', 1.3);
-        broadcastNearbyPlayerEvent(this.x, this.y, 'player_damage', 0.85, this);
-        broadcastNearbySpeciesAllyHurt(this.x, this.y, this.dexId ?? 1, 1.05, this);
-        this.provoked01 = clamp((this.provoked01 || 0) + 0.42, 0, 3);
-        if (this.provoked01 >= 0.38) {
-          this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 4.8));
-        }
-
-        if (amount > 0) playWildDamageHurtCry(this);
-      }
+        seededHashInt(mx * 211 + sx * 37, my * 223 + sy * 41, data.seed ^ 0x6c6f64) % WILD_UPDATE_CADENCE_FAR
     };
+    bindStandardWildTakeDamage(entity);
     entitiesByKey.set(k, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
     probeSpriteCollabPortraitPrefix(dex).catch(() => {});

@@ -1,4 +1,5 @@
 import { player, setPlayerSpecies } from '../player.js';
+import { summonDebugWildPokemon } from '../wild-pokemon/wild-pokemon-manager.js';
 import { getGen1SpeciesName, padDex3 } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
@@ -28,8 +29,14 @@ function moveAbbrevFromLabel(label) {
 }
 
 export class CharacterSelector {
-  constructor(containerId) {
+  /**
+   * @param {string} containerId
+   * @param {{ getCurrentData?: () => object | null, getAppMode?: () => string }} [opts]
+   */
+  constructor(containerId, opts = {}) {
     this.container = document.getElementById(containerId);
+    this.getCurrentData = typeof opts.getCurrentData === 'function' ? opts.getCurrentData : () => null;
+    this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
     this.allSpecies = [];
     this.isOpen = false;
     /** @type {'full' | 'minimal'} */
@@ -211,6 +218,7 @@ export class CharacterSelector {
         <div class="search-container">
           <span class="search-icon">🔍</span>
           <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
+          <p class="selector-summon-hint" style="margin:0.35rem 0 0;font-size:0.72rem;opacity:0.82">Click: play as · Ctrl+click (⌘ on Mac): summon wild nearby</p>
           
           <div class="results-list" id="search-results">
             <!-- Results injected here -->
@@ -326,9 +334,15 @@ export class CharacterSelector {
     );
 
     resultsList.querySelectorAll('.result-item').forEach((item) => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (ev) => {
         const id = parseInt(item.dataset.id, 10);
-        this.selectSpecies(id);
+        const data = this.getCurrentData?.() ?? null;
+        const inPlay = this.getAppMode?.() === 'play';
+        if ((ev.ctrlKey || ev.metaKey) && inPlay && data) {
+          summonDebugWildPokemon(id, data, player.x, player.y);
+        } else {
+          void this.selectSpecies(id);
+        }
         resultsList.classList.remove('active');
         const si = this.container.querySelector('#species-search');
         if (si) si.value = '';

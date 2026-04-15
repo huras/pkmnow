@@ -469,6 +469,8 @@ export function render(canvas, data, options = {}) {
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
+    /** LOD 0 only: deferred grass / `playerTopOverlay` strips over sprites. LOD 1+ use PASS 5a grass under entities. */
+    const playLodGrassSpriteOverlay = lodDetail < 1;
     const latchGround = isGroundDigLatchEligible();
     const time = options.settings?.time || 0;
 
@@ -851,8 +853,12 @@ export function render(canvas, data, options = {}) {
           drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
           return;
         }
-        if (isGrassDeferredAroundPlayer(mx, my)) {
+        if (playLodGrassSpriteOverlay && isGrassDeferredAroundPlayer(mx, my)) {
           if (isGrassDeferredEwNeighbor(mx, my)) {
+            drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
+          } else if (skipPlayerGrassOverlayDuringFlight) {
+            // S / SE / SW are normally drawn after the sprite; that pass is skipped in flight.
+            // Draw them here so ground + shadow tiles still get grass (sprite is aloft).
             drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
           }
           return;
@@ -1422,10 +1428,11 @@ export function render(canvas, data, options = {}) {
           drawWildHpBar(item, spawnYOffset);
         }
 
-        // Terrain / Grass Depth Cue (Deferred Overlay) — omit for player in creative flight
+        // Terrain / grass depth cue (LOD 0 only) — omit for player in creative flight
         const targetMx = Math.floor(item.x);
         const targetMy = Math.floor(item.y);
         if (
+          playLodGrassSpriteOverlay &&
           (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight) &&
           targetMx >= startX &&
           targetMx < endX &&
@@ -1647,10 +1654,10 @@ export function render(canvas, data, options = {}) {
       ctx.restore();
     }
 
-    // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip on active/waiting tile
+    // PASS 5a-deferred: S / SE / SW full grass over sprite; E / W extra bottom strip (LOD 0 only; skipped in flight)
     const microW = width * MACRO_TILE_STRIDE;
     const microH = height * MACRO_TILE_STRIDE;
-    if (!skipPlayerGrassOverlayDuringFlight) {
+    if (playLodGrassSpriteOverlay && !skipPlayerGrassOverlayDuringFlight) {
     const playerFracY = vy - overlayMy;
     const playerTouchesSouthTile = playerFracY >= 0.68;
     const preferSouthBottomOverlay =
@@ -1710,7 +1717,7 @@ export function render(canvas, data, options = {}) {
         drawGrass5aForCell(overlayMx, overlayMy, tPlayer, twP, thP, txP, tyP, 'playerTopOverlay');
       }
     }
-    } // !skipPlayerGrassOverlayDuringFlight (5a-deferred)
+    } // playLodGrassSpriteOverlay && !skipPlayerGrassOverlayDuringFlight (5a-deferred)
 
     // --- Collider overlay (checkbox or C key): walkability tint + every nearby trunk stroke + entity radii.
     // "Inspect one tree" (context menu) only adds the yellow trunk highlight below + player feet circle here — not all trunks.

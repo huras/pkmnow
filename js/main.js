@@ -709,7 +709,10 @@ loadTilesetImages().then(async () => {
   if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {
     new BiomesModal();
   }
-  playCharacterSelector = new CharacterSelector('character-selector-container');
+  playCharacterSelector = new CharacterSelector('character-selector-container', {
+    getCurrentData: () => currentData,
+    getAppMode: () => appMode
+  });
   playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);

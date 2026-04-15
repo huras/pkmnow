@@ -51,7 +51,7 @@ const FLIGHT_LEVITATION_VERT_SPEED = 4.2;
 const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 1.25;
 const FLIGHT_LEVITATION_FRICTION_MULT = 0.69;
 /** Horizontal input acceleration while in creative flight (ground uses full `ACCEL`). */
-const FLIGHT_ACCEL_MULT = 0.95;
+const FLIGHT_ACCEL_MULT = 0.85;
 /** Walk / idle PMD cycle advances faster only while actually gaining altitude in creative flight. */
 const FLIGHT_RAISE_HEIGHT_ANIM_MULT = 2.5;
 /** Horizontal flight cap multiplier while moving (WASD); not stacked while actively gaining altitude. */
