@@ -290,14 +290,31 @@ function crystalDropVisualFromItemKey(itemKey) {
   const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
   if (!base?.ids?.length) return null;
   const shape = parseShape(objSet.shape);
+  const shapeCols = Math.max(1, shape.cols);
+  const shapeRows = Math.max(1, shape.rows);
+  const shapeCells = shapeCols * shapeRows;
+  const allPartIds = [];
+  let shapeMatchedPartIds = null;
+  if (Array.isArray(objSet.parts)) {
+    for (const part of objSet.parts) {
+      if (!Array.isArray(part?.ids) || part.ids.length === 0) continue;
+      if (!shapeMatchedPartIds && part.ids.length === shapeCells) {
+        shapeMatchedPartIds = [...part.ids];
+      }
+      for (const id of part.ids) allPartIds.push(id);
+    }
+  }
+  const dropTileIds =
+    shapeMatchedPartIds ||
+    (allPartIds.length === shapeCells ? allPartIds : [...base.ids]);
   const path = TessellationEngine.getImagePath(objSet.file);
   const cols = path && path.includes('caves') ? 50 : 57;
   return {
     itemKey,
-    tileId: base.ids[0],
-    tileIds: [...base.ids],
-    shapeCols: Math.max(1, shape.cols),
-    shapeRows: Math.max(1, shape.rows),
+    tileId: dropTileIds[0] ?? base.ids[0],
+    tileIds: dropTileIds,
+    shapeCols,
+    shapeRows,
     cols,
     imgPath: path || null
   };
