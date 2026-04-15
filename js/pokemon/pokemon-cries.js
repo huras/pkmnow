@@ -30,6 +30,14 @@ function clampCryVol(v) {
 /** @type {Map<number, HTMLAudioElement[]>} */
 const pools = new Map();
 
+/** In-flight {@link preloadPokemonCry} per dex (dedupes parallel spawns). */
+/** @type {Map<number, Promise<void>>} */
+const cryPreloadInflight = new Map();
+
+function clampDex(dex) {
+  return Math.max(1, Math.min(151, Number(dex) || 1));
+}
+
 /** @type {WeakMap<object, number>} */
 const nextEmotionCryByEntity = new WeakMap();
 /** @type {WeakMap<object, number>} */
@@ -130,12 +138,17 @@ function attachCryEnvelope(audio, curve) {
 }
 
 function cryUrlForDex(dex) {
-  const d = Math.max(1, Math.min(151, Number(dex) || 1));
+  const d = clampDex(dex);
   return `./audio/cries/gen1/${padDex3(d)}-${getGen1ShowdownCrySlug(d)}.mp3`;
 }
 
-function borrowAudio(dex) {
-  const d = Math.max(1, Math.min(151, Number(dex) || 1));
+/**
+ * Ensure the cry pool exists for this dex (two {@link HTMLAudioElement} slots).
+ * @param {number} dex
+ * @returns {HTMLAudioElement[]}
+ */
+function ensureCryPool(dex) {
+  const d = clampDex(dex);
   let pool = pools.get(d);
   if (!pool) {
     const url = cryUrlForDex(d);
@@ -147,6 +160,60 @@ function borrowAudio(dex) {
     }
     pools.set(d, pool);
   }
+  return pool;
+}
+
+/**
+ * Warm cry buffers for a species before cries play (spawn / emotion / hurt).
+ * Dedupes concurrent preloads per dex. Does not block the game loop — callers use `void`.
+ * @param {number} dex
+ * @returns {Promise<void>}
+ */
+export function preloadPokemonCry(dex) {
+  const d = clampDex(dex);
+  const existing = cryPreloadInflight.get(d);
+  if (existing) return existing;
+
+  void resumeSpatialAudioContext();
+
+  const pool = ensureCryPool(d);
+
+  const waitOne = (a) =>
+    new Promise((resolve) => {
+      if (a.error) {
+        resolve();
+        return;
+      }
+      if (a.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        resolve();
+        return;
+      }
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      a.addEventListener('canplay', done, { once: true });
+      a.addEventListener('error', done, { once: true });
+      setTimeout(done, 5000);
+      try {
+        if (a.readyState === HTMLMediaElement.HAVE_NOTHING) a.load();
+      } catch {
+        done();
+      }
+    });
+
+  const p = Promise.all(pool.map(waitOne)).then(() => {});
+  cryPreloadInflight.set(d, p);
+  p.finally(() => {
+    if (cryPreloadInflight.get(d) === p) cryPreloadInflight.delete(d);
+  });
+  return p;
+}
+
+function borrowAudio(dex) {
+  const pool = ensureCryPool(dex);
   for (const a of pool) {
     if (a.paused || a.ended) return a;
   }
@@ -300,8 +367,10 @@ export function playWildDamageHurtCry(entity) {
 
   const fallbackHalf = 0.36;
 
+  let hurtBegun = false;
   const beginHurtTail = () => {
-    if (a.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    if (hurtBegun) return;
+    hurtBegun = true;
     const d = a.duration;
     const hurtStart =
       d && Number.isFinite(d) && d > 0.1 ? d * 0.5 : fallbackHalf;
@@ -332,10 +401,17 @@ export function playWildDamageHurtCry(entity) {
   if (a.readyState >= HTMLMediaElement.HAVE_METADATA) {
     beginHurtTail();
   } else {
-    // Do NOT call `a.load()` here: it resets the element and forces a full re-fetch from the
-    // network. On localhost the clip is often already buffered (HAVE_METADATA); on a server
-    // each hurt-cry then sounds like a stutter/reload. `preload="auto"` + existing src load it.
+    // Do NOT call `a.load()` on every hurt when data is already loading — it resets and
+    // re-fetches. Kick `load()` only from HAVE_NOTHING; {@link preloadPokemonCry} should
+    // have metadata ready before combat cries matter.
     a.addEventListener('loadedmetadata', beginHurtTail, { once: true });
+    a.addEventListener('error', beginHurtTail, { once: true });
+    setTimeout(beginHurtTail, 2800);
+    try {
+      if (a.readyState === HTMLMediaElement.HAVE_NOTHING) a.load();
+    } catch {
+      beginHurtTail();
+    }
   }
 }
 

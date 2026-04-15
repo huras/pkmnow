@@ -14,7 +14,7 @@ import {
   probeSpriteCollabPortraitPrefix
 } from '../pokemon/spritecollab-portraits.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
-import { playWildEmotionCry, playWildDamageHurtCry } from '../pokemon/pokemon-cries.js';
+import { playWildEmotionCry, playWildDamageHurtCry, preloadPokemonCry } from '../pokemon/pokemon-cries.js';
 import { imageCache } from '../image-cache.js';
 import { PMD_DEFAULT_MON_ANIMS } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimMeta } from '../pokemon/pmd-anim-metadata.js';
@@ -550,6 +550,8 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
 
   const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
   if (!pos) return false;
+
+  void preloadPokemonCry(dex);
 
   pruneDebugSummonsIfNeeded();
   const summonSeq = nextDebugSummonSeq++;
@@ -1116,6 +1118,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     if (baseDex == null) continue;
     const bossRoll = rollBossPromotedDex(baseDex, mx, my, sx, sy, data.seed);
     const dex = bossRoll.dex;
+    void preloadPokemonCry(dex);
     const spawnHp = bossRoll.hp;
     const spawnMaxHp = bossRoll.maxHp;
     const isBoss = bossRoll.isBoss;
