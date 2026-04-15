@@ -11,7 +11,22 @@ const snap = (n) => Math.round(n);
  */
 const compositeCache = new Map();
 
-const MAX_CACHE = 400;
+/**
+ * Aumentado de 400 → 1500: em biomas densos (Jungle, Ghost Woods) com 60+ canopies visíveis
+ * × 9 wind frames × 2 escalas de LOD, o cache antigo sofria thrashing (re-bake constante).
+ * 1500 entries ≈ 15MB RAM no pior caso; elimina thrashing completamente.
+ */
+const MAX_CACHE = 1500;
+
+/**
+ * LRU trim: `Map` em JS preserva ordem de inserção. Em cada `get()` com hit, re-inserimos
+ * a entry (delete + set) pra marcá-la como "mais recente". `trimCache` remove as do começo
+ * (menos recentes). Substitui o FIFO antigo que podia evictar canopies renderizadas toda frame.
+ */
+function touchLRU(key, entry) {
+  compositeCache.delete(key);
+  compositeCache.set(key, entry);
+}
 
 function trimCache() {
   while (compositeCache.size > MAX_CACHE) {
@@ -30,7 +45,11 @@ function trimCache() {
  * @param {number} angleRad
  */
 function bakeComposite(key, img, atlasCols, tileW, tileH, placements, angleRad) {
-  if (compositeCache.has(key)) return compositeCache.get(key);
+  const cached = compositeCache.get(key);
+  if (cached) {
+    touchLRU(key, cached);
+    return cached;
+  }
 
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
@@ -124,9 +143,21 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
     return { canvas: c, ox: 0, oy: 0 };
   }
   const frameIndex = AnimationRenderer.getFrameIndex(time, originX, originY);
-  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
+
+  // Fast-path: tenta cache hit ANTES de alocar placements[] e computar canopyRows.
+  // treeType identifica unicamente `tops` (são derivados determinísticamente), então
+  // tops.join(',') é redundante na key — removido (eliminava ~60 string allocs/frame em Jungle).
+  const key = `ft|${treeType}|${frameIndex}|${twC}|${thC}|${natureImg.src}`;
+  const cached = compositeCache.get(key);
+  if (cached) {
+    touchLRU(key, cached);
+    return cached;
+  }
+
+  // Cache miss: agora sim aloca placements pra bake.
+  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
   const canopyCols = 2;
   const canopyRows = Math.ceil(tops.length / canopyCols);
   const placements = [];
@@ -143,7 +174,6 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
       drawY
     });
   }
-  const key = `ft|${treeType}|${frameIndex}|${twC}|${thC}|${natureImg.src}|${tops.join(',')}`;
   return bakeComposite(key, natureImg, TCOLS_NATURE, tileW, tileH, placements, angle);
 }
 
@@ -179,10 +209,22 @@ export function getScatterTopCanopyComposite(
     c.height = 1;
     return { canvas: c, ox: 0, oy: 0 };
   }
-  const frameIndex = windSway ? AnimationRenderer.getFrameIndex(time, originX, originY) : 1;
-  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
+  // Frame 3 (meio do array de 7) = ângulo 0 rad. Default estático para itens sem sway (crystal, rock, shell).
+  const WIND_CENTER_IDX = Math.floor(AnimationRenderer.WIND_ANGLES.length / 2);
+  const frameIndex = windSway ? AnimationRenderer.getFrameIndex(time, originX, originY) : WIND_CENTER_IDX;
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
+
+  // Fast-path: tenta cache hit ANTES de alocar placements. itemKey identifica topPart.ids
+  // determinísticamente, então idsKey era redundante — removido (eliminava mais ~60 string allocs/frame).
+  const key = `sc|${itemKey}|${cols}|${frameIndex}|${windSway ? 1 : 0}|${twC}|${thC}|${img.src || ''}|${atlasCols}`;
+  const cached = compositeCache.get(key);
+  if (cached) {
+    touchLRU(key, cached);
+    return cached;
+  }
+
+  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
   const topRows = Math.ceil(topPart.ids.length / cols);
   const placements = [];
   for (let idx = 0; idx < topPart.ids.length; idx++) {
@@ -198,7 +240,5 @@ export function getScatterTopCanopyComposite(
       drawY
     });
   }
-  const idsKey = topPart.ids.join(',');
-  const key = `sc|${itemKey}|${cols}|${frameIndex}|${windSway ? 1 : 0}|${twC}|${thC}|${img.src || ''}|${atlasCols}|${idsKey}`;
   return bakeComposite(key, img, atlasCols, tileW, tileH, placements, angle);
 }

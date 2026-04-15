@@ -9,15 +9,18 @@ export const AnimationRenderer = {
     // Key format: "imageURI-tileId-frameIndex"
     cache: new Map(),
 
-    // Configurações de balanço (Sutil)
-    // Usamos 3 frames para o balanço clássico sutil
-    WIND_ANGLES: [-0.05, 0, 0.05],
+    /**
+     * 7 frames para balanço suave (antes: 3 frames com buckets grosseiros causavam "pulos" visíveis).
+     * Pico ±0.07 rad ≈ ±4° — sutil, não quebra pixel art.
+     * Cache cresce 2.3×, mas canopy-sway-cache suporta 1500 entries (bumpado em fix anterior).
+     */
+    WIND_ANGLES: [-0.07, -0.045, -0.02, 0, 0.02, 0.045, 0.07],
 
     /**
      * Retorna um frame pré-renderizado (Canvas) para o balanço de vento.
      * @param {HTMLImageElement} img O Tileset original
      * @param {number} tileId O ID do tile no tileset
-     * @param {number} frameIndex O índice do frame (0, 1, 2)
+     * @param {number} frameIndex O índice do frame (0..WIND_ANGLES.length-1)
      * @param {number} cols Número de colunas no tileset
      */
     getWindFrame(img, tileId, frameIndex, cols) {
@@ -54,19 +57,27 @@ export const AnimationRenderer = {
     },
 
     /**
-     * Calcula qual frameIndex usar baseado no tempo e posição.
+     * Calcula frameIndex baseado em tempo + posição.
+     * Mapa contínuo `wave (-1..1)` → `idx (0..N-1)` em vez de 3 buckets discretos.
      * @param {number} time Tempo atual (s)
      * @param {number} mx Posição X (world)
      * @param {number} my Posição Y (world)
      */
     getFrameIndex(time, mx, my) {
+        // Quantização temporal: snap do tempo para bucket de 143ms (7 Hz).
+        // Efeito: frameIndex só pode mudar 7×/seg em vez de 60×/seg. Imperceptível a olho humano
+        // (rotação sutil de ±4°), mas elimina thrashing de compositeCache em biomas densos —
+        // entre re-quantizações, o MESMO composite é reusado ~8 frames seguidos = cache hit garantido.
+        const tQuant = Math.floor(time * 7) / 7;
+
         // Fase por célula: Perlin (escala baixa) + cache em perlin-wind.js — não recalcula todo frame.
+        // Amplitude reduzida dentro de perlin-wind.js cria efeito de onda coerente (trees próximas balançam juntas).
         const phase = getWindPhaseOffset(mx, my);
-        const wave = Math.sin(time * 2.0 + phase);
-        
-        // Mapeia Seno (-1 a 1) para índice (0, 1, 2)
-        if (wave < -0.33) return 0; // Esquerda
-        if (wave > 0.33) return 2;  // Direita
-        return 1;                   // Centro
+        const wave = Math.sin(tQuant * 1.6 + phase); // 1.6 rad/s = ~0.25 Hz (orgânico)
+
+        // Mapeia (-1..1) → (0..N-1) continuamente. Math.round pra ficar no frame mais próximo.
+        const N = this.WIND_ANGLES.length;
+        const idx = Math.round((wave + 1) * 0.5 * (N - 1));
+        return idx < 0 ? 0 : idx >= N ? N - 1 : idx;
     }
 };
