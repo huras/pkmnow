@@ -41,12 +41,17 @@ function combatModifierHeld() {
 
 /** World aim for LMB/RMB / hotkeys / debug — continuous sub-tile coords (matches screen→world). */
 export function aimAtCursor(player) {
+  const px = player.visualX ?? player.x;
+  const py = player.visualY ?? player.y;
+  /** Same horizontal/vertical anchor as the play sprite (`vx+0.5`, `vy+0.5` in `render.js`). */
+  const sx = px + 0.5;
+  const sy = py + 0.5;
   if (!playInputState.mouseValid) {
-    return { tx: player.x + 1, ty: player.y, sx: player.x, sy: player.y };
+    return { tx: sx + 1, ty: sy, sx, sy };
   }
   const wx = playInputState.mouseX;
   const wy = playInputState.mouseY;
-  return { tx: wx, ty: wy, sx: player.x, sy: player.y };
+  return { tx: wx, ty: wy, sx, sy };
 }
 
 /** @type {Record<string, string>} */

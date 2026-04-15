@@ -716,8 +716,9 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
       if (proj.trailAcc != null) {
         proj.trailAcc += dt;
-        const interval = PSY_TRAIL_INTERVAL * 0.42;
-        while (proj.trailAcc >= interval) {
+        const interval = PSY_TRAIL_INTERVAL * 1.35;
+        let budget = 4;
+        while (proj.trailAcc >= interval && budget-- > 0) {
           proj.trailAcc -= interval;
           const u = Math.random();
           const px = sx0 + (sx1 - sx0) * u + (Math.random() - 0.5) * 0.06;
@@ -745,9 +746,17 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
       if (proj.hitsWild) {
         const set = proj.psyHitWild instanceof Set ? proj.psyHitWild : (proj.psyHitWild = new Set());
+        const pad = COLLISION_BROAD_PHASE_TILES + 1.2;
+        const minX = Math.min(sx0, sx1) - pad;
+        const maxX = Math.max(sx0, sx1) + pad;
+        const minY = Math.min(sy0, sy1) - pad;
+        const maxY = Math.max(sy0, sy1) + pad;
         for (const wild of wildList) {
           if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
           if (set.has(wild)) continue;
+          const qx = wild.x + 0.5;
+          const qy = wild.y + 0.5;
+          if (qx < minX || qx > maxX || qy < minY || qy > maxY) continue;
           const wDex = wild.dexId ?? 1;
           const wz = wild.z ?? 0;
           const { hx, hy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, wDex);

@@ -28,6 +28,19 @@ function Resolve-AnimFile {
   return $null
 }
 
+function Resolve-AnimFileCandidates {
+  param(
+    [Parameter(Mandatory = $true)][string]$SpeciesRoot,
+    [Parameter(Mandatory = $true)][string[]]$Candidates
+  )
+  foreach ($name in $Candidates) {
+    if ([string]::IsNullOrWhiteSpace($name)) { continue }
+    $f = Resolve-AnimFile -SpeciesRoot $SpeciesRoot -AnimFileName $name
+    if ($f) { return $f }
+  }
+  return $null
+}
+
 function Resolve-SpeciesRoot {
   param(
     [Parameter(Mandatory = $true)][string]$SpriteRoot,
@@ -125,11 +138,21 @@ function Read-AnimMetadata {
     }
   }
 
-  $idleInfo = $null
-  $walkInfo = $null
-  if ($byName.ContainsKey("Idle")) { $idleInfo = $byName["Idle"] }
-  if ($byName.ContainsKey("Walk")) { $walkInfo = $byName["Walk"] }
-  if ($null -eq $idleInfo -and $null -eq $walkInfo) {
+  $idleInfo = if ($byName.ContainsKey("Idle")) { $byName["Idle"] } else { $null }
+  $walkInfo = if ($byName.ContainsKey("Walk")) { $byName["Walk"] } else { $null }
+  $digInfo = if ($byName.ContainsKey("Dig")) { $byName["Dig"] } else { $null }
+  $hurtInfo = if ($byName.ContainsKey("Hurt")) { $byName["Hurt"] } else { $null }
+  $sleepInfo = if ($byName.ContainsKey("Sleep")) { $byName["Sleep"] } else { $null }
+  $faintInfo = if ($byName.ContainsKey("Faint")) { $byName["Faint"] } else { $null }
+
+  if (
+    $null -eq $idleInfo -and
+    $null -eq $walkInfo -and
+    $null -eq $digInfo -and
+    $null -eq $hurtInfo -and
+    $null -eq $sleepInfo -and
+    $null -eq $faintInfo
+  ) {
     return $null
   }
 
@@ -146,6 +169,34 @@ function Read-AnimMetadata {
       frameWidth = $walkInfo.frameWidth
       frameHeight = $walkInfo.frameHeight
       durations = $walkInfo.durations
+    }
+  }
+  if ($null -ne $digInfo) {
+    $out.dig = @{
+      frameWidth = $digInfo.frameWidth
+      frameHeight = $digInfo.frameHeight
+      durations = $digInfo.durations
+    }
+  }
+  if ($null -ne $hurtInfo) {
+    $out.hurt = @{
+      frameWidth = $hurtInfo.frameWidth
+      frameHeight = $hurtInfo.frameHeight
+      durations = $hurtInfo.durations
+    }
+  }
+  if ($null -ne $sleepInfo) {
+    $out.sleep = @{
+      frameWidth = $sleepInfo.frameWidth
+      frameHeight = $sleepInfo.frameHeight
+      durations = $sleepInfo.durations
+    }
+  }
+  if ($null -ne $faintInfo) {
+    $out.faint = @{
+      frameWidth = $faintInfo.frameWidth
+      frameHeight = $faintInfo.frameHeight
+      durations = $faintInfo.durations
     }
   }
   return $out
@@ -178,8 +229,30 @@ for ($dex = 1; $dex -le 151; $dex++) {
     continue
   }
 
-  $walkSource = Resolve-AnimFile -SpeciesRoot $speciesRoot -AnimFileName "Walk-Anim.png"
-  $idleSource = Resolve-AnimFile -SpeciesRoot $speciesRoot -AnimFileName "Idle-Anim.png"
+  $walkSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Walk-Anim.png",
+    "Walk.png"
+  )
+  $idleSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Idle-Anim.png",
+    "Idle.png"
+  )
+  $digSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Dig-Anim.png",
+    "Dig.png"
+  )
+  $hurtSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Hurt-Anim.png",
+    "Hurt.png"
+  )
+  $sleepSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Sleep-Anim.png",
+    "Sleep.png"
+  )
+  $faintSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
+    "Faint-Anim.png",
+    "Faint.png"
+  )
   # Muitas espécies só têm Walk-Anim.png; no AnimData o Idle é <CopyOf>Walk</CopyOf> — usa a mesma folha.
   if ($walkSource -and -not $idleSource) {
     $idleSource = $walkSource
@@ -197,9 +270,17 @@ for ($dex = 1; $dex -le 151; $dex++) {
 
   $walkDest = Join-Path $OutputDir "${dex3}_walk.png"
   $idleDest = Join-Path $OutputDir "${dex3}_idle.png"
+  $digDest = Join-Path $OutputDir "${dex3}_dig.png"
+  $hurtDest = Join-Path $OutputDir "${dex3}_hurt.png"
+  $sleepDest = Join-Path $OutputDir "${dex3}_sleep.png"
+  $faintDest = Join-Path $OutputDir "${dex3}_faint.png"
 
   Copy-Item -Path $walkSource -Destination $walkDest -Force
   Copy-Item -Path $idleSource -Destination $idleDest -Force
+  if ($digSource) { Copy-Item -Path $digSource -Destination $digDest -Force }
+  if ($hurtSource) { Copy-Item -Path $hurtSource -Destination $hurtDest -Force }
+  if ($sleepSource) { Copy-Item -Path $sleepSource -Destination $sleepDest -Force }
+  if ($faintSource) { Copy-Item -Path $faintSource -Destination $faintDest -Force }
   if ($null -ne $animMeta) {
     $metaByDex[$dex3] = $animMeta
   }
@@ -221,6 +302,17 @@ export const PMD_ANIM_METADATA = $json;
 export function getDexAnimMeta(dexId) {
   const key = String(Math.max(1, Math.min(151, Number(dexId) || 1))).padStart(3, '0');
   return PMD_ANIM_METADATA[key] || null;
+}
+
+/** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'} kind */
+export function getDexAnimSlice(dexId, kind) {
+  const m = getDexAnimMeta(dexId);
+  if (!m) return null;
+  if (kind === 'dig') return m.dig ?? m.walk ?? null;
+  if (kind === 'hurt') return m.hurt ?? m.idle ?? null;
+  if (kind === 'sleep') return m.sleep ?? m.idle ?? null;
+  if (kind === 'faint') return m.faint ?? m.idle ?? null;
+  return m[kind] ?? null;
 }
 "@
 

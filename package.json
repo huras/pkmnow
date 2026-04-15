@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:palettes": "node scripts/bake-terrain-palettes.mjs"
+    "build:palettes": "node scripts/bake-terrain-palettes.mjs",
+    "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git pull'"
   },
   "devDependencies": {
     "pngjs": "^7.0.0"

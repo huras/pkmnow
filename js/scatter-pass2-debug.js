@@ -121,12 +121,13 @@ function insideAnotherScatterBaseFootprintMicro(mx, my, seed, microW, microH, ge
       const nTile = getT(ox0, oy0);
       if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
       if (here.heightStep !== nTile.heightStep) continue;
-
-      if (!scatterOriginStrictUpToFootprintScan(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
 
       const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
       if (itemsO.length === 0) continue;
+
+      if (!scatterOriginStrictUpToFootprintScan(ox0, oy0, seed, microW, microH, getT, memo)) continue;
+
       const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
       const objSet = OBJECT_SETS[itemKey];
       if (!objSet) continue;
@@ -185,12 +186,12 @@ export function grassSuppressedByScatterFootprint(mx, my, data, memo = null) {
       const nTile = getT(ox0, oy0);
       if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
       if (here.heightStep !== nTile.heightStep) continue;
-
-      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
 
       const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
       if (itemsO.length === 0) continue;
+
+      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
       const objSet = OBJECT_SETS[itemKey];
       if (!objSet) continue;
@@ -222,11 +223,11 @@ export function buildScatterFootprintNoGrassSet(startX, endX, startY, endY, data
     for (let ox0 = ox0Min; ox0 < ox0Max; ox0++) {
       const nTile = getT(ox0, oy0);
       if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
-      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
 
       const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
       if (itemsO.length === 0) continue;
+      if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, memo)) continue;
       const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
       const objSet = OBJECT_SETS[itemKey];
       if (!objSet) continue;
@@ -333,13 +334,15 @@ export function analyzeScatterPass2Base(mx, my, data) {
         const oy = my - oyDelta;
         if (oy < 0 || oy >= microH) break;
         const nTile = getT(ox, oy);
+        const itemsOcc = nTile ? BIOME_VEGETATION[nTile.biomeId] || [] : [];
         if (
           nTile &&
+          itemsOcc.length > 0 &&
           foliageDensity(ox, oy, seed + 111, 2.5) > 0.82 &&
           !nTile.isRoad &&
           validScatterOriginMicro(ox, oy, seed, microW, microH, getT, originMemo)
         ) {
-          const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+          const itemsO = itemsOcc;
           const nItemKey = itemsO[Math.floor(seededHash(ox, oy, seed + 222) * itemsO.length)];
           const nObjSet = OBJECT_SETS[nItemKey];
           if (nObjSet) {
@@ -434,10 +437,12 @@ export function analyzeScatterPass2Base(mx, my, data) {
           (tx + ty) % 3 === 1 &&
           foliageDensity(tx - 1, ty, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
         if (isFTO(ox0, oy0) || isFNO(ox0, oy0)) continue;
-
-        if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) continue;
+        if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
 
         const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+        if (itemsO.length === 0) continue;
+        if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) continue;
+
         const itemKeyO = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
         const objSetO = OBJECT_SETS[itemKeyO];
         if (!objSetO) continue;

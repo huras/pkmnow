@@ -165,7 +165,7 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     const dy = y1 - y0;
     const len = Math.hypot(dx, dy) || 1;
     const ang = Math.atan2(dy, dx);
-    const th = Math.max(5, tileH * 0.2);
+    const th = Math.max(6, tileH * 0.22);
     const mx = (x0 + x1) * 0.5;
     const my = (y0 + y1) * 0.5;
     ctx.save();
@@ -173,17 +173,21 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     ctx.rotate(ang);
     const halfL = len * 0.5;
     const grd = ctx.createLinearGradient(-halfL, 0, halfL, 0);
-    grd.addColorStop(0, `rgba(255,210,248,${0.38 * a})`);
-    grd.addColorStop(0.42, `rgba(255,130,215,${0.95 * a})`);
-    grd.addColorStop(0.58, `rgba(255,95,195,${0.98 * a})`);
-    grd.addColorStop(1, `rgba(255,55,175,${0.35 * a})`);
+    grd.addColorStop(0, `rgba(255,105,185,${0.52 * a})`);
+    grd.addColorStop(0.35, `rgba(255,75,170,${0.92 * a})`);
+    grd.addColorStop(0.5, `rgba(255,55,160,${0.98 * a})`);
+    grd.addColorStop(0.65, `rgba(255,80,178,${0.92 * a})`);
+    grd.addColorStop(1, `rgba(230,50,150,${0.48 * a})`);
+    /* Soft outer halo without ctx.shadowBlur (very expensive with `lighter` compositing). */
+    ctx.fillStyle = `rgba(255, 75, 175, ${0.22 * a})`;
+    ctx.fillRect(-halfL, -th * 0.72, len, th * 1.44);
     ctx.fillStyle = grd;
-    ctx.shadowColor = `rgba(255, 85, 195, ${0.72 * a})`;
-    ctx.shadowBlur = 20;
     ctx.fillRect(-halfL, -th * 0.5, len, th);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(255,255,255,${0.42 * a})`;
-    ctx.fillRect(-halfL, -th * 0.16, len, th * 0.32);
+    /* Narrow “core” read — hot pink / magenta, not white */
+    ctx.fillStyle = `rgba(255, 165, 220, ${0.58 * a})`;
+    ctx.fillRect(-halfL, -th * 0.14, len, th * 0.28);
+    ctx.fillStyle = `rgba(255, 110, 195, ${0.45 * a})`;
+    ctx.fillRect(-halfL, -th * 0.08, len, th * 0.16);
     ctx.restore();
   } else if (p.type === 'prismaticShot') {
     const ang = Math.atan2(p.vy || 0, p.vx || 1);
@@ -202,11 +206,10 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       grd.addColorStop(0.35, `hsla(${h1}, 100%, 56%, 0.92)`);
       grd.addColorStop(0.65, `hsla(${h2}, 100%, 64%, 0.92)`);
       grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.22)`);
+      ctx.fillStyle = `hsla(${(h1 + 40) % 360}, 100%, 60%, 0.18)`;
+      ctx.fillRect(-len * 0.5, -th * 0.85, len, th * 1.7);
       ctx.fillStyle = grd;
-      ctx.shadowColor = `hsla(${(h1 + 40) % 360}, 100%, 65%, 0.85)`;
-      ctx.shadowBlur = 14;
       ctx.fillRect(-len * 0.5, -th * 0.5, len, th);
-      ctx.shadowBlur = 0;
       ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.55)`;
       ctx.lineWidth = 1.2;
       ctx.strokeRect(-len * 0.5, -th * 0.5, len, th);
@@ -897,6 +900,8 @@ export function render(canvas, data, options = {}) {
     
     // --- Collect Sortable Objects (Scatter, Trees, Buildings) ---
     const sortableScanPad = lodDetail >= 2 ? 2 : 4;
+    /** Dedup `validScatterOriginMicro` (footprint + “em cima de outro scatter”) no mesmo frame. */
+    const scatterOriginMemoRender = new Map();
     for (let myScan = startY - sortableScanPad; myScan < endY; myScan++) {
       for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
         if (mxScan < 0 || myScan < 0 || mxScan >= width * MACRO_TILE_STRIDE || myScan >= height * MACRO_TILE_STRIDE) continue;
@@ -927,7 +932,18 @@ export function render(canvas, data, options = {}) {
             const isSortable = isSortableScatter(itemKey);
             // Even if not "sortable" (like grass), we check for "tops" that need sorting
             const objSet = OBJECT_SETS[itemKey];
-            if (objSet && validScatterOriginMicro(mxScan, myScan, data.seed, width * MACRO_TILE_STRIDE, height * MACRO_TILE_STRIDE, (c, r) => getCached(c, r))) {
+            if (
+              objSet &&
+              validScatterOriginMicro(
+                mxScan,
+                myScan,
+                data.seed,
+                width * MACRO_TILE_STRIDE,
+                height * MACRO_TILE_STRIDE,
+                (c, r) => getCached(c, r),
+                scatterOriginMemoRender
+              )
+            ) {
                const { cols, rows } = parseShape(objSet.shape);
                const hasTop = objSet.parts.some(p => p.role === 'top' || p.role === 'tops');
                if (isSortable || hasTop) {
@@ -1223,9 +1239,7 @@ export function render(canvas, data, options = {}) {
       const z0 = player.z ?? 0;
       const pushOrb = (hold) => {
         if (!hold) return;
-        const { tx, ty } = aimAtCursor(player);
-        const sx = player.x;
-        const sy = player.y;
+        const { sx, sy, tx, ty } = aimAtCursor(player);
         const d = Math.hypot(tx - sx, ty - sy) || 1e-6;
         const bx = sx + ((tx - sx) / d) * 0.42;
         const by = sy + ((ty - sy) / d) * 0.42;
@@ -1542,11 +1556,9 @@ export function render(canvas, data, options = {}) {
         ctx.arc(collCx, collCyGround, Math.max(1, collR - 1), 0, Math.PI * 2);
         ctx.stroke();
         {
-          const { tx, ty } = aimAtCursor(player);
-          const pcx = player.x + 0.5;
-          const pcy = player.y + 0.5;
-          let dx = (tx - pcx) * tileW;
-          let dy = (ty - pcy) * tileH;
+          const { sx: aimSx, sy: aimSy, tx, ty } = aimAtCursor(player);
+          let dx = (tx - aimSx) * tileW;
+          let dy = (ty - aimSy) * tileH;
           if (Math.hypot(dx, dy) < 1e-4) {
             dx = tileW;
             dy = 0;
@@ -1594,19 +1606,20 @@ export function render(canvas, data, options = {}) {
         const px = snapPx(item.bx * tileW);
         const py = snapPx(item.by * tileH - item.bz * tileH);
         const pulse = item.pulse || 0;
-        const scale = 1 + Math.sin(pulse) * 0.3;
-        const r = Math.max(6, tileW * 0.17) * scale;
+        const scale = 1 + Math.sin(pulse) * 0.26;
+        const r = Math.max(12, tileW * 0.3) * scale;
         const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
-        grd.addColorStop(0, 'rgba(255,255,255,0.96)');
-        grd.addColorStop(0.32, 'rgba(255,160,225,0.94)');
-        grd.addColorStop(0.68, 'rgba(255,95,185,0.78)');
-        grd.addColorStop(1, 'rgba(255,45,160,0)');
+        grd.addColorStop(0, 'rgba(255,210,245,0.95)');
+        grd.addColorStop(0.18, 'rgba(255,150,215,0.98)');
+        grd.addColorStop(0.45, 'rgba(255,105,190,0.92)');
+        grd.addColorStop(0.75, 'rgba(255,70,170,0.72)');
+        grd.addColorStop(1, 'rgba(255,40,150,0)');
         ctx.fillStyle = grd;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255, 185, 230, 0.65)';
+        ctx.lineWidth = 2;
         ctx.stroke();
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, itemKey } = item;
