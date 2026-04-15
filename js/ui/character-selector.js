@@ -8,7 +8,7 @@ import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
 import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
-import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
+import { getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import {
   getPlayerMoveCooldownRemaining,
   getPlayerMoveCooldownUiMax
@@ -17,7 +17,9 @@ import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../mai
 import {
   getFieldSkillLabel,
   getSelectedFieldSkillForDex,
-  syncSelectedFieldSkillForDex
+  getSelectedSpecialAttackMoveForDex,
+  syncSelectedFieldSkillForDex,
+  syncSelectedSpecialAttackForDex
 } from '../main/play-mouse-combat.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
@@ -98,6 +100,7 @@ export class CharacterSelector {
     this.applyLayoutMode();
     this.applyPlayImmersiveChrome();
     syncSelectedFieldSkillForDex(player.dexId);
+    syncSelectedSpecialAttackForDex(player.dexId);
     this.updatePreview().catch(() => {});
   }
 
@@ -500,6 +503,7 @@ export class CharacterSelector {
     // 1. Update player data
     setPlayerSpecies(id);
     syncSelectedFieldSkillForDex(id);
+    syncSelectedSpecialAttackForDex(id);
     
     // 2. Clear focus/search
     this.container.querySelector('#species-search')?.blur();
@@ -528,14 +532,13 @@ export class CharacterSelector {
 
     const movesEl = this.container.querySelector('#current-player-moves');
     if (movesEl) {
-      const moves = getPokemonMoveset(player.dexId);
-      const hotkeys = ['—', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
-      const slotHtml = (moveId, hk, title) => {
-        const label = getMoveLabel(moveId);
+      const hotkeys = ['LMB', 'RMB', 'MMB'];
+      const slotHtml = (hudMoveId, iconFile, hk, title, labelText) => {
+        const label = labelText != null && String(labelText).length ? labelText : getMoveLabel(hudMoveId);
         const abbrev = moveAbbrevFromLabel(label);
-        const src = `${SKILL_ICON_BASE}/${moveId}.png`;
-        const uClass = moveId === 'ultimate' ? ' move-slot--ultimate' : '';
-        return `<div class="move-slot${uClass}" data-move-id="${moveId}" title="${title || label}">
+        const src = `${SKILL_ICON_BASE}/${iconFile}.png`;
+        const uClass = hudMoveId === 'ultimate' ? ' move-slot--ultimate' : '';
+        return `<div class="move-slot${uClass}" data-move-id="${hudMoveId}" title="${title || label}">
           <div class="move-slot__icon-wrap" data-abbrev="${abbrev}">
             <img class="move-slot__icon" src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async" />
             <span class="move-slot__sweep" aria-hidden="true" style="--cd-p:0"></span>
@@ -544,17 +547,25 @@ export class CharacterSelector {
           <span class="move-slot__key">${hk}</span>
         </div>`;
       };
-      const slotsHtml = moves
-        .map((m, i) => {
-          const hk = hotkeys[i] || '—';
-          const title =
-            i === 0
-              ? `${getMoveLabel(m)} — teclas 2–0 e - no play; LMB usa field move (hold 1: tackle/cut/strength, hold+release LMB = charge, Cut combo x3)`
-              : `${getMoveLabel(m)} (${hk})`;
-          return slotHtml(m, hk, title);
-        })
-        .join('');
-      const ultimateHtml = slotHtml('ultimate', 'MMB', 'Ultimate — nova ring toward cursor');
+      const fieldSkillId = getSelectedFieldSkillForDex(player.dexId);
+      const rightMoveId = getSelectedSpecialAttackMoveForDex(player.dexId);
+      const slots = [
+        {
+          hudMoveId: `field:${fieldSkillId}`,
+          iconFile: fieldSkillId,
+          hk: hotkeys[0],
+          title: `${getFieldSkillLabel(fieldSkillId)} — field move no LMB (segure 1 para trocar; hold+release LMB = charge quando aplicável; Cut combo x3)`,
+          labelText: getFieldSkillLabel(fieldSkillId)
+        },
+        {
+          hudMoveId: rightMoveId,
+          iconFile: rightMoveId,
+          hk: hotkeys[1],
+          title: `${getMoveLabel(rightMoveId)} — ataque especial no RMB (segure 2 para trocar; hold+release RMB = charge quando aplicável)`
+        }
+      ];
+      const slotsHtml = slots.map((s) => slotHtml(s.hudMoveId, s.iconFile, s.hk, s.title, s.labelText)).join('');
+      const ultimateHtml = slotHtml('ultimate', 'ultimate', 'MMB', 'Ultimate — nova ring toward cursor', null);
       movesEl.classList.add('player-moves-list--slots');
       movesEl.innerHTML = slotsHtml + ultimateHtml;
       for (const img of movesEl.querySelectorAll('.move-slot__icon')) {

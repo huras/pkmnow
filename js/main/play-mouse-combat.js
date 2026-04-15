@@ -12,7 +12,7 @@ import {
   tryCastPlayerPrismaticStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
-import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
+import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
@@ -38,6 +38,25 @@ const FIELD_SKILL_LABEL = {
   strength: 'Strength'
 };
 
+/** Hold `2` (Digit2) to pick which move RMB executes (special attack wheel). */
+const SPECIAL_ATTACK_WHEEL_HOLD_MS = 170;
+const SPECIAL_ATTACK_STORAGE_KEY = 'pkmn_special_attack_by_dex';
+/** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
+const SPECIAL_ATTACK_MOVE_IDS = /** @type {const} */ ([
+  'ember',
+  'flamethrower',
+  'confusion',
+  'bubble',
+  'waterBurst',
+  'waterGun',
+  'psybeam',
+  'prismaticLaser',
+  'poisonSting',
+  'poisonPowder',
+  'incinerate',
+  'silkShoot'
+]);
+
 function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
   setPlayerFacingFromWorldAimDelta(player, tx - sx, ty - sy);
 }
@@ -46,9 +65,8 @@ let leftHeld = false;
 let leftDownAt = 0;
 let rightHeld = false;
 let rightDownAt = 0;
-/** Left Ctrl held when primary/secondary button went down (locks “no charge build” for that press). */
+/** Left Ctrl held when primary button went down (locks “no charge build” for that press). */
 let leftShiftAtDown = false;
-let rightShiftAtDown = false;
 /** True after at least one flamethrower puff this RMB press (hold-stream). */
 let rightFlameStreamedThisPress = false;
 /** True after at least one prismatic laser stream puff this RMB press. */
@@ -67,6 +85,16 @@ let fieldCutComboTimerSec = 0;
 let lastComboDexId = 0;
 let fieldWheelMouseClientX = 0;
 let fieldWheelMouseClientY = 0;
+
+let selectedSpecialMoveId = /** @type {MoveId} */ ('ember');
+let specialAttackWheelHoldStartMs = 0;
+let specialAttackWheelArmed = false;
+let specialAttackWheelOpen = false;
+let specialAttackWheelHoverIndex = 0;
+/** @type {HTMLDivElement | null} */
+let specialAttackWheelRoot = null;
+/** @type {Record<string, MoveId>} */
+let specialAttackByDex = loadStoredSpecialAttackByDex();
 
 function normalizeFieldSkillId(skillId) {
   return FIELD_SKILLS.includes(String(skillId)) ? String(skillId) : 'tackle';
@@ -143,6 +171,78 @@ export function syncSelectedFieldSkillForDex(dexId) {
   const dex = Math.floor(Number(dexId) || 0);
   setSelectedFieldSkill(getSelectedFieldSkillForDex(dex), dex, false);
   return selectedFieldSkillId;
+}
+
+function normalizeSpecialMoveId(moveId) {
+  const m = String(moveId || '');
+  return SPECIAL_ATTACK_MOVE_IDS.includes(/** @type {any} */ (m)) ? /** @type {MoveId} */ (m) : 'ember';
+}
+
+function loadStoredSpecialAttackByDex() {
+  try {
+    const raw = localStorage.getItem(SPECIAL_ATTACK_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    /** @type {Record<string, MoveId>} */
+    const out = {};
+    for (const [dexKey, moveId] of Object.entries(parsed)) {
+      const dex = Math.floor(Number(dexKey) || 0);
+      if (dex < 1 || dex > 151) continue;
+      out[String(dex)] = normalizeSpecialMoveId(moveId);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredSpecialAttackByDex() {
+  try {
+    localStorage.setItem(SPECIAL_ATTACK_STORAGE_KEY, JSON.stringify(specialAttackByDex));
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.).
+  }
+}
+
+function dispatchSpecialAttackChange(dexId, moveId) {
+  window.dispatchEvent(
+    new CustomEvent('play-special-attack-change', {
+      detail: {
+        dexId: Math.floor(Number(dexId) || 0),
+        moveId: normalizeSpecialMoveId(moveId)
+      }
+    })
+  );
+}
+
+function persistSelectedSpecialAttackForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  if (dex < 1 || dex > 151) return;
+  specialAttackByDex[String(dex)] = normalizeSpecialMoveId(selectedSpecialMoveId);
+  saveStoredSpecialAttackByDex();
+}
+
+function setSelectedSpecialMove(moveId, dexId, persist = false) {
+  selectedSpecialMoveId = normalizeSpecialMoveId(moveId);
+  specialAttackWheelHoverIndex = Math.max(0, SPECIAL_ATTACK_MOVE_IDS.indexOf(selectedSpecialMoveId));
+  if (persist) persistSelectedSpecialAttackForDex(dexId);
+  syncSpecialAttackWheelDom();
+  if (Number.isFinite(Number(dexId))) {
+    dispatchSpecialAttackChange(dexId, selectedSpecialMoveId);
+  }
+}
+
+export function getSelectedSpecialAttackMoveForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  if (dex < 1 || dex > 151) return /** @type {MoveId} */ ('ember');
+  return normalizeSpecialMoveId(specialAttackByDex[String(dex)] || 'ember');
+}
+
+export function syncSelectedSpecialAttackForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  setSelectedSpecialMove(getSelectedSpecialAttackMoveForDex(dex), dex, false);
+  return selectedSpecialMoveId;
 }
 
 function ensureFieldSkillWheelDom() {
@@ -225,6 +325,123 @@ function resolveFieldWheelHoverFromScreenAngle() {
     }
   }
   return bestIdx;
+}
+
+function ensureSpecialAttackWheelDom() {
+  if (specialAttackWheelRoot) return specialAttackWheelRoot;
+  const root = document.createElement('div');
+  root.id = 'play-special-attack-wheel';
+  root.className = 'play-field-skill-wheel hidden';
+  root.setAttribute('aria-hidden', 'true');
+  const buttons = SPECIAL_ATTACK_MOVE_IDS.map(
+    (id) =>
+      `<button type="button" class="play-field-skill-wheel__item" data-move="${id}">${getMoveLabel(id)}</button>`
+  ).join('');
+  root.innerHTML = `
+    <div class="play-field-skill-wheel__ring">
+      <div class="play-field-skill-wheel__hint">Hold 2 · release to select (RMB)</div>
+      ${buttons}
+    </div>
+  `;
+  document.body.appendChild(root);
+  specialAttackWheelRoot = root;
+  syncSpecialAttackWheelDom();
+  return root;
+}
+
+function syncSpecialAttackWheelDom() {
+  if (!specialAttackWheelRoot) return;
+  specialAttackWheelRoot.classList.toggle('hidden', !specialAttackWheelOpen);
+  specialAttackWheelRoot.setAttribute('aria-hidden', specialAttackWheelOpen ? 'false' : 'true');
+  const hoverMove = SPECIAL_ATTACK_MOVE_IDS[specialAttackWheelHoverIndex] || selectedSpecialMoveId;
+  for (const el of specialAttackWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
+    const moveId = String(el.getAttribute('data-move') || '');
+    el.classList.toggle('is-hover', specialAttackWheelOpen && moveId === hoverMove);
+    el.classList.toggle('is-selected', moveId === selectedSpecialMoveId);
+  }
+}
+
+function openSpecialAttackWheel() {
+  specialAttackWheelOpen = true;
+  ensureSpecialAttackWheelDom();
+  syncSpecialAttackWheelDom();
+}
+
+function closeSpecialAttackWheel() {
+  specialAttackWheelOpen = false;
+  syncSpecialAttackWheelDom();
+}
+
+function resolveSpecialAttackWheelHoverFromScreenAngle() {
+  if (!specialAttackWheelRoot) return specialAttackWheelHoverIndex;
+  const ring = specialAttackWheelRoot.querySelector('.play-field-skill-wheel__ring');
+  if (!(ring instanceof HTMLElement)) return specialAttackWheelHoverIndex;
+  const ringRect = ring.getBoundingClientRect();
+  const cx = ringRect.left + ringRect.width * 0.5;
+  const cy = ringRect.top + ringRect.height * 0.5;
+  const dx = fieldWheelMouseClientX - cx;
+  const dy = fieldWheelMouseClientY - cy;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 14) {
+    return specialAttackWheelHoverIndex;
+  }
+  const mouseAngle = Math.atan2(dy, dx);
+  let bestIdx = specialAttackWheelHoverIndex;
+  let bestDelta = Infinity;
+  for (let i = 0; i < SPECIAL_ATTACK_MOVE_IDS.length; i++) {
+    const moveId = SPECIAL_ATTACK_MOVE_IDS[i];
+    const item = specialAttackWheelRoot.querySelector(`.play-field-skill-wheel__item[data-move="${moveId}"]`);
+    if (!(item instanceof HTMLElement)) continue;
+    const ir = item.getBoundingClientRect();
+    const ix = ir.left + ir.width * 0.5;
+    const iy = ir.top + ir.height * 0.5;
+    const itemAngle = Math.atan2(iy - cy, ix - cx);
+    const d = Math.abs(normalizeAngleSigned(mouseAngle - itemAngle));
+    if (d < bestDelta) {
+      bestDelta = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function updateSpecialAttackWheelHover(player) {
+  void player;
+  if (!specialAttackWheelOpen) return;
+  const idx = resolveSpecialAttackWheelHoverFromScreenAngle();
+  if (idx !== specialAttackWheelHoverIndex) {
+    specialAttackWheelHoverIndex = idx;
+    syncSpecialAttackWheelDom();
+  }
+}
+
+export function handleSpecialAttackHotkeyDown(code) {
+  if (code !== 'Digit2') return false;
+  fieldSkillWheelArmed = false;
+  closeFieldSkillWheel();
+  if (!specialAttackWheelArmed) {
+    specialAttackWheelArmed = true;
+    specialAttackWheelOpen = false;
+    specialAttackWheelHoldStartMs = performance.now();
+    specialAttackWheelHoverIndex = Math.max(0, SPECIAL_ATTACK_MOVE_IDS.indexOf(selectedSpecialMoveId));
+    syncSpecialAttackWheelDom();
+  }
+  return true;
+}
+
+export function handleSpecialAttackHotkeyUp(code, player) {
+  if (code !== 'Digit2') return false;
+  if (!specialAttackWheelArmed && !specialAttackWheelOpen) return false;
+  fieldSkillWheelArmed = false;
+  closeFieldSkillWheel();
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  if (specialAttackWheelOpen) {
+    setSelectedSpecialMove(SPECIAL_ATTACK_MOVE_IDS[specialAttackWheelHoverIndex] || selectedSpecialMoveId, dex, true);
+  } else if (dex >= 1) {
+    setSelectedSpecialMove(selectedSpecialMoveId, dex, true);
+  }
+  specialAttackWheelArmed = false;
+  closeSpecialAttackWheel();
+  return true;
 }
 
 function resolveCutStyleForDex(dexId) {
@@ -505,6 +722,8 @@ function updateFieldSkillWheelHover(player) {
 
 export function handleFieldSkillHotkeyDown(code) {
   if (code !== 'Digit1') return false;
+  specialAttackWheelArmed = false;
+  closeSpecialAttackWheel();
   if (!fieldSkillWheelArmed) {
     fieldSkillWheelArmed = true;
     fieldSkillWheelOpen = false;
@@ -519,6 +738,8 @@ export function handleFieldSkillHotkeyUp(code, player, data) {
   void data;
   if (code !== 'Digit1') return false;
   if (!fieldSkillWheelArmed && !fieldSkillWheelOpen) return false;
+  specialAttackWheelArmed = false;
+  closeSpecialAttackWheel();
   const dex = Math.floor(Number(player?.dexId) || 0);
   if (fieldSkillWheelOpen) {
     setSelectedFieldSkill(FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId, dex, true);
@@ -553,46 +774,21 @@ export function aimAtCursor(player) {
   return { tx: wx, ty: wy, sx, sy };
 }
 
-/** @type {Record<string, string>} */
-const HOTKEY_TO_MOVE_ID = {
-  Digit2: 'flamethrower',
-  Digit3: 'confusion',
-  Digit4: 'bubble',
-  Digit5: 'waterGun',
-  Digit6: 'psybeam',
-  Digit7: 'prismaticLaser',
-  Digit8: 'poisonSting',
-  Digit9: 'poisonPowder',
-  Digit0: 'incinerate',
-  Minus: 'silkShoot'
-};
-
 /**
- * Keyboard quick-cast for all Zelda-ported moves.
- * Digit 1 is reserved for field-skill wheel (Tackle/Cut/Strength).
- * 2 Flamethrower, 3 Confusion, 4 Bubble, 5 Water Gun,
- * 6 Psybeam, 7 Prismatic Laser, 8 Poison Sting, 9 Poison Powder,
- * 0 Incinerate, - Silk Shoot.
- * @returns {boolean} true when a hotkey was consumed.
+ * Legacy digit hotkeys were removed: play combat is now 3-slot (LMB field skill, RMB special via wheel on `2`, MMB ultimate).
+ * @returns {boolean}
  */
-export function castMappedMoveByHotkey(code, player) {
-  const moveId = HOTKEY_TO_MOVE_ID[code];
-  if (!moveId || !player) return false;
-  const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (moveId === 'flamethrower' || moveId === 'prismaticLaser' || moveId === 'psybeam') {
-    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-  }
-  castMoveById(moveId, sx, sy, tx, ty, player);
-  return true;
+export function castMappedMoveByHotkey(_code, _player) {
+  return false;
 }
 
 function resolveSlots(player) {
+  const dex = Math.floor(Number(player?.dexId) || 0);
   const moves = getPokemonMoveset(player?.dexId || 1);
+  const rightTap = dex >= 1 ? getSelectedSpecialAttackMoveForDex(dex) : /** @type {MoveId} */ ('ember');
   return {
     leftTap: moves[0],
-    rightTap: moves[1],
-    leftShift: moves[2],
-    rightShift: moves[3]
+    rightTap
   };
 }
 
@@ -608,6 +804,7 @@ export function updatePlayPointerCombat(dt, player, data) {
     fieldCutComboStep = 0;
     fieldCutComboTimerSec = 0;
     lastComboDexId = dex;
+    syncSelectedSpecialAttackForDex(dex);
   }
   if (fieldCutComboTimerSec > 0) {
     fieldCutComboTimerSec = Math.max(0, fieldCutComboTimerSec - dt);
@@ -618,7 +815,13 @@ export function updatePlayPointerCombat(dt, player, data) {
       openFieldSkillWheel();
     }
   }
+  if (specialAttackWheelArmed && !specialAttackWheelOpen) {
+    if (performance.now() - specialAttackWheelHoldStartMs >= SPECIAL_ATTACK_WHEEL_HOLD_MS) {
+      openSpecialAttackWheel();
+    }
+  }
   updateFieldSkillWheelHover(player);
+  updateSpecialAttackWheelHover(player);
   if (leftHeld && !combatModifierHeld()) {
     const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec());
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
@@ -654,13 +857,16 @@ export function installPlayPointerCombat(deps) {
   const { canvas, getAppMode, getPlayer, getCurrentData } = deps;
   fieldWheelMouseClientX = window.innerWidth * 0.5;
   fieldWheelMouseClientY = window.innerHeight * 0.5;
+  syncSelectedSpecialAttackForDex(Math.floor(Number(getPlayer()?.dexId) || 0));
 
   window.addEventListener(
     'pointermove',
     (e) => {
       fieldWheelMouseClientX = Number(e.clientX) || 0;
       fieldWheelMouseClientY = Number(e.clientY) || 0;
-      if (fieldSkillWheelOpen) updateFieldSkillWheelHover(getPlayer());
+      const p = getPlayer();
+      if (fieldSkillWheelOpen) updateFieldSkillWheelHover(p);
+      if (specialAttackWheelOpen) updateSpecialAttackWheelHover(p);
     },
     true
   );
@@ -690,7 +896,6 @@ export function installPlayPointerCombat(deps) {
         e.preventDefault();
         rightHeld = true;
         rightDownAt = performance.now();
-        rightShiftAtDown = sh;
         rightFlameStreamedThisPress = false;
         rightPrismaticStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
@@ -712,11 +917,8 @@ export function installPlayPointerCombat(deps) {
 
     if (e.button === 0 && leftHeld) {
       leftHeld = false;
-      const { sx, sy, tx, ty } = aimAtCursor(player);
-      const slots = resolveSlots(player);
-      if (leftShiftAtDown || shUp) {
-        castMoveById(slots.leftShift, sx, sy, tx, ty, player);
-      } else {
+      if (!(leftShiftAtDown || shUp)) {
+        const { sx, sy, tx, ty } = aimAtCursor(player);
         const heldMs = now - leftDownAt;
         const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
         const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
@@ -729,9 +931,7 @@ export function installPlayPointerCombat(deps) {
       const heldMs = now - rightDownAt;
       const { sx, sy, tx, ty } = aimAtCursor(player);
       const slots = resolveSlots(player);
-      if (rightShiftAtDown || shUp) {
-        castMoveById(slots.rightShift, sx, sy, tx, ty, player);
-      } else if (slots.rightTap === 'flamethrower') {
+      if (slots.rightTap === 'flamethrower') {
         if (!rightFlameStreamedThisPress) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
@@ -762,6 +962,8 @@ export function installPlayPointerCombat(deps) {
     rightHeld = false;
     fieldSkillWheelArmed = false;
     closeFieldSkillWheel();
+    specialAttackWheelArmed = false;
+    closeSpecialAttackWheel();
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
     playInputState.psybeamLeftHold = null;

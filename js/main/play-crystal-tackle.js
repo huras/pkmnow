@@ -85,7 +85,7 @@ const TACKLE_DETAIL_HURTBOX_RADIUS_MULT = 2;
 /** Sampling only drives candidate origin lookup window; collision is exact segment-vs-circle. */
 const TACKLE_ORIGIN_SCAN_STEP_TILES = 0.2;
 /** Ground pickup radius for dropped crystal items (tiles). */
-const CRYSTAL_DROP_PICK_RADIUS_TILES = 0.85;
+const CRYSTAL_DROP_PICK_RADIUS_TILES = 1.35;
 /** Spawned "small crystal" chunks that remain on ground after a large crystal breaks. */
 export const activeSpawnedSmallCrystals = [];
 /** Pickable drops created after breaking a small crystal chunk. */
@@ -1043,7 +1043,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
     if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
     const dx = px - d.x;
     const dy = py - d.y;
-    if (dx * dx + dy * dy <= (d.pickRadius || 0.5) * (d.pickRadius || 0.5)) {
+    if (dx * dx + dy * dy <= (d.pickRadius || 1.1) * (d.pickRadius || 1.1)) {
       const stack = Math.max(1, Number(d.stackCount) || 1);
       const key = String(d.itemKey || 'unknown');
       collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);

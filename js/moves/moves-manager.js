@@ -692,6 +692,7 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
  * @param {string} moveId
  */
 export function getPlayerMoveCooldownUiMax(moveId) {
+  if (String(moveId || '').startsWith('field:')) return 1;
   switch (moveId) {
     case 'ember':
       return 0.48;
@@ -730,6 +731,7 @@ export function getPlayerMoveCooldownUiMax(moveId) {
  * @returns {number}
  */
 export function getPlayerMoveCooldownRemaining(moveId) {
+  if (String(moveId || '').startsWith('field:')) return 0;
   switch (moveId) {
     case 'ember':
       return playerEmberCooldown;

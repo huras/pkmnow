@@ -11,9 +11,10 @@ import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
 import {
   updatePlayPointerCombat,
-  castMappedMoveByHotkey,
   handleFieldSkillHotkeyDown,
-  handleFieldSkillHotkeyUp
+  handleFieldSkillHotkeyUp,
+  handleSpecialAttackHotkeyDown,
+  handleSpecialAttackHotkeyUp
 } from './play-mouse-combat.js';
 import {
   updateCrystalShardParticles,
@@ -341,7 +342,7 @@ export function registerPlayKeyboard(api) {
 
       if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {
         e.preventDefault();
-      } else if (!e.repeat && castMappedMoveByHotkey(e.code, player)) {
+      } else if (!e.repeat && handleSpecialAttackHotkeyDown(e.code)) {
         e.preventDefault();
       }
 
@@ -377,6 +378,8 @@ export function registerPlayKeyboard(api) {
       playInputState.ctrlLeftHeld = false;
     }
     if (getAppMode() === 'play' && handleFieldSkillHotkeyUp(e.code, player, getCurrentData())) {
+      e.preventDefault();
+    } else if (getAppMode() === 'play' && handleSpecialAttackHotkeyUp(e.code, player)) {
       e.preventDefault();
     }
     const dir = keyToDir(e.key);
