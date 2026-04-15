@@ -8,7 +8,7 @@ import {
 import { seededHash } from './tessellation-logic.js';
 
 /** Play (micro) tiles per generator macro cell: terrain sampling, world bounds, minimap grid. */
-export const MACRO_TILE_STRIDE = 48;
+export const MACRO_TILE_STRIDE = 32;
 export const LAND_STEPS = 12;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 5;  // 5 degraus abaixo do nível do mar
 
