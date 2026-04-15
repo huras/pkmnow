@@ -31,7 +31,7 @@ import {
   scatterSolidStemRadiusMultiplier,
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
-import { isPlayDetailScatterOriginDestroyed } from './main/play-crystal-tackle.js';
+import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -370,6 +370,7 @@ function circleIntersectsUnitSquare(cx, cy, r, x0, y0) {
  * Shared by collision, bake, and debug.
  */
 export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
+  if (isPlayFormalTreeRootDestroyed(rootX, rootY)) return false;
   const t = getMicroTile(rootX, rootY, data);
   if (!t) return false;
   const tt = getTreeType(t.biomeId, rootX, rootY, data.seed);

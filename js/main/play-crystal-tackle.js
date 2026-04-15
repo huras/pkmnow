@@ -6,11 +6,13 @@ import { TessellationEngine } from '../tessellation-engine.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { playChunkMap } from '../render/play-chunk-cache.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
-import { scatterPhysicsCircleAtOrigin } from '../walkability.js';
+import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
+/** Formal tree roots `(rootX,my)` cut in current play session. */
+const destroyedFormalTreeRoots = new Set();
 /** @type {Map<string, {
  *   ox: number,
  *   oy: number,
@@ -81,8 +83,13 @@ export function isPlayDetailScatterOriginDestroyed(ox, oy) {
   return isPlayCrystalScatterOriginDestroyed(ox, oy);
 }
 
+export function isPlayFormalTreeRootDestroyed(rootX, my) {
+  return destroyedFormalTreeRoots.has(`${rootX},${my}`);
+}
+
 export function clearPlayCrystalTackleState() {
   destroyedCrystalScatterOrigins.clear();
+  destroyedFormalTreeRoots.clear();
   detailBreakStateByOrigin.clear();
   detailBreakSweepIter = null;
   detailBreakSweepCooldownSec = 0;
@@ -104,6 +111,10 @@ function isCrystalItemKey(itemKey) {
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
   destroyedCrystalScatterOrigins.add(`${rootOx},${rootOy}`);
   clearScatterSolidBlockCache();
+}
+
+function registerDestroyedFormalTreeRoot(rootX, my) {
+  destroyedFormalTreeRoots.add(`${rootX},${my}`);
 }
 
 function unregisterDestroyedDetailOrigin(rootOx, rootOy) {
@@ -559,6 +570,24 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
           });
           continue;
         }
+        if (!isPlayFormalTreeRootDestroyed(ox, oy) && didFormalTreeSpawnAtRoot(ox, oy, data)) {
+          const trunk = getFormalTreeTrunkCircle(ox, oy, data);
+          if (trunk) {
+            const detailR = Math.max(0.01, trunk.r * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+            const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
+            const ht = segmentCircleFirstHitT(px, py, ex, ey, trunk.cx, trunk.cy, rr);
+            if (ht != null) {
+              hits.push({
+                type: 'formalTree',
+                rootOx: ox,
+                rootOy: oy,
+                cx: trunk.cx,
+                cy: trunk.cy,
+                t: ht
+              });
+            }
+          }
+        }
 
         // Non-blockable scatter (flowers, shells, etc.) has no walkability collider:
         // still allow tackle to break/pick by testing a compact footprint-center circle.
@@ -619,10 +648,19 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       continue;
     }
 
-    const worldKey = `${hit.rootOx},${hit.rootOy}`;
+    const worldKey = hit.type === 'formalTree' ? `formal:${hit.rootOx},${hit.rootOy}` : `${hit.rootOx},${hit.rootOy}`;
     if (consumedWorld.has(worldKey)) continue;
     consumedWorld.add(worldKey);
     if (worldHitOnceSet?.has(worldKey)) continue;
+    if (hit.type === 'formalTree') {
+      if (isPlayFormalTreeRootDestroyed(hit.rootOx, hit.rootOy)) continue;
+      markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, 1, 1, 0, nowSec);
+      markDetailHitShake(worldKey, nowSec);
+      spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+      registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy);
+      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+      continue;
+    }
     if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
     const objSet = OBJECT_SETS[hit.itemKey];
     const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };

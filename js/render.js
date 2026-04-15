@@ -64,7 +64,8 @@ import {
   getDetailHitShake01,
   getActiveDetailHitHpBars,
   activeSpawnedSmallCrystals,
-  isPlayDetailScatterOriginDestroyed
+  isPlayDetailScatterOriginDestroyed,
+  isPlayFormalTreeRootDestroyed
 } from './main/play-crystal-tackle.js';
 import {
   getBorrowDigPlaceholderDex,
@@ -1372,6 +1373,7 @@ export function render(canvas, data, options = {}) {
         // 1. Formal Trees
         const treeType = getTreeType(t.biomeId, mxScan, myScan, data.seed);
         if (treeType && (mxScan + myScan) % 3 === 0 && foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
+          if (isPlayFormalTreeRootDestroyed(mxScan, myScan)) continue;
           if (getCached(mxScan + 1, myScan)?.heightStep === t.heightStep) {
             renderItems.push({
               type: 'tree',
