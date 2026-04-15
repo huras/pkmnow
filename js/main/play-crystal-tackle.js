@@ -1,5 +1,7 @@
 import { clearScatterSolidBlockCache } from '../scatter-pass2-debug.js';
 import { BIOME_VEGETATION } from '../biome-tiles.js';
+import { getEncounters } from '../ecodex.js';
+import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape, seededHash } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
@@ -757,7 +759,35 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
   const probeReach = Math.max(0.2, reach - TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
-  tryBreakDetailsAlongSegment(px, py, ex, ey, data);
+  tryBreakDetailsAlongSegment(px, py, ex, ey, data, { hitSource: 'tackle' });
+}
+
+function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
+  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !data) return;
+  const salt = Math.floor((seed ?? 0) + biomeId * 131 + cx * 17 + cy * 23);
+  const branch = seededHash(Math.floor(cx * 10), Math.floor(cy * 10), salt + 77111);
+  if (branch < 0.07) {
+    const pool = getEncounters(biomeId);
+    if (pool?.length) {
+      const pick = pool[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77133) * pool.length)];
+      const dex = encounterNameToDex(pick);
+      if (dex != null) {
+        void import('../wild-pokemon/wild-pokemon-manager.js').then((m) => {
+          if (m?.summonDebugWildPokemon) m.summonDebugWildPokemon(dex, data, cx, cy);
+        });
+      }
+    }
+    return;
+  }
+  if (branch < 0.2) {
+    const items = BIOME_VEGETATION[biomeId] || [];
+    if (!items.length) return;
+    const itemKey = items[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77177) * items.length)];
+    if (!itemKey || scatterItemKeyIsSolid(itemKey) || scatterItemKeyIsTree(itemKey)) return;
+    const objSet = OBJECT_SETS[itemKey];
+    if (!objSet) return;
+    spawnPickableCrystalDropAt(cx, cy, itemKey, countSpritesInObjectSet(objSet));
+  }
 }
 
 /**
@@ -770,12 +800,17 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
  * @param {object | null | undefined} data
  * @param {{
  *   worldHitOnceSet?: Set<string>,
- *   spawnedHitOnceSet?: Set<number>
+ *   spawnedHitOnceSet?: Set<number>,
+ *   hitSource?: 'tackle' | 'cut' | 'other'
  * }} [opts]
  */
 export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!data) return;
   const nowSec = performance.now() * 0.001;
+  const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
+  const allowFormalTreeDestroy = hitSource === 'cut';
+  /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */
+  const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
   const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
   const spawnedHitOnceSet = opts.spawnedHitOnceSet instanceof Set ? opts.spawnedHitOnceSet : null;
   const px = Number(ax);
@@ -950,23 +985,65 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     consumedWorld.add(worldKey);
     if (worldHitOnceSet?.has(worldKey)) continue;
     if (hit.type === 'formalTree') {
+      const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
       if (isPlayFormalTreeRootDestroyed(hit.rootOx, hit.rootOy)) {
-        tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
+        if (allowChargedStumpHarvest) {
+          tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
+        } else {
+          markDetailHitShake(bumpKey, nowSec);
+          spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+        }
         continue;
       }
-      markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, 1, 1, 0, nowSec);
-      markDetailHitShake(worldKey, nowSec);
+      if (allowFormalTreeDestroy) {
+        markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, 1, 1, 0, nowSec);
+      }
+      markDetailHitShake(bumpKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-      registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec);
+      if (allowFormalTreeDestroy) {
+        registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec);
+      } else {
+        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+        tryApplyTreeTackleEffects(
+          hit.cx ?? hit.rootOx + 1,
+          hit.cy ?? hit.rootOy + 0.5,
+          t0?.biomeId ?? 0,
+          data.seed ?? 0,
+          data
+        );
+      }
       if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
       continue;
     }
     if (hit.type === 'charredScatterTree') {
-      tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
+      if (allowChargedStumpHarvest) {
+        tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
+      } else {
+        const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+        markDetailHitShake(bumpKey, nowSec);
+        spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+        tryApplyTreeTackleEffects(
+          hit.cx ?? hit.rootOx + 0.5,
+          hit.cy ?? hit.rootOy + 0.5,
+          t0?.biomeId ?? 0,
+          data.seed ?? 0,
+          data
+        );
+      }
       if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
       continue;
     }
     if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
+    if (hitSource !== 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
+      const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+      markDetailHitShake(bumpKey, nowSec);
+      spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+      const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+      tryApplyTreeTackleEffects(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, t0?.biomeId ?? 0, data.seed ?? 0, data);
+      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+      continue;
+    }
     const objSet = OBJECT_SETS[hit.itemKey];
     const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
     const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);

@@ -2173,7 +2173,8 @@ export function render(canvas, data, options = {}) {
         ctx.stroke();
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, rows, itemKey, isBurning, isCharred } = item;
-        const shake01 = getDetailHitShake01(`${originX},${originY}`);
+        const bump01 = scatterItemKeyIsTree(itemKey) ? getDetailHitShake01(`treeBump:${originX},${originY}`) : 0;
+        const shake01 = Math.max(getDetailHitShake01(`${originX},${originY}`), bump01);
         if (shake01 > 0) {
           const a = tileW * 0.07 * shake01;
           const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
@@ -2258,6 +2259,14 @@ export function render(canvas, data, options = {}) {
         const { treeType, originX, originY, isDestroyed, isCharred, isBurning } = item;
         const ids = TREE_TILES[treeType];
         if (ids) {
+          const bump01 = getDetailHitShake01(`treeBump:${originX},${originY}`);
+          if (bump01 > 0) {
+            ctx.save();
+            const a = tileW * 0.07 * bump01;
+            const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
+            const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
+            ctx.translate(sx, sy);
+          }
           const stumpBase = TREE_TILES.palm?.base || ids.base;
           const baseIds = isDestroyed ? stumpBase : ids.base;
           // Draw Base (skipped in bake)
@@ -2318,6 +2327,9 @@ export function render(canvas, data, options = {}) {
               drawFlame(fx0, 0);
               drawFlame(fx1, 2);
             }
+          }
+          if (bump01 > 0) {
+            ctx.restore();
           }
         }
       } else if (item.type === 'building') {

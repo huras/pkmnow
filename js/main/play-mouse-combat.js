@@ -599,7 +599,11 @@ function castPlayerCut(player, data, charged = false) {
     const ang = (i / rays) * Math.PI * 2;
     const ex = centerX + Math.cos(ang) * useRadius;
     const ey = centerY + Math.sin(ang) * useRadius;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
+      worldHitOnceSet,
+      spawnedHitOnceSet,
+      hitSource: 'cut'
+    });
   }
   cutGrassInCircle(centerX, centerY, useRadius, data);
 }
@@ -625,7 +629,11 @@ function castPlayerStrengthPlaceholder(player, data, charged = false) {
     const ang = (i / rays) * Math.PI * 2;
     const ex = centerX + Math.cos(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
     const ey = centerY + Math.sin(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
+      worldHitOnceSet,
+      spawnedHitOnceSet,
+      hitSource: 'cut'
+    });
   }
 }
 
@@ -671,7 +679,11 @@ function castChargedFieldSpinAttack(player, data) {
     const ang = (i / rays) * Math.PI * 2;
     const ex = centerX + Math.cos(ang) * radius;
     const ey = centerY + Math.sin(ang) * radius;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
+      worldHitOnceSet,
+      spawnedHitOnceSet,
+      hitSource: 'cut'
+    });
   }
   if (selectedFieldSkillId === 'cut') {
     cutGrassInCircle(centerX, centerY, radius, data);
