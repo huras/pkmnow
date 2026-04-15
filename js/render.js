@@ -60,8 +60,11 @@ import { aimAtCursor } from './main/play-mouse-combat.js';
 import {
   activeCrystalDrops,
   activeCrystalShards,
+  getActiveDetailHitPulses,
+  getDetailHitShake01,
+  getActiveDetailHitHpBars,
   activeSpawnedSmallCrystals,
-  isPlayCrystalScatterOriginDestroyed
+  isPlayDetailScatterOriginDestroyed
 } from './main/play-crystal-tackle.js';
 import {
   getBorrowDigPlaceholderDex,
@@ -413,6 +416,36 @@ function drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx) {
   ctx.setLineDash([]);
   ctx.fillStyle = 'rgba(255, 200, 140, 0.95)';
   ctx.fillRect(hcx - 2, hcy - 2, 4, 4);
+}
+
+function drawDetailHitHpBar(ctx, bar, tileW, tileH, snapPx) {
+  const maxHp = Math.max(1, Number(bar.hpMax) || 1);
+  const hpNow = Math.max(0, Math.min(maxHp, Number(bar.hpNow) || 0));
+  const hp01 = hpNow / maxHp;
+  const w = Math.max(16, Math.floor(tileW * 0.95));
+  const h = Math.max(3, Math.floor(tileH * 0.1));
+  const x = snapPx(bar.x * tileW - w * 0.5);
+  const y = snapPx(bar.y * tileH - tileH * 0.72);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = hp01 > 0.5 ? '#59e36e' : hp01 > 0.2 ? '#ffd85b' : '#ff6b6b';
+  ctx.fillRect(x, y, Math.max(0, Math.floor(w * hp01)), h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx) {
+  const t = Math.max(0, Math.min(1, pulse.age / Math.max(0.001, pulse.maxAge)));
+  const a = 1 - t;
+  const px = snapPx(pulse.x * tileW);
+  const py = snapPx(pulse.y * tileH);
+  const r = Math.max(6, tileW * (0.18 + 0.36 * t));
+  ctx.strokeStyle = `rgba(255,235,190,${0.75 * a})`;
+  ctx.lineWidth = Math.max(1.4, tileW * 0.045);
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 export {
@@ -954,10 +987,7 @@ export function render(canvas, data, options = {}) {
                 scatterOriginMemoRender
               )
             ) {
-              if (
-                String(itemKey).toLowerCase().includes('crystal') &&
-                isPlayCrystalScatterOriginDestroyed(mxScan, myScan)
-              ) {
+              if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) {
                 continue;
               }
                const { cols, rows } = parseShape(objSet.shape);
@@ -1690,6 +1720,13 @@ export function render(canvas, data, options = {}) {
         ctx.stroke();
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, itemKey } = item;
+        const shake01 = getDetailHitShake01(`${originX},${originY}`);
+        if (shake01 > 0) {
+          const a = tileW * 0.07 * shake01;
+          const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
+          const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
+          ctx.translate(sx, sy);
+        }
         const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
         const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
         const { img, cols: atlasCols } = atlasFromObjectSet(objSet);
@@ -1809,6 +1846,13 @@ export function render(canvas, data, options = {}) {
         }
       } else if (item.type === 'spawnedSmallCrystal') {
         const s = item.crystal;
+        const shake01 = getDetailHitShake01(`dyn:${s.id}`);
+        if (shake01 > 0) {
+          const a = tileW * 0.07 * shake01;
+          const sx = Math.sin(time * 95 + s.id * 0.71) * a;
+          const sy = Math.cos(time * 120 + s.id * 0.53) * a * 0.35;
+          ctx.translate(sx, sy);
+        }
         const path = s.imgPath;
         const img = path ? imageCache.get(path) : null;
         if (img && s.tileId != null && s.tileId >= 0 && s.cols > 0) {
@@ -1855,6 +1899,24 @@ export function render(canvas, data, options = {}) {
         } else {
           drawBatchedParticle(ctx, be.part, tileW, tileH, snapPx);
         }
+      }
+      ctx.restore();
+    }
+
+    const detailHitBars = getActiveDetailHitHpBars();
+    if (detailHitBars.length > 0) {
+      ctx.save();
+      for (const bar of detailHitBars) {
+        drawDetailHitHpBar(ctx, bar, tileW, tileH, snapPx);
+      }
+      ctx.restore();
+    }
+    const detailPulses = getActiveDetailHitPulses();
+    if (detailPulses.length > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const pulse of detailPulses) {
+        drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx);
       }
       ctx.restore();
     }

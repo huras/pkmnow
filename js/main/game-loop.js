@@ -9,7 +9,11 @@ import {
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
 import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
-import { updateCrystalShardParticles, updateCrystalDropsAndPickup } from './play-crystal-tackle.js';
+import {
+  updateCrystalShardParticles,
+  updateCrystalDropsAndPickup,
+  updateBreakableDetailRegeneration
+} from './play-crystal-tackle.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
@@ -114,6 +118,7 @@ export function createGameLoop(api) {
     if (getAppMode() === 'play') {
       updateCrystalShardParticles(dt);
       updateCrystalDropsAndPickup(dt, player);
+      updateBreakableDetailRegeneration(dt, currentData);
     }
 
     if (currentData && getAppMode() === 'play') {

@@ -20,6 +20,7 @@ import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
 import { PLAY_CHUNK_SIZE, VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
+import { isPlayDetailScatterOriginDestroyed } from '../main/play-crystal-tackle.js';
 
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
@@ -405,6 +406,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
           ) {
             const items = BIOME_VEGETATION[tile.biomeId] || [];
             const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
             const objSet = OBJECT_SETS[itemKey];
             if (objSet) {
               const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');

@@ -231,8 +231,10 @@ export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, op
     fromWild,
     hitsWild: !fromWild,
     hitsPlayer: !!fromWild,
+    hasTackleTrait: true,
     trailAcc: 0,
     psyHitWild: new Set(),
+    psyHitDetails: new Set(),
     playerBeamHitDone: false
   });
 }

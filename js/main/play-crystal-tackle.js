@@ -1,14 +1,38 @@
 import { clearScatterSolidBlockCache } from '../scatter-pass2-debug.js';
+import { BIOME_VEGETATION } from '../biome-tiles.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape, seededHash } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
-import { MACRO_TILE_STRIDE } from '../chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { playChunkMap } from '../render/play-chunk-cache.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { scatterPhysicsCircleAtOrigin } from '../walkability.js';
+import { scatterItemKeyIsSolid, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
+/** @type {Map<string, {
+ *   ox: number,
+ *   oy: number,
+ *   itemKey: string,
+ *   cols: number,
+ *   rows: number,
+ *   hitsMax: number,
+ *   hitsRemaining: number,
+ *   destroyed: boolean,
+ *   regenAtSec: number,
+ *   lastHitAtSec: number
+ * }>} */
+const detailBreakStateByOrigin = new Map();
+let detailBreakSweepIter = null;
+let detailBreakSweepCooldownSec = 0;
+const DETAIL_REGEN_AFTER_BREAK_SEC = 80;
+const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
+const DETAIL_SWEEP_STEP = 96;
+const DETAIL_SWEEP_INTERVAL_SEC = 0.5;
+const DETAIL_HIT_BAR_ANIM_SEC = 0.16;
+const DETAIL_HIT_BAR_LINGER_SEC = 1.05;
+const DETAIL_HIT_SHAKE_SEC = 0.18;
 
 /** @typedef {{ x: number, y: number, vx: number, vy: number, tileId: number, cols: number, imgPath: string | null, age: number, maxAge: number }} CrystalShard */
 
@@ -18,6 +42,8 @@ export const activeCrystalShards = [];
 const TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
 /** Player tackle uses a capsule-like sweep (segment + this radius), not per-tile checks. */
 const TACKLE_SWEEP_RADIUS_TILES = 0.32;
+/** Tackle hurtbox scale over each detail's physical collider radius. */
+const TACKLE_DETAIL_HURTBOX_RADIUS_MULT = 2;
 /** Sampling only drives candidate origin lookup window; collision is exact segment-vs-circle. */
 const TACKLE_ORIGIN_SCAN_STEP_TILES = 0.2;
 /** Ground pickup radius for dropped crystal items (tiles). */
@@ -28,13 +54,39 @@ export const activeSpawnedSmallCrystals = [];
 export const activeCrystalDrops = [];
 let crystalLootCount = 0;
 let crystalDynIdSeq = 1;
+/** @type {Map<string, {
+ *   x: number,
+ *   y: number,
+ *   hpMax: number,
+ *   hpFrom: number,
+ *   hpTo: number,
+ *   animStartSec: number,
+ *   animDurSec: number,
+ *   hideAtSec: number
+ * }>} */
+const detailHitHpBars = new Map();
+/** @type {Map<string, number>} */
+const detailHitShakeAtSec = new Map();
+/** @type {Array<{ x: number, y: number, age: number, maxAge: number }>} */
+const activeDetailHitPulses = [];
 
 export function isPlayCrystalScatterOriginDestroyed(ox, oy) {
-  return destroyedCrystalScatterOrigins.has(`${ox},${oy}`);
+  const st = detailBreakStateByOrigin.get(`${ox},${oy}`);
+  return !!st?.destroyed;
+}
+
+export function isPlayDetailScatterOriginDestroyed(ox, oy) {
+  return isPlayCrystalScatterOriginDestroyed(ox, oy);
 }
 
 export function clearPlayCrystalTackleState() {
   destroyedCrystalScatterOrigins.clear();
+  detailBreakStateByOrigin.clear();
+  detailBreakSweepIter = null;
+  detailBreakSweepCooldownSec = 0;
+  detailHitHpBars.clear();
+  detailHitShakeAtSec.clear();
+  activeDetailHitPulses.length = 0;
   activeCrystalShards.length = 0;
   activeSpawnedSmallCrystals.length = 0;
   activeCrystalDrops.length = 0;
@@ -45,6 +97,123 @@ export function clearPlayCrystalTackleState() {
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
   destroyedCrystalScatterOrigins.add(`${rootOx},${rootOy}`);
   clearScatterSolidBlockCache();
+}
+
+function unregisterDestroyedDetailOrigin(rootOx, rootOy) {
+  destroyedCrystalScatterOrigins.delete(`${rootOx},${rootOy}`);
+  clearScatterSolidBlockCache();
+}
+
+function getDetailHpBarDisplayedHp(bar, nowSec) {
+  if (!bar) return 0;
+  const animT = Math.max(0, Math.min(1, (nowSec - bar.animStartSec) / Math.max(0.001, bar.animDurSec)));
+  return bar.hpFrom + (bar.hpTo - bar.hpFrom) * animT;
+}
+
+function markDetailHitHpBar(key, x, y, hpMax, hpBefore, hpAfter, nowSec) {
+  if (!key || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  const maxHp = Math.max(1, hpMax | 0);
+  const fromHpRaw = Math.max(0, Math.min(maxHp, hpBefore));
+  const toHp = Math.max(0, Math.min(maxHp, hpAfter));
+  const prev = detailHitHpBars.get(key);
+  const fromHp = prev ? getDetailHpBarDisplayedHp(prev, nowSec) : fromHpRaw;
+  detailHitHpBars.set(key, {
+    x,
+    y,
+    hpMax: maxHp,
+    hpFrom: Math.max(0, Math.min(maxHp, fromHp)),
+    hpTo: toHp,
+    animStartSec: nowSec,
+    animDurSec: DETAIL_HIT_BAR_ANIM_SEC,
+    hideAtSec: nowSec + DETAIL_HIT_BAR_LINGER_SEC
+  });
+}
+
+function markDetailHitShake(key, nowSec) {
+  if (!key) return;
+  detailHitShakeAtSec.set(key, nowSec);
+}
+
+function spawnDetailHitPulse(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  activeDetailHitPulses.push({ x, y, age: 0, maxAge: 0.18 });
+  if (activeDetailHitPulses.length > 64) {
+    activeDetailHitPulses.splice(0, activeDetailHitPulses.length - 64);
+  }
+}
+
+export function getActiveDetailHitHpBars() {
+  const nowSec = performance.now() * 0.001;
+  const out = [];
+  for (const [key, bar] of detailHitHpBars.entries()) {
+    if (!bar || nowSec > bar.hideAtSec) {
+      detailHitHpBars.delete(key);
+      continue;
+    }
+    out.push({
+      x: bar.x,
+      y: bar.y,
+      hpMax: bar.hpMax,
+      hpNow: getDetailHpBarDisplayedHp(bar, nowSec)
+    });
+  }
+  return out;
+}
+
+export function getDetailHitShake01(key) {
+  if (!key) return 0;
+  const nowSec = performance.now() * 0.001;
+  const hitAt = detailHitShakeAtSec.get(key);
+  if (hitAt == null) return 0;
+  const t = nowSec - hitAt;
+  if (t >= DETAIL_HIT_SHAKE_SEC) {
+    detailHitShakeAtSec.delete(key);
+    return 0;
+  }
+  return Math.max(0, 1 - t / DETAIL_HIT_SHAKE_SEC);
+}
+
+export function getActiveDetailHitPulses() {
+  return activeDetailHitPulses;
+}
+
+function countSpritesInObjectSet(objSet) {
+  if (!objSet?.parts?.length) return 1;
+  let n = 0;
+  for (const part of objSet.parts) n += Array.isArray(part.ids) ? part.ids.length : 0;
+  return Math.max(1, n);
+}
+
+function hitsForDetailBySpriteCount(objSet) {
+  const spriteCount = countSpritesInObjectSet(objSet);
+  return Math.max(1, Math.ceil(Math.sqrt(spriteCount)));
+}
+
+function getOrCreateDetailBreakState(rootOx, rootOy, itemKey, objSet, nowSec) {
+  const key = `${rootOx},${rootOy}`;
+  let st = detailBreakStateByOrigin.get(key);
+  if (!st) {
+    const { cols, rows } = parseShape(objSet?.shape || '[1x1]');
+    const hitsMax = hitsForDetailBySpriteCount(objSet);
+    st = {
+      ox: rootOx,
+      oy: rootOy,
+      itemKey,
+      cols: Math.max(1, cols),
+      rows: Math.max(1, rows),
+      hitsMax,
+      hitsRemaining: hitsMax,
+      destroyed: false,
+      regenAtSec: 0,
+      lastHitAtSec: nowSec
+    };
+    detailBreakStateByOrigin.set(key, st);
+    detailBreakSweepIter = null;
+  } else {
+    st.itemKey = itemKey || st.itemKey;
+    st.lastHitAtSec = nowSec;
+  }
+  return st;
 }
 
 function invalidateChunksOverlappingFootprint(rootOx, rootOy, cols, rows) {
@@ -134,18 +303,70 @@ function spawnSmallCrystalChunksFromLarge(rootOx, rootOy, itemKey) {
   }
 }
 
-function spawnPickableCrystalDropAt(x, y, itemKey) {
+function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
   const visual = crystalVisualFromItemKey(itemKey) || crystalVisualFromItemKey('small-blue-crystal [1x1]');
   if (!visual) return;
+  const objSet = OBJECT_SETS[itemKey];
+  const resolvedStackCount =
+    stackCount == null
+      ? countSpritesInObjectSet(objSet)
+      : Math.max(1, Number(stackCount) || 1);
   activeCrystalDrops.push({
     id: crystalDynIdSeq++,
     x,
     y,
     pickRadius: CRYSTAL_DROP_PICK_RADIUS_TILES,
+    stackCount: resolvedStackCount,
     age: 0,
     bobSeed: seededHash(Math.floor(x * 10), Math.floor(y * 10), 13291),
+    maxAge: 90,
     ...visual
   });
+}
+
+function markDestroyedDetailAndScheduleRegen(st, nowSec) {
+  if (!st || st.destroyed) return;
+  st.destroyed = true;
+  st.regenAtSec = nowSec + DETAIL_REGEN_AFTER_BREAK_SEC;
+  registerDestroyedCrystalOrigin(st.ox, st.oy);
+  invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+}
+
+function sweepDetailBreakState(data, nowSec) {
+  if (!data || detailBreakStateByOrigin.size === 0) return;
+  if (detailBreakSweepCooldownSec > nowSec) return;
+  detailBreakSweepCooldownSec = nowSec + DETAIL_SWEEP_INTERVAL_SEC;
+  if (!detailBreakSweepIter) detailBreakSweepIter = detailBreakStateByOrigin.entries();
+
+  let processed = 0;
+  while (processed < DETAIL_SWEEP_STEP) {
+    const it = detailBreakSweepIter.next();
+    if (it.done) {
+      detailBreakSweepIter = null;
+      break;
+    }
+    processed += 1;
+    const [key, st] = it.value;
+    if (!st) {
+      detailBreakStateByOrigin.delete(key);
+      continue;
+    }
+    if (st.destroyed) {
+      if (nowSec >= st.regenAtSec) {
+        unregisterDestroyedDetailOrigin(st.ox, st.oy);
+        invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        detailBreakStateByOrigin.delete(key);
+        detailHitHpBars.delete(key);
+        detailHitShakeAtSec.delete(key);
+      }
+      continue;
+    }
+    if (nowSec - st.lastHitAtSec >= DETAIL_PARTIAL_DAMAGE_FORGET_SEC) {
+      detailBreakStateByOrigin.delete(key);
+      detailHitHpBars.delete(key);
+      detailHitShakeAtSec.delete(key);
+    }
+  }
 }
 
 function spawnCrystalShards(rootOx, rootOy, itemKey, data) {
@@ -203,15 +424,57 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
   const probeReach = Math.max(0.2, reach - TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
+  tryBreakDetailsAlongSegment(px, py, ex, ey, data);
+}
+
+/**
+ * Applies tackle-trait detail breaking along a segment (capsule sweep against detail hurtboxes).
+ * Useful for other moves (e.g. psybeam) that should behave like tackle on map details.
+ * @param {number} ax
+ * @param {number} ay
+ * @param {number} bx
+ * @param {number} by
+ * @param {object | null | undefined} data
+ * @param {{
+ *   worldHitOnceSet?: Set<string>,
+ *   spawnedHitOnceSet?: Set<number>
+ * }} [opts]
+ */
+export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
+  if (!data) return;
+  const nowSec = performance.now() * 0.001;
+  const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
+  const spawnedHitOnceSet = opts.spawnedHitOnceSet instanceof Set ? opts.spawnedHitOnceSet : null;
+  const px = Number(ax);
+  const py = Number(ay);
+  const ex = Number(bx);
+  const ey = Number(by);
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
+  const segLen = Math.hypot(ex - px, ey - py);
+  if (!Number.isFinite(segLen) || segLen <= 1e-6) return;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   /** @type {Array<any>} */
   const hits = [];
-  const steps = Math.max(2, Math.ceil(probeReach / TACKLE_ORIGIN_SCAN_STEP_TILES));
+  const steps = Math.max(2, Math.ceil(segLen / TACKLE_ORIGIN_SCAN_STEP_TILES));
   const sampledOriginKeys = new Set();
   const originMemo = new Map();
+  const tileMemo = new Map();
+  const microWm = data.width * MACRO_TILE_STRIDE;
+  const microHm = data.height * MACRO_TILE_STRIDE;
+  const seed = data.seed ?? 0;
+  const getTileCached = (x, y) => {
+    if (x < 0 || y < 0 || x >= microWm || y >= microHm) return null;
+    const key = `${x},${y}`;
+    if (tileMemo.has(key)) return tileMemo.get(key);
+    const t = getMicroTile(x, y, data);
+    tileMemo.set(key, t || null);
+    return t || null;
+  };
   for (const sc of activeSpawnedSmallCrystals) {
-    const ht = segmentCircleFirstHitT(px, py, ex, ey, sc.x, sc.y, Math.max(0.01, sc.radius + TACKLE_SWEEP_RADIUS_TILES));
+    if (spawnedHitOnceSet?.has(sc.id)) continue;
+    const detailR = Math.max(0.01, (sc.radius || 0.3) * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+    const ht = segmentCircleFirstHitT(px, py, ex, ey, sc.x, sc.y, detailR + TACKLE_SWEEP_RADIUS_TILES);
     if (ht == null) continue;
     hits.push({ type: 'spawnedSmall', id: sc.id, itemKey: sc.itemKey, x: sc.x, y: sc.y, t: ht });
   }
@@ -226,13 +489,58 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
         const key = `${ox},${oy}`;
         if (sampledOriginKeys.has(key)) continue;
         sampledOriginKeys.add(key);
+        if (worldHitOnceSet?.has(key)) continue;
         const p = scatterPhysicsCircleAtOrigin(ox, oy, data, originMemo);
-        if (!p || !String(p.itemKey || '').toLowerCase().includes('crystal')) continue;
-        if (isPlayCrystalScatterOriginDestroyed(ox, oy)) continue;
-        const rr = Math.max(0.01, p.radius + TACKLE_SWEEP_RADIUS_TILES);
-        const ht = segmentCircleFirstHitT(px, py, ex, ey, p.cx, p.cy, rr);
+        if (isPlayDetailScatterOriginDestroyed(ox, oy)) continue;
+        if (p) {
+          const detailR = Math.max(0.01, p.radius * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+          const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
+          const ht = segmentCircleFirstHitT(px, py, ex, ey, p.cx, p.cy, rr);
+          if (ht == null) continue;
+          hits.push({
+            type: 'worldDetail',
+            rootOx: ox,
+            rootOy: oy,
+            itemKey: String(p.itemKey),
+            cx: p.cx,
+            cy: p.cy,
+            t: ht
+          });
+          continue;
+        }
+
+        // Non-blockable scatter (flowers, shells, etc.) has no walkability collider:
+        // still allow tackle to break/pick by testing a compact footprint-center circle.
+        const oTile = getTileCached(ox, oy);
+        if (!oTile) continue;
+        if (
+          !validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)
+        ) {
+          continue;
+        }
+        const items = BIOME_VEGETATION[oTile.biomeId] || [];
+        if (!items.length) continue;
+        const itemKey = items[Math.floor(seededHash(ox, oy, seed + 222) * items.length)];
+        if (scatterItemKeyIsSolid(itemKey)) continue;
+        const objSet = OBJECT_SETS[itemKey];
+        if (!objSet) continue;
+        const shape = parseShape(objSet.shape);
+        const cx0 = ox + shape.cols * 0.5;
+        const cy0 = oy + shape.rows * 0.5;
+        const detailRBase = Math.max(0.26, Math.max(shape.cols, shape.rows) * 0.33);
+        const detailR = detailRBase * TACKLE_DETAIL_HURTBOX_RADIUS_MULT;
+        const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
+        const ht = segmentCircleFirstHitT(px, py, ex, ey, cx0, cy0, rr);
         if (ht == null) continue;
-        hits.push({ type: 'worldCrystal', rootOx: ox, rootOy: oy, itemKey: String(p.itemKey), cx: p.cx, cy: p.cy, t: ht });
+        hits.push({
+          type: 'worldDetail',
+          rootOx: ox,
+          rootOy: oy,
+          itemKey: String(itemKey),
+          cx: cx0,
+          cy: cy0,
+          t: ht
+        });
       }
     }
   }
@@ -248,8 +556,14 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
       const idx = activeSpawnedSmallCrystals.findIndex((c) => c.id === hit.id);
       if (idx < 0) continue;
       const c = activeSpawnedSmallCrystals[idx];
+      const dynKey = `dyn:${c.id}`;
+      markDetailHitHpBar(dynKey, c.x, c.y, 1, 1, 0, nowSec);
+      markDetailHitShake(dynKey, nowSec);
+      spawnDetailHitPulse(c.x, c.y);
       activeSpawnedSmallCrystals.splice(idx, 1);
-      spawnPickableCrystalDropAt(c.x, c.y, c.itemKey);
+      if (spawnedHitOnceSet) spawnedHitOnceSet.add(c.id);
+      const cSet = OBJECT_SETS[c.itemKey];
+      spawnPickableCrystalDropAt(c.x, c.y, c.itemKey, countSpritesInObjectSet(cSet));
       spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
       continue;
     }
@@ -257,17 +571,34 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
     const worldKey = `${hit.rootOx},${hit.rootOy}`;
     if (consumedWorld.has(worldKey)) continue;
     consumedWorld.add(worldKey);
-    if (isPlayCrystalScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
+    if (worldHitOnceSet?.has(worldKey)) continue;
+    if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
     const objSet = OBJECT_SETS[hit.itemKey];
     const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
+    const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);
+    if (st.destroyed) continue;
+    const hpBefore = st.hitsRemaining;
+    st.hitsRemaining = Math.max(0, st.hitsRemaining - 1);
+    markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+    markDetailHitShake(worldKey, nowSec);
+    spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+    if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+    if (st.hitsRemaining > 0) {
+      continue;
+    }
 
-    registerDestroyedCrystalOrigin(hit.rootOx, hit.rootOy);
-    invalidateChunksOverlappingFootprint(hit.rootOx, hit.rootOy, shape.cols, shape.rows);
-    const isLargeCrystal = shape.cols >= 2 && shape.rows >= 2;
+    markDestroyedDetailAndScheduleRegen(st, nowSec);
+    const isCrystal = String(hit.itemKey || '').toLowerCase().includes('crystal');
+    const isLargeCrystal = isCrystal && shape.cols >= 2 && shape.rows >= 2;
     if (isLargeCrystal) {
       spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
     } else {
-      spawnPickableCrystalDropAt(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, hit.itemKey);
+      spawnPickableCrystalDropAt(
+        hit.cx ?? hit.rootOx + 0.5,
+        hit.cy ?? hit.rootOy + 0.5,
+        hit.itemKey,
+        countSpritesInObjectSet(objSet)
+      );
     }
     spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
   }
@@ -307,13 +638,43 @@ export function updateCrystalDropsAndPickup(dt, player) {
   for (let i = activeCrystalDrops.length - 1; i >= 0; i--) {
     const d = activeCrystalDrops[i];
     d.age = (d.age || 0) + dt;
+    if (d.maxAge && d.age >= d.maxAge) {
+      activeCrystalDrops.splice(i, 1);
+      continue;
+    }
     if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
     const dx = px - d.x;
     const dy = py - d.y;
     if (dx * dx + dy * dy <= (d.pickRadius || 0.5) * (d.pickRadius || 0.5)) {
-      crystalLootCount += 1;
+      crystalLootCount += Math.max(1, Number(d.stackCount) || 1);
       activeCrystalDrops.splice(i, 1);
     }
+  }
+}
+
+/**
+ * Incremental cleanup + regeneration of broken details.
+ * Keeps memory bounded while restoring map determinism over time.
+ * @param {number} dt
+ * @param {object | null | undefined} data
+ */
+export function updateBreakableDetailRegeneration(dt, data) {
+  void dt;
+  if (!data) return;
+  const nowSec = performance.now() * 0.001;
+  sweepDetailBreakState(data, nowSec);
+  for (const [key, bar] of detailHitHpBars.entries()) {
+    if (!bar || nowSec > bar.hideAtSec) detailHitHpBars.delete(key);
+  }
+  for (const [key, hitAt] of detailHitShakeAtSec.entries()) {
+    if (!Number.isFinite(hitAt) || nowSec - hitAt >= DETAIL_HIT_SHAKE_SEC) {
+      detailHitShakeAtSec.delete(key);
+    }
+  }
+  for (let i = activeDetailHitPulses.length - 1; i >= 0; i--) {
+    const p = activeDetailHitPulses[i];
+    p.age += dt;
+    if (p.age >= p.maxAge) activeDetailHitPulses.splice(i, 1);
   }
 }
 

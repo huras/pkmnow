@@ -31,7 +31,7 @@ import {
   scatterSolidStemRadiusMultiplier,
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
-import { isPlayCrystalScatterOriginDestroyed } from './main/play-crystal-tackle.js';
+import { isPlayDetailScatterOriginDestroyed } from './main/play-crystal-tackle.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -520,7 +520,7 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
   const seed = data.seed;
   const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
-  if (isPlayCrystalScatterOriginDestroyed(ox0, oy0)) return null;
+  if (isPlayDetailScatterOriginDestroyed(ox0, oy0)) return null;
 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;

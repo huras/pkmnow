@@ -47,6 +47,7 @@ import {
   getEffectiveWildBehavior,
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
+import { tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -768,6 +769,12 @@ export function updateMoves(dt, wildPokemonList, data, player) {
             set.add(wild);
           }
         }
+      }
+
+      if (proj.hasTackleTrait && data) {
+        const detailSet =
+          proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet });
       }
 
       if (proj.timeToLive <= 0) {
