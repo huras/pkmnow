@@ -65,10 +65,15 @@ export function getRoleForCell(r, c, rows, cols, isLandAtFunc, setType) {
     return 'SEAMLESS_CENTER';
   }
 
-  const nw = landAt(r - 1, c - 1);
-  const ne = landAt(r - 1, c + 1);
-  const sw = landAt(r + 1, c - 1);
-  const se = landAt(r + 1, c + 1);
+  // Diagonais: para conc-conv-a/b/c usar terra *crua* (sem `landPredicateFillSmallNoiseHoles`).
+  // O preenchimento de buraco 1×1 nos cardinais faz um degrau de 1 tile virar “terra” na diagonal
+  // e some IN_NE/IN_NW legítimos — pele 13-tiles fica CENTER onde devia ser canto interno.
+  const rawLand = (rr, cc) => !!isLandAtFunc(rr, cc);
+  const useRawDiagonals = isConcConvThreeByThreeStyle(setType);
+  const nw = useRawDiagonals ? rawLand(r - 1, c - 1) : landAt(r - 1, c - 1);
+  const ne = useRawDiagonals ? rawLand(r - 1, c + 1) : landAt(r - 1, c + 1);
+  const sw = useRawDiagonals ? rawLand(r + 1, c - 1) : landAt(r + 1, c - 1);
+  const se = useRawDiagonals ? rawLand(r + 1, c + 1) : landAt(r + 1, c + 1);
 
   // Todos os 4 vizinhos cardinais são terra
   if (n && s && w && e) {
