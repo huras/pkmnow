@@ -153,13 +153,37 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-  } else if (p.type === 'psybeamShot') {
-    const ang = Math.atan2(p.vy || 0, p.vx || 1);
+  } else if (p.type === 'psybeamBeam') {
+    const x0 = snapPx(p.beamStartX * tileW);
+    const y0 = snapPx(p.beamStartY * tileH - (p.z || 0) * tileH);
+    const x1 = snapPx(p.beamEndX * tileW);
+    const y1 = snapPx(p.beamEndY * tileH - (p.z || 0) * tileH);
+    const maxT = p.beamTtlMax || 0.28;
+    const ttl = Math.max(0, p.timeToLive ?? maxT);
+    const a = Math.max(0.06, Math.min(1, (ttl / maxT) * 0.9 + 0.1));
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx);
+    const th = Math.max(5, tileH * 0.2);
+    const mx = (x0 + x1) * 0.5;
+    const my = (y0 + y1) * 0.5;
     ctx.save();
-    ctx.translate(px, py);
+    ctx.translate(mx, my);
     ctx.rotate(ang);
-    ctx.fillStyle = 'rgba(255,112,198,0.9)';
-    ctx.fillRect(-Math.max(3, tileW * 0.16), -Math.max(2, tileH * 0.07), Math.max(7, tileW * 0.32), Math.max(4, tileH * 0.14));
+    const halfL = len * 0.5;
+    const grd = ctx.createLinearGradient(-halfL, 0, halfL, 0);
+    grd.addColorStop(0, `rgba(255,210,248,${0.38 * a})`);
+    grd.addColorStop(0.42, `rgba(255,130,215,${0.95 * a})`);
+    grd.addColorStop(0.58, `rgba(255,95,195,${0.98 * a})`);
+    grd.addColorStop(1, `rgba(255,55,175,${0.35 * a})`);
+    ctx.fillStyle = grd;
+    ctx.shadowColor = `rgba(255, 85, 195, ${0.72 * a})`;
+    ctx.shadowBlur = 20;
+    ctx.fillRect(-halfL, -th * 0.5, len, th);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(255,255,255,${0.42 * a})`;
+    ctx.fillRect(-halfL, -th * 0.16, len, th * 0.32);
     ctx.restore();
   } else if (p.type === 'prismaticShot') {
     const ang = Math.atan2(p.vy || 0, p.vx || 1);
@@ -1195,6 +1219,30 @@ export function render(canvas, data, options = {}) {
       }
     }
 
+    const pushPsybeamChargeOrbs = () => {
+      const z0 = player.z ?? 0;
+      const pushOrb = (hold) => {
+        if (!hold) return;
+        const { tx, ty } = aimAtCursor(player);
+        const sx = player.x;
+        const sy = player.y;
+        const d = Math.hypot(tx - sx, ty - sy) || 1e-6;
+        const bx = sx + ((tx - sx) / d) * 0.42;
+        const by = sy + ((ty - sy) / d) * 0.42;
+        renderItems.push({
+          type: 'psybeamChargeBall',
+          sortY: by + 0.38,
+          bx,
+          by,
+          bz: z0 + 0.08,
+          pulse: hold.pulse
+        });
+      };
+      pushOrb(playInputState.psybeamLeftHold);
+      pushOrb(playInputState.psybeamRightHold);
+    };
+    pushPsybeamChargeOrbs();
+
     for (const proj of activeProjectiles) {
       renderItems.push({
         type: 'projectile',
@@ -1542,6 +1590,24 @@ export function render(canvas, data, options = {}) {
           ctx.stroke();
         }
         ctx.setLineDash([]);
+      } else if (item.type === 'psybeamChargeBall') {
+        const px = snapPx(item.bx * tileW);
+        const py = snapPx(item.by * tileH - item.bz * tileH);
+        const pulse = item.pulse || 0;
+        const scale = 1 + Math.sin(pulse) * 0.3;
+        const r = Math.max(6, tileW * 0.17) * scale;
+        const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
+        grd.addColorStop(0, 'rgba(255,255,255,0.96)');
+        grd.addColorStop(0.32, 'rgba(255,160,225,0.94)');
+        grd.addColorStop(0.68, 'rgba(255,95,185,0.78)');
+        grd.addColorStop(1, 'rgba(255,45,160,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
       } else if (item.type === 'scatter') {
         const { objSet, originX, originY, cols, itemKey } = item;
         const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');

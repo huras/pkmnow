@@ -203,37 +203,37 @@ export function castConfusion(sourceX, sourceY, targetX, targetY, sourceEntity, 
 
 export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile } = opts;
-  const maxR = fromWild ? 11 : 13;
-  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
-  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, targetX, targetY, 0.44);
-  const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
-    sp.startX,
-    sp.startY,
-    sp.startZ,
-    targetX,
-    targetY,
-    sourceX,
-    sourceY,
-    18,
-    maxR,
-    { ttlMargin: 1.05, ttlPad: 0.06 }
-  );
+  const maxR = fromWild ? 12 : 14;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.04;
+  const { aimX, aimY, dirX, dirY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.44);
+  const beamEndX = sourceX + dirX * dist0;
+  const beamEndY = sourceY + dirY * dist0;
+  const ttl = fromWild ? 0.2 : 0.28;
   pushLinearProjectile(pushProjectile, {
-    type: 'psybeamShot',
-    x: sp.startX,
-    y: sp.startY,
-    vx,
-    vy,
-    vz,
+    type: 'psybeamBeam',
+    x: (sp.startX + beamEndX) * 0.5,
+    y: (sp.startY + beamEndY) * 0.5,
+    vx: 0,
+    vy: 0,
+    vz: 0,
     z: sp.startZ,
-    radius: 0.3,
-    timeToLive,
+    radius: 0.28,
+    beamStartX: sp.startX,
+    beamStartY: sp.startY,
+    beamEndX,
+    beamEndY,
+    beamHalfWidth: fromWild ? 0.24 : 0.28,
+    timeToLive: ttl,
+    beamTtlMax: ttl,
     damage: fromWild ? 7 : 12,
     sourceEntity,
     fromWild,
     hitsWild: !fromWild,
     hitsPlayer: !!fromWild,
-    trailAcc: PSY_TRAIL_INTERVAL * 0.8
+    trailAcc: 0,
+    psyHitWild: new Set(),
+    playerBeamHitDone: false
   });
 }
 

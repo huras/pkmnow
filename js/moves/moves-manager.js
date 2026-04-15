@@ -143,6 +143,19 @@ function checkDamageHitCircle(px, py, projRadius, targetX, targetY, targetHurtRa
   return dist < projRadius + targetHurtRadiusTiles;
 }
 
+/** Shortest distance from point P to segment A–B (tile XY plane). */
+function distPointToSegmentTiles(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + t * dx;
+  const qy = ay + t * dy;
+  return Math.hypot(px - qx, py - qy);
+}
+
 function broadPhaseOk(px, py, tx, ty) {
   return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
 }
@@ -352,6 +365,11 @@ export function castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity
     pushProjectile
   });
   return true;
+}
+
+/** Mouse / slot release after holding Psybeam (same gameplay as hotkey cast). */
+export function tryReleasePlayerPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -687,6 +705,68 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const proj = activeProjectiles[i];
 
+    if (proj.type === 'psybeamBeam') {
+      proj.timeToLive -= dt;
+      const sx0 = proj.beamStartX;
+      const sy0 = proj.beamStartY;
+      const sx1 = proj.beamEndX;
+      const sy1 = proj.beamEndY;
+      const halfW = proj.beamHalfWidth ?? 0.26;
+      const zBeam = proj.z ?? 0;
+
+      if (proj.trailAcc != null) {
+        proj.trailAcc += dt;
+        const interval = PSY_TRAIL_INTERVAL * 0.42;
+        while (proj.trailAcc >= interval) {
+          proj.trailAcc -= interval;
+          const u = Math.random();
+          const px = sx0 + (sx1 - sx0) * u + (Math.random() - 0.5) * 0.06;
+          const py = sy0 + (sy1 - sy0) * u + (Math.random() - 0.5) * 0.06;
+          spawnTrailParticle(px, py, 'psyTrail', zBeam);
+        }
+      }
+
+      if (proj.hitsPlayer && !proj.playerBeamHitDone) {
+        const px = player.visualX ?? player.x;
+        const py = player.visualY ?? player.y;
+        const dex = player.dexId ?? 1;
+        const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
+        if (projectileZInPokemonHurtbox(zBeam, dex, player.z ?? 0)) {
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
+            const poison = false;
+            if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
+              spawnHitParticles(hx, hy, player.z ?? 0);
+            }
+            proj.playerBeamHitDone = true;
+          }
+        }
+      }
+
+      if (proj.hitsWild) {
+        const set = proj.psyHitWild instanceof Set ? proj.psyHitWild : (proj.psyHitWild = new Set());
+        for (const wild of wildList) {
+          if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
+          if (set.has(wild)) continue;
+          const wDex = wild.dexId ?? 1;
+          const wz = wild.z ?? 0;
+          const { hx, hy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, wDex);
+          if (!projectileZInPokemonHurtbox(zBeam, wDex, wz)) continue;
+          const hurtR = getPokemonHurtboxRadiusTiles(wDex);
+          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
+            if (wild.takeDamage) wild.takeDamage(proj.damage);
+            spawnHitParticles(hx, hy, wz);
+            set.add(wild);
+          }
+        }
+      }
+
+      if (proj.timeToLive <= 0) {
+        activeProjectiles.splice(i, 1);
+      }
+      continue;
+    }
+
     proj.x += proj.vx * dt;
     proj.y += proj.vy * dt;
     if (Number.isFinite(proj.vz)) {
@@ -733,7 +813,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
             ? 'powderTrail'
             : proj.type === 'silkShot'
               ? 'silkTrail'
-              : proj.type === 'confusionOrb' || proj.type === 'psybeamShot'
+              : proj.type === 'confusionOrb'
                 ? 'psyTrail'
                 : proj.type === 'prismaticShot'
                   ? 'laserTrail'

@@ -426,7 +426,7 @@ function enterPlayMode(gx, gy) {
   btnBackToMap?.classList.remove('hidden');
   minimap.classList.remove('hidden');
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged (Ember/água), Psybeam segure = orbe rosa pulsante e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 

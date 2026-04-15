@@ -5,7 +5,8 @@ import {
   castMoveChargedById,
   castUltimate,
   tryCastPlayerFlamethrowerStreamPuff,
-  tryCastPlayerPrismaticStreamPuff
+  tryCastPlayerPrismaticStreamPuff,
+  tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
 
@@ -74,7 +75,7 @@ export function castMappedMoveByHotkey(code, player) {
   const moveId = HOTKEY_TO_MOVE_ID[code];
   if (!moveId || !player) return false;
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (moveId === 'flamethrower' || moveId === 'prismaticLaser') {
+  if (moveId === 'flamethrower' || moveId === 'prismaticLaser' || moveId === 'psybeam') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
   }
   castMoveById(moveId, sx, sy, tx, ty, player);
@@ -99,11 +100,23 @@ export function updatePlayPointerCombat(dt, player) {
   if (!player) return;
   const slots = resolveSlots(player);
   const mod = combatModifierHeld();
-  if (leftHeld && !mod && !isHoldStreamMoveId(slots.leftTap)) {
+  if (leftHeld && !mod && !isHoldStreamMoveId(slots.leftTap) && slots.leftTap !== 'psybeam') {
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
   }
-  if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap)) {
+  if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap) && slots.rightTap !== 'psybeam') {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
+  }
+  if (leftHeld && !mod && slots.leftTap === 'psybeam') {
+    if (!playInputState.psybeamLeftHold) playInputState.psybeamLeftHold = { pulse: 0 };
+    playInputState.psybeamLeftHold.pulse += dt * 7.2;
+  } else {
+    playInputState.psybeamLeftHold = null;
+  }
+  if (rightHeld && !mod && slots.rightTap === 'psybeam') {
+    if (!playInputState.psybeamRightHold) playInputState.psybeamRightHold = { pulse: 0 };
+    playInputState.psybeamRightHold.pulse += dt * 7.2;
+  } else {
+    playInputState.psybeamRightHold = null;
   }
   const { sx, sy, tx, ty } = aimAtCursor(player);
   if (leftHeld && !mod && slots.leftTap === 'flamethrower') {
@@ -192,6 +205,9 @@ export function installPlayPointerCombat(deps) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
         }
+      } else if (slots.leftTap === 'psybeam') {
+        applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+        tryReleasePlayerPsybeam(sx, sy, tx, ty, player);
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.leftTap, sx, sy, tx, ty, player);
       } else {
@@ -216,6 +232,9 @@ export function installPlayPointerCombat(deps) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
         }
+      } else if (slots.rightTap === 'psybeam') {
+        applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+        tryReleasePlayerPsybeam(sx, sy, tx, ty, player);
       } else if (heldMs < TAP_MS) {
         castMoveById(slots.rightTap, sx, sy, tx, ty, player);
       } else {
@@ -234,6 +253,8 @@ export function installPlayPointerCombat(deps) {
     rightHeld = false;
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
+    playInputState.psybeamLeftHold = null;
+    playInputState.psybeamRightHold = null;
     playInputState.mouseValid = false;
   });
 }

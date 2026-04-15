@@ -15,19 +15,13 @@ const MAX_SCATTER_COLS_FOOTPRINT = 8;
 const MAX_SCATTER_COLS_OVERLAP_SEARCH = 4; // Deve ser >= cols - 1 de qualquer árvore
 
 /**
- * True se (mx,my) pode ser coluna esquerda de um scatter (2B / origem 2C): não é interior de
- * outro scatter a Oeste cuja **origem seja válida**, papel CENTER, noise e footprint sem formal.
- * `memo` (Map "mx,my"→bool) evita custo recursivo no render quando a cadeia a Oeste é longa.
+ * Gates até ao scan do footprint (incl. interior a Oeste), **sem** “já estou em cima da base de
+ * outro scatter”. Usado por `insideAnotherScatterBaseFootprintMicro` para não recair em
+ * `validScatterOriginMicro` (evita recursão infinita A↔B).
  */
-export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo = null) {
-  const memoKey = memo ? `${mx},${my}` : null;
-  if (memo && memo.has(memoKey)) return memo.get(memoKey);
-
+function scatterOriginStrictUpToFootprintScan(mx, my, seed, microW, microH, getT, memo) {
   const nTile = getT(mx, my);
-  if (!tileSurfaceAllowsScatterVegetation(nTile)) {
-    if (memo) memo.set(memoKey, false);
-    return false;
-  }
+  if (!tileSurfaceAllowsScatterVegetation(nTile)) return false;
 
   const treeFormalOrigin = getTreeType(nTile.biomeId);
   const isFormalTreeOrig = (tx, ty) =>
@@ -38,10 +32,7 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
     !!treeFormalOrigin &&
     (tx + ty) % 3 === 1 &&
     foliageDensity(tx - 1, ty, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-  if (isFormalTreeOrig(mx, my) || isFormalNeighborOrig(mx, my)) {
-    if (memo) memo.set(memoKey, false);
-    return false;
-  }
+  if (isFormalTreeOrig(mx, my) || isFormalNeighborOrig(mx, my)) return false;
 
   const scatterItemsOrigin = BIOME_VEGETATION[nTile.biomeId] || [];
   for (let dw = 1; dw <= MAX_SCATTER_COLS_OVERLAP_SEARCH; dw++) {
@@ -59,11 +50,7 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
       const os = OBJECT_SETS[ik];
       if (os) {
         const { cols: cWest } = parseShape(os.shape);
-        if (
-          dw < cWest &&
-          validScatterOriginMicro(nxw, my, seed, microW, microH, getT, memo)
-        ) {
-          if (memo) memo.set(memoKey, false);
+        if (dw < cWest && validScatterOriginMicro(nxw, my, seed, microW, microH, getT, memo)) {
           return false;
         }
       }
@@ -73,55 +60,35 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
   const setO = TERRAIN_SETS[BIOME_TO_TERRAIN[nTile.biomeId] || 'grass'];
   if (setO) {
     const chkO = (r, c) => (getT(c, r)?.heightStep ?? -99) >= nTile.heightStep;
-    if (getRoleForCell(my, mx, microH, microW, chkO, setO.type) !== 'CENTER') {
-      if (memo) memo.set(memoKey, false);
-      return false;
-    }
+    if (getRoleForCell(my, mx, microH, microW, chkO, setO.type) !== 'CENTER') return false;
   }
 
-  if (foliageDensity(mx, my, seed + 111, 2.5) <= 0.82) {
-    if (memo) memo.set(memoKey, false);
-    return false;
-  }
+  if (foliageDensity(mx, my, seed + 111, 2.5) <= 0.82) return false;
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
-  if (itemsO.length === 0) {
-    if (memo) memo.set(memoKey, false);
-    return false;
-  }
+  if (itemsO.length === 0) return false;
 
   const itemKeyO = itemsO[Math.floor(seededHash(mx, my, seed + 222) * itemsO.length)];
   const objSetO = OBJECT_SETS[itemKeyO];
-  if (!objSetO) {
-    if (memo) memo.set(memoKey, false);
-    return false;
-  }
+  if (!objSetO) return false;
   const { rows: rowsO, cols: colsO } = parseShape(objSetO.shape);
   const treeTypeO = getTreeType(nTile.biomeId);
 
-  // RIGOROUS FOOTPRINT SCAN: All tiles in the rows x cols area must be valid
   for (let dy = 0; dy < rowsO; dy++) {
     for (let dx = 0; dx < colsO; dx++) {
       const gx = mx + dx;
       const gy = my + dy;
       const cTile = getT(gx, gy);
 
-      // 1. Basic Existence and Terrain Gate
       if (!cTile || cTile.heightStep !== nTile.heightStep || cTile.isRoad || cTile.isCity) {
-        if (memo) memo.set(memoKey, false);
         return false;
       }
 
-      // 2. Flat Ground Gate (CENTER role only)
       const setC = TERRAIN_SETS[BIOME_TO_TERRAIN[cTile.biomeId] || 'grass'];
       if (setC) {
         const chkC = (r, c) => (getT(c, r)?.heightStep ?? -99) >= nTile.heightStep;
-        if (getRoleForCell(gy, gx, microH, microW, chkC, setC.type) !== 'CENTER') {
-          if (memo) memo.set(memoKey, false);
-          return false;
-        }
+        if (getRoleForCell(gy, gx, microH, microW, chkC, setC.type) !== 'CENTER') return false;
       }
 
-      // 3. Formal Tree Overlap Gate
       const isFT =
         !!treeTypeO &&
         (gx + gy) % 3 === 0 &&
@@ -130,11 +97,65 @@ export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo
         !!treeTypeO &&
         (gx + gy) % 3 === 1 &&
         foliageDensity(gx - 1, gy, seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
-      if (isFT || isFN) {
-        if (memo) memo.set(memoKey, false);
-        return false;
-      }
+      if (isFT || isFN) return false;
     }
+  }
+
+  return true;
+}
+
+/**
+ * True se (mx,my) cai dentro do retângulo **base** de um scatter cuja origem é outra célula
+ * (tipicamente a norte / NO na janela de busca). Evita raiz 2B de pormenor 1×1 em cima da base de
+ * cristal/rocha maior — `validScatterOriginMicro` só bloqueava interiores à **oeste** na mesma linha.
+ */
+function insideAnotherScatterBaseFootprintMicro(mx, my, seed, microW, microH, getT, memo = null) {
+  const here = getT(mx, my);
+  if (!tileSurfaceAllowsScatterVegetation(here)) return false;
+  if ((BIOME_VEGETATION[here.biomeId] || []).length === 0) return false;
+
+  for (let oy0 = my; oy0 >= my - MAX_SCATTER_ROWS_PASS2 + 1 && oy0 >= 0; oy0--) {
+    for (let ox0 = mx; ox0 >= mx - MAX_SCATTER_COLS_FOOTPRINT + 1 && ox0 >= 0; ox0--) {
+      if (ox0 === mx && oy0 === my) continue;
+
+      const nTile = getT(ox0, oy0);
+      if (!tileSurfaceAllowsScatterVegetation(nTile)) continue;
+      if (here.heightStep !== nTile.heightStep) continue;
+
+      if (!scatterOriginStrictUpToFootprintScan(ox0, oy0, seed, microW, microH, getT, memo)) continue;
+      if (foliageDensity(ox0, oy0, seed + 111, 2.5) <= 0.82) continue;
+
+      const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
+      if (itemsO.length === 0) continue;
+      const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
+      const objSet = OBJECT_SETS[itemKey];
+      if (!objSet) continue;
+      const { rows, cols } = parseShape(objSet.shape);
+      const dmx = mx - ox0;
+      const dmy = my - oy0;
+      if (dmx >= 0 && dmy >= 0 && dmx < cols && dmy < rows) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True se (mx,my) pode ser coluna esquerda de um scatter (2B / origem 2C): não é interior de
+ * outro scatter a Oeste cuja **origem seja válida**, papel CENTER, noise e footprint sem formal.
+ * `memo` (Map "mx,my"→bool) evita custo recursivo no render quando a cadeia a Oeste é longa.
+ */
+export function validScatterOriginMicro(mx, my, seed, microW, microH, getT, memo = null) {
+  const memoKey = memo ? `${mx},${my}` : null;
+  if (memo && memo.has(memoKey)) return memo.get(memoKey);
+
+  if (!scatterOriginStrictUpToFootprintScan(mx, my, seed, microW, microH, getT, memo)) {
+    if (memo) memo.set(memoKey, false);
+    return false;
+  }
+
+  if (insideAnotherScatterBaseFootprintMicro(mx, my, seed, microW, microH, getT, memo)) {
+    if (memo) memo.set(memoKey, false);
+    return false;
   }
 
   if (memo) memo.set(memoKey, true);

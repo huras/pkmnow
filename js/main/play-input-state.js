@@ -18,7 +18,11 @@ export const playInputState = {
   /** 0–1 while holding LMB (no Shift) — charged fire shot. */
   chargeLeft01: 0,
   /** 0–1 while holding RMB (no Shift) — charged water shot. */
-  chargeRight01: 0
+  chargeRight01: 0,
+  /** Psybeam: LMB held with Psybeam in primary slot — pulse phase for pink charge orb. */
+  psybeamLeftHold: /** @type {{ pulse: number } | null} */ (null),
+  /** Psybeam: RMB held with Psybeam in secondary slot. */
+  psybeamRightHold: /** @type {{ pulse: number } | null} */ (null)
 };
 
 export function isShiftDigHeld() {
