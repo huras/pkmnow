@@ -473,6 +473,67 @@ const activeRunDustPuffs = [];
 /** @type {Map<string, number>} */
 const runDustLastSpawnByEntityKey = new Map();
 let runDustLastTimeSec = null;
+let lastPlayChunkFrameStats = {
+  mode: 'idle',
+  totalVisible: 0,
+  drawnVisible: 0,
+  missingVisible: 0,
+  bakedThisFrame: 0,
+  bakeBudget: 0,
+  bakeBoost: 0,
+  queueSize: 0
+};
+let playChunkBakeBoost = 0;
+let playChunkBakeStableFrames = 0;
+
+function resetPlayChunkBakeAutoTuner() {
+  playChunkBakeBoost = 0;
+  playChunkBakeStableFrames = 0;
+}
+
+function getAdaptivePlayChunkBakeBudget({
+  lodDetail,
+  cachedVisibleChunks,
+  missingVisibleChunks,
+  queueSize,
+  totalVisibleChunks
+}) {
+  let budget = lodDetail >= 2 ? 1 : 2;
+  if (cachedVisibleChunks === 0 && missingVisibleChunks > 0) budget = Math.max(budget, 8);
+  else if (missingVisibleChunks >= 10) budget = Math.max(budget, 4);
+  if (queueSize >= 48) budget = Math.max(budget, 3);
+
+  const severeMissing = Math.max(10, Math.floor(totalVisibleChunks * 0.45));
+  const severeQueue = queueSize >= 96;
+  const mediumPressure = missingVisibleChunks >= 6 || queueSize >= 36;
+  const highPressure = missingVisibleChunks >= severeMissing || severeQueue;
+  const coldStart = cachedVisibleChunks === 0 && missingVisibleChunks > 0;
+  const steadyState = missingVisibleChunks === 0 && queueSize === 0;
+
+  if (coldStart) playChunkBakeBoost = Math.max(playChunkBakeBoost, 6);
+  if (highPressure) playChunkBakeBoost = Math.min(8, playChunkBakeBoost + 2);
+  else if (mediumPressure) playChunkBakeBoost = Math.min(8, playChunkBakeBoost + 1);
+
+  if (steadyState) {
+    playChunkBakeStableFrames++;
+    if (playChunkBakeStableFrames >= 10 && playChunkBakeBoost > 0) {
+      playChunkBakeBoost -= 1;
+      playChunkBakeStableFrames = 0;
+    }
+  } else {
+    playChunkBakeStableFrames = 0;
+    if (!mediumPressure && playChunkBakeBoost > 0) {
+      playChunkBakeBoost -= 1;
+    }
+  }
+
+  budget = Math.max(budget, budget + playChunkBakeBoost);
+  return Math.min(12, Math.max(1, budget));
+}
+
+export function getPlayChunkFrameStats() {
+  return lastPlayChunkFrameStats;
+}
 
 function spawnJumpRingAt(x, y) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -637,6 +698,19 @@ export function render(canvas, data, options = {}) {
 
   const appMode = options.settings?.appMode || 'map';
   const player = options.settings?.player || { x: 0, y: 0 };
+  if (appMode !== 'play') {
+    resetPlayChunkBakeAutoTuner();
+    lastPlayChunkFrameStats = {
+      mode: appMode,
+      totalVisible: 0,
+      drawnVisible: 0,
+      missingVisible: 0,
+      bakedThisFrame: 0,
+      bakeBudget: 0,
+      bakeBoost: 0,
+      queueSize: 0
+    };
+  }
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -664,6 +738,7 @@ export function render(canvas, data, options = {}) {
 
   if (syncPlayChunkCache(data, tileW, appMode)) {
     clearGrassFireStateForNewMap();
+    resetPlayChunkBakeAutoTuner();
   }
 
   if (appMode === 'map') {
@@ -767,11 +842,14 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // Orçamento de bake por frame para evitar travadas quando vários chunks entram no viewport.
-    let chunkBakeBudget = lodDetail >= 2 ? 1 : 2;
-    if (cachedVisibleChunks === 0 && missingVisibleChunks > 0) chunkBakeBudget = Math.max(chunkBakeBudget, 8);
-    else if (missingVisibleChunks >= 10) chunkBakeBudget = Math.max(chunkBakeBudget, 4);
-    if (getPlayChunkBakeQueueSize() >= 48) chunkBakeBudget = Math.max(chunkBakeBudget, 3);
+    const queueBeforeBake = getPlayChunkBakeQueueSize();
+    const chunkBakeBudget = getAdaptivePlayChunkBakeBudget({
+      lodDetail,
+      cachedVisibleChunks,
+      missingVisibleChunks,
+      queueSize: queueBeforeBake,
+      totalVisibleChunks: visibleChunkCoords.length
+    });
 
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
     for (const req of bakeRequests) {
@@ -780,9 +858,11 @@ export function render(canvas, data, options = {}) {
       playChunkMap.set(req.key, chunk);
     }
 
+    let drawnVisibleChunks = 0;
     for (const { cx, cy, key } of visibleChunkCoords) {
       const chunk = playChunkMap.get(key);
       if (!chunk) continue;
+      drawnVisibleChunks++;
       const destW = Math.max(1, Math.ceil(chunk.canvas.width * chunkDrawScale - 1e-6));
       const destH = Math.max(1, Math.ceil(chunk.canvas.height * chunkDrawScale - 1e-6));
       ctx.drawImage(
@@ -797,6 +877,16 @@ export function render(canvas, data, options = {}) {
         destH
       );
     }
+    lastPlayChunkFrameStats = {
+      mode: 'play',
+      totalVisible: visibleChunkCoords.length,
+      drawnVisible: drawnVisibleChunks,
+      missingVisible: Math.max(0, visibleChunkCoords.length - drawnVisibleChunks),
+      bakedThisFrame: bakeRequests.length,
+      bakeBudget: chunkBakeBudget,
+      bakeBoost: playChunkBakeBoost,
+      queueSize: getPlayChunkBakeQueueSize()
+    };
 
     ctx.imageSmoothingEnabled = prevSmoothing;
 
