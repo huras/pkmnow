@@ -556,7 +556,7 @@ export function updatePlayer(dt, data) {
     player.vy += player.inputY * ACCEL * accelMul * dt;
   } else {
     // Friction
-    const spd = Math.hypot(player.vx, player.vy);
+    const spd = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
     if (spd > 0) {
       const flightFric = flightMove
         ? smoothLevitationFlight
@@ -573,7 +573,7 @@ export function updatePlayer(dt, data) {
 
   // Winged flight only: horizontal drag while thrusting (levitation keeps friction on release only).
   if (flightMove && !smoothLevitationFlight && (player.inputX !== 0 || player.inputY !== 0)) {
-    const spdW = Math.hypot(player.vx, player.vy);
+    const spdW = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
     if (spdW > 0) {
       const fr = FRICTION * FLIGHT_WINGED_FRICTION_MULT;
       const drop = fr * dt;
@@ -584,8 +584,8 @@ export function updatePlayer(dt, data) {
   }
 
   // Clamp Speed (underground cliff crossing caps Diglett/Dugtrio much lower)
-  const inputMag = Math.hypot(player.inputX, player.inputY);
-  const spdPreClamp = Math.hypot(player.vx, player.vy);
+  const inputMag = Math.sqrt(player.inputX * player.inputX + player.inputY * player.inputY);
+  const spdPreClamp = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
   const burrowFeetWalkActive =
     player.grounded &&
     !isAirborne &&
@@ -622,7 +622,7 @@ export function updatePlayer(dt, data) {
     : 1;
   const currentMaxSpeed =
     MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul * flightHorizontalMoveBoost;
-  const spd = Math.hypot(player.vx, player.vy);
+  const spd = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
      player.vy *= currentMaxSpeed / spd;
@@ -700,7 +700,9 @@ export function updatePlayer(dt, data) {
     endWalkProbeCache();
   }
 
-  const spdPostMove = Math.hypot(player.vx ?? 0, player.vy ?? 0);
+  const _vx = player.vx ?? 0;
+  const _vy = player.vy ?? 0;
+  const spdPostMove = Math.sqrt(_vx * _vx + _vy * _vy);
   const playerBurrowWalkActive = isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
     isAirborne,
     grounded: !!player.grounded,

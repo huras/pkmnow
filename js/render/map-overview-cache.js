@@ -4,6 +4,9 @@ import { elevationToStep } from '../chunking.js';
 let mapOverviewCacheCanvas = null;
 let mapOverviewCacheKey = '';
 
+// BIOMES é imutável — cache estático do Map evita realocação a cada rebuild do overview.
+const BIOME_COLOR_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
+
 /**
  * Desenha a visão macro (biomas / elevação + overlays) com cache por chave.
  */
@@ -54,7 +57,7 @@ export function drawCachedMapOverview(ctx, params) {
 
       const tileW = cw / width;
       const tileH = ch / height;
-      const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
+      const biomeColorById = BIOME_COLOR_BY_ID;
       for (let y = startY; y < endY; y++) {
         for (let x = startX; x < endX; x++) {
           const idx = y * width + x;

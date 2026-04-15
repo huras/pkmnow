@@ -6434,9 +6434,17 @@ export const PMD_ANIM_METADATA = {
             }
 };
 
+// Cache por dexId: getDexAnimMeta é chamado ~centenas de vezes/frame (por pokemon visível
+// × cada slice de animação requisitado). Máximo 151 Gen-1, cache pequeno e estável.
+const _dexMetaCache = new Map();
 export function getDexAnimMeta(dexId) {
-  const key = String(Math.max(1, Math.min(151, Number(dexId) || 1))).padStart(3, '0');
-  return PMD_ANIM_METADATA[key] || null;
+  const dex = Math.max(1, Math.min(151, Number(dexId) || 1));
+  const cached = _dexMetaCache.get(dex);
+  if (cached !== undefined) return cached;
+  const key = String(dex).padStart(3, '0');
+  const meta = PMD_ANIM_METADATA[key] || null;
+  _dexMetaCache.set(dex, meta);
+  return meta;
 }
 
 /** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'|'attack'} kind */

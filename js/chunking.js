@@ -379,7 +379,21 @@ export function getMicroTile(mx, my, macroData) {
     };
 }
 
+/**
+ * Memo frame-scoped: em Jungle, foliageDensity é chamada 7× por tile (3.5k calls/frame com 500 tiles).
+ * Mesma (mx, my, seed, scale) retorna mesmo valor — puro, determinístico. Cache em Map com
+ * chave string bit-packed. Reset via `resetFoliageDensityCache()` no início de cada frame.
+ */
+const _foliageDensityCache = new Map();
+export function resetFoliageDensityCache() {
+    _foliageDensityCache.clear();
+}
 export function foliageDensity(mx, my, seed, scale) {
+    // Chave: string compacta — trade-off tempo/memória favorável, ~16 bytes por entry.
+    const key = `${mx},${my},${seed},${scale}`;
+    const cached = _foliageDensityCache.get(key);
+    if (cached !== undefined) return cached;
+
     const gx = mx * scale;
     const gy = my * scale;
     const ix = Math.floor(gx);
@@ -395,7 +409,9 @@ export function foliageDensity(mx, my, seed, scale) {
     const v01 = seededHash(ix, iy + 1, seed + 7777);
     const v11 = seededHash(ix + 1, iy + 1, seed + 7777);
 
-    return lerp(lerp(v00, v10, sx), lerp(v01, v11, sx), sy);
+    const result = lerp(lerp(v00, v10, sx), lerp(v01, v11, sx), sy);
+    _foliageDensityCache.set(key, result);
+    return result;
 }
 
 export function foliageType(mx, my, seed) {

@@ -6,6 +6,9 @@ let minimapBaseCacheData = null;
 let minimapBaseCacheW = 0;
 let minimapBaseCacheH = 0;
 
+// BIOMES é imutável — criar o Map 1× em module-level em vez de toda vez que cache rebuilda.
+const BIOME_COLOR_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
+
 export function renderMinimap(canvas, data, player) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -37,12 +40,11 @@ export function renderMinimap(canvas, data, player) {
 
     const tileWb = w / data.width;
     const tileHb = h / data.height;
-    const colorByBiomeId = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
     for (let y = 0; y < data.height; y++) {
       for (let x = 0; x < data.width; x++) {
         const idx = y * data.width + x;
         const bId = data.biomes[idx];
-        bctx.fillStyle = colorByBiomeId.get(bId) || '#000';
+        bctx.fillStyle = BIOME_COLOR_BY_ID.get(bId) || '#000';
         bctx.fillRect(Math.floor(x * tileWb), Math.floor(y * tileHb), Math.ceil(tileWb), Math.ceil(tileHb));
       }
     }

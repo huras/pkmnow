@@ -31,14 +31,34 @@ export function playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile) {
 }
 
 /**
+ * Memo frame-scoped: resultado determinístico por (mx, my) dentro de um mesmo frame.
+ * Render.js chama `resetPlayGrassLayersCache()` no início de cada frame.
+ * Em Jungle (~500 tiles visíveis × múltiplas re-chamadas), memo poupa ~2ms/frame.
+ */
+const _grassLayersCache = new Map();
+export function resetPlayGrassLayersCache() {
+  _grassLayersCache.clear();
+}
+function _grassLayersKey(mx, my) {
+  return ((mx & 0xFFFF) << 16) | (my & 0xFFFF);
+}
+
+/**
  * Which animated grass layers would draw at LOD0 (union used for flammability; render still gates top by lodDetail).
  * @param {(col: number, row: number) => object | null | undefined} getTile
  * @param {Map<string, { canvas: HTMLCanvasElement, suppressedSet: Set<string> }>} playChunkMap
  * @returns {{ base: boolean, top: boolean }}
  */
 export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) {
+  const cacheKey = _grassLayersKey(mx, my);
+  const cached = _grassLayersCache.get(cacheKey);
+  if (cached) return cached;
+
   const out = { base: false, top: false };
-  if (!playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile)) return out;
+  if (!playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile)) {
+    _grassLayersCache.set(cacheKey, out);
+    return out;
+  }
 
   const tile = getTile(mx, my);
   if (!tile) return out;
@@ -115,6 +135,7 @@ export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) 
     }
   }
 
+  _grassLayersCache.set(cacheKey, out);
   return out;
 }
 

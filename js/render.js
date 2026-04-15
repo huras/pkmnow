@@ -17,7 +17,7 @@ import {
   isSortableScatter,
   tileSurfaceAllowsScatterVegetation
 } from './biome-tiles.js';
-import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity, foliageType } from './chunking.js';
+import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity, foliageType, resetFoliageDensityCache } from './chunking.js';
 import {
   canWalkMicroTile,
   formalTreeTrunkOverlapsMicroCell,
@@ -95,7 +95,7 @@ import {
 import { computePlayViewState } from './render/play-view-camera.js';
 import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import { syncPlayChunkCache, playChunkMap } from './render/play-chunk-cache.js';
-import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
+import { getPlayAnimatedGrassLayers, resetPlayGrassLayersCache } from './play-grass-eligibility.js';
 import {
   clearGrassFireStateForNewMap,
   grassFireVisualPhaseAt,
@@ -123,16 +123,6 @@ const RENDER_SCATTER_ORIGIN_MEMO = new Map();
  * elimina a realocação do array (objects internos ainda são GC'd, custo menor).
  */
 const RENDER_SORTABLE_ITEMS = [];
-/**
- * Tiles cobertos por canopies de trees/scatter-tops neste frame. Populado no scan,
- * consumido em `passesAbovePlayerTileGate` para evitar que grass overlay do player
- * desenhe por cima de palmeiras/árvores (bug visual: grama vaza sobre canopy).
- * Key = bit-packed int32 (mx << 16 | my & 0xFFFF).
- */
-const CANOPY_COVERED_TILES = new Set();
-function canopyTileKey(mx, my) {
-  return ((mx & 0xFFFF) << 16) | (my & 0xFFFF);
-}
 
 /**
  * @param {CanvasRenderingContext2D} ctx
@@ -639,6 +629,12 @@ export function render(canvas, data, options = {}) {
     // Otimização de Frame: Cache de tiles para o viewport atual (reutiliza Map persistente).
     RENDER_TILE_CACHE.clear();
     const tileCache = RENDER_TILE_CACHE;
+    // Reset do memo de grass layers (por-frame): mesmo tile pode ser consultado
+    // múltiplas vezes no mesmo frame por render + fire eligibility.
+    resetPlayGrassLayersCache();
+    // Reset do memo de foliageDensity: em Jungle, 7 chamadas por tile × 500 tiles = ~3500
+    // noise evaluations por frame, todas determinísticas. Cache frame-scoped elimina redundância.
+    resetFoliageDensityCache();
     const getCached = (mx, my) => {
       const key = (mx << 16) | (my & 0xFFFF);
       if (tileCache.has(key)) return tileCache.get(key);
@@ -791,9 +787,6 @@ export function render(canvas, data, options = {}) {
 
     const passesAbovePlayerTileGate = (mx, my, tile) => {
       if (!tile || tile.heightStep < 1) return false;
-      // Bug fix: se o tile está coberto por canopy de tree/scatter, NÃO desenhar grass overlay
-      // por cima do sprite — a canopy/árvore é quem deve aparecer acima, não a grama.
-      if (CANOPY_COVERED_TILES.has(canopyTileKey(mx, my))) return false;
       const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
       if (gateSet) {
         const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
@@ -965,8 +958,7 @@ export function render(canvas, data, options = {}) {
     const wildList = getWildPokemonEntities();
     RENDER_SORTABLE_ITEMS.length = 0;
     const renderItems = RENDER_SORTABLE_ITEMS;
-    CANOPY_COVERED_TILES.clear();
-    
+
     // --- Collect Sortable Objects (Scatter, Trees, Buildings) ---
     const sortableScanPad = lodDetail >= 2 ? 2 : 4;
     /** Dedup `validScatterOriginMicro` (footprint + "em cima de outro scatter") no mesmo frame. */
@@ -991,12 +983,6 @@ export function render(canvas, data, options = {}) {
               sortY: myScan + 1, // matches formal canopy translate Y: originY*tileH + tileH
               biomeId: t.biomeId
             });
-            // Marca tiles cobertos pelo canopy (2 cols × 3 rows: base + 2 rows de canopy acima)
-            // para grass overlay do player não vazar por cima da árvore.
-            for (let dy = -2; dy <= 0; dy++) {
-              CANOPY_COVERED_TILES.add(canopyTileKey(mxScan, myScan + dy));
-              CANOPY_COVERED_TILES.add(canopyTileKey(mxScan + 1, myScan + dy));
-            }
           }
         }
         
@@ -1037,16 +1023,6 @@ export function render(canvas, data, options = {}) {
                    cols,
                    rows
                  });
-                 // Marca tiles cobertos pela canopy/footprint do scatter para evitar
-                 // grass overlay do player vazar sobre palm/large scatter (bug visual).
-                 // Escopo conservador: footprint completo + 2 rows acima (área típica do top).
-                 if (hasTop) {
-                   for (let dy = -2; dy < rows; dy++) {
-                     for (let dx = 0; dx < cols; dx++) {
-                       CANOPY_COVERED_TILES.add(canopyTileKey(mxScan + dx, myScan + dy));
-                     }
-                   }
-                 }
                }
             }
           }

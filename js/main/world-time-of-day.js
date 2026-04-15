@@ -97,18 +97,23 @@ export function tickDayCycleTintSmooth(dt, worldHoursWrapped) {
   const phase = getDayPhaseFromHours(worldHoursWrapped);
   if (phase !== _tintLastPhase) {
     _tintLastPhase = phase;
-    _tintFrom = { ..._tintDisplay };
-    _tintTo = getDayCycleTintRgbForBlend(phase);
+    // Mutate in-place: evita alocação de 2 objetos por transição. Preserva shape.
+    _tintFrom.r = _tintDisplay.r;
+    _tintFrom.g = _tintDisplay.g;
+    _tintFrom.b = _tintDisplay.b;
+    const to = getDayCycleTintRgbForBlend(phase);
+    _tintTo.r = to.r;
+    _tintTo.g = to.g;
+    _tintTo.b = to.b;
     _tintElapsedSec = 0;
   }
   const d = Math.max(0, dt);
   _tintElapsedSec += d;
   const w = Math.min(1, _tintElapsedSec / DAY_CYCLE_TINT_BLEND_SEC);
-  _tintDisplay = {
-    r: lerpChannel(_tintFrom.r, _tintTo.r, w),
-    g: lerpChannel(_tintFrom.g, _tintTo.g, w),
-    b: lerpChannel(_tintFrom.b, _tintTo.b, w)
-  };
+  // Mutate in-place: antes alocava novo object toda frame (60 allocs/s eliminados).
+  _tintDisplay.r = lerpChannel(_tintFrom.r, _tintTo.r, w);
+  _tintDisplay.g = lerpChannel(_tintFrom.g, _tintTo.g, w);
+  _tintDisplay.b = lerpChannel(_tintFrom.b, _tintTo.b, w);
 }
 
 /**
