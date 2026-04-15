@@ -346,39 +346,75 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
     ctx.fill();
-  } else if (p.type === 'fieldSlashArc') {
-    const u = 1 - a;
-    const baseAngle = Number(p.arcAngle) || 0;
-    const span = Math.max(0.2, Number(p.arcSpan) || Math.PI * 0.9);
-    const rr = Math.max(0.25, Number(p.arcRadius) || 0.9);
-    const w = Math.max(1.8, (Number(p.arcWidth) || 0.08) * Math.min(tileW, tileH));
-    const start = baseAngle - span * 0.5 + span * 0.2 * u;
-    const end = baseAngle + span * 0.5 + span * 0.18 * u;
-    const rPx = rr * Math.min(tileW, tileH);
-    const variant = String(p.arcVariant || 'slash');
-    const glow =
-      variant === 'psychic'
-        ? 'rgba(212,126,255,0.78)'
-        : variant === 'vine'
-          ? 'rgba(124,245,132,0.72)'
-          : 'rgba(188,223,255,0.72)';
-    const core =
-      variant === 'psychic'
-        ? '#ffd9ff'
-        : variant === 'vine'
-          ? '#e5ffe7'
-          : '#ffffff';
+  } else if (p.type === 'fieldCutVineArc') {
+    const t = 1 - a;
+    const ease = 1 - (1 - t) * (1 - t);
+    const arcRad = ((Number(p.arcDeg) || 120) * Math.PI) / 180;
+    const half = arcRad * 0.5;
+    const r = Math.max(tileW * 0.55, (Number(p.radiusTiles) || 1.55) * Math.min(tileW, tileH));
+    const heading = Number(p.headingRad) || 0;
+    const swayBase = Math.max(0.02, 0.16 * (1 - ease * 0.58));
     ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineWidth = w * 2.15;
-    ctx.strokeStyle = glow;
+    ctx.translate(px, py);
+    ctx.rotate(heading);
+    for (let strand = 0; strand < 3; strand++) {
+      const strandOff = (strand - 1) * tileH * 0.03;
+      const links = 12;
+      ctx.beginPath();
+      for (let i = 0; i < links; i++) {
+        const u = i / (links - 1);
+        const theta = -half + arcRad * u;
+        const pendulum = Math.sin(performance.now() * 0.016 + u * 8.8 + strand * 1.4) * swayBase;
+        const rr = r * (0.33 + 0.67 * u);
+        const x = Math.cos(theta + pendulum) * rr;
+        const y = Math.sin(theta + pendulum) * rr + strandOff;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(132, 244, 118, ${0.45 + 0.48 * a})`;
+      ctx.lineWidth = Math.max(1.5, tileW * (0.072 - strand * 0.013));
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+    const outerR = r * (0.94 + ease * 0.16);
+    const innerR = outerR * 0.68;
+    const tipInset = half * 0.2;
     ctx.beginPath();
-    ctx.arc(px, py, rPx, start, end, false);
+    ctx.arc(0, 0, outerR, -half, half);
+    ctx.arc(0, 0, innerR, half - tipInset, -half + tipInset, true);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(186, 255, 162, ${0.2 + 0.35 * a})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(224, 255, 198, ${0.3 + 0.42 * a})`;
+    ctx.lineWidth = Math.max(1.1, tileW * 0.032);
     ctx.stroke();
-    ctx.lineWidth = w;
-    ctx.strokeStyle = core;
+    ctx.restore();
+  } else if (p.type === 'fieldCutPsychicArc' || p.type === 'fieldCutSlashArc') {
+    const psychic = p.type === 'fieldCutPsychicArc';
+    const t = 1 - a;
+    const ease = 1 - (1 - t) * (1 - t);
+    const arcRad = ((Number(p.arcDeg) || (psychic ? 120 : 108)) * Math.PI) / 180;
+    const half = arcRad * 0.5;
+    const r = Math.max(tileW * 0.52, (Number(p.radiusTiles) || (psychic ? 1.62 : 1.46)) * Math.min(tileW, tileH));
+    const heading = Number(p.headingRad) || 0;
+    const outerR = r * (0.9 + 0.2 * ease);
+    const innerR = outerR * (psychic ? 0.62 : 0.7);
+    const tipInset = half * (psychic ? 0.24 : 0.18);
+    const glow = psychic ? [255, 122, 220] : [240, 240, 255];
+    const core = psychic ? [255, 84, 190] : [255, 255, 255];
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(heading);
     ctx.beginPath();
-    ctx.arc(px, py, rPx, start, end, false);
+    ctx.arc(0, 0, outerR, -half, half);
+    ctx.arc(0, 0, innerR, half - tipInset, -half + tipInset, true);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${glow[0]}, ${glow[1]}, ${glow[2]}, ${0.24 + 0.36 * a})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${core[0]}, ${core[1]}, ${core[2]}, ${0.36 + 0.52 * a})`;
+    ctx.lineWidth = Math.max(1.3, tileW * (psychic ? 0.05 : 0.038));
+    ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
   } else {

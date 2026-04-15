@@ -61,6 +61,10 @@ function bumpPlayerMoveCastVisual(sourceEntity) {
 
 export const activeProjectiles = [];
 export const activeParticles = [];
+/** Front cut sweep angle in degrees (requested configurable constant). */
+export const FIELD_CUT_VINE_ARC_DEG = 120;
+/** Psychic slash arc angle in degrees (can be tuned independently). */
+export const FIELD_CUT_PSYCHIC_ARC_DEG = 120;
 
 let playerEmberCooldown = 0;
 let playerWaterCooldown = 0;
@@ -94,6 +98,51 @@ function pushParticle(p) {
   activeParticles.push(p);
 }
 
+function pushFieldCutArcParticle(type, centerX, centerY, headingRad, opts = {}) {
+  const life = Math.max(0.12, Number(opts.lifeSec) || 0.3);
+  pushParticle({
+    type,
+    x: Number(centerX) || 0,
+    y: Number(centerY) || 0,
+    z: Math.max(0, Number(opts.z) || 0.08),
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    life,
+    maxLife: life,
+    headingRad: Number(headingRad) || 0,
+    arcDeg: Math.max(30, Number(opts.arcDeg) || 120),
+    radiusTiles: Math.max(0.3, Number(opts.radiusTiles) || 1.25)
+  });
+}
+
+export function spawnFieldCutVineSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutVineArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG,
+    radiusTiles: opts.radiusTiles ?? 1.55,
+    lifeSec: opts.lifeSec ?? 0.36
+  });
+}
+
+export function spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutPsychicArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG,
+    radiusTiles: opts.radiusTiles ?? 1.62,
+    lifeSec: opts.lifeSec ?? 0.34
+  });
+}
+
+export function spawnFieldCutSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutSlashArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? 108,
+    radiusTiles: opts.radiusTiles ?? 1.46,
+    lifeSec: opts.lifeSec ?? 0.28
+  });
+}
+
 /**
  * Burst FX at the given world tile coords (sub-tile ok — matches projectile impact, not snapped to cell center).
  * `effectZ` is world height (tiles).
@@ -117,102 +166,6 @@ export function spawnHitParticles(x, y, effectZ) {
       vz: 4 + Math.random() * 3,
       life,
       maxLife: 0.56
-    });
-  }
-}
-
-/**
- * Field-skill slash arc feedback (used by Cut variants).
- * @param {number} x
- * @param {number} y
- * @param {number} dirX
- * @param {number} dirY
- * @param {{
- *   variant?: 'slash' | 'vine' | 'psychic',
- *   radius?: number,
- *   spanRad?: number,
- *   z?: number
- * }} [opts]
- */
-export function spawnFieldSlashArcFx(x, y, dirX, dirY, opts = {}) {
-  const vx = Number(dirX);
-  const vy = Number(dirY);
-  const len = Math.hypot(vx, vy) || 1;
-  const nx = vx / len;
-  const ny = vy / len;
-  const variant = opts.variant || 'slash';
-  const radius = Math.max(0.35, Number(opts.radius) || 0.9);
-  const spanRad = Math.max(0.6, Number(opts.spanRad) || Math.PI * 0.9);
-  // Keep field slash arcs grounded and readable (do not lift with airborne sprite z).
-  const z = 0.06;
-  const baseAngle = Math.atan2(ny, nx);
-  const dirJitter = (Math.random() - 0.5) * 0.2;
-  pushParticle({
-    type: 'fieldSlashArc',
-    x,
-    y,
-    vx: 0,
-    vy: 0,
-    z,
-    vz: 0,
-    life: 0.38,
-    maxLife: 0.38,
-    arcAngle: baseAngle + dirJitter,
-    arcSpan: spanRad,
-    arcRadius: radius,
-    arcWidth: variant === 'psychic' ? 0.135 : 0.12,
-    arcVariant: variant
-  });
-  // Secondary mirrored arc to make the cut shape unmistakable.
-  pushParticle({
-    type: 'fieldSlashArc',
-    x,
-    y,
-    vx: 0,
-    vy: 0,
-    z,
-    vz: 0,
-    life: 0.32,
-    maxLife: 0.32,
-    arcAngle: baseAngle + Math.PI + dirJitter * 0.35,
-    arcSpan: spanRad * 0.58,
-    arcRadius: radius * 0.64,
-    arcWidth: variant === 'psychic' ? 0.105 : 0.095,
-    arcVariant: variant
-  });
-  if (variant === 'psychic') {
-    pushParticle({
-      type: 'fieldSlashArc',
-      x,
-      y,
-      vx: 0,
-      vy: 0,
-      z,
-      vz: 0,
-      life: 0.44,
-      maxLife: 0.44,
-      arcAngle: baseAngle + dirJitter + 0.15,
-      arcSpan: spanRad * 0.72,
-      arcRadius: radius * 1.16,
-      arcWidth: 0.11,
-      arcVariant: variant
-    });
-  }
-  // Tiny spark cloud so you always get particle confirmation, even if arc timing is missed.
-  const sparkCount = variant === 'psychic' ? 9 : 6;
-  for (let i = 0; i < sparkCount; i++) {
-    const a = baseAngle + (Math.random() - 0.5) * spanRad;
-    const rr = radius * (0.35 + Math.random() * 0.7);
-    pushParticle({
-      type: variant === 'psychic' ? 'psyTrail' : variant === 'vine' ? 'powderTrail' : 'burst',
-      x: x + Math.cos(a) * rr * 0.35,
-      y: y + Math.sin(a) * rr * 0.3,
-      vx: Math.cos(a) * (0.8 + Math.random() * 1.6),
-      vy: Math.sin(a) * (0.8 + Math.random() * 1.6),
-      z: z + 0.02 + Math.random() * 0.06,
-      vz: 0.25 + Math.random() * 0.35,
-      life: 0.24 + Math.random() * 0.2,
-      maxLife: 0.24 + Math.random() * 0.2
     });
   }
 }
@@ -816,6 +769,9 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     }
     if (p.type === 'grassFire') {
       p.z = 0.08;
+      continue;
+    }
+    if (p.type === 'fieldCutVineArc' || p.type === 'fieldCutPsychicArc' || p.type === 'fieldCutSlashArc') {
       continue;
     }
     p.x += p.vx * dt;

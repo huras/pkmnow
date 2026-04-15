@@ -432,6 +432,27 @@ body.play-mode-active .character-selector.character-selector--minimal .play-poin
   color: rgba(255, 255, 255, 0.72);
 }
 
+.player-field-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 187, 255, 0.36);
+  background: rgba(24, 44, 68, 0.42);
+  color: rgba(221, 238, 255, 0.9);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#player-field-skill-label {
+  color: #fff4bb;
+}
+
 .player-moves-list {
   display: flex;
   flex-wrap: wrap;

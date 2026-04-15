@@ -4,7 +4,9 @@ import {
   castMoveById,
   castMoveChargedById,
   castUltimate,
-  spawnFieldSlashArcFx,
+  spawnFieldCutPsychicSlashFx,
+  spawnFieldCutSlashFx,
+  spawnFieldCutVineSlashFx,
   tryCastPlayerFlamethrowerStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
   tryReleasePlayerPsybeam
@@ -14,8 +16,6 @@ import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './pl
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
 import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
-import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
-import { imageCache } from '../image-cache.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
@@ -23,8 +23,13 @@ const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
 const FIELD_SKILL_STRENGTH_RADIUS = 1.9;
-const PLAYER_PHYSICS_COLLIDER_RADIUS_TILES = 0.32;
 const FIELD_SKILLS = ['tackle', 'cut', 'strength'];
+const FIELD_SKILL_STORAGE_KEY = 'pkmn_field_skill_by_dex';
+const FIELD_SKILL_LABEL = {
+  tackle: 'Tackle',
+  cut: 'Cut',
+  strength: 'Strength'
+};
 
 function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
   setPlayerFacingFromWorldAimDelta(player, tx - sx, ty - sy);
@@ -47,11 +52,84 @@ let fieldSkillWheelOpen = false;
 let fieldSkillWheelHoverIndex = 0;
 /** @type {HTMLDivElement | null} */
 let fieldSkillWheelRoot = null;
+/** @type {Record<string, 'tackle' | 'cut' | 'strength'>} */
+let fieldSkillByDex = loadStoredFieldSkillByDex();
 
-function fieldSkillLabelById(skillId) {
-  if (skillId === 'cut') return 'Cut';
-  if (skillId === 'strength') return 'Strength';
-  return 'Tackle';
+function normalizeFieldSkillId(skillId) {
+  return FIELD_SKILLS.includes(String(skillId)) ? String(skillId) : 'tackle';
+}
+
+function loadStoredFieldSkillByDex() {
+  try {
+    const raw = localStorage.getItem(FIELD_SKILL_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    /** @type {Record<string, 'tackle' | 'cut' | 'strength'>} */
+    const out = {};
+    for (const [dexKey, skillId] of Object.entries(parsed)) {
+      const dex = Math.floor(Number(dexKey) || 0);
+      if (dex < 1 || dex > 151) continue;
+      const norm = normalizeFieldSkillId(skillId);
+      out[String(dex)] = /** @type {'tackle' | 'cut' | 'strength'} */ (norm);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredFieldSkillByDex() {
+  try {
+    localStorage.setItem(FIELD_SKILL_STORAGE_KEY, JSON.stringify(fieldSkillByDex));
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.).
+  }
+}
+
+function dispatchFieldSkillChange(dexId, skillId) {
+  window.dispatchEvent(
+    new CustomEvent('play-field-skill-change', {
+      detail: {
+        dexId: Math.floor(Number(dexId) || 0),
+        skillId: normalizeFieldSkillId(skillId)
+      }
+    })
+  );
+}
+
+function persistSelectedFieldSkillForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  if (dex < 1 || dex > 151) return;
+  fieldSkillByDex[String(dex)] = /** @type {'tackle' | 'cut' | 'strength'} */ (normalizeFieldSkillId(selectedFieldSkillId));
+  saveStoredFieldSkillByDex();
+}
+
+function setSelectedFieldSkill(skillId, dexId, persist = false) {
+  selectedFieldSkillId = normalizeFieldSkillId(skillId);
+  fieldSkillWheelHoverIndex = Math.max(0, FIELD_SKILLS.indexOf(selectedFieldSkillId));
+  if (persist) persistSelectedFieldSkillForDex(dexId);
+  syncFieldSkillWheelDom();
+  if (Number.isFinite(Number(dexId))) {
+    dispatchFieldSkillChange(dexId, selectedFieldSkillId);
+  }
+}
+
+export function getFieldSkillLabel(skillId) {
+  const norm = normalizeFieldSkillId(skillId);
+  return FIELD_SKILL_LABEL[norm] || 'Tackle';
+}
+
+export function getSelectedFieldSkillForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  if (dex < 1 || dex > 151) return 'tackle';
+  return normalizeFieldSkillId(fieldSkillByDex[String(dex)] || 'tackle');
+}
+
+export function syncSelectedFieldSkillForDex(dexId) {
+  const dex = Math.floor(Number(dexId) || 0);
+  setSelectedFieldSkill(getSelectedFieldSkillForDex(dex), dex, false);
+  return selectedFieldSkillId;
 }
 
 function ensureFieldSkillWheelDom() {
@@ -62,7 +140,7 @@ function ensureFieldSkillWheelDom() {
   root.setAttribute('aria-hidden', 'true');
   root.innerHTML = `
     <div class="play-field-skill-wheel__ring">
-      <div class="play-field-skill-wheel__hint">Hold 1 · release to cast</div>
+      <div class="play-field-skill-wheel__hint">Hold 1 · release to select</div>
       <button type="button" class="play-field-skill-wheel__item" data-skill="tackle">Tackle</button>
       <button type="button" class="play-field-skill-wheel__item" data-skill="cut">Cut</button>
       <button type="button" class="play-field-skill-wheel__item" data-skill="strength">Strength</button>
@@ -121,24 +199,16 @@ function castPlayerCut(player, data) {
   const ny = Number(player.tackleDirNy) || 1;
   const styleId = resolveCutStyleForDex(player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
+  const headingRad = Math.atan2(ny, nx || 1e-6);
   const centerX = (player.x ?? sx) + nx * FIELD_SKILL_CUT_CENTER_OFFSET;
   const centerY = (player.y ?? sy) + ny * FIELD_SKILL_CUT_CENTER_OFFSET;
-  const feet = worldFeetFromPivotCell(
-    Number(player.x ?? sx - 0.5),
-    Number(player.y ?? sy - 0.5),
-    imageCache,
-    player.dexId ?? 1,
-    Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4
-  );
-  // Anchor slash arc to the bottom of the physics collider (feet line + collider radius).
-  const arcOriginX = feet.x + nx * FIELD_SKILL_CUT_CENTER_OFFSET;
-  const arcOriginY = feet.y + PLAYER_PHYSICS_COLLIDER_RADIUS_TILES + ny * FIELD_SKILL_CUT_CENTER_OFFSET;
-  spawnFieldSlashArcFx(arcOriginX, arcOriginY, nx, ny, {
-    variant: styleId,
-    radius: profile.radius * 0.86,
-    spanRad: styleId === 'psychic' ? Math.PI * 1.08 : Math.PI * 0.9,
-    z: Number(player.z) || 0
-  });
+  if (styleId === 'vine') {
+    spawnFieldCutVineSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+  } else if (styleId === 'psychic') {
+    spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+  } else {
+    spawnFieldCutSlashFx(centerX, centerY, headingRad, { radiusTiles: profile.radius });
+  }
   tryPlayerCutHitWildCircle(player, data, centerX, centerY, profile.radius, {
     damage: profile.damage,
     knockback: profile.knockback
@@ -228,23 +298,18 @@ export function handleFieldSkillHotkeyDown(code) {
 }
 
 export function handleFieldSkillHotkeyUp(code, player, data) {
+  void data;
   if (code !== 'Digit1') return false;
   if (!fieldSkillWheelArmed && !fieldSkillWheelOpen) return false;
+  const dex = Math.floor(Number(player?.dexId) || 0);
   if (fieldSkillWheelOpen) {
-    selectedFieldSkillId = FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId;
+    setSelectedFieldSkill(FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId, dex, true);
+  } else if (dex >= 1) {
+    setSelectedFieldSkill(selectedFieldSkillId, dex, true);
   }
-  castSelectedFieldSkill(player, data ?? null);
   fieldSkillWheelArmed = false;
   closeFieldSkillWheel();
   return true;
-}
-
-export function getSelectedFieldSkillId() {
-  return selectedFieldSkillId;
-}
-
-export function getSelectedFieldSkillLabel() {
-  return fieldSkillLabelById(selectedFieldSkillId);
 }
 
 function isHoldStreamMoveId(moveId) {
@@ -404,16 +469,7 @@ export function installPlayPointerCombat(deps) {
       if (leftShiftAtDown || shUp) {
         castMoveById(slots.leftShift, sx, sy, tx, ty, player);
       } else {
-        const hasMoveInput = Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4;
-        if (hasMoveInput) {
-          // Movement input: keep tackle aligned with current facing.
-          triggerPlayerLmbAttack(player);
-        } else {
-          // Idle: mouse-guided tackle, free vector (not 8-way quantized).
-          triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-        }
-        tryPlayerTackleHitWild(player, getCurrentData?.() ?? null);
-        tryBreakCrystalOnPlayerTackle(player, getCurrentData?.() ?? null);
+        castSelectedFieldSkill(player, getCurrentData?.() ?? null);
       }
       playInputState.chargeLeft01 = 0;
     }

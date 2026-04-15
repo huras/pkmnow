@@ -12,8 +12,12 @@ import {
   getPlayerMoveCooldownRemaining,
   getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
-import { getSelectedFieldSkillId, getSelectedFieldSkillLabel } from '../main/play-mouse-combat.js';
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
+import {
+  getFieldSkillLabel,
+  getSelectedFieldSkillForDex,
+  syncSelectedFieldSkillForDex
+} from '../main/play-mouse-combat.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -65,6 +69,10 @@ export class CharacterSelector {
     this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
     this.allSpecies = [];
     this.isOpen = false;
+    this._onFieldSkillChange = (ev) => {
+      const dex = Math.floor(Number(ev?.detail?.dexId) || 0);
+      if (dex === (player.dexId ?? 0)) this.updateFieldSkillDisplay();
+    };
     /** @type {'full' | 'minimal'} */
     this.layoutMode =
       localStorage.getItem(LAYOUT_STORAGE_KEY) === 'minimal' ? 'minimal' : 'full';
@@ -88,6 +96,7 @@ export class CharacterSelector {
     this.attachEvents();
     this.applyLayoutMode();
     this.applyPlayImmersiveChrome();
+    syncSelectedFieldSkillForDex(player.dexId);
     this.updatePreview().catch(() => {});
   }
 
@@ -208,7 +217,6 @@ export class CharacterSelector {
 
   /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
   updatePlayMovesCooldownHud() {
-    this.updatePlayFieldSkillHud();
     const movesEl = this.container?.querySelector('#current-player-moves');
     if (!movesEl) return;
     for (const slot of movesEl.querySelectorAll('.move-slot[data-move-id]')) {
@@ -229,15 +237,6 @@ export class CharacterSelector {
         slot.classList.add('move-slot--on-cd');
       }
     }
-  }
-
-  updatePlayFieldSkillHud() {
-    const valEl = this.container?.querySelector('#current-player-field-skill');
-    if (!valEl) return;
-    const id = getSelectedFieldSkillId();
-    const label = getSelectedFieldSkillLabel();
-    valEl.textContent = label;
-    valEl.setAttribute('data-skill-id', id);
   }
 
   render() {
@@ -306,12 +305,11 @@ export class CharacterSelector {
 
         <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
           <div class="player-moves-title">Moves</div>
-          <div class="player-field-skill" title="Current left-click field skill from the 1-key wheel">
-            <span class="player-field-skill__label">LMB Field Skill</span>
-            <span class="player-field-skill__value" id="current-player-field-skill" data-skill-id="tackle">Tackle</span>
+          <div class="player-field-skill-chip" id="player-field-skill-chip" title="Left click field skill">
+            LMB: <span id="player-field-skill-label">Tackle</span>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = field skill (hold 1 wheel) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · ranged hotkeys: 2–0 and -</div>
+          <div class="player-moves-help">LMB = field skill (hold 1: tackle/cut/strength) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div
@@ -394,6 +392,14 @@ export class CharacterSelector {
         this.setPlayImmersiveChrome(!this.playImmersiveChrome);
       });
     }
+    window.addEventListener('play-field-skill-change', this._onFieldSkillChange);
+  }
+
+  updateFieldSkillDisplay() {
+    const labelEl = this.container?.querySelector('#player-field-skill-label');
+    if (!labelEl) return;
+    const skillId = getSelectedFieldSkillForDex(player.dexId);
+    labelEl.textContent = getFieldSkillLabel(skillId);
   }
 
   syncPlayPointerModeRadios() {
@@ -475,6 +481,7 @@ export class CharacterSelector {
   async selectSpecies(id) {
     // 1. Update player data
     setPlayerSpecies(id);
+    syncSelectedFieldSkillForDex(id);
     
     // 2. Clear focus/search
     this.container.querySelector('#species-search')?.blur();
@@ -524,7 +531,7 @@ export class CharacterSelector {
           const hk = hotkeys[i] || '—';
           const title =
             i === 0
-              ? `${getMoveLabel(m)} — golpes: teclas 1–0 e - no play; LMB só animação de ataque`
+              ? `${getMoveLabel(m)} — teclas 2–0 e - no play; LMB usa field skill (hold 1: tackle/cut/strength)`
               : `${getMoveLabel(m)} (${hk})`;
           return slotHtml(m, hk, title);
         })
@@ -539,7 +546,7 @@ export class CharacterSelector {
         });
       }
     }
-    this.updatePlayFieldSkillHud();
+    this.updateFieldSkillDisplay();
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');
     if (!portraitEl) {

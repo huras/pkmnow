@@ -328,6 +328,79 @@ button.btn-secondary:hover {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
+.play-field-skill-wheel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 55;
+  pointer-events: none;
+}
+
+.play-field-skill-wheel__ring {
+  width: 230px;
+  height: 230px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: radial-gradient(circle at center, rgba(10, 12, 18, 0.88) 0%, rgba(8, 9, 13, 0.78) 64%, rgba(8, 9, 13, 0.48) 100%);
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.play-field-skill-wheel__hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #bdd9ff;
+  font-size: 0.73rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.84;
+  white-space: nowrap;
+}
+
+.play-field-skill-wheel__item {
+  position: absolute;
+  width: 86px;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(154, 216, 255, 0.28);
+  background: rgba(21, 31, 48, 0.82);
+  color: #d4ecff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.44);
+}
+
+.play-field-skill-wheel__item[data-skill="tackle"] {
+  left: 50%;
+  top: 18%;
+}
+
+.play-field-skill-wheel__item[data-skill="cut"] {
+  left: 20%;
+  top: 70%;
+}
+
+.play-field-skill-wheel__item[data-skill="strength"] {
+  left: 80%;
+  top: 70%;
+}
+
+.play-field-skill-wheel__item.is-hover {
+  border-color: rgba(255, 236, 144, 0.96);
+  box-shadow: 0 0 0 2px rgba(255, 236, 144, 0.3), 0 8px 18px rgba(0, 0, 0, 0.45);
+  color: #fff7cb;
+}
+
+.play-field-skill-wheel__item.is-selected {
+  background: rgba(22, 62, 102, 0.88);
+  border-color: rgba(111, 189, 255, 0.96);
+}
+
 .minimap-panel__music-btn:hover {
   background: rgba(154, 216, 255, 0.12);
   border-color: rgba(154, 216, 255, 0.28);
