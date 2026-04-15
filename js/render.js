@@ -2060,6 +2060,16 @@ export function render(canvas, data, options = {}) {
         if (item.type === 'player' || item.type === 'wild') {
           drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
           drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx);
+        } else if (item.type === 'crystalDrop') {
+          const d = item.drop;
+          const r = Math.max(0.05, Number(d.pickRadius) || 0.5);
+          ctx.strokeStyle = 'rgba(140, 245, 255, 0.95)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(snapPx(d.x * tileW), snapPx(d.y * tileH), Math.max(1, r * tileW), Math.max(1, r * tileH), 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(170, 255, 255, 0.3)';
+          ctx.fill();
         } else if (item.type === 'scatter' || item.type === 'tree') {
           ctx.fillStyle = 'rgba(255, 80, 255, 0.65)';
           ctx.fillRect(item.originX * tileW + tileW / 2 - 3, (item.y + 0.1) * tileH - 3, 6, 6);

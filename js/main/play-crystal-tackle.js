@@ -20,6 +20,8 @@ const TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
 const TACKLE_SWEEP_RADIUS_TILES = 0.32;
 /** Sampling only drives candidate origin lookup window; collision is exact segment-vs-circle. */
 const TACKLE_ORIGIN_SCAN_STEP_TILES = 0.2;
+/** Ground pickup radius for dropped crystal items (tiles). */
+const CRYSTAL_DROP_PICK_RADIUS_TILES = 0.85;
 /** Spawned "small crystal" chunks that remain on ground after a large crystal breaks. */
 export const activeSpawnedSmallCrystals = [];
 /** Pickable drops created after breaking a small crystal chunk. */
@@ -139,7 +141,7 @@ function spawnPickableCrystalDropAt(x, y, itemKey) {
     id: crystalDynIdSeq++,
     x,
     y,
-    pickRadius: 0.5,
+    pickRadius: CRYSTAL_DROP_PICK_RADIUS_TILES,
     age: 0,
     bobSeed: seededHash(Math.floor(x * 10), Math.floor(y * 10), 13291),
     ...visual
@@ -203,18 +205,15 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
   const ey = py + ny * probeReach;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
-  let hit = null;
-  let bestT = Infinity;
+  /** @type {Array<any>} */
+  const hits = [];
   const steps = Math.max(2, Math.ceil(probeReach / TACKLE_ORIGIN_SCAN_STEP_TILES));
   const sampledOriginKeys = new Set();
   const originMemo = new Map();
   for (const sc of activeSpawnedSmallCrystals) {
     const ht = segmentCircleFirstHitT(px, py, ex, ey, sc.x, sc.y, Math.max(0.01, sc.radius + TACKLE_SWEEP_RADIUS_TILES));
     if (ht == null) continue;
-    if (ht < bestT) {
-      bestT = ht;
-      hit = { type: 'spawnedSmall', id: sc.id, itemKey: sc.itemKey, x: sc.x, y: sc.y };
-    }
+    hits.push({ type: 'spawnedSmall', id: sc.id, itemKey: sc.itemKey, x: sc.x, y: sc.y, t: ht });
   }
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -233,38 +232,45 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
         const rr = Math.max(0.01, p.radius + TACKLE_SWEEP_RADIUS_TILES);
         const ht = segmentCircleFirstHitT(px, py, ex, ey, p.cx, p.cy, rr);
         if (ht == null) continue;
-        if (ht < bestT) {
-          bestT = ht;
-          hit = { type: 'worldCrystal', rootOx: ox, rootOy: oy, itemKey: String(p.itemKey), cx: p.cx, cy: p.cy };
-        }
+        hits.push({ type: 'worldCrystal', rootOx: ox, rootOy: oy, itemKey: String(p.itemKey), cx: p.cx, cy: p.cy, t: ht });
       }
     }
   }
-  if (!hit) return;
+  if (hits.length === 0) return;
+  hits.sort((a, b) => a.t - b.t);
+  const consumedSpawned = new Set();
+  const consumedWorld = new Set();
 
-  if (hit.type === 'spawnedSmall') {
-    const idx = activeSpawnedSmallCrystals.findIndex((c) => c.id === hit.id);
-    if (idx >= 0) {
+  for (const hit of hits) {
+    if (hit.type === 'spawnedSmall') {
+      if (consumedSpawned.has(hit.id)) continue;
+      consumedSpawned.add(hit.id);
+      const idx = activeSpawnedSmallCrystals.findIndex((c) => c.id === hit.id);
+      if (idx < 0) continue;
       const c = activeSpawnedSmallCrystals[idx];
       activeSpawnedSmallCrystals.splice(idx, 1);
       spawnPickableCrystalDropAt(c.x, c.y, c.itemKey);
       spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
+      continue;
     }
-    return;
-  }
 
-  const objSet = OBJECT_SETS[hit.itemKey];
-  const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
+    const worldKey = `${hit.rootOx},${hit.rootOy}`;
+    if (consumedWorld.has(worldKey)) continue;
+    consumedWorld.add(worldKey);
+    if (isPlayCrystalScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
+    const objSet = OBJECT_SETS[hit.itemKey];
+    const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
 
-  registerDestroyedCrystalOrigin(hit.rootOx, hit.rootOy);
-  invalidateChunksOverlappingFootprint(hit.rootOx, hit.rootOy, shape.cols, shape.rows);
-  const isLargeCrystal = shape.cols >= 2 && shape.rows >= 2;
-  if (isLargeCrystal) {
-    spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
-  } else {
-    spawnPickableCrystalDropAt(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, hit.itemKey);
+    registerDestroyedCrystalOrigin(hit.rootOx, hit.rootOy);
+    invalidateChunksOverlappingFootprint(hit.rootOx, hit.rootOy, shape.cols, shape.rows);
+    const isLargeCrystal = shape.cols >= 2 && shape.rows >= 2;
+    if (isLargeCrystal) {
+      spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
+    } else {
+      spawnPickableCrystalDropAt(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, hit.itemKey);
+    }
+    spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
   }
-  spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
 }
 
 /**

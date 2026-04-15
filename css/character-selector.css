@@ -162,7 +162,6 @@
 
 .app--play-immersive #character-selector-container .character-selector .player-alt-compact,
 .app--play-immersive #character-selector-container .character-selector .play-pointer-mode-bar,
-.app--play-immersive #character-selector-container .character-selector #player-moves-box,
 .app--play-immersive #character-selector-container .character-selector #character-social-numpad,
 .app--play-immersive #character-selector-container .character-selector .search-container,
 .app--play-immersive #character-selector-container .character-selector .character-selector__layout-toggle {
@@ -179,6 +178,23 @@
 
 .app--play-immersive #character-selector-container .character-selector .selector-header {
   gap: 8px;
+}
+
+/* In immersive mode, keep move slots visible right under the header in a compact row. */
+.app--play-immersive #character-selector-container .character-selector #player-moves-box {
+  display: flex;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: none;
+}
+
+.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-title,
+.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-help {
+  display: none;
+}
+
+.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-list--slots {
+  min-height: 0;
 }
 
 .player-preview-pill {
