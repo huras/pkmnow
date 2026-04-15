@@ -1,5 +1,6 @@
 const LS_BGM = 'pkmn_mix_bgm_01';
 const LS_CRIES = 'pkmn_mix_cries_01';
+const LS_BGM_TRACK_TOAST_SUPPRESS = 'pkmn_bgm_track_toast_suppress';
 
 function clamp01(x) {
   const n = Number(x);
@@ -25,4 +26,14 @@ export function getCriesMix01() {
 /** @param {number} v linear 0–1 */
 export function setCriesMix01(v) {
   localStorage.setItem(LS_CRIES, String(clamp01(v)));
+}
+
+/** When true, immersive play mode skips the floating toast when the BGM track changes. */
+export function isBgmTrackChangeToastSuppressed() {
+  return localStorage.getItem(LS_BGM_TRACK_TOAST_SUPPRESS) === '1';
+}
+
+/** @param {boolean} suppress */
+export function setBgmTrackChangeToastSuppressed(suppress) {
+  localStorage.setItem(LS_BGM_TRACK_TOAST_SUPPRESS, suppress ? '1' : '0');
 }

@@ -83,6 +83,7 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   const faint = `tilesets/pokemon/${id}_faint.png`;
   const charge = `tilesets/pokemon/${id}_charge.png`;
   const shoot = `tilesets/pokemon/${id}_shoot.png`;
+  const attack = `tilesets/pokemon/${id}_attack.png`;
   const tasks = [
     loadOne(imageCache, walk, FALLBACK_WALK),
     loadOne(imageCache, idle, FALLBACK_IDLE)
@@ -105,6 +106,9 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   if (speciesHasDedicatedSliceMeta(dexId, 'shoot')) {
     tasks.push(loadOptionalSheet(imageCache, shoot));
   }
+  if (speciesHasDedicatedSliceMeta(dexId, 'attack')) {
+    tasks.push(loadOptionalSheet(imageCache, attack));
+  }
   return Promise.all(tasks);
 }
 
@@ -120,6 +124,7 @@ export function getPokemonSheetPaths(dexId) {
     faint: `tilesets/pokemon/${id}_faint.png`,
     charge: `tilesets/pokemon/${id}_charge.png`,
     shoot: `tilesets/pokemon/${id}_shoot.png`,
+    attack: `tilesets/pokemon/${id}_attack.png`,
     fallbackWalk: FALLBACK_WALK,
     fallbackIdle: FALLBACK_IDLE
   };
@@ -128,10 +133,11 @@ export function getPokemonSheetPaths(dexId) {
 /**
  * @param {Map<string, HTMLImageElement>} imageCache
  * @param {number} dexId
- * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined, charge?: HTMLImageElement | undefined, shoot?: HTMLImageElement | undefined }}
+ * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined, charge?: HTMLImageElement | undefined, shoot?: HTMLImageElement | undefined, attack?: HTMLImageElement | undefined }}
  */
 export function getResolvedSheets(imageCache, dexId) {
-  const { walk, idle, dig, hurt, sleep, faint, charge, shoot, fallbackWalk, fallbackIdle } = getPokemonSheetPaths(dexId);
+  const { walk, idle, dig, hurt, sleep, faint, charge, shoot, attack, fallbackWalk, fallbackIdle } =
+    getPokemonSheetPaths(dexId);
   const w = imageCache.get(walk) || imageCache.get(fallbackWalk);
   const useDedicatedDig = speciesHasDedicatedDigSheetMeta(dexId);
   const useDedicatedHurt = speciesHasDedicatedSliceMeta(dexId, 'hurt');
@@ -141,6 +147,8 @@ export function getResolvedSheets(imageCache, dexId) {
     speciesHasDedicatedSliceMeta(dexId, 'charge') && !!(imageCache.get(charge)?.naturalWidth || imageCache.get(charge)?.width);
   const useShootAsset =
     speciesHasDedicatedSliceMeta(dexId, 'shoot') && !!(imageCache.get(shoot)?.naturalWidth || imageCache.get(shoot)?.width);
+  const useAttackAsset =
+    speciesHasDedicatedSliceMeta(dexId, 'attack') && !!(imageCache.get(attack)?.naturalWidth || imageCache.get(attack)?.width);
   const idleSheet = imageCache.get(idle) || imageCache.get(fallbackIdle);
   const digSheet = useDedicatedDig ? imageCache.get(dig) || w : w;
   return {
@@ -163,6 +171,26 @@ export function getResolvedSheets(imageCache, dexId) {
     /** Optional `NNN_charge.png` when metadata + file exist. */
     charge: useChargeAsset ? imageCache.get(charge) : undefined,
     /** Optional `NNN_shoot.png` when metadata + file exist. */
-    shoot: useShootAsset ? imageCache.get(shoot) : undefined
+    shoot: useShootAsset ? imageCache.get(shoot) : undefined,
+    /** Optional `NNN_attack.png` when metadata + file exist. */
+    attack: useAttackAsset ? imageCache.get(attack) : undefined
   };
+}
+
+/**
+ * Which sheet + PMD slice name to draw for LMB “attack” (shoot → charge → walk).
+ * @param {number} dexId
+ * @param {Map<string, HTMLImageElement>} imageCache
+ * @param {{ walk?: HTMLImageElement, idle?: HTMLImageElement, charge?: HTMLImageElement, shoot?: HTMLImageElement, attack?: HTMLImageElement }} r from {@link getResolvedSheets}
+ * @returns {{ sheet: HTMLImageElement | undefined, slice: 'shoot' | 'charge' | 'walk' | 'attack' }}
+ */
+export function resolvePlayerLmbAttackSheetAndSlice(dexId, imageCache, r) {
+  const meta = getDexAnimMeta(dexId);
+  if (meta?.attack && speciesHasDedicatedSliceMeta(dexId, 'attack')) {
+    const sheet = r.attack;
+    if (sheet && (sheet.naturalWidth || sheet.width)) return { sheet, slice: 'attack' };
+  }
+  if (meta?.shoot && r.shoot) return { sheet: r.shoot, slice: 'shoot' };
+  if (meta?.charge && r.charge) return { sheet: r.charge, slice: 'charge' };
+  return { sheet: r.walk, slice: 'walk' };
 }

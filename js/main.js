@@ -29,6 +29,7 @@ import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
+import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { createPlaySocialOverlay } from './main/play-social-overlay.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
@@ -45,6 +46,7 @@ import {
 } from './render/play-camera-snapshot.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
+import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import {
   advanceWorldHours,
@@ -330,7 +332,9 @@ function syncPlayBgmNowPlayingPanel() {
     dismissPlayBgmToast();
   } else if (title !== '—' && title !== lastBgmToastTrackKey) {
     lastBgmToastTrackKey = title;
-    showPlayBgmTrackToast(title, statusText);
+    if (!isBgmTrackChangeToastSuppressed()) {
+      showPlayBgmTrackToast(title, statusText);
+    }
   }
 }
 
@@ -389,6 +393,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
+    playCharacterSelector?.updatePlayItemsHud();
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
     minimapAudioUi.syncMinimapAudioPopover();
@@ -412,7 +417,8 @@ registerPlayKeyboard({
 installPlayPointerCombat({
   canvas,
   getAppMode: () => appMode,
-  getPlayer: () => player
+  getPlayer: () => player,
+  getCurrentData: () => currentData
 });
 
 installPlayContextMenu({
@@ -544,6 +550,7 @@ canvas.addEventListener('mouseleave', () => {
 
 function enterPlayMode(gx, gy) {
   resetWildPokemonManager();
+  clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;
   appMode = 'play';
@@ -553,7 +560,7 @@ function enterPlayMode(gx, gy) {
   else minimap?.classList.remove('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB 1º golpe, RMB 2º golpe, Hold = Charged (Ember/água), Psybeam segure = orbe rosa pulsante e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys para testar todos os ports: 1 Ember · 2 Flamethrower · 3 Confusion · 4 Bubble · 5 Water Gun · 6 Psybeam · 7 Prismatic Laser · 8 Poison Sting · 9 Poison Powder · 0 Incinerate · - Silk Shoot. Social: Numpad 1-9 envia sinais com emoji para os selvagens próximos. Debug menu: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB = investida (sprite avança na direção do cursor; corpo fica no lugar) — se o tile à frente tiver cristal scatter, quebra em 4 estilhaços. RMB = 2º golpe do moveset, segure RMB = carregado (Ember/água etc.), Psybeam no 2º slot: segure RMB = orbe rosa e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys: 1 Ember · 2 Flamethrower · … · - Silk Shoot. Social: Numpad 1-9. Debug: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
@@ -582,6 +589,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   stopBiomeBgm();
+  clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
   appMode = 'map';
   btnExport?.classList.remove('hidden');
@@ -599,6 +607,7 @@ btnBackToMap?.addEventListener('click', () => {
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);
   playCharacterSelector?.clearPlayMovesCooldownHud();
+  playCharacterSelector?.clearPlayItemsHud();
   lastBgmUiSignature = '';
   lastBgmToastTrackKey = null;
   dismissPlayBgmToast();

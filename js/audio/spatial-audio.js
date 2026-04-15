@@ -78,9 +78,14 @@ export function wireSpatialMediaElement(audio) {
   const panner = ctx.createPanner();
   panner.panningModel = 'equalpower';
   panner.distanceModel = 'inverse';
-  panner.refDistance = 0.75;
-  panner.maxDistance = 890;
-  panner.rolloffFactor = 0.75;
+  /**
+   * Cry audibility tuning:
+   * - higher `refDistance` keeps near/mid cries louder before attenuation starts.
+   * - lower `rolloffFactor` slows spatial decay so distant cries remain audible.
+   */
+  panner.refDistance = 2.4;
+  panner.maxDistance = 1400;
+  panner.rolloffFactor = 0.24;
   panner.coneInnerAngle = 360;
   panner.coneOuterAngle = 360;
 

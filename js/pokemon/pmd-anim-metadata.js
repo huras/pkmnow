@@ -6439,7 +6439,7 @@ export function getDexAnimMeta(dexId) {
   return PMD_ANIM_METADATA[key] || null;
 }
 
-/** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'} kind */
+/** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'|'attack'} kind */
 export function getDexAnimSlice(dexId, kind) {
   const m = getDexAnimMeta(dexId);
   if (!m) return null;
@@ -6449,5 +6449,7 @@ export function getDexAnimSlice(dexId, kind) {
   if (kind === 'faint') return m.faint ?? m.idle ?? null;
   if (kind === 'charge') return m.charge ?? null;
   if (kind === 'shoot') return m.shoot ?? null;
+  /** LMB melee: dedicated `attack` in data, else shoot/charge/walk (every species has walk). */
+  if (kind === 'attack') return m.attack ?? m.shoot ?? m.charge ?? m.walk ?? m.idle ?? null;
   return m[kind] ?? null;
 }

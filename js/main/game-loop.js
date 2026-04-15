@@ -9,6 +9,7 @@ import {
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
 import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
+import { updateCrystalShardParticles, updateCrystalDropsAndPickup } from './play-crystal-tackle.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
@@ -109,6 +110,11 @@ export function createGameLoop(api) {
     const tUpdPlayer0 = performance.now();
     updatePlayer(dt, currentData);
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+
+    if (getAppMode() === 'play') {
+      updateCrystalShardParticles(dt);
+      updateCrystalDropsAndPickup(dt, player);
+    }
 
     if (currentData && getAppMode() === 'play') {
       const pvx = player.visualX ?? player.x;

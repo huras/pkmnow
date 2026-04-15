@@ -392,6 +392,29 @@ button.btn-secondary:hover {
   cursor: pointer;
 }
 
+.minimap-audio-popover__check-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.minimap-audio-popover__check-row input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: #9ad8ff;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.minimap-audio-popover__check-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: rgba(220, 226, 240, 0.95);
+  line-height: 1.35;
+  cursor: pointer;
+}
+
 .minimap-audio-popover__now {
   padding-top: 4px;
   margin-top: 2px;

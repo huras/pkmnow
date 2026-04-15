@@ -25,7 +25,7 @@ import { playInputState } from './main/play-input-state.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
-import { getDexAnimMeta } from './pokemon/pmd-anim-metadata.js';
+import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
@@ -72,6 +72,14 @@ const DIG_IDLE_ANIM_SPEED = 2.8;
 /** Ground dig (non-Ghost): hold Left Shift to fill charge, then latch burrow until leave ground / jump. */
 const DIG_CHARGE_SEC = 0.88;
 const DIG_CHARGE_DECAY = 2.2;
+/** Fixed real-time length for one tackle window (seconds). */
+const TACKLE_DURATION_SEC = 0.5;
+/** Tackle visual reach in tile units (sprite-only lunge; gameplay body stays in place). */
+const TACKLE_REACH_TILES = 2;
+/** Tackle lunge curve profile (`sin` = symmetric out/back, `easeOut` = snappier hit then settle). */
+const TACKLE_LUNGE_CURVE = 'sin';
+/** PMD-ish depth foreshortening for tackle sprite offset on world Y (visual only). */
+const TACKLE_VISUAL_DEPTH_Y_SCALE = 0.72;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 /** Default species when nothing valid is stored (Charmander). */
@@ -119,6 +127,18 @@ export const player = {
   poisonVisualSec: 0,
   /** Seconds remaining: play `shoot` PMD slice after a successful player cast (if asset exists). */
   moveShootAnimSec: 0,
+  /** Seconds remaining: LMB melee “attack” pose (shoot → charge → walk slice). */
+  lmbAttackAnimSec: 0,
+  /** Unit vector (world micro tiles) for tackle aim — logical position does not move. */
+  tackleDirNx: 0,
+  tackleDirNy: 1,
+  /** Duration (s) of the current LMB tackle window (for lunge easing). */
+  _tackleDurSec: 0,
+  /** Peak visual tackle reach in tile units (sprite only). */
+  _tackleReachTiles: TACKLE_REACH_TILES,
+  /** Visual lunge offset in tile units (sprite only; collision uses x,y). */
+  _tackleLungeDx: 0,
+  _tackleLungeDy: 0,
   /** Social emoji balloon rendered above the player. */
   socialEmotionType: null,
   socialEmotionAge: 0,
@@ -142,6 +162,14 @@ export function setPlayerSpecies(dexId) {
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
   player._chargeAnimTick = 0;
+  player.lmbAttackAnimSec = 0;
+  player._lmbAttackAnimTick = 0;
+  player.tackleDirNx = 0;
+  player.tackleDirNy = 1;
+  player._tackleDurSec = 0;
+  player._tackleReachTiles = TACKLE_REACH_TILES;
+  player._tackleLungeDx = 0;
+  player._tackleLungeDy = 0;
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
@@ -176,6 +204,14 @@ export function setPlayerPos(x, y) {
   player.socialEmotionPortraitSlug = null;
   player._flightIdleCycleSec = 0;
   player.flightGroundTetherVisible = false;
+  player.lmbAttackAnimSec = 0;
+  player._lmbAttackAnimTick = 0;
+  player.tackleDirNx = 0;
+  player.tackleDirNy = 1;
+  player._tackleDurSec = 0;
+  player._tackleReachTiles = TACKLE_REACH_TILES;
+  player._tackleLungeDx = 0;
+  player._tackleLungeDy = 0;
 }
 
 /**
@@ -345,6 +381,52 @@ export function setPlayerFacingFromWorldAimDelta(player, dx, dy) {
   player.animRow = DIRECTION_ROW_MAP[key] || 0;
 }
 
+/** Tackle direction from 8-way facing when aim vector is omitted. */
+const FACING_TO_TACKLE_UNIT = {
+  down: [0, 1],
+  up: [0, -1],
+  left: [-1, 0],
+  right: [1, 0],
+  'down-left': [-0.70710678, 0.70710678],
+  'down-right': [0.70710678, 0.70710678],
+  'up-left': [-0.70710678, -0.70710678],
+  'up-right': [0.70710678, -0.70710678]
+};
+
+/**
+ * Starts the LMB melee pose window (`getDexAnimSlice(dex, 'attack')` timings) + tackle direction for lunge / crystal hit.
+ * @param {{ dexId?: number, lmbAttackAnimSec?: number, _lmbAttackAnimTick?: number, facing?: string, tackleDirNx?: number, tackleDirNy?: number, _tackleDurSec?: number } | null | undefined} p
+ * @param {number} [dirNx] Optional free-aim X (used when player is not pressing movement input).
+ * @param {number} [dirNy] Optional free-aim Y (used when player is not pressing movement input).
+ */
+export function triggerPlayerLmbAttack(p, dirNx, dirNy) {
+  if (!p) return;
+  const dex = p.dexId ?? 94;
+  const atk = getDexAnimSlice(dex, 'attack');
+  const seq = atk?.durations;
+  if (!seq?.length) return;
+  const sec = TACKLE_DURATION_SEC;
+  p.lmbAttackAnimSec = sec;
+  p._lmbAttackAnimTick = 0;
+  p._tackleDurSec = sec;
+  p._tackleReachTiles = TACKLE_REACH_TILES;
+
+  const nx = Number(dirNx);
+  const ny = Number(dirNy);
+  const nLen = Math.hypot(nx, ny);
+  if (Number.isFinite(nLen) && nLen > 1e-4) {
+    // Mouse-guided free vector (not quantized to 8 directions) while idle.
+    p.tackleDirNx = nx / nLen;
+    p.tackleDirNy = ny / nLen;
+    setPlayerFacingFromWorldAimDelta(p, p.tackleDirNx, p.tackleDirNy);
+  } else {
+    // Keyboard movement keeps tackle in the current 8-way facing.
+    const q = FACING_TO_TACKLE_UNIT[p.facing] || FACING_TO_TACKLE_UNIT.down;
+    p.tackleDirNx = q[0];
+    p.tackleDirNy = q[1];
+  }
+}
+
 function pickPmdSeqFrame(seq, tickInLoop) {
   let acc = 0;
   for (let i = 0; i < seq.length; i++) {
@@ -352,6 +434,20 @@ function pickPmdSeqFrame(seq, tickInLoop) {
     if (tickInLoop <= acc) return i;
   }
   return Math.max(0, seq.length - 1);
+}
+
+/**
+ * @param {number} progress normalized tackle phase 0..1
+ * @returns {number} normalized lunge amount 0..1..0
+ */
+function resolveTackleLunge01(progress) {
+  const t = Math.min(1, Math.max(0, progress));
+  if (TACKLE_LUNGE_CURVE === 'easeOut') {
+    const out = 1 - Math.pow(1 - t, 2.2);
+    const back = t < 0.5 ? out : 1 - Math.pow((t - 0.5) * 2, 1.35);
+    return Math.max(0, Math.min(1, back));
+  }
+  return Math.sin(t * Math.PI);
 }
 
 // tryMovePlayer is now handled directly by inputX/Y in the gameLoop
@@ -683,6 +779,11 @@ export function updatePlayer(dt, data) {
   const shootRemain0 = player.moveShootAnimSec || 0;
   const shootPlaying = shootRemain0 > 0 && hasShootAsset && pmdMeta?.shoot?.durations?.length;
 
+  const lmbRemain0 = player.lmbAttackAnimSec || 0;
+  const atkSliceMeta = getDexAnimSlice(metaDex, 'attack');
+  const lmbAttackPlaying =
+    lmbRemain0 > 0 && !!atkSliceMeta?.durations?.length && !shootPlaying;
+
   if (shootPlaying) {
     const seq = pmdMeta.shoot.durations;
     const total = seq.reduce((a, b) => a + b, 0);
@@ -691,8 +792,19 @@ export function updatePlayer(dt, data) {
     player.animFrame = pickPmdSeqFrame(seq, t);
     player.idleTimer = 0;
     player.totalDistMoved = 0;
+  } else if (lmbAttackPlaying) {
+    player._shootAnimTick = 0;
+    player._chargeAnimTick = 0;
+    const seq = atkSliceMeta.durations;
+    const total = seq.reduce((a, b) => a + b, 0);
+    player._lmbAttackAnimTick = (player._lmbAttackAnimTick || 0) + dt * 60;
+    const t = Math.min(player._lmbAttackAnimTick, Math.max(0.0001, total - 0.0001));
+    player.animFrame = pickPmdSeqFrame(seq, t);
+    player.idleTimer = 0;
+    player.totalDistMoved = 0;
   } else if (inCombatCharge && pmdMeta?.charge?.durations?.length) {
     player._shootAnimTick = 0;
+    player._lmbAttackAnimTick = 0;
     const seq = pmdMeta.charge.durations;
     const total = seq.reduce((a, b) => a + b, 0);
     player._chargeAnimTick = (player._chargeAnimTick || 0) + dt * 60;
@@ -703,6 +815,7 @@ export function updatePlayer(dt, data) {
   } else {
     player._shootAnimTick = 0;
     player._chargeAnimTick = 0;
+    player._lmbAttackAnimTick = 0;
 
     const useWalkLikeAnim =
       (!!player.grounded && (spd > 0.1 || !!player.digActive)) ||
@@ -764,6 +877,22 @@ export function updatePlayer(dt, data) {
 
   if (shootRemain0 > 0) {
     player.moveShootAnimSec = Math.max(0, shootRemain0 - dt);
+  }
+  if (lmbRemain0 > 0) {
+    player.lmbAttackAnimSec = Math.max(0, lmbRemain0 - dt);
+  }
+
+  const tackleDur = player._tackleDurSec || 0;
+  const tackleRem = player.lmbAttackAnimSec || 0;
+  if (tackleRem > 0 && tackleDur > 1e-6) {
+    const progress = 1 - tackleRem / tackleDur;
+    const reach = Math.max(0, Number(player._tackleReachTiles) || 2);
+    const lunge = resolveTackleLunge01(progress) * reach;
+    player._tackleLungeDx = (player.tackleDirNx ?? 0) * lunge;
+    player._tackleLungeDy = (player.tackleDirNy ?? 0) * lunge * TACKLE_VISUAL_DEPTH_Y_SCALE;
+  } else {
+    player._tackleLungeDx = 0;
+    player._tackleLungeDy = 0;
   }
 
   if (player.socialEmotionType !== null) {

@@ -1,5 +1,5 @@
 import { playInputState } from './play-input-state.js';
-import { setPlayerFacingFromWorldAimDelta } from '../player.js';
+import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack } from '../player.js';
 import {
   castMoveById,
   castMoveChargedById,
@@ -9,6 +9,7 @@ import {
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
+import { tryBreakCrystalOnPlayerTackle } from './play-crystal-tackle.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
@@ -19,16 +20,13 @@ function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
 
 let leftHeld = false;
 let rightHeld = false;
-let leftDownAt = 0;
 let rightDownAt = 0;
 /** Left Ctrl held when primary/secondary button went down (locks “no charge build” for that press). */
 let leftShiftAtDown = false;
 let rightShiftAtDown = false;
-/** True after at least one flamethrower puff this LMB press (hold-stream). */
-let leftFlameStreamedThisPress = false;
+/** True after at least one flamethrower puff this RMB press (hold-stream). */
 let rightFlameStreamedThisPress = false;
-/** True after at least one prismatic laser stream puff this press. */
-let leftPrismaticStreamedThisPress = false;
+/** True after at least one prismatic laser stream puff this RMB press. */
 let rightPrismaticStreamedThisPress = false;
 
 function isHoldStreamMoveId(moveId) {
@@ -105,17 +103,8 @@ export function updatePlayPointerCombat(dt, player) {
   if (!player) return;
   const slots = resolveSlots(player);
   const mod = combatModifierHeld();
-  if (leftHeld && !mod && !isHoldStreamMoveId(slots.leftTap) && slots.leftTap !== 'psybeam') {
-    playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
-  }
   if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap) && slots.rightTap !== 'psybeam') {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
-  }
-  if (leftHeld && !mod && slots.leftTap === 'psybeam') {
-    if (!playInputState.psybeamLeftHold) playInputState.psybeamLeftHold = { pulse: 0 };
-    playInputState.psybeamLeftHold.pulse += dt * 7.2;
-  } else {
-    playInputState.psybeamLeftHold = null;
   }
   if (rightHeld && !mod && slots.rightTap === 'psybeam') {
     if (!playInputState.psybeamRightHold) playInputState.psybeamRightHold = { pulse: 0 };
@@ -124,17 +113,9 @@ export function updatePlayPointerCombat(dt, player) {
     playInputState.psybeamRightHold = null;
   }
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (leftHeld && !mod && slots.leftTap === 'flamethrower') {
-    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) leftFlameStreamedThisPress = true;
-  }
   if (rightHeld && !mod && slots.rightTap === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
-  }
-  if (leftHeld && !mod && slots.leftTap === 'prismaticLaser') {
-    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) leftPrismaticStreamedThisPress = true;
   }
   if (rightHeld && !mod && slots.rightTap === 'prismaticLaser') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -143,10 +124,10 @@ export function updatePlayPointerCombat(dt, player) {
 }
 
 /**
- * @param {{ canvas: HTMLCanvasElement, getAppMode: () => string, getPlayer: () => import('../player.js').player }} deps
+ * @param {{ canvas: HTMLCanvasElement, getAppMode: () => string, getPlayer: () => import('../player.js').player, getCurrentData?: () => object | null }} deps
  */
 export function installPlayPointerCombat(deps) {
-  const { canvas, getAppMode, getPlayer } = deps;
+  const { canvas, getAppMode, getPlayer, getCurrentData } = deps;
 
   canvas.addEventListener('contextmenu', (e) => {
     if (getAppMode() === 'play' && !e.ctrlKey) e.preventDefault();
@@ -163,10 +144,7 @@ export function installPlayPointerCombat(deps) {
       if (e.button === 0) {
         e.preventDefault();
         leftHeld = true;
-        leftDownAt = performance.now();
         leftShiftAtDown = sh;
-        leftFlameStreamedThisPress = false;
-        leftPrismaticStreamedThisPress = false;
         playInputState.chargeLeft01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
@@ -195,28 +173,20 @@ export function installPlayPointerCombat(deps) {
 
     if (e.button === 0 && leftHeld) {
       leftHeld = false;
-      const heldMs = now - leftDownAt;
       const { sx, sy, tx, ty } = aimAtCursor(player);
       const slots = resolveSlots(player);
       if (leftShiftAtDown || shUp) {
         castMoveById(slots.leftShift, sx, sy, tx, ty, player);
-      } else if (slots.leftTap === 'flamethrower') {
-        if (!leftFlameStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (slots.leftTap === 'prismaticLaser') {
-        if (!leftPrismaticStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (slots.leftTap === 'psybeam') {
-        applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-        tryReleasePlayerPsybeam(sx, sy, tx, ty, player);
-      } else if (heldMs < TAP_MS) {
-        castMoveById(slots.leftTap, sx, sy, tx, ty, player);
       } else {
-        castMoveChargedById(slots.leftTap, sx, sy, tx, ty, player, playInputState.chargeLeft01 || 0);
+        const hasMoveInput = Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4;
+        if (hasMoveInput) {
+          // Movement input: keep tackle aligned with current facing.
+          triggerPlayerLmbAttack(player);
+        } else {
+          // Idle: mouse-guided tackle, free vector (not 8-way quantized).
+          triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+        }
+        tryBreakCrystalOnPlayerTackle(player, getCurrentData?.() ?? null);
       }
       playInputState.chargeLeft01 = 0;
     }

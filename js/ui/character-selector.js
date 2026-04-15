@@ -12,6 +12,7 @@ import {
   getPlayerMoveCooldownRemaining,
   getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
+import { getCrystalLootCount } from '../main/play-crystal-tackle.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -154,6 +155,19 @@ export class CharacterSelector {
     }
   }
 
+  /** Clears item HUD counters (e.g. when leaving play mode). */
+  clearPlayItemsHud() {
+    const v = this.container?.querySelector('#play-item-crystal-count');
+    if (v) v.textContent = '0';
+  }
+
+  /** Live item counters (play mode; game loop). */
+  updatePlayItemsHud() {
+    const v = this.container?.querySelector('#play-item-crystal-count');
+    if (!v) return;
+    v.textContent = String(Math.max(0, getCrystalLootCount() | 0));
+  }
+
   /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
   updatePlayMovesCooldownHud() {
     const movesEl = this.container?.querySelector('#current-player-moves');
@@ -245,7 +259,7 @@ export class CharacterSelector {
         <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
           <div class="player-moves-title">Moves</div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB/RMB = 1st/2nd · LCtrl+click = 3rd/4th · MMB = Ultimate</div>
+          <div class="player-moves-help">LMB = ataque · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 1–0 e -</div>
         </div>
 
         <div
@@ -261,6 +275,15 @@ export class CharacterSelector {
           
           <div class="results-list" id="search-results">
             <!-- Results injected here -->
+          </div>
+        </div>
+
+        <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
+          <div class="play-item-hud__title">Items</div>
+          <div class="play-item-hud__row">
+            <span class="play-item-hud__icon" aria-hidden="true">💎</span>
+            <span class="play-item-hud__label">Crystal Shards</span>
+            <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
           </div>
         </div>
       </div>
@@ -428,7 +451,7 @@ export class CharacterSelector {
     const movesEl = this.container.querySelector('#current-player-moves');
     if (movesEl) {
       const moves = getPokemonMoveset(player.dexId);
-      const hotkeys = ['LMB', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
+      const hotkeys = ['—', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
       const slotHtml = (moveId, hk, title) => {
         const label = getMoveLabel(moveId);
         const abbrev = moveAbbrevFromLabel(label);
@@ -444,7 +467,14 @@ export class CharacterSelector {
         </div>`;
       };
       const slotsHtml = moves
-        .map((m, i) => slotHtml(m, hotkeys[i] || '—', `${getMoveLabel(m)} (${hotkeys[i]})`))
+        .map((m, i) => {
+          const hk = hotkeys[i] || '—';
+          const title =
+            i === 0
+              ? `${getMoveLabel(m)} — golpes: teclas 1–0 e - no play; LMB só animação de ataque`
+              : `${getMoveLabel(m)} (${hk})`;
+          return slotHtml(m, hk, title);
+        })
         .join('');
       const ultimateHtml = slotHtml('ultimate', 'MMB', 'Ultimate — nova ring toward cursor');
       movesEl.classList.add('player-moves-list--slots');

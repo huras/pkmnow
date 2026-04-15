@@ -34,7 +34,11 @@ import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { wildSexHudLabel } from './pokemon/pokemon-sex.js';
 import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
 import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
-import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import {
+  ensurePokemonSheetsLoaded,
+  getResolvedSheets,
+  resolvePlayerLmbAttackSheetAndSlice
+} from './pokemon/pokemon-asset-loader.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import {
   resolvePmdFrameSpecForSlice,
@@ -53,6 +57,12 @@ import {
 import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
+import {
+  activeCrystalDrops,
+  activeCrystalShards,
+  activeSpawnedSmallCrystals,
+  isPlayCrystalScatterOriginDestroyed
+} from './main/play-crystal-tackle.js';
 import {
   getBorrowDigPlaceholderDex,
   isUndergroundBurrowerDex,
@@ -944,6 +954,12 @@ export function render(canvas, data, options = {}) {
                 scatterOriginMemoRender
               )
             ) {
+              if (
+                String(itemKey).toLowerCase().includes('crystal') &&
+                isPlayCrystalScatterOriginDestroyed(mxScan, myScan)
+              ) {
+                continue;
+              }
                const { cols, rows } = parseShape(objSet.shape);
                const hasTop = objSet.parts.some(p => p.role === 'top' || p.role === 'tops');
                if (isSortable || hasTop) {
@@ -1148,6 +1164,7 @@ export function render(canvas, data, options = {}) {
       !isGhostPhaseShiftBurrowEligibleDex(playerDex) &&
       (borrowDiglettArt ? !!pDig : !!pDigSelf || isUndergroundBurrowerDex(playerDex));
     const combatShoot = (player.moveShootAnimSec || 0) > 0 && !!pShootSheet;
+    const combatLmbAttack = (player.lmbAttackAnimSec || 0) > 0;
     const combatCharge =
       !player.digBurrowMode &&
       (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
@@ -1162,6 +1179,17 @@ export function render(canvas, data, options = {}) {
     } else if (combatShoot) {
       pSheet = pShootSheet;
       pmdAnimSlice = 'shoot';
+    } else if (combatLmbAttack) {
+      void ensurePokemonSheetsLoaded(imageCache, playerDex);
+      const rSheets = getResolvedSheets(imageCache, playerDex);
+      const lmb = resolvePlayerLmbAttackSheetAndSlice(playerDex, imageCache, rSheets);
+      if (lmb.sheet) {
+        pSheet = lmb.sheet;
+        pmdAnimSlice = lmb.slice;
+      } else {
+        pSheet = isPlayerMoving ? pWalk : pIdle;
+        pmdAnimSlice = isPlayerMoving ? 'walk' : 'idle';
+      }
     } else if (combatCharge) {
       pSheet = pChargeSheet;
       pmdAnimSlice = 'charge';
@@ -1203,6 +1231,8 @@ export function render(canvas, data, options = {}) {
         drawAlpha: player.ghostPhaseAlpha ?? 1,
         animMoving: isPlayerMoving,
         digBuryVisual: player.digBurrowMode ? 0 : player.digCharge01,
+        tackleOffPx: (player._tackleLungeDx || 0) * tileW,
+        tackleOffPy: (player._tackleLungeDy || 0) * tileH,
         cx: snapPx((vx + 0.5) * tileW),
         cy: snapPx((vy + 0.5) * tileH - (player.z || 0) * tileH),
         sheet: pSheet,
@@ -1270,6 +1300,28 @@ export function render(canvas, data, options = {}) {
         type: 'particle',
         part: part,
         sortY: part.y + 0.5,
+      });
+    }
+
+    for (const shard of activeCrystalShards) {
+      renderItems.push({
+        type: 'crystalShard',
+        shard,
+        sortY: shard.y + 0.5
+      });
+    }
+    for (const c of activeSpawnedSmallCrystals) {
+      renderItems.push({
+        type: 'spawnedSmallCrystal',
+        crystal: c,
+        sortY: c.y + 0.5
+      });
+    }
+    for (const d of activeCrystalDrops) {
+      renderItems.push({
+        type: 'crystalDrop',
+        drop: d,
+        sortY: d.y + 0.5
       });
     }
 
@@ -1487,8 +1539,10 @@ export function render(canvas, data, options = {}) {
         ctx.fill();
 
         const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
-        const pxL = snapPx(item.cx - item.pivotX);
-        const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset);
+        const tackleOx = item.type === 'player' ? (item.tackleOffPx || 0) : 0;
+        const tackleOy = item.type === 'player' ? (item.tackleOffPy || 0) : 0;
+        const pxL = snapPx(item.cx - item.pivotX + tackleOx);
+        const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset + tackleOy);
         const pxW = snapPx(item.dw);
         const pxH = snapPx(item.dh);
         
@@ -1737,6 +1791,51 @@ export function render(canvas, data, options = {}) {
               ctx.drawImage(pcImg, sx, sy, 16, 16, snapPx((originX+c)*tileW), snapPx((originY+r)*tileH), Math.ceil(tileW), Math.ceil(tileH));
             });
           });
+        }
+      } else if (item.type === 'crystalShard') {
+        const s = item.shard;
+        const path = s.imgPath;
+        const img = path ? imageCache.get(path) : null;
+        if (img && s.tileId != null && s.tileId >= 0 && s.cols > 0) {
+          const dw = Math.ceil(tileW * 0.24);
+          const dh = Math.ceil(tileH * 0.24);
+          const sx = (s.tileId % s.cols) * 16;
+          const sy = Math.floor(s.tileId / s.cols) * 16;
+          const px = snapPx(s.x * tileW);
+          const py = snapPx(s.y * tileH);
+          ctx.globalAlpha = Math.max(0.2, 1 - s.age / Math.max(0.001, s.maxAge));
+          ctx.drawImage(img, sx, sy, 16, 16, px - dw * 0.5, py - dh * 0.5, dw, dh);
+          ctx.globalAlpha = 1;
+        }
+      } else if (item.type === 'spawnedSmallCrystal') {
+        const s = item.crystal;
+        const path = s.imgPath;
+        const img = path ? imageCache.get(path) : null;
+        if (img && s.tileId != null && s.tileId >= 0 && s.cols > 0) {
+          const dw = Math.ceil(tileW * 0.72);
+          const dh = Math.ceil(tileH * 0.72);
+          const sx = (s.tileId % s.cols) * 16;
+          const sy = Math.floor(s.tileId / s.cols) * 16;
+          const px = snapPx(s.x * tileW);
+          const py = snapPx(s.y * tileH);
+          ctx.drawImage(img, sx, sy, 16, 16, px - dw * 0.5, py - dh * 0.5, dw, dh);
+        }
+      } else if (item.type === 'crystalDrop') {
+        const d = item.drop;
+        const path = d.imgPath;
+        const img = path ? imageCache.get(path) : null;
+        if (img && d.tileId != null && d.tileId >= 0 && d.cols > 0) {
+          const pulse = 0.88 + Math.sin((d.age || 0) * 8 + (d.bobSeed || 0) * 6.28) * 0.12;
+          const bob = Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
+          const dw = Math.ceil(tileW * 0.56 * pulse);
+          const dh = Math.ceil(tileH * 0.56 * pulse);
+          const sx = (d.tileId % d.cols) * 16;
+          const sy = Math.floor(d.tileId / d.cols) * 16;
+          const px = snapPx(d.x * tileW);
+          const py = snapPx(d.y * tileH - bob);
+          ctx.globalAlpha = 0.94;
+          ctx.drawImage(img, sx, sy, 16, 16, px - dw * 0.5, py - dh * 0.5, dw, dh);
+          ctx.globalAlpha = 1;
         }
       } else if (item.type === 'projectile') {
         batchedEffects.push({ kind: 'projectile', proj: item.proj });
