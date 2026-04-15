@@ -47,7 +47,8 @@ import {
   getEffectiveWildBehavior,
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
-import { tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
+import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
+import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -84,6 +85,7 @@ let playerSilkShootCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.072;
+const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
 const PRISMATIC_STREAM_INTERVAL = 0.076;
@@ -257,6 +259,14 @@ function distPointToSegmentTiles(px, py, ax, ay, bx, by) {
 
 function broadPhaseOk(px, py, tx, ty) {
   return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
+}
+
+function isProjectileBlockedByTree(proj, data) {
+  if (!proj || !data) return false;
+  if (!TREE_BLOCKING_FIRE_PROJECTILE_TYPES.has(proj.type)) return false;
+  const z = Number(proj.z) || 0;
+  if (Math.abs(z) > 1.35) return false;
+  return formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data) || scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data);
 }
 
 /**
@@ -921,6 +931,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
             maxLife: GRASS_FIRE_PARTICLE_SEC
           });
         }
+        tryApplyFireHitToFormalTreesAt(proj.x, proj.y, zz, proj.type, data);
         grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
       }
       activeProjectiles.splice(i, 1);
@@ -961,6 +972,18 @@ export function updateMoves(dt, wildPokemonList, data, player) {
         proj.trailAcc -= interval;
         spawnTrailParticle(proj.x, proj.y, trailType, proj.z);
       }
+    }
+
+    if (data && isProjectileBlockedByTree(proj, data)) {
+      const impactZ = Math.max(0, Number(proj.z) || 0);
+      spawnHitParticles(proj.x, proj.y, impactZ);
+      tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
+      if (proj.type === 'incinerateCore') {
+        applySplashToWild(proj, wildList, impactZ);
+        spawnIncinerateShards(proj, pushProjectile, impactZ);
+      }
+      activeProjectiles.splice(i, 1);
+      continue;
     }
 
     let hit = false;

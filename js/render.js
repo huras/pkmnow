@@ -64,7 +64,13 @@ import {
   getDetailHitShake01,
   getActiveDetailHitHpBars,
   activeSpawnedSmallCrystals,
+  isPlayScatterTreeOriginBurnedHarvested,
+  isPlayScatterTreeOriginBurning,
+  isPlayScatterTreeOriginCharred,
+  isPlayFormalTreeRootBurnedHarvested,
+  isPlayFormalTreeRootBurning,
   isPlayDetailScatterOriginDestroyed,
+  isPlayFormalTreeRootCharred,
   isPlayFormalTreeRootDestroyed
 } from './main/play-crystal-tackle.js';
 import {
@@ -1375,6 +1381,10 @@ export function render(canvas, data, options = {}) {
         if (treeType && (mxScan + myScan) % 3 === 0 && foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
           if (getCached(mxScan + 1, myScan)?.heightStep === t.heightStep) {
             const isDestroyed = isPlayFormalTreeRootDestroyed(mxScan, myScan);
+            const isCharred = isPlayFormalTreeRootCharred(mxScan, myScan);
+            const isBurning = isPlayFormalTreeRootBurning(mxScan, myScan);
+            const isBurnedHarvested = isPlayFormalTreeRootBurnedHarvested(mxScan, myScan);
+            if (isBurnedHarvested) continue;
             renderItems.push({
               type: 'tree',
               treeType,
@@ -1383,7 +1393,9 @@ export function render(canvas, data, options = {}) {
               y: myScan + 0.9, // debug / marker; depth uses canopy pivot
               sortY: myScan + 1, // matches formal canopy translate Y: originY*tileH + tileH
               biomeId: t.biomeId,
-              isDestroyed
+              isDestroyed,
+              isCharred,
+              isBurning
             });
           }
         }
@@ -1408,12 +1420,17 @@ export function render(canvas, data, options = {}) {
                 scatterOriginMemoRender
               )
             ) {
-              if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) {
+              const scatterDestroyed = isPlayDetailScatterOriginDestroyed(mxScan, myScan);
+              const scatterBurning = isPlayScatterTreeOriginBurning(mxScan, myScan);
+              const scatterCharred = isPlayScatterTreeOriginCharred(mxScan, myScan);
+              const scatterBurnedHarvested = isPlayScatterTreeOriginBurnedHarvested(mxScan, myScan);
+              if (scatterBurnedHarvested) continue;
+              if (scatterDestroyed && !scatterCharred) {
                 continue;
               }
                const { cols, rows } = parseShape(objSet.shape);
                const hasTop = objSet.parts.some(p => p.role === 'top' || p.role === 'tops');
-               if (isSortable || hasTop) {
+               if (isSortable || hasTop || scatterBurning || scatterCharred) {
                  renderItems.push({
                    type: 'scatter',
                    itemKey,
@@ -1423,7 +1440,9 @@ export function render(canvas, data, options = {}) {
                    y: myScan + rows - 0.1, // debug / marker; depth uses canopy pivot
                    sortY: myScan + 1, // matches scatter tops translate: originY*tileH + tileH
                    cols,
-                   rows
+                   rows,
+                   isBurning: scatterBurning,
+                   isCharred: scatterCharred
                  });
                }
             }
@@ -2153,7 +2172,7 @@ export function render(canvas, data, options = {}) {
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (item.type === 'scatter') {
-        const { objSet, originX, originY, cols, itemKey } = item;
+        const { objSet, originX, originY, cols, rows, itemKey, isBurning, isCharred } = item;
         const shake01 = getDetailHitShake01(`${originX},${originY}`);
         if (shake01 > 0) {
           const a = tileW * 0.07 * shake01;
@@ -2167,7 +2186,13 @@ export function render(canvas, data, options = {}) {
         
         if (img) {
           // Draw Base (if sortable)
-          if (base?.ids && isSortableScatter(itemKey)) {
+          if (base?.ids && (isSortableScatter(itemKey) || isCharred)) {
+            const prevFilter = ctx.filter;
+            const prevAlpha = ctx.globalAlpha;
+            if (isCharred) {
+              ctx.filter = 'brightness(0.18) saturate(0.05)';
+              ctx.globalAlpha = 0.97;
+            }
             base.ids.forEach((id, idx) => {
               const ox = idx % cols;
               const oy = Math.floor(idx / cols);
@@ -2178,9 +2203,11 @@ export function render(canvas, data, options = {}) {
                  ctx.drawImage(img, (id % atlasCols) * 16, Math.floor(id / atlasCols) * 16, 16, 16, snapPx(tx * tileW), snapPx(ty * tileH), Math.ceil(tileW), Math.ceil(tileH));
               }
             });
+            ctx.filter = prevFilter;
+            ctx.globalAlpha = prevAlpha;
           }
           // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
-          if (topPart) {
+          if (topPart && !isCharred) {
             const wind = scatterHasWindSway(itemKey);
             const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
               canopyAnimTime,
@@ -2199,9 +2226,36 @@ export function render(canvas, data, options = {}) {
             const py = snapPx(originY * tileH + tileH);
             ctx.drawImage(scCan, px - scOx, py - scOy);
           }
+          if (isBurning) {
+            const fireImg = imageCache.get('tilesets/effects/actual-fire.png');
+            if (fireImg && fireImg.naturalWidth) {
+              const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;
+              const dw = Math.ceil(tileW * 1.6);
+              const dh = Math.ceil(tileH * 1.6);
+              const fx0 = snapPx(originX * tileW + (cols * tileW) * 0.35);
+              const fx1 = snapPx(originX * tileW + (cols * tileW) * 0.68);
+              const fy = snapPx((originY + rows - 0.45) * tileH);
+              const drawFlame = (px, frameOffset) => {
+                const fi = (flick + frameOffset) % BURN_START_FRAMES;
+                ctx.drawImage(
+                  fireImg,
+                  0,
+                  fi * BURN_START_FRAME,
+                  BURN_START_FRAME,
+                  BURN_START_FRAME,
+                  px - dw * 0.5,
+                  fy - dh * 0.5,
+                  dw,
+                  dh
+                );
+              };
+              drawFlame(fx0, 0);
+              drawFlame(fx1, 2);
+            }
+          }
         }
       } else if (item.type === 'tree') {
-        const { treeType, originX, originY, isDestroyed } = item;
+        const { treeType, originX, originY, isDestroyed, isCharred, isBurning } = item;
         const ids = TREE_TILES[treeType];
         if (ids) {
           const stumpBase = TREE_TILES.palm?.base || ids.base;
@@ -2209,6 +2263,17 @@ export function render(canvas, data, options = {}) {
           // Draw Base (skipped in bake)
           drawTile16(baseIds[0], originX * tileW, originY * tileH);
           drawTile16(baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
+          if (isDestroyed && isCharred) {
+            // Re-draw stump sprites with a dark filter so transparency stays untouched.
+            const prevFilter = ctx.filter;
+            const prevAlpha = ctx.globalAlpha;
+            ctx.filter = 'brightness(0.2) saturate(0.05)';
+            ctx.globalAlpha = 0.96;
+            drawTile16(baseIds[0], originX * tileW, originY * tileH);
+            drawTile16(baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH);
+            ctx.filter = prevFilter;
+            ctx.globalAlpha = prevAlpha;
+          }
           
           // Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
           if (!isDestroyed && ids.top) {
@@ -2226,6 +2291,33 @@ export function render(canvas, data, options = {}) {
             const px = snapPx(originX * tileW + tileW);
             const py = snapPx(originY * tileH + tileH);
             ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+          }
+          if (isBurning) {
+            const img = imageCache.get('tilesets/effects/actual-fire.png');
+            if (img && img.naturalWidth) {
+              const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;
+              const dw = Math.ceil(tileW * 1.6);
+              const dh = Math.ceil(tileH * 1.6);
+              const fx0 = snapPx(originX * tileW + tileW * 0.55);
+              const fx1 = snapPx((originX + 1) * tileW + tileW * 0.45);
+              const fy = snapPx(originY * tileH + tileH * 0.58);
+              const drawFlame = (px, frameOffset) => {
+                const fi = (flick + frameOffset) % BURN_START_FRAMES;
+                ctx.drawImage(
+                  img,
+                  0,
+                  fi * BURN_START_FRAME,
+                  BURN_START_FRAME,
+                  BURN_START_FRAME,
+                  px - dw * 0.5,
+                  fy - dh * 0.5,
+                  dw,
+                  dh
+                );
+              };
+              drawFlame(fx0, 0);
+              drawFlame(fx1, 2);
+            }
           }
         }
       } else if (item.type === 'building') {
@@ -2302,6 +2394,23 @@ export function render(canvas, data, options = {}) {
         }
       } else if (item.type === 'crystalDrop') {
         const d = item.drop;
+        if (String(d.itemKey || '') === 'charcoal') {
+          const bob = Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
+          const px = snapPx(d.x * tileW);
+          const py = snapPx(d.y * tileH - bob);
+          const rr = Math.max(2, tileW * 0.16);
+          ctx.fillStyle = 'rgba(22,22,22,0.95)';
+          ctx.beginPath();
+          ctx.arc(px, py, rr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(90,90,90,0.9)';
+          ctx.lineWidth = Math.max(1, tileW * 0.04);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(170,170,170,0.28)';
+          ctx.beginPath();
+          ctx.arc(px - rr * 0.25, py - rr * 0.25, Math.max(1, rr * 0.35), 0, Math.PI * 2);
+          ctx.fill();
+        } else {
         const path = d.imgPath;
         const img = path ? imageCache.get(path) : null;
         if (img && d.tileId != null && d.tileId >= 0 && d.cols > 0) {
@@ -2332,6 +2441,7 @@ export function render(canvas, data, options = {}) {
             ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileDw, tileDh);
           }
           ctx.globalAlpha = 1;
+        }
         }
       } else if (item.type === 'projectile') {
         batchedEffects.push({ kind: 'projectile', proj: item.proj });
