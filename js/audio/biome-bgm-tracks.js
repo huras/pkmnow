@@ -144,7 +144,7 @@ export const BIOME_BGM_TRACK_URLS = Object.freeze({
   [BIOMES.GHOST_WOODS.id]: Object.freeze(
     folderTracks('ghost-woods', ['120. Old Chateau.mp3', '2-33. Scary House.mp3'])
   ),
-  [BIOMES.ARCANE.id]: Object.freeze(folderTracks('arcane', ['3-01. Anistar City.mp3'])),
+  [BIOMES.ARCANE.id]: Object.freeze(folderTracks('arcane', ['3-01. Anistar City.mp3', '1-36. Castelia City Gym.mp3'])),
   [BIOMES.CITY.id]: Object.freeze(folderTracks('city', ['1-37. Lumiose City.mp3'])),
   [BIOMES.CITY_STREET.id]: Object.freeze(folderTracks('city-streets', ['1-36. Castelia City Gym.mp3'])),
   [BIOMES.TOWN.id]: Object.freeze(folderTracks('town', ['004 - Littleroot Town.mp3'])),

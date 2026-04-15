@@ -4,16 +4,27 @@ import {
   castMoveById,
   castMoveChargedById,
   castUltimate,
+  spawnFieldSlashArcFx,
   tryCastPlayerFlamethrowerStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset } from '../moves/pokemon-moveset-config.js';
-import { tryBreakCrystalOnPlayerTackle } from './play-crystal-tackle.js';
-import { tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
+import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
+import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
+import { cutGrassInCircle } from '../play-grass-cut.js';
+import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
+import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
+import { imageCache } from '../image-cache.js';
 
 const TAP_MS = 220;
 const CHARGE_MAX_SEC = 1.12;
+const FIELD_SKILL_WHEEL_HOLD_MS = 170;
+const FIELD_SKILL_CUT_RADIUS = 1.5;
+const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
+const FIELD_SKILL_STRENGTH_RADIUS = 1.9;
+const PLAYER_PHYSICS_COLLIDER_RADIUS_TILES = 0.32;
+const FIELD_SKILLS = ['tackle', 'cut', 'strength'];
 
 function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
   setPlayerFacingFromWorldAimDelta(player, tx - sx, ty - sy);
@@ -29,6 +40,212 @@ let rightShiftAtDown = false;
 let rightFlameStreamedThisPress = false;
 /** True after at least one prismatic laser stream puff this RMB press. */
 let rightPrismaticStreamedThisPress = false;
+let selectedFieldSkillId = 'tackle';
+let fieldSkillWheelHoldStartMs = 0;
+let fieldSkillWheelArmed = false;
+let fieldSkillWheelOpen = false;
+let fieldSkillWheelHoverIndex = 0;
+/** @type {HTMLDivElement | null} */
+let fieldSkillWheelRoot = null;
+
+function fieldSkillLabelById(skillId) {
+  if (skillId === 'cut') return 'Cut';
+  if (skillId === 'strength') return 'Strength';
+  return 'Tackle';
+}
+
+function ensureFieldSkillWheelDom() {
+  if (fieldSkillWheelRoot) return fieldSkillWheelRoot;
+  const root = document.createElement('div');
+  root.id = 'play-field-skill-wheel';
+  root.className = 'play-field-skill-wheel hidden';
+  root.setAttribute('aria-hidden', 'true');
+  root.innerHTML = `
+    <div class="play-field-skill-wheel__ring">
+      <div class="play-field-skill-wheel__hint">Hold 1 · release to cast</div>
+      <button type="button" class="play-field-skill-wheel__item" data-skill="tackle">Tackle</button>
+      <button type="button" class="play-field-skill-wheel__item" data-skill="cut">Cut</button>
+      <button type="button" class="play-field-skill-wheel__item" data-skill="strength">Strength</button>
+    </div>
+  `;
+  document.body.appendChild(root);
+  fieldSkillWheelRoot = root;
+  syncFieldSkillWheelDom();
+  return root;
+}
+
+function syncFieldSkillWheelDom() {
+  if (!fieldSkillWheelRoot) return;
+  fieldSkillWheelRoot.classList.toggle('hidden', !fieldSkillWheelOpen);
+  fieldSkillWheelRoot.setAttribute('aria-hidden', fieldSkillWheelOpen ? 'false' : 'true');
+  const hoverSkill = FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId;
+  for (const el of fieldSkillWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
+    const skillId = String(el.getAttribute('data-skill') || '');
+    el.classList.toggle('is-hover', fieldSkillWheelOpen && skillId === hoverSkill);
+    el.classList.toggle('is-selected', skillId === selectedFieldSkillId);
+  }
+}
+
+function openFieldSkillWheel() {
+  fieldSkillWheelOpen = true;
+  ensureFieldSkillWheelDom();
+  syncFieldSkillWheelDom();
+}
+
+function closeFieldSkillWheel() {
+  fieldSkillWheelOpen = false;
+  syncFieldSkillWheelDom();
+}
+
+function resolveCutStyleForDex(dexId) {
+  if (speciesHasType(dexId, 'grass')) return 'vine';
+  if (speciesHasType(dexId, 'psychic')) return 'psychic';
+  return 'slash';
+}
+
+function resolveCutProfile(styleId) {
+  if (styleId === 'vine') {
+    return { radius: FIELD_SKILL_CUT_RADIUS + 0.24, damage: 8, knockback: 2.9 };
+  }
+  if (styleId === 'psychic') {
+    return { radius: FIELD_SKILL_CUT_RADIUS + 0.35, damage: 10, knockback: 3.4 };
+  }
+  return { radius: FIELD_SKILL_CUT_RADIUS, damage: 9, knockback: 3.1 };
+}
+
+function castPlayerCut(player, data) {
+  if (!player || !data) return;
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  const nx = Number(player.tackleDirNx) || 0;
+  const ny = Number(player.tackleDirNy) || 1;
+  const styleId = resolveCutStyleForDex(player.dexId ?? 1);
+  const profile = resolveCutProfile(styleId);
+  const centerX = (player.x ?? sx) + nx * FIELD_SKILL_CUT_CENTER_OFFSET;
+  const centerY = (player.y ?? sy) + ny * FIELD_SKILL_CUT_CENTER_OFFSET;
+  const feet = worldFeetFromPivotCell(
+    Number(player.x ?? sx - 0.5),
+    Number(player.y ?? sy - 0.5),
+    imageCache,
+    player.dexId ?? 1,
+    Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4
+  );
+  // Anchor slash arc to the bottom of the physics collider (feet line + collider radius).
+  const arcOriginX = feet.x + nx * FIELD_SKILL_CUT_CENTER_OFFSET;
+  const arcOriginY = feet.y + PLAYER_PHYSICS_COLLIDER_RADIUS_TILES + ny * FIELD_SKILL_CUT_CENTER_OFFSET;
+  spawnFieldSlashArcFx(arcOriginX, arcOriginY, nx, ny, {
+    variant: styleId,
+    radius: profile.radius * 0.86,
+    spanRad: styleId === 'psychic' ? Math.PI * 1.08 : Math.PI * 0.9,
+    z: Number(player.z) || 0
+  });
+  tryPlayerCutHitWildCircle(player, data, centerX, centerY, profile.radius, {
+    damage: profile.damage,
+    knockback: profile.knockback
+  });
+  const worldHitOnceSet = new Set();
+  const spawnedHitOnceSet = new Set();
+  const rays = styleId === 'psychic' ? 12 : 9;
+  for (let i = 0; i < rays; i++) {
+    const ang = (i / rays) * Math.PI * 2;
+    const ex = centerX + Math.cos(ang) * profile.radius;
+    const ey = centerY + Math.sin(ang) * profile.radius;
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+  }
+  cutGrassInCircle(centerX, centerY, profile.radius, data);
+}
+
+function castPlayerStrengthPlaceholder(player, data) {
+  if (!player || !data) return;
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  const nx = Number(player.tackleDirNx) || 0;
+  const ny = Number(player.tackleDirNy) || 1;
+  const centerX = (player.x ?? sx) + nx * 1.25;
+  const centerY = (player.y ?? sy) + ny * 1.25;
+  // Placeholder until dedicated Strength move exists.
+  tryPlayerCutHitWildCircle(player, data, centerX, centerY, FIELD_SKILL_STRENGTH_RADIUS, {
+    damage: 14,
+    knockback: 4.9
+  });
+  const worldHitOnceSet = new Set();
+  const spawnedHitOnceSet = new Set();
+  const rays = 14;
+  for (let i = 0; i < rays; i++) {
+    const ang = (i / rays) * Math.PI * 2;
+    const ex = centerX + Math.cos(ang) * FIELD_SKILL_STRENGTH_RADIUS;
+    const ey = centerY + Math.sin(ang) * FIELD_SKILL_STRENGTH_RADIUS;
+    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, { worldHitOnceSet, spawnedHitOnceSet });
+  }
+}
+
+function castSelectedFieldSkill(player, data) {
+  if (!player) return;
+  if (selectedFieldSkillId === 'cut') {
+    castPlayerCut(player, data);
+    return;
+  }
+  if (selectedFieldSkillId === 'strength') {
+    castPlayerStrengthPlaceholder(player, data);
+    return;
+  }
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  const hasMoveInput = Math.hypot(player?.inputX || 0, player?.inputY || 0) > 1e-4;
+  if (hasMoveInput) {
+    triggerPlayerLmbAttack(player);
+  } else {
+    triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+  }
+  tryPlayerTackleHitWild(player, data);
+  tryBreakCrystalOnPlayerTackle(player, data);
+}
+
+function updateFieldSkillWheelHover(player) {
+  if (!fieldSkillWheelOpen || !player || !playInputState.mouseValid) return;
+  const { sx, sy, tx, ty } = aimAtCursor(player);
+  const dx = tx - sx;
+  const dy = ty - sy;
+  if (Math.hypot(dx, dy) < 0.08) return;
+  const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+  const sectorSize = (Math.PI * 2) / FIELD_SKILLS.length;
+  const idx = Math.floor((angle + sectorSize * 0.5) / sectorSize) % FIELD_SKILLS.length;
+  if (idx !== fieldSkillWheelHoverIndex) {
+    fieldSkillWheelHoverIndex = idx;
+    syncFieldSkillWheelDom();
+  }
+}
+
+export function handleFieldSkillHotkeyDown(code) {
+  if (code !== 'Digit1') return false;
+  if (!fieldSkillWheelArmed) {
+    fieldSkillWheelArmed = true;
+    fieldSkillWheelOpen = false;
+    fieldSkillWheelHoldStartMs = performance.now();
+    fieldSkillWheelHoverIndex = Math.max(0, FIELD_SKILLS.indexOf(selectedFieldSkillId));
+    syncFieldSkillWheelDom();
+  }
+  return true;
+}
+
+export function handleFieldSkillHotkeyUp(code, player, data) {
+  if (code !== 'Digit1') return false;
+  if (!fieldSkillWheelArmed && !fieldSkillWheelOpen) return false;
+  if (fieldSkillWheelOpen) {
+    selectedFieldSkillId = FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId;
+  }
+  castSelectedFieldSkill(player, data ?? null);
+  fieldSkillWheelArmed = false;
+  closeFieldSkillWheel();
+  return true;
+}
+
+export function getSelectedFieldSkillId() {
+  return selectedFieldSkillId;
+}
+
+export function getSelectedFieldSkillLabel() {
+  return fieldSkillLabelById(selectedFieldSkillId);
+}
 
 function isHoldStreamMoveId(moveId) {
   return moveId === 'flamethrower' || moveId === 'prismaticLaser';
@@ -55,7 +272,6 @@ export function aimAtCursor(player) {
 
 /** @type {Record<string, string>} */
 const HOTKEY_TO_MOVE_ID = {
-  Digit1: 'ember',
   Digit2: 'flamethrower',
   Digit3: 'confusion',
   Digit4: 'bubble',
@@ -70,7 +286,8 @@ const HOTKEY_TO_MOVE_ID = {
 
 /**
  * Keyboard quick-cast for all Zelda-ported moves.
- * 1 Ember, 2 Flamethrower, 3 Confusion, 4 Bubble, 5 Water Gun,
+ * Digit 1 is reserved for field-skill wheel (Tackle/Cut/Strength).
+ * 2 Flamethrower, 3 Confusion, 4 Bubble, 5 Water Gun,
  * 6 Psybeam, 7 Prismatic Laser, 8 Poison Sting, 9 Poison Powder,
  * 0 Incinerate, - Silk Shoot.
  * @returns {boolean} true when a hotkey was consumed.
@@ -99,9 +316,17 @@ function resolveSlots(player) {
 /**
  * @param {number} dt
  * @param {import('../player.js').player} player
+ * @param {object | null | undefined} data
  */
-export function updatePlayPointerCombat(dt, player) {
+export function updatePlayPointerCombat(dt, player, data) {
   if (!player) return;
+  void data;
+  if (fieldSkillWheelArmed && !fieldSkillWheelOpen) {
+    if (performance.now() - fieldSkillWheelHoldStartMs >= FIELD_SKILL_WHEEL_HOLD_MS) {
+      openFieldSkillWheel();
+    }
+  }
+  updateFieldSkillWheelHover(player);
   const slots = resolveSlots(player);
   const mod = combatModifierHeld();
   if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap) && slots.rightTap !== 'psybeam') {
@@ -228,6 +453,8 @@ export function installPlayPointerCombat(deps) {
     if (getAppMode() !== 'play') return;
     leftHeld = false;
     rightHeld = false;
+    fieldSkillWheelArmed = false;
+    closeFieldSkillWheel();
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
     playInputState.psybeamLeftHold = null;

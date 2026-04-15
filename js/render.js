@@ -107,6 +107,7 @@ import {
   grassFireVisualPhaseAt,
   grassFireCharredRegrowth01
 } from './play-grass-fire.js';
+import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from './play-grass-cut.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
@@ -345,6 +346,41 @@ function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
     ctx.fill();
+  } else if (p.type === 'fieldSlashArc') {
+    const u = 1 - a;
+    const baseAngle = Number(p.arcAngle) || 0;
+    const span = Math.max(0.2, Number(p.arcSpan) || Math.PI * 0.9);
+    const rr = Math.max(0.25, Number(p.arcRadius) || 0.9);
+    const w = Math.max(1.8, (Number(p.arcWidth) || 0.08) * Math.min(tileW, tileH));
+    const start = baseAngle - span * 0.5 + span * 0.2 * u;
+    const end = baseAngle + span * 0.5 + span * 0.18 * u;
+    const rPx = rr * Math.min(tileW, tileH);
+    const variant = String(p.arcVariant || 'slash');
+    const glow =
+      variant === 'psychic'
+        ? 'rgba(212,126,255,0.78)'
+        : variant === 'vine'
+          ? 'rgba(124,245,132,0.72)'
+          : 'rgba(188,223,255,0.72)';
+    const core =
+      variant === 'psychic'
+        ? '#ffd9ff'
+        : variant === 'vine'
+          ? '#e5ffe7'
+          : '#ffffff';
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = w * 2.15;
+    ctx.strokeStyle = glow;
+    ctx.beginPath();
+    ctx.arc(px, py, rPx, start, end, false);
+    ctx.stroke();
+    ctx.lineWidth = w;
+    ctx.strokeStyle = core;
+    ctx.beginPath();
+    ctx.arc(px, py, rPx, start, end, false);
+    ctx.stroke();
+    ctx.restore();
   } else {
     ctx.fillStyle = '#ffff88';
     ctx.beginPath();
@@ -738,6 +774,7 @@ export function render(canvas, data, options = {}) {
 
   if (syncPlayChunkCache(data, tileW, appMode)) {
     clearGrassFireStateForNewMap();
+    clearGrassCutStateForNewMap();
     resetPlayChunkBakeAutoTuner();
   }
 
@@ -1084,6 +1121,12 @@ export function render(canvas, data, options = {}) {
       }
 
       const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
+      if (grassCutSuppressesAnimatedGrassAt(mx, my)) {
+        if (playerTopOverlay) {
+          ctx.restore();
+        }
+        return;
+      }
       const firePhase = grassFireVisualPhaseAt(mx, my);
       const charredRegrowU =
         firePhase === 'charred' ? (grassFireCharredRegrowth01(mx, my) ?? 0) : 0;

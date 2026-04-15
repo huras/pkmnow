@@ -323,6 +323,8 @@ const PLAYER_TACKLE_WILD_DAMAGE = 12;
 const PLAYER_TACKLE_WILD_KNOCKBACK = 4.15;
 const PLAYER_TACKLE_WILD_SWEEP_RADIUS = 0.34;
 const PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
+const PLAYER_CUT_WILD_DAMAGE = 9;
+const PLAYER_CUT_WILD_KNOCKBACK = 3.35;
 const WILD_KNOCKBACK_LOCK_SEC = 0.34;
 const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
@@ -1768,4 +1770,43 @@ export function tryPlayerTackleHitWild(player, data) {
   pushRecentNearbyEvent(best, 'player_field_move', 1.18);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
   return { hit: true, dexId: best.dexId };
+}
+
+/**
+ * Circular melee hit used by field skills like Cut.
+ * @param {{ x?: number, y?: number } | null | undefined} player
+ * @param {object | null | undefined} data
+ * @param {number} centerX
+ * @param {number} centerY
+ * @param {number} radiusTiles
+ * @param {{ damage?: number, knockback?: number }} [opts]
+ * @returns {{ hit: boolean, hitCount: number }}
+ */
+export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radiusTiles, opts = {}) {
+  if (!player || !data) return { hit: false, hitCount: 0 };
+  const cx = Number(centerX);
+  const cy = Number(centerY);
+  const radius = Math.max(0.2, Number(radiusTiles) || 0);
+  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(radius)) {
+    return { hit: false, hitCount: 0 };
+  }
+  const damage = Math.max(1, Number(opts.damage) || PLAYER_CUT_WILD_DAMAGE);
+  const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_CUT_WILD_KNOCKBACK);
+  let hitCount = 0;
+  for (const e of entitiesByKey.values()) {
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+    const dex = e.dexId ?? 1;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
+    const rr = radius + getPokemonHurtboxRadiusTiles(dex);
+    const dx = hx - cx;
+    const dy = hy - cy;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    hitCount++;
+    if (typeof e.takeDamage === 'function') e.takeDamage(damage);
+    setEmotion(e, 5, false, 'Pain');
+    applyWildKnockbackFromPoint(e, player.x ?? cx, player.y ?? cy, knockback);
+    pushRecentNearbyEvent(e, 'player_field_move', 1.08);
+    broadcastNearbyPlayerEvent(e.x, e.y, 'player_field_move', 0.72, e);
+  }
+  return { hit: hitCount > 0, hitCount };
 }

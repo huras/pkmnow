@@ -121,6 +121,102 @@ export function spawnHitParticles(x, y, effectZ) {
   }
 }
 
+/**
+ * Field-skill slash arc feedback (used by Cut variants).
+ * @param {number} x
+ * @param {number} y
+ * @param {number} dirX
+ * @param {number} dirY
+ * @param {{
+ *   variant?: 'slash' | 'vine' | 'psychic',
+ *   radius?: number,
+ *   spanRad?: number,
+ *   z?: number
+ * }} [opts]
+ */
+export function spawnFieldSlashArcFx(x, y, dirX, dirY, opts = {}) {
+  const vx = Number(dirX);
+  const vy = Number(dirY);
+  const len = Math.hypot(vx, vy) || 1;
+  const nx = vx / len;
+  const ny = vy / len;
+  const variant = opts.variant || 'slash';
+  const radius = Math.max(0.35, Number(opts.radius) || 0.9);
+  const spanRad = Math.max(0.6, Number(opts.spanRad) || Math.PI * 0.9);
+  // Keep field slash arcs grounded and readable (do not lift with airborne sprite z).
+  const z = 0.06;
+  const baseAngle = Math.atan2(ny, nx);
+  const dirJitter = (Math.random() - 0.5) * 0.2;
+  pushParticle({
+    type: 'fieldSlashArc',
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    z,
+    vz: 0,
+    life: 0.38,
+    maxLife: 0.38,
+    arcAngle: baseAngle + dirJitter,
+    arcSpan: spanRad,
+    arcRadius: radius,
+    arcWidth: variant === 'psychic' ? 0.135 : 0.12,
+    arcVariant: variant
+  });
+  // Secondary mirrored arc to make the cut shape unmistakable.
+  pushParticle({
+    type: 'fieldSlashArc',
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    z,
+    vz: 0,
+    life: 0.32,
+    maxLife: 0.32,
+    arcAngle: baseAngle + Math.PI + dirJitter * 0.35,
+    arcSpan: spanRad * 0.58,
+    arcRadius: radius * 0.64,
+    arcWidth: variant === 'psychic' ? 0.105 : 0.095,
+    arcVariant: variant
+  });
+  if (variant === 'psychic') {
+    pushParticle({
+      type: 'fieldSlashArc',
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      z,
+      vz: 0,
+      life: 0.44,
+      maxLife: 0.44,
+      arcAngle: baseAngle + dirJitter + 0.15,
+      arcSpan: spanRad * 0.72,
+      arcRadius: radius * 1.16,
+      arcWidth: 0.11,
+      arcVariant: variant
+    });
+  }
+  // Tiny spark cloud so you always get particle confirmation, even if arc timing is missed.
+  const sparkCount = variant === 'psychic' ? 9 : 6;
+  for (let i = 0; i < sparkCount; i++) {
+    const a = baseAngle + (Math.random() - 0.5) * spanRad;
+    const rr = radius * (0.35 + Math.random() * 0.7);
+    pushParticle({
+      type: variant === 'psychic' ? 'psyTrail' : variant === 'vine' ? 'powderTrail' : 'burst',
+      x: x + Math.cos(a) * rr * 0.35,
+      y: y + Math.sin(a) * rr * 0.3,
+      vx: Math.cos(a) * (0.8 + Math.random() * 1.6),
+      vy: Math.sin(a) * (0.8 + Math.random() * 1.6),
+      z: z + 0.02 + Math.random() * 0.06,
+      vz: 0.25 + Math.random() * 0.35,
+      life: 0.24 + Math.random() * 0.2,
+      maxLife: 0.24 + Math.random() * 0.2
+    });
+  }
+}
+
 /** @param {number} [baseZ] — match parent projectile z so trails align when casting from flight (projectiles use `sourceEntity.z`). */
 function spawnTrailParticle(px, py, trailType, baseZ = 0) {
   const spread = 0.18;

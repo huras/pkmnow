@@ -560,7 +560,7 @@ function enterPlayMode(gx, gy) {
   else minimap?.classList.remove('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB = investida (sprite avança na direção do cursor; corpo fica no lugar) — se o tile à frente tiver cristal scatter, quebra em 4 estilhaços. RMB = 2º golpe do moveset, segure RMB = carregado (Ember/água etc.), Psybeam no 2º slot: segure RMB = orbe rosa e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys: 1 Ember · 2 Flamethrower · … · - Silk Shoot. Social: Numpad 1-9. Debug: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB = investida (sprite avança na direção do cursor; corpo fica no lugar) — se o tile à frente tiver cristal scatter, quebra em 4 estilhaços. RMB = 2º golpe do moveset, segure RMB = carregado (Ember/água etc.), Psybeam no 2º slot: segure RMB = orbe rosa e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Segure 1 = roda de skills de campo (Tackle / Cut / Strength). Hotkeys: 2 Flamethrower · … · - Silk Shoot. Social: Numpad 1-9. Debug: Ctrl+RMB.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 

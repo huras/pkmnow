@@ -9,7 +9,12 @@ import {
 } from '../wild-pokemon/wild-pokemon-manager.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
-import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
+import {
+  updatePlayPointerCombat,
+  castMappedMoveByHotkey,
+  handleFieldSkillHotkeyDown,
+  handleFieldSkillHotkeyUp
+} from './play-mouse-combat.js';
 import {
   updateCrystalShardParticles,
   updateCrystalDropsAndPickup,
@@ -133,7 +138,7 @@ export function createGameLoop(api) {
       updateWildPokemon(dt, currentData, pvx, pvy);
       updateBreakdown.updWildMs = performance.now() - tWild0;
       const tPointer0 = performance.now();
-      updatePlayPointerCombat(dt, player);
+      updatePlayPointerCombat(dt, player, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
@@ -334,7 +339,9 @@ export function registerPlayKeyboard(api) {
         tryJumpPlayer(getCurrentData());
       }
 
-      if (!e.repeat && castMappedMoveByHotkey(e.code, player)) {
+      if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {
+        e.preventDefault();
+      } else if (!e.repeat && castMappedMoveByHotkey(e.code, player)) {
         e.preventDefault();
       }
 
@@ -368,6 +375,9 @@ export function registerPlayKeyboard(api) {
     }
     if (e.code === 'ControlLeft') {
       playInputState.ctrlLeftHeld = false;
+    }
+    if (getAppMode() === 'play' && handleFieldSkillHotkeyUp(e.code, player, getCurrentData())) {
+      e.preventDefault();
     }
     const dir = keyToDir(e.key);
     if (dir) heldKeys.delete(dir);
