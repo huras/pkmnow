@@ -614,6 +614,25 @@ export function getActiveDetailHitPulses() {
   return activeDetailHitPulses;
 }
 
+/**
+ * Shows the current HP bar of a breakable detail at an origin (useful as feedback when interaction is denied).
+ * @returns {boolean} true if a detail with break-state HP was found and shown
+ */
+export function showBreakableDetailHpAtOrigin(ox, oy, data) {
+  if (!data) return false;
+  const key = `${ox},${oy}`;
+  const st = detailBreakStateByOrigin.get(key);
+  if (!st || st.destroyed) return false;
+  const hpMax = Math.max(1, Math.floor(Number(st.hitsMax) || 1));
+  const hpNow = Math.max(0, Math.min(hpMax, Math.floor(Number(st.hitsRemaining) || hpMax)));
+  const p = scatterPhysicsCircleAtOrigin(ox, oy, data, null, null, { ignoreDestroyed: true });
+  const cx = Number.isFinite(p?.cx) ? p.cx : st.ox + Math.max(1, st.cols || 1) * 0.5;
+  const cy = Number.isFinite(p?.cy) ? p.cy : st.oy + Math.max(1, st.rows || 1) * 0.5;
+  const nowSec = performance.now() * 0.001;
+  markDetailHitHpBar(key, cx, cy, hpMax, hpNow, hpNow, nowSec);
+  return true;
+}
+
 function countSpritesInObjectSet(objSet) {
   if (!objSet?.parts?.length) return 1;
   let n = 0;
