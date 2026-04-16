@@ -96,7 +96,15 @@ export function scatterHasWindSway(itemKey) {
  */
 export function isSortableScatter(itemKey) {
   const k = String(itemKey).toLowerCase();
-  return k.includes('crystal') || k.includes('rock') || k.includes('cactus');
+  return (
+    k.includes('crystal') ||
+    k.includes('rock') ||
+    k.includes('cactus') ||
+    k.includes('broadleaf') ||
+    k.includes('palm') ||
+    k.includes('pine') ||
+    k.includes('savannah-tree')
+  );
 }
 
 // ==== FOLIAGE TILE IDS (Diretamente do Tileset Nature) ====

@@ -397,7 +397,7 @@ function markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data) {
   return true;
 }
 
-function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec) {
+function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data) {
   const key = `${rootX},${my}`;
   if (isPlayFormalTreeRootDestroyed(rootX, my)) return false;
   if (burningFormalTreeEndsAtSecByRoot.has(key)) return false;
@@ -405,6 +405,15 @@ function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec) {
   if (!Number.isFinite(add) || add <= 0) return false;
   const cur = formalTreeBurnMeterByRoot.get(key) || 0;
   const next = Math.max(0, Math.min(FORMAL_TREE_BURN_METER_MAX, cur + add));
+  
+  const trunk = getFormalTreeTrunkCircle(rootX, my, data); // get trunk cx,cy
+  if (trunk) {
+    const hpMax = FORMAL_TREE_BURN_METER_MAX;
+    const hpBefore = hpMax - cur;
+    const hpAfter = hpMax - next;
+    markDetailHitHpBar(`formal:${rootX},${my}`, trunk.cx, trunk.cy, hpMax, hpBefore, hpAfter, nowSec);
+  }
+
   if (next >= FORMAL_TREE_BURN_METER_MAX) {
     formalTreeBurnMeterByRoot.delete(key);
     burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
@@ -424,6 +433,12 @@ function addScatterTreeBurnMeterAndMaybeDestroy(ox, oy, projType, nowSec, data) 
   if (!Number.isFinite(add) || add <= 0) return false;
   const cur = scatterTreeBurnMeterByOrigin.get(key) || 0;
   const next = Math.max(0, Math.min(SCATTER_TREE_BURN_METER_MAX, cur + add));
+
+  const hpMax = SCATTER_TREE_BURN_METER_MAX;
+  const hpBefore = hpMax - cur;
+  const hpAfter = hpMax - next;
+  markDetailHitHpBar(key, spec.cx, spec.cy, hpMax, hpBefore, hpAfter, nowSec);
+
   if (next >= SCATTER_TREE_BURN_METER_MAX) {
     scatterTreeBurnMeterByOrigin.delete(key);
     burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + SCATTER_TREE_BURNING_VISUAL_SEC);
@@ -456,7 +471,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
       const dx = worldX - trunk.cx;
       const dy = worldY - trunk.cy;
       if (dx * dx + dy * dy > rr * rr) continue;
-      addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec);
+      addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data);
       anyApplied = true;
     }
   }
@@ -587,15 +602,22 @@ function countSpritesInObjectSet(objSet) {
 
 function hitsForDetailBySpriteCount(objSet) {
   const spriteCount = countSpritesInObjectSet(objSet);
-  return Math.max(1, Math.ceil(Math.sqrt(spriteCount)));
+  return Math.max(1, Math.ceil(Math.sqrt(spriteCount)) * 2);
 }
 
-function getOrCreateDetailBreakState(rootOx, rootOy, itemKey, objSet, nowSec) {
+function hitsForFormalTree(treeType) {
+  const ids = TREE_TILES[treeType];
+  const count = (ids?.base?.length || 0) + (ids?.top?.length || 0);
+  const spriteCount = Math.max(1, count);
+  return Math.max(1, Math.ceil(Math.sqrt(spriteCount)) * 2);
+}
+
+function getOrCreateDetailBreakState(rootOx, rootOy, itemKey, objSet, nowSec, initialHitsMax = null) {
   const key = `${rootOx},${rootOy}`;
   let st = detailBreakStateByOrigin.get(key);
   if (!st) {
-    const { cols, rows } = parseShape(objSet?.shape || '[1x1]');
-    const hitsMax = hitsForDetailBySpriteCount(objSet);
+    const { cols, rows } = parseShape(objSet?.shape || '[1x2]'); // Formal trees are 1x2 or 2x3 usually, but 1x2 is a safe default for hit state
+    const hitsMax = initialHitsMax != null ? initialHitsMax : hitsForDetailBySpriteCount(objSet);
     st = {
       ox: rootOx,
       oy: rootOy,
@@ -1288,29 +1310,44 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         }
         continue;
       }
-      if (allowFormalTreeDestroy) {
-        markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, 1, 1, 0, nowSec);
+
+      // Normalized Formal Tree HP
+      const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+      const treeType = t0 ? getTreeType(t0.biomeId, hit.rootOx, hit.rootOy, data.seed) : 'broadleaf';
+      const hitsMax = hitsForFormalTree(treeType);
+      const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, `formal:${treeType}`, null, nowSec, hitsMax);
+      
+      const hpBefore = st.hitsRemaining;
+      const amount = (hitSource === 'cut' || hitSource === 'tackle') ? 1 : 0; // Only cut/tackle deals damage here for now
+      if (amount > 0) {
+        st.hitsRemaining = Math.max(0, st.hitsRemaining - amount);
+        markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
       }
+      
       markDetailHitShake(bumpKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+      
       if (hitSource === 'cut') {
         playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      } else if (hitSource === 'tackle') {
+        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
       }
-      if (allowFormalTreeDestroy) {
-        playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+
+      if (st.hitsRemaining <= 0) {
+        if (hitSource === 'cut') {
+          playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
         registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec, 'cut', data);
       } else {
         if (hitSource === 'tackle') {
-          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          tryApplyTreeTackleEffects(
+            hit.cx ?? hit.rootOx + 1,
+            hit.cy ?? hit.rootOy + 0.5,
+            t0?.biomeId ?? 0,
+            data.seed ?? 0,
+            data
+          );
         }
-        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
-        tryApplyTreeTackleEffects(
-          hit.cx ?? hit.rootOx + 1,
-          hit.cy ?? hit.rootOy + 0.5,
-          t0?.biomeId ?? 0,
-          data.seed ?? 0,
-          data
-        );
       }
       if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
       continue;
