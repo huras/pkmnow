@@ -41,6 +41,8 @@ const WILD_JUMP_BLOCKED_FRAMES_FLEE = 14;
 const WILD_JUMP_BLOCKED_FRAMES_WANDER = 28;
 const WILD_JUMP_COOLDOWN_SEC = 0.85;
 const WILD_TREE_BODY_R = 0.28;
+const WILD_VISION_RANGE_BASE_MULT = 1.45;
+const WILD_VISION_RANGE_MIN_TILES = 8.5;
 
 export function ensureWildPhysicsState(entity) {
   if (entity.z == null) entity.z = 0;
@@ -362,6 +364,10 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
   const beh = getEffectiveWildBehavior(entity);
+  const effectiveAlertRadius = Math.max(
+    WILD_VISION_RANGE_MIN_TILES,
+    (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT + (entity.wildTempAggressiveSec > 0 ? 1.0 : 0)
+  );
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
   const distP = Math.hypot(dxP, dyP);
@@ -369,7 +375,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   const prevState = entity.aiState;
 
   if (entity.aiState === 'sleep') {
-    if (distP < beh.alertRadius) {
+    if (distP < effectiveAlertRadius) {
       entity.aiState = 'alert';
       entity.alertTimer = 1.0;
       setEmotion(entity, 0, true, 'Surprised');
@@ -378,7 +384,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
 
-  if (distP < beh.alertRadius) {
+  if (distP < effectiveAlertRadius) {
     if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
       const angToPlayer = Math.atan2(dyP, dxP);
@@ -408,7 +414,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vy = 0;
       }
     }
-  } else if (distP >= beh.alertRadius * 1.5 && entity.aiState !== 'sleep') {
+  } else if (distP >= effectiveAlertRadius * 1.5 && entity.aiState !== 'sleep') {
     entity.aiState = 'wander';
   }
 

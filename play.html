@@ -74,6 +74,19 @@
               </button>
               <button
                 type="button"
+                id="minimap-help-toggle"
+                class="minimap-panel__help-btn"
+                title="Ajuda — controles e interface"
+                aria-label="Ajuda — controles e interface"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__help-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-audio-toggle"
                 class="minimap-panel__music-btn"
                 title="Volume BGM e gritos"
@@ -151,6 +164,27 @@
           </div>
           <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
           <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="play-help-wiki-modal"
+      class="play-help-wiki hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="play-help-wiki-title"
+    >
+      <div class="play-help-wiki__backdrop" aria-hidden="true"></div>
+      <div class="play-help-wiki__card">
+        <header class="play-help-wiki__header">
+          <h1 id="play-help-wiki-title" class="play-help-wiki__title">Ajuda</h1>
+          <button type="button" id="play-help-wiki-close" class="play-help-wiki__close" aria-label="Fechar ajuda">×</button>
+        </header>
+        <div class="play-help-wiki__body">
+          <nav id="play-help-wiki-nav" class="play-help-wiki__nav" aria-label="Índice"></nav>
+          <div id="play-help-wiki-article" class="play-help-wiki__article"></div>
         </div>
       </div>
     </div>

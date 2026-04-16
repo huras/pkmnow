@@ -5,7 +5,8 @@ import { playInputState } from './play-input-state.js';
 import {
   syncWildPokemonWindow,
   updateWildPokemon,
-  getWildPokemonEntities
+  getWildPokemonEntities,
+  wildUpdatePerfLast
 } from '../wild-pokemon/index.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
@@ -113,6 +114,11 @@ export function createGameLoop(api) {
       updPlayerMs: 0,
       updWildWindowMs: 0,
       updWildMs: 0,
+      updWildMiscMs: 0,
+      updWildVerticalMs: 0,
+      updWildSocialMs: 0,
+      updWildMotionMs: 0,
+      updWildPostMs: 0,
       updPointerMs: 0,
       updMovesMs: 0,
       updGrassFireMs: 0,
@@ -142,6 +148,11 @@ export function createGameLoop(api) {
       const tWild0 = performance.now();
       updateWildPokemon(dt, currentData, pvx, pvy);
       updateBreakdown.updWildMs = performance.now() - tWild0;
+      updateBreakdown.updWildMiscMs = wildUpdatePerfLast.miscMs;
+      updateBreakdown.updWildVerticalMs = wildUpdatePerfLast.verticalMs;
+      updateBreakdown.updWildSocialMs = wildUpdatePerfLast.socialMs;
+      updateBreakdown.updWildMotionMs = wildUpdatePerfLast.motionMs;
+      updateBreakdown.updWildPostMs = wildUpdatePerfLast.postMs;
       const tPointer0 = performance.now();
       updatePlayPointerCombat(dt, player, currentData);
       updateStrengthCarryInteraction(dt, player, currentData);
@@ -191,11 +202,28 @@ export function createGameLoop(api) {
           ['grs', perf.p95UpdGrassFireMsStable],
           ['bgm', perf.p95UpdBgmMsStable],
           ['hud', perf.p95UpdHudMsStable]
-        ]
-          .sort((a, b) => b[1] - a[1])
+        ].sort((a, b) => b[1] - a[1]);
+        const top3HeavyUpdate = heavyUpdateSlices
           .slice(0, 3)
           .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
           .join(' | ');
+        const maxHeavyMs = heavyUpdateSlices.length ? heavyUpdateSlices[0][1] : 0;
+        const wildIsHeavy =
+          perf.p95UpdWildMsStable >= 2.5 && perf.p95UpdWildMsStable >= maxHeavyMs * 0.92;
+        const wildSubHeavy = wildIsHeavy
+          ? [
+              ['m', perf.p95UpdWildMotionMsStable],
+              ['soc', perf.p95UpdWildSocialMsStable],
+              ['misc', perf.p95UpdWildMiscMsStable],
+              ['y', perf.p95UpdWildVerticalMsStable],
+              ['post', perf.p95UpdWildPostMsStable]
+            ]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 2)
+              .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+              .join(' | ')
+          : '';
+        const wildSubTag = wildSubHeavy ? ` · wldΔ ${wildSubHeavy}` : '';
         const chunkStats = getPlayChunkFrameStats();
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
@@ -212,7 +240,8 @@ export function createGameLoop(api) {
           ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
           ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
           ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
-          ` · upd top ${heavyUpdateSlices}` +
+          ` · upd top ${top3HeavyUpdate}` +
+          wildSubTag +
           ` · stable ${stablePct.toFixed(0)}%` +
           chunkInfo;
       }

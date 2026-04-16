@@ -53,6 +53,7 @@ import { TessellationEngine } from './tessellation-engine.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
+import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { cycleMinimapZoom } from './render/render-minimap.js';
 import {
   advanceWorldHours,
@@ -260,6 +261,9 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
+installPlayHelpWikiModal({
+  forceCloseMinimapAudioPopover: minimapAudioUi.forceCloseMinimapAudioPopover
+});
 
 let lastHudTileKey = '';
 let lastHudMs = 0;
@@ -517,6 +521,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   }
 });
 
+/** Help wiki registers Escape (capture) before this so Esc closes the modal instead of exiting play. */
 registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,

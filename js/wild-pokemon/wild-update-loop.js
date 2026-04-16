@@ -19,6 +19,15 @@ const WILD_LOD_DT_CAP = 0.12;
 
 let wildUpdateFrameCounter = 0;
 
+/** Wall-time breakdown for the last `updateWildPokemon` call (ms). */
+export const wildUpdatePerfLast = {
+  miscMs: 0,
+  verticalMs: 0,
+  socialMs: 0,
+  motionMs: 0,
+  postMs: 0
+};
+
 function nextWildUpdateFrame() {
   wildUpdateFrameCounter = (wildUpdateFrameCounter + 1) % 1_000_000_000;
   return wildUpdateFrameCounter;
@@ -48,11 +57,18 @@ export function resetWildUpdateFrameCounter() {
 
 export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
+  wildUpdatePerfLast.miscMs = 0;
+  wildUpdatePerfLast.verticalMs = 0;
+  wildUpdatePerfLast.socialMs = 0;
+  wildUpdatePerfLast.motionMs = 0;
+  wildUpdatePerfLast.postMs = 0;
+
   const toDelete = [];
   const frameNo = nextWildUpdateFrame();
   for (const [k, e] of entitiesByKey.entries()) {
     if (e?._strengthCarryHidden) continue;
     const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
+    let mark = performance.now();
     const isCloseEnough = distToPlayer < 24;
     const fullRate = wildNeedsFullRateUpdate(e, distToPlayer);
     const cadence = fullRate ? 1 : wildCadenceForDistance(distToPlayer);
@@ -68,6 +84,9 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       !e.isDespawning &&
       (e.spawnPhase ?? 1) >= 0.5;
 
+    wildUpdatePerfLast.miscMs += performance.now() - mark;
+    mark = performance.now();
+
     if (e.isDespawning) {
       if (e.deadTimer > 0) {
         e.deadTimer = Math.max(0, e.deadTimer - stepDt);
@@ -82,9 +101,19 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       }
     }
 
+    wildUpdatePerfLast.miscMs += performance.now() - mark;
+    mark = performance.now();
+
     integrateWildPokemonVertical(e, stepDt);
+
+    wildUpdatePerfLast.verticalMs += performance.now() - mark;
+    mark = performance.now();
+
     decaySocialMemory(e, stepDt);
     trackPlayerProximitySignals(e, distToPlayer, stepDt);
+
+    wildUpdatePerfLast.socialMs += performance.now() - mark;
+    mark = performance.now();
 
     if (!skipWanderMotion) {
       updateWildMotion(e, stepDt, data, playerX, playerY);
@@ -93,6 +122,10 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       e.vy = 0;
       e.animMoving = false;
     }
+
+    wildUpdatePerfLast.motionMs += performance.now() - mark;
+    mark = performance.now();
+
     if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - stepDt);
     advanceWildPokemonAnim(e, stepDt);
 
@@ -100,6 +133,8 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       e.hitFlashTimer -= stepDt;
       if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
     }
+
+    wildUpdatePerfLast.postMs += performance.now() - mark;
   }
   for (const k of toDelete) entitiesByKey.delete(k);
 }

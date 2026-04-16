@@ -132,8 +132,11 @@ SPECIES_BEHAVIOR.set(144, neutral(8));     // Articuno — legendary, observes
 SPECIES_BEHAVIOR.set(142, aggressive(8, 1.5, 3.0)); // Aerodactyl
 
 // ── VOLCANO (biome 13) ──────────────────────────────────────────────────────
-SPECIES_BEHAVIOR.set(126, aggressive(7, 1.2, 2.5)); // Magmar
-SPECIES_BEHAVIOR.set(77,  timid(6, 4.0)); // Ponyta — fast runner
+SPECIES_BEHAVIOR.set(126, aggressive(9, 1.55, 2.8)); // Magmar
+SPECIES_BEHAVIOR.set(77,  aggressive(9, 1.7, 2.55)); // Ponyta
+SPECIES_BEHAVIOR.set(78,  aggressive(9, 1.85, 2.65)); // Rapidash
+SPECIES_BEHAVIOR.set(37,  aggressive(8, 1.45, 2.45)); // Vulpix
+SPECIES_BEHAVIOR.set(38,  aggressive(10, 1.7, 2.85)); // Ninetales
 SPECIES_BEHAVIOR.set(4,   neutral(5));     // Charmander
 SPECIES_BEHAVIOR.set(58,  aggressive(7, 1.5, 2.0)); // Growlithe — guard-like
 

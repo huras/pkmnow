@@ -29,8 +29,11 @@ export function bindStandardWildTakeDamage(entity) {
     }
     this.hitFlashTimer = 0.2;
 
-    if (this.aiState !== 'flee' && this.aiState !== 'sleep') {
-      this.aiState = 'flee';
+    if (!this.deadState && this.aiState !== 'sleep') {
+      this.aiState = 'approach';
+      this.alertTimer = Math.max(this.alertTimer || 0, 1.15);
+      this.targetX = null;
+      this.targetY = null;
     }
 
     memory.threat = clamp(memory.threat + 0.9, 0, 3.5);
@@ -38,10 +41,8 @@ export function bindStandardWildTakeDamage(entity) {
     pushRecentNearbyEvent(this, 'player_damage', 1.3);
     broadcastNearbyPlayerEvent(this.x, this.y, 'player_damage', 0.85, this);
     broadcastNearbySpeciesAllyHurt(this.x, this.y, this.dexId ?? 1, 1.05, this);
-    this.provoked01 = clamp((this.provoked01 || 0) + 0.42, 0, 3);
-    if (this.provoked01 >= 0.38) {
-      this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 4.8));
-    }
+    this.provoked01 = clamp((this.provoked01 || 0) + 0.66, 0, 3);
+    this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 10.0));
 
     if (amount > 0) playWildDamageHurtCry(this);
   };

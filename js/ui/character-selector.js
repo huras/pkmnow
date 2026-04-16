@@ -147,8 +147,8 @@ export class CharacterSelector {
         minimal ? 'Show full character panel' : 'Use minimal character panel'
       );
       btn.title = minimal
-        ? 'Show search, move hints, and right-click mode'
-        : 'Hide search, move hints, and right-click mode';
+        ? 'Show search and right-click mode bar'
+        : 'Hide search and right-click mode bar';
       btn.textContent = minimal ? 'Full' : 'Min';
     }
   }
@@ -266,7 +266,7 @@ export class CharacterSelector {
               id="character-selector-layout-toggle"
               aria-pressed="false"
               aria-label="Use minimal character panel"
-              title="Hide search, move hints, and right-click mode"
+              title="Hide search and right-click mode bar"
             >Min</button>
             <button
               type="button"
@@ -321,7 +321,6 @@ export class CharacterSelector {
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut; hold+release LMB = charge; Cut = 3-hit combo) · E = pegar/soltar pedra · com pedra: soltar LMB = arremessar · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div
@@ -333,8 +332,6 @@ export class CharacterSelector {
         <div class="search-container">
           <span class="search-icon">🔍</span>
           <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
-          <p class="selector-summon-hint" style="margin:0.35rem 0 0;font-size:0.72rem;opacity:0.82">Click: play as · Ctrl+click (⌘ on Mac): summon wild nearby</p>
-          
           <div class="results-list" id="search-results">
             <!-- Results injected here -->
           </div>

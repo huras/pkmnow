@@ -188,8 +188,7 @@
   border-top: none;
 }
 
-.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-title,
-.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-help {
+.app--play-immersive #character-selector-container .character-selector #player-moves-box .player-moves-title {
   display: none;
 }
 
@@ -381,9 +380,8 @@ body.play-mode-active .character-selector.character-selector--minimal .play-poin
   display: none;
 }
 
-/* Minimal layout: hide species search, move hotkey tutorial, and right-click mode bar */
-.character-selector--minimal .search-container,
-.character-selector--minimal .player-moves-help {
+/* Minimal layout: hide species search and right-click mode bar */
+.character-selector--minimal .search-container {
   display: none;
 }
 
@@ -616,11 +614,6 @@ body.play-mode-active .character-selector.character-selector--minimal .play-poin
   max-width: 100%;
   word-break: break-word;
   text-wrap: balance;
-}
-
-.player-moves-help {
-  font-size: 0.62rem;
-  color: rgba(255, 255, 255, 0.5);
 }
 
 /* Social numpad panel (integrated in character selector) */
