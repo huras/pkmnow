@@ -62,10 +62,6 @@ const FORMAL_TREE_BURN_METER_DECAY_PER_SEC = 4.5;
 const FORMAL_TREE_BURN_GROUND_Z_MAX = 0.55;
 const FORMAL_TREE_BURN_IMPACT_RADIUS_TILES = 0.3;
 const FORMAL_TREE_BURNING_VISUAL_SEC = 5;
-const SCATTER_TREE_BURN_METER_MAX = 100;
-const SCATTER_TREE_BURN_METER_DECAY_PER_SEC = 4.5;
-const SCATTER_TREE_BURN_IMPACT_RADIUS_TILES = 0.34;
-const SCATTER_TREE_BURNING_VISUAL_SEC = 5;
 const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   ember: 34,
   flamethrowerShot: 16,
@@ -325,23 +321,14 @@ function scatterTreeSpecAtOrigin(ox, oy, data, getTileFn = null, originMemo = nu
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   if (ox < 0 || oy < 0 || ox >= microW || oy >= microH) return null;
-  const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
-  const t = getT(ox, oy);
-  if (!t) return null;
-  if (!validScatterOriginMicro(ox, oy, data.seed, microW, microH, getT, originMemo)) return null;
-  const items = BIOME_VEGETATION[t.biomeId] || [];
-  if (!items.length) return null;
-  const itemKey = items[Math.floor(seededHash(ox, oy, data.seed + 222) * items.length)];
-  if (!scatterItemKeyIsTree(itemKey)) return null;
-  const objSet = OBJECT_SETS[itemKey];
+  const p = scatterPhysicsCircleAtOrigin(ox, oy, data, originMemo, getTileFn, { ignoreDestroyed: true });
+  if (!p || !scatterItemKeyIsTree(p.itemKey)) return null;
+  const objSet = OBJECT_SETS[p.itemKey];
   if (!objSet) return null;
   const shape = parseShape(objSet.shape);
   const cols = Math.max(1, shape.cols);
   const rows = Math.max(1, shape.rows);
-  const cx = ox + cols * 0.5;
-  const cy = oy + rows - 0.5;
-  const r = Math.max(0.16, Math.min(0.48, cols * 0.18));
-  return { ox, oy, itemKey, cols, rows, cx, cy, r };
+  return { ox, oy, itemKey: p.itemKey, cols, rows, cx: p.cx, cy: p.cy, r: p.radius };
 }
 
 function queueChunkRebakeOverlappingFootprint(rootOx, rootOy, cols, rows) {
@@ -432,16 +419,16 @@ function addScatterTreeBurnMeterAndMaybeDestroy(ox, oy, projType, nowSec, data) 
   const add = FORMAL_TREE_BURN_ADD_BY_PROJECTILE[projType];
   if (!Number.isFinite(add) || add <= 0) return false;
   const cur = scatterTreeBurnMeterByOrigin.get(key) || 0;
-  const next = Math.max(0, Math.min(SCATTER_TREE_BURN_METER_MAX, cur + add));
+  const next = Math.max(0, Math.min(FORMAL_TREE_BURN_METER_MAX, cur + add));
 
-  const hpMax = SCATTER_TREE_BURN_METER_MAX;
+  const hpMax = FORMAL_TREE_BURN_METER_MAX;
   const hpBefore = hpMax - cur;
   const hpAfter = hpMax - next;
   markDetailHitHpBar(key, spec.cx, spec.cy, hpMax, hpBefore, hpAfter, nowSec);
 
-  if (next >= SCATTER_TREE_BURN_METER_MAX) {
+  if (next >= FORMAL_TREE_BURN_METER_MAX) {
     scatterTreeBurnMeterByOrigin.delete(key);
-    burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + SCATTER_TREE_BURNING_VISUAL_SEC);
+    burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
     burnedScatterTreeOrigins.delete(key);
     harvestedBurnedScatterTreeOrigins.delete(key);
     return true;
@@ -480,7 +467,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
     for (let ox = ix - 2; ox <= ix + 2; ox++) {
       const spec = scatterTreeSpecAtOrigin(ox, oy, data, null, scatterOriginMemo);
       if (!spec) continue;
-      const rr = spec.r + SCATTER_TREE_BURN_IMPACT_RADIUS_TILES;
+      const rr = spec.r + FORMAL_TREE_BURN_IMPACT_RADIUS_TILES;
       const dx = worldX - spec.cx;
       const dy = worldY - spec.cy;
       if (dx * dx + dy * dy > rr * rr) continue;
@@ -612,12 +599,29 @@ function hitsForFormalTree(treeType) {
   return Math.max(1, Math.ceil(Math.sqrt(spriteCount)) * 2);
 }
 
+/** Same HP curve as formal trees: base + top sprite count only (not whole object set). */
+function hitsForScatterTreeItemKey(itemKey) {
+  const objSet = OBJECT_SETS[itemKey];
+  if (!objSet?.parts?.length) return hitsForDetailBySpriteCount(objSet);
+  const basePart = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+  const topPart = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+  const nBase = Array.isArray(basePart?.ids) ? basePart.ids.length : 0;
+  const nTop = Array.isArray(topPart?.ids) ? topPart.ids.length : 0;
+  const count = Math.max(1, nBase + nTop);
+  return Math.max(1, Math.ceil(Math.sqrt(count)) * 2);
+}
+
 function getOrCreateDetailBreakState(rootOx, rootOy, itemKey, objSet, nowSec, initialHitsMax = null) {
   const key = `${rootOx},${rootOy}`;
   let st = detailBreakStateByOrigin.get(key);
   if (!st) {
     const { cols, rows } = parseShape(objSet?.shape || '[1x2]'); // Formal trees are 1x2 or 2x3 usually, but 1x2 is a safe default for hit state
-    const hitsMax = initialHitsMax != null ? initialHitsMax : hitsForDetailBySpriteCount(objSet);
+    const hitsMax =
+      initialHitsMax != null
+        ? initialHitsMax
+        : scatterItemKeyIsTree(itemKey)
+          ? hitsForScatterTreeItemKey(itemKey)
+          : hitsForDetailBySpriteCount(objSet);
     st = {
       ox: rootOx,
       oy: rootOy,
@@ -1114,7 +1118,6 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!data) return;
   const nowSec = performance.now() * 0.001;
   const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
-  const allowFormalTreeDestroy = hitSource === 'cut';
   /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */
   const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
   const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
@@ -1381,32 +1384,39 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       continue;
     }
     if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
-    if (hitSource !== 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
-      const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
-      if (hitSource === 'tackle') {
-        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-      }
-      markDetailHitShake(bumpKey, nowSec);
-      spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-      const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
-      tryApplyTreeTackleEffects(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, t0?.biomeId ?? 0, data.seed ?? 0, data);
-      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
-      continue;
-    }
     const objSet = OBJECT_SETS[hit.itemKey];
     const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
     const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);
     if (st.destroyed) continue;
     const hpBefore = st.hitsRemaining;
-    st.hitsRemaining = Math.max(0, st.hitsRemaining - 1);
-    markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+    const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
+    const treeDamage =
+      isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
+    st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
+    if (treeDamage > 0 || !isTreeHit) {
+      markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+    }
     markDetailHitShake(worldKey, nowSec);
     spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-    if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
-      playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+    if (isTreeHit && treeDamage > 0) {
+      if (hitSource === 'cut') {
+        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      } else if (hitSource === 'tackle') {
+        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
     }
     if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
     if (st.hitsRemaining > 0) {
+      if (treeDamage > 0 && hitSource === 'tackle' && isTreeHit) {
+        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+        tryApplyTreeTackleEffects(
+          hit.cx ?? hit.rootOx + 1,
+          hit.cy ?? hit.rootOy + 0.5,
+          t0?.biomeId ?? 0,
+          data.seed ?? 0,
+          data
+        );
+      }
       continue;
     }
 
@@ -1419,19 +1429,21 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     harvestedBurnedScatterTreeOrigins.delete(`${hit.rootOx},${hit.rootOy}`);
     burningScatterTreeEndsAtSecByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
     scatterTreeBurnMeterByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
-    const isCrystal = String(hit.itemKey || '').toLowerCase().includes('crystal');
-    const isLargeCrystal = isCrystal && shape.cols >= 2 && shape.rows >= 2;
-    if (isLargeCrystal) {
-      spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
-    } else {
-      spawnPickableCrystalDropAt(
-        hit.cx ?? hit.rootOx + 0.5,
-        hit.cy ?? hit.rootOy + 0.5,
-        hit.itemKey,
-        countSpritesInObjectSet(objSet)
-      );
+    if (!scatterItemKeyIsTree(hit.itemKey)) {
+      const isCrystal = String(hit.itemKey || '').toLowerCase().includes('crystal');
+      const isLargeCrystal = isCrystal && shape.cols >= 2 && shape.rows >= 2;
+      if (isLargeCrystal) {
+        spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
+      } else {
+        spawnPickableCrystalDropAt(
+          hit.cx ?? hit.rootOx + 0.5,
+          hit.cy ?? hit.rootOy + 0.5,
+          hit.itemKey,
+          countSpritesInObjectSet(objSet)
+        );
+      }
+      spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
     }
-    spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
   }
 }
 
@@ -1563,7 +1575,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
     }
   }
   if (scatterTreeBurnMeterByOrigin.size > 0 && dt > 0) {
-    const decay = SCATTER_TREE_BURN_METER_DECAY_PER_SEC * dt;
+    const decay = FORMAL_TREE_BURN_METER_DECAY_PER_SEC * dt;
     for (const [key, meter] of scatterTreeBurnMeterByOrigin.entries()) {
       const next = meter - decay;
       if (next <= 0.001) {

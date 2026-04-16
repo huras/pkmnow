@@ -514,15 +514,16 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
 /**
  * One scatter **origin** → at most one physics circle (tree trunk or, when experiment on, non-tree solid “stem”).
  * Deduplicates `validScatterOriginMicro` + itemKey between tree / solid paths (hot: `gatherTreeTrunkCirclesNearWorldPoint`).
+ * @param {{ ignoreDestroyed?: boolean }} [opts] — When `ignoreDestroyed`, skip the “origin destroyed” check (charred-stump / harvest helpers still use the same trunk geometry as the living tree).
  * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, itemKey: string }}
  */
-export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
+export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null, opts = undefined) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   const seed = data.seed;
   const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
-  if (isPlayDetailScatterOriginDestroyed(ox0, oy0)) return null;
+  if (!opts?.ignoreDestroyed && isPlayDetailScatterOriginDestroyed(ox0, oy0)) return null;
 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;
