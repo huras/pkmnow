@@ -108,10 +108,28 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       ctx.restore();
     }
   } else if (p.type === 'flamethrowerShot' || p.type === 'incinerateCore' || p.type === 'incinerateShard') {
-    ctx.fillStyle = p.type === 'flamethrowerShot' ? '#ff6a00' : '#ff4500';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(3, tileW * (p.type === 'incinerateShard' ? 0.1 : 0.14)), 0, Math.PI * 2);
-    ctx.fill();
+    if (p.type === 'flamethrowerShot') {
+      const img = imageCache.get('tilesets/effects/actual-fire.png');
+      const fh = p.sheetFrameH || FIRE_FRAME_H;
+      const fw = p.sheetFrameW || FIRE_FRAME_W;
+      const n = p.sheetFrames || 4;
+      const frame = Math.floor((time * 18 + (p.x + p.y) * 2.3) % n);
+      const dw = Math.ceil(tileW * 1.02);
+      const dh = Math.ceil(tileH * 1.02);
+      if (img && img.naturalWidth) {
+        ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
+      } else {
+        ctx.fillStyle = '#ff6a00';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = '#ff4500';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(3, tileW * (p.type === 'incinerateShard' ? 0.1 : 0.14)), 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (p.type === 'confusionOrb') {
     ctx.fillStyle = 'rgba(164,94,255,0.65)';
     ctx.strokeStyle = 'rgba(222,171,255,0.95)';
