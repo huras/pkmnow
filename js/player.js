@@ -22,6 +22,8 @@ import {
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
+import { strengthCarryBlocksWalk } from './main/play-strength-carry.js';
+import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
@@ -152,7 +154,12 @@ export const player = {
   socialEmotionAge: 0,
   socialEmotionPortraitSlug: null,
   /** Creative flight: dashed feet↔sprite tether allowed this frame (render / debug overlay). */
-  flightGroundTetherVisible: false
+  flightGroundTetherVisible: false,
+  /**
+   * Strength grab: lifted scatter rock/crystal (world origin while carried is “broken” until placed/dropped).
+   * @type {null | { liftOx: number, liftOy: number, itemKey: string, cols: number, rows: number, weightTier: number }}
+   */
+  _strengthCarry: null
 };
 
 export function setPlayerSpecies(dexId) {
@@ -185,9 +192,23 @@ export function setPlayerSpecies(dexId) {
   player.flightGroundTetherVisible = false;
   player.jumpsUsed = 0;
   player.jumpSerial = 0;
+  player._strengthCarry = null;
 }
 
 export function setPlayerPos(x, y) {
+  const carry = player._strengthCarry;
+  if (carry) {
+    strengthDropCarriedAsPickup(
+      carry.liftOx,
+      carry.liftOy,
+      carry.cols,
+      carry.rows,
+      carry.itemKey,
+      x + 0.5,
+      y + 0.5
+    );
+    player._strengthCarry = null;
+  }
   player.x = x;
   player.y = y;
   player.visualX = x;
@@ -545,6 +566,12 @@ export function updatePlayer(dt, data) {
     !raisingHeightOnFlight
       ? FLIGHT_HORIZONTAL_MOVE_SPEED_MULT
       : 1;
+
+  if (strengthCarryBlocksWalk(player)) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
+  }
 
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {

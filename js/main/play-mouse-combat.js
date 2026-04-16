@@ -14,6 +14,7 @@ import {
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
+import { tryStrengthFieldSkillPress } from './play-strength-carry.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
 import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
@@ -29,7 +30,6 @@ const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
 const FIELD_SKILL_CUT_ADVANCE_TILES = 0.5;
-const FIELD_SKILL_STRENGTH_RADIUS = 1.9;
 const FIELD_SKILLS = ['tackle', 'cut', 'strength'];
 const FIELD_SKILL_STORAGE_KEY = 'pkmn_field_skill_by_dex';
 const FIELD_SKILL_LABEL = {
@@ -612,29 +612,7 @@ function castPlayerStrengthPlaceholder(player, data, charged = false) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-  const nx = Number(player.tackleDirNx) || 0;
-  const ny = Number(player.tackleDirNy) || 1;
-  const centerX = (player.x ?? sx) + nx * 1.25;
-  const centerY = (player.y ?? sy) + ny * 1.25;
-  // Placeholder until dedicated Strength move exists.
-  const chargedMul = charged ? 1.35 : 1;
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, FIELD_SKILL_STRENGTH_RADIUS * chargedMul, {
-    damage: charged ? 20 : 14,
-    knockback: charged ? 6 : 4.9
-  });
-  const worldHitOnceSet = new Set();
-  const spawnedHitOnceSet = new Set();
-  const rays = charged ? 20 : 14;
-  for (let i = 0; i < rays; i++) {
-    const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
-    const ey = centerY + Math.sin(ang) * FIELD_SKILL_STRENGTH_RADIUS * chargedMul;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
-      worldHitOnceSet,
-      spawnedHitOnceSet,
-      hitSource: 'cut'
-    });
-  }
+  tryStrengthFieldSkillPress(player, data, charged);
 }
 
 function castChargedFieldSpinAttack(player, data) {
@@ -675,6 +653,7 @@ function castChargedFieldSpinAttack(player, data) {
   const worldHitOnceSet = new Set();
   const spawnedHitOnceSet = new Set();
   const rays = 24;
+  const spinHitSource = selectedFieldSkillId === 'cut' ? 'cut' : 'tackle';
   for (let i = 0; i < rays; i++) {
     const ang = (i / rays) * Math.PI * 2;
     const ex = centerX + Math.cos(ang) * radius;
@@ -682,7 +661,7 @@ function castChargedFieldSpinAttack(player, data) {
     tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
       worldHitOnceSet,
       spawnedHitOnceSet,
-      hitSource: 'cut'
+      hitSource: spinHitSource
     });
   }
   if (selectedFieldSkillId === 'cut') {

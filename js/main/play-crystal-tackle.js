@@ -1,5 +1,5 @@
 import { clearScatterSolidBlockCache } from '../scatter-pass2-debug.js';
-import { BIOME_VEGETATION } from '../biome-tiles.js';
+import { BIOME_VEGETATION, getTreeType, TREE_TILES } from '../biome-tiles.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -11,6 +11,7 @@ import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
+import { setScatterItemKeyOverride, clearScatterItemKeyOverrides } from './scatter-item-override.js';
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
@@ -74,6 +75,92 @@ const DETAIL_HIT_BAR_ANIM_SEC = 0.16;
 const DETAIL_HIT_BAR_LINGER_SEC = 1.05;
 const DETAIL_HIT_SHAKE_SEC = 0.18;
 
+/** Short canopy/top “fall + fade” after trees are cut (wall-clock seconds, cheap drawImage only). */
+const TREE_TOP_FALL_SEC = 0.58;
+const MAX_TREE_TOP_FALLS = 56;
+
+/**
+ * @type {Array<
+ *   | { kind: 'formal'; rootX: number; my: number; treeType: string; startWallSec: number }
+ *   | { kind: 'scatter'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
+ * >}
+ */
+const activeTreeTopFalls = [];
+
+function easeOutQuadTreeFall(u) {
+  const x = Math.max(0, Math.min(1, u));
+  return 1 - (1 - x) * (1 - x);
+}
+
+function pruneTreeTopFalls(wallSec) {
+  for (let i = activeTreeTopFalls.length - 1; i >= 0; i--) {
+    const e = activeTreeTopFalls[i];
+    if (wallSec - e.startWallSec > TREE_TOP_FALL_SEC + 0.08) activeTreeTopFalls.splice(i, 1);
+  }
+}
+
+function pushFormalTreeTopFall(rootX, my, treeType, startWallSec) {
+  const ids = TREE_TILES[treeType];
+  if (!ids?.top?.length) return;
+  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
+  activeTreeTopFalls.push({ kind: 'formal', rootX, my, treeType, startWallSec });
+}
+
+function pushScatterTreeTopFallFromSt(st, startWallSec) {
+  if (!st || !scatterItemKeyIsTree(st.itemKey)) return;
+  const objSet = OBJECT_SETS[st.itemKey];
+  if (!objSet) return;
+  const topPart = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+  if (!topPart?.ids?.length) return;
+  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
+  activeTreeTopFalls.push({
+    kind: 'scatter',
+    ox: st.ox,
+    oy: st.oy,
+    itemKey: st.itemKey,
+    cols: st.cols,
+    rows: st.rows,
+    startWallSec: startWallSec
+  });
+}
+
+/** Enqueues sorted `renderItems` entries for falling tree tops (cached composites + alpha only). */
+export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, tileH) {
+  void tileW;
+  void tileH;
+  pruneTreeTopFalls(wallNowSec);
+  for (const e of activeTreeTopFalls) {
+    const u = Math.max(0, Math.min(1, (wallNowSec - e.startWallSec) / TREE_TOP_FALL_SEC));
+    if (u >= 1) continue;
+    const dropYTiles = easeOutQuadTreeFall(u) * 0.9;
+    const alpha = Math.max(0, Math.min(1, 1 - Math.pow(Math.max(0, u - 0.08) / 0.92, 1.22)));
+    if (alpha < 0.02) continue;
+    if (e.kind === 'formal') {
+      renderItems.push({
+        type: 'formalTreeCanopyFall',
+        originX: e.rootX,
+        originY: e.my,
+        treeType: e.treeType,
+        dropYTiles,
+        alpha,
+        sortY: e.my + 1 + dropYTiles * 0.36
+      });
+    } else {
+      renderItems.push({
+        type: 'scatterTreeCanopyFall',
+        originX: e.ox,
+        originY: e.oy,
+        itemKey: e.itemKey,
+        cols: e.cols,
+        rows: e.rows,
+        dropYTiles,
+        alpha,
+        sortY: e.oy + e.rows - 0.1 + dropYTiles * 0.36
+      });
+    }
+  }
+}
+
 /** @typedef {{ x: number, y: number, vx: number, vy: number, tileId: number, cols: number, imgPath: string | null, age: number, maxAge: number }} CrystalShard */
 
 /** @type {CrystalShard[]} */
@@ -111,6 +198,8 @@ const detailHitHpBars = new Map();
 const detailHitShakeAtSec = new Map();
 /** @type {Array<{ x: number, y: number, age: number, maxAge: number }>} */
 const activeDetailHitPulses = [];
+/** Origins whose destroyed scatter regen is paused while Strength is carrying that lift. */
+const strengthCarriedBlockRegenKeys = new Set();
 
 export function isPlayCrystalScatterOriginDestroyed(ox, oy) {
   const st = detailBreakStateByOrigin.get(`${ox},${oy}`);
@@ -151,7 +240,19 @@ export function isPlayScatterTreeOriginBurnedHarvested(ox, oy) {
   return harvestedBurnedScatterTreeOrigins.has(`${ox},${oy}`);
 }
 
+/** True if this origin can be Strength-lifted as an intact rock/crystal (not destroyed / chipped). */
+export function isScatterDetailLiftableRockAt(ox, oy, itemKey) {
+  const key = `${ox},${oy}`;
+  const st = detailBreakStateByOrigin.get(key);
+  if (st && st.destroyed) return false;
+  if (st && st.hitsRemaining < st.hitsMax) return false;
+  if (st && st.itemKey && String(st.itemKey) !== String(itemKey)) return false;
+  return true;
+}
+
 export function clearPlayCrystalTackleState() {
+  strengthCarriedBlockRegenKeys.clear();
+  clearScatterItemKeyOverrides();
   destroyedCrystalScatterOrigins.clear();
   destroyedFormalTreeRoots.clear();
   destroyedFormalTreeRegenAtSecByRoot.clear();
@@ -175,6 +276,7 @@ export function clearPlayCrystalTackleState() {
   collectedDetailInventory.clear();
   crystalLootCount = 0;
   crystalDynIdSeq = 1;
+  activeTreeTopFalls.length = 0;
 }
 
 function isCrystalItemKey(itemKey) {
@@ -186,13 +288,18 @@ function registerDestroyedCrystalOrigin(rootOx, rootOy) {
   clearScatterSolidBlockCache();
 }
 
-function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut') {
+function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut', data = null) {
   const key = `${rootX},${my}`;
   burningFormalTreeEndsAtSecByRoot.delete(key);
   destroyedFormalTreeRoots.add(key);
   destroyedFormalTreeRegenAtSecByRoot.set(key, nowSec + FORMAL_TREE_REGEN_AFTER_BREAK_SEC);
   destroyedFormalTreeCauseByRoot.set(key, cause === 'burned' ? 'burned' : 'cut');
   formalTreeBurnMeterByRoot.delete(key);
+  if (cause !== 'burned' && data) {
+    const t = getMicroTile(rootX, my, data);
+    const treeType = t ? getTreeType(t.biomeId, rootX, my, data.seed) : null;
+    if (treeType) pushFormalTreeTopFall(rootX, my, treeType, nowSec);
+  }
   enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
   enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
 }
@@ -273,7 +380,7 @@ function markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data) {
     st.hitsRemaining = 0;
     st.lastHitAtSec = nowSec;
   }
-  markDestroyedDetailAndScheduleRegen(st, nowSec);
+  markDestroyedDetailAndScheduleRegen(st, nowSec, { skipTreeTopFall: true });
   burnedScatterTreeOrigins.add(key);
   harvestedBurnedScatterTreeOrigins.delete(key);
   scatterTreeBurnMeterByOrigin.delete(key);
@@ -513,6 +620,103 @@ function invalidateChunksOverlappingFootprint(rootOx, rootOy, cols, rows) {
   for (const k of keys) playChunkMap.delete(k);
 }
 
+function pauseStrengthCarriedScatterRegen(ox, oy) {
+  strengthCarriedBlockRegenKeys.add(`${ox},${oy}`);
+}
+
+function strengthRockItemKeyAllowed(itemKey) {
+  const k = String(itemKey || '').toLowerCase();
+  if (scatterItemKeyIsTree(itemKey)) return false;
+  if (isCrystalItemKey(itemKey)) return true;
+  return /boulder|rock|stone|geode|stalag|stalagmite|gravel|ore/i.test(k);
+}
+
+/**
+ * Strength: lift an intact solid rock/crystal scatter at this micro origin (hides map prop until placed / dropped).
+ * @returns {boolean}
+ */
+export function tryStrengthLiftSolidScatterAt(ox, oy, data, nowSec) {
+  if (!data) return false;
+  if (isPlayScatterTreeOriginCharred(ox, oy) || isPlayScatterTreeOriginBurning(ox, oy)) return false;
+  const key = `${ox},${oy}`;
+  const p = scatterPhysicsCircleAtOrigin(ox, oy, data);
+  if (!p || scatterItemKeyIsTree(String(p.itemKey))) return false;
+  const itemKey = String(p.itemKey);
+  if (!strengthRockItemKeyAllowed(itemKey)) return false;
+  if (!isScatterDetailLiftableRockAt(ox, oy, itemKey)) return false;
+  const objSet = OBJECT_SETS[itemKey];
+  if (!objSet) return false;
+  setScatterItemKeyOverride(ox, oy, null);
+  const st = getOrCreateDetailBreakState(ox, oy, itemKey, objSet, nowSec);
+  if (st.destroyed || st.hitsRemaining < st.hitsMax) return false;
+  pauseStrengthCarriedScatterRegen(ox, oy);
+  detailHitHpBars.delete(key);
+  detailHitShakeAtSec.delete(key);
+  markDestroyedDetailAndScheduleRegen(st, nowSec);
+  return true;
+}
+
+/**
+ * Strength: after a carry, place the prop at a new micro origin (restores walkability + visuals via override).
+ * @returns {boolean}
+ */
+export function strengthRelocateCarriedDetail(liftOx, liftOy, nox, noy, itemKey, cols, rows, data, nowSec) {
+  if (!data) return false;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const seed = data.seed ?? 0;
+  const originMemo = new Map();
+  const tileMemo = new Map();
+  const getTileCached = (x, y) => {
+    if (x < 0 || y < 0 || x >= microW || y >= microH) return null;
+    const k = `${x},${y}`;
+    if (tileMemo.has(k)) return tileMemo.get(k);
+    const t = getMicroTile(x, y, data);
+    tileMemo.set(k, t || null);
+    return t || null;
+  };
+  if (!validScatterOriginMicro(nox, noy, seed, microW, microH, getTileCached, originMemo)) return false;
+  const nk = `${nox},${noy}`;
+  const exSt = detailBreakStateByOrigin.get(nk);
+  if (exSt && !exSt.destroyed) return false;
+  const oldKey = `${liftOx},${liftOy}`;
+  strengthCarriedBlockRegenKeys.delete(oldKey);
+  detailBreakStateByOrigin.delete(oldKey);
+  detailHitHpBars.delete(oldKey);
+  detailHitShakeAtSec.delete(oldKey);
+  unregisterDestroyedDetailOrigin(liftOx, liftOy);
+  invalidateChunksOverlappingFootprint(liftOx, liftOy, cols, rows);
+  const objSet = OBJECT_SETS[itemKey];
+  if (!objSet) return false;
+  detailBreakStateByOrigin.delete(nk);
+  const st = getOrCreateDetailBreakState(nox, noy, itemKey, objSet, nowSec);
+  st.hitsRemaining = st.hitsMax;
+  st.destroyed = false;
+  st.regenAtSec = 0;
+  st.lastHitAtSec = nowSec;
+  destroyedCrystalScatterOrigins.delete(nk);
+  setScatterItemKeyOverride(nox, noy, itemKey);
+  invalidateChunksOverlappingFootprint(nox, noy, st.cols, st.rows);
+  clearScatterSolidBlockCache();
+  return true;
+}
+
+/**
+ * Strength: cancel carry — clear lift hole and spawn a pickup drop (no world re-embed).
+ */
+export function strengthDropCarriedAsPickup(liftOx, liftOy, cols, rows, itemKey, dropX, dropY) {
+  const oldKey = `${liftOx},${liftOy}`;
+  strengthCarriedBlockRegenKeys.delete(oldKey);
+  detailBreakStateByOrigin.delete(oldKey);
+  detailHitHpBars.delete(oldKey);
+  detailHitShakeAtSec.delete(oldKey);
+  unregisterDestroyedDetailOrigin(liftOx, liftOy);
+  invalidateChunksOverlappingFootprint(liftOx, liftOy, cols, rows);
+  setScatterItemKeyOverride(liftOx, liftOy, null);
+  spawnPickableCrystalDropAt(dropX, dropY, itemKey, null);
+  clearScatterSolidBlockCache();
+}
+
 function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
   const dx = bx - ax;
   const dy = by - ay;
@@ -629,7 +833,7 @@ function spawnSmallCrystalChunksFromLarge(rootOx, rootOy, itemKey) {
   }
 }
 
-function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
+export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
   const resolvedItemKey = String(itemKey || 'unknown');
   const visual =
     crystalDropVisualFromItemKey(resolvedItemKey) ||
@@ -655,8 +859,10 @@ function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
   });
 }
 
-function markDestroyedDetailAndScheduleRegen(st, nowSec) {
+function markDestroyedDetailAndScheduleRegen(st, nowSec, opts = {}) {
   if (!st || st.destroyed) return;
+  setScatterItemKeyOverride(st.ox, st.oy, null);
+  if (!opts.skipTreeTopFall) pushScatterTreeTopFallFromSt(st, nowSec);
   st.destroyed = true;
   st.regenAtSec = nowSec + DETAIL_REGEN_AFTER_BREAK_SEC;
   registerDestroyedCrystalOrigin(st.ox, st.oy);
@@ -683,7 +889,11 @@ function sweepDetailBreakState(data, nowSec) {
       continue;
     }
     if (st.destroyed) {
+      if (strengthCarriedBlockRegenKeys.has(key)) {
+        continue;
+      }
       if (nowSec >= st.regenAtSec) {
+        setScatterItemKeyOverride(st.ox, st.oy, null);
         unregisterDestroyedDetailOrigin(st.ox, st.oy);
         invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
         detailBreakStateByOrigin.delete(key);
@@ -1001,7 +1211,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       markDetailHitShake(bumpKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
       if (allowFormalTreeDestroy) {
-        registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec);
+        registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec, 'cut', data);
       } else {
         const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
         tryApplyTreeTackleEffects(
@@ -1138,6 +1348,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
  */
 export function updateBreakableDetailRegeneration(dt, data) {
   if (!data) return;
+  pruneTreeTopFalls(performance.now() * 0.001);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
     for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot.entries()) {

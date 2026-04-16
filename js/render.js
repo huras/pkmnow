@@ -57,6 +57,7 @@ import {
 import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
+import { getScatterItemKeyOverride } from './main/scatter-item-override.js';
 import {
   activeCrystalDrops,
   activeCrystalShards,
@@ -71,7 +72,8 @@ import {
   isPlayFormalTreeRootBurning,
   isPlayDetailScatterOriginDestroyed,
   isPlayFormalTreeRootCharred,
-  isPlayFormalTreeRootDestroyed
+  isPlayFormalTreeRootDestroyed,
+  appendTreeTopFallRenderItems
 } from './main/play-crystal-tackle.js';
 import {
   getBorrowDigPlaceholderDex,
@@ -1404,7 +1406,9 @@ export function render(canvas, data, options = {}) {
         if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !t.isRoad && !t.urbanBuilding) {
           const items = BIOME_VEGETATION[t.biomeId] || [];
           if (items.length > 0) {
-            const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            const itemKey =
+              getScatterItemKeyOverride(mxScan, myScan) ||
+              items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
             const isSortable = isSortableScatter(itemKey);
             // Even if not "sortable" (like grass), we check for "tops" that need sorting
             const objSet = OBJECT_SETS[itemKey];
@@ -1725,7 +1729,8 @@ export function render(canvas, data, options = {}) {
         vy: Number(player.vy) || 0,
         pivotX: dw * 0.5,
         pivotY: dh * PMD_MON_SHEET.pivotYFrac,
-        targetHeightTiles
+        targetHeightTiles,
+        strengthCarry: player._strengthCarry || null
       });
       if (playerEmotionPayload && lodDetail < 2) {
         const playerFootSortY = vy + 0.5;
@@ -1805,6 +1810,8 @@ export function render(canvas, data, options = {}) {
         sortY: d.y + 0.5
       });
     }
+
+    appendTreeTopFallRenderItems(renderItems, performance.now() * 0.001, tileW, tileH);
 
     // --- SORT BY Y (`sortY`: pivot — Pokémon vy+0.5; formal + scatter canopy originY+1 per translate; else `y`) ---
     renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
@@ -2047,7 +2054,31 @@ export function render(canvas, data, options = {}) {
         } else {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
         }
-        
+
+        if (item.type === 'player' && item.strengthCarry) {
+          const sc = item.strengthCarry;
+          const objSet = OBJECT_SETS[sc.itemKey];
+          if (objSet) {
+            const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+            const tid = base?.ids?.[0];
+            const { img, cols: atlasCols } = atlasFromObjectSet(objSet);
+            if (img && tid != null) {
+              const cols = Math.max(1, Number(sc.cols) || 1);
+              const rows = Math.max(1, Number(sc.rows) || 1);
+              const srcW = 16 * cols;
+              const srcH = 16 * rows;
+              const scale = 0.38;
+              const dw = srcW * scale * (tileW / 16);
+              const dh = srcH * scale * (tileH / 16);
+              const tx = snapPx(item.cx - dw * 0.35 + tackleOx * 0.12);
+              const ty = snapPx(pxT0 - dh * 0.72 + tackleOy * 0.12);
+              const sx0 = (tid % atlasCols) * 16;
+              const sy0 = Math.floor(tid / atlasCols) * 16;
+              ctx.drawImage(img, sx0, sy0, srcW, srcH, tx, ty, dw, dh);
+            }
+          }
+        }
+
         ctx.filter = 'none';
 
         if (item.type === 'wild') {
@@ -2330,6 +2361,58 @@ export function render(canvas, data, options = {}) {
           }
           if (bump01 > 0) {
             ctx.restore();
+          }
+        }
+      } else if (item.type === 'formalTreeCanopyFall') {
+        const { originX, originY, treeType, dropYTiles, alpha } = item;
+        const ids = TREE_TILES[treeType];
+        if (ids?.top?.length && alpha > 0.02) {
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+            0,
+            treeType,
+            originX,
+            originY,
+            ids.top,
+            natureImg,
+            TCOLS_NATURE,
+            tileW,
+            tileH
+          );
+          const px = snapPx(originX * tileW + tileW);
+          const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
+          ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+          ctx.restore();
+        }
+      } else if (item.type === 'scatterTreeCanopyFall') {
+        const { originX, originY, itemKey, cols, rows, dropYTiles, alpha } = item;
+        const objSet = OBJECT_SETS[itemKey];
+        if (objSet && alpha > 0.02) {
+          const topPart = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+          if (topPart?.ids?.length) {
+            const { img, cols: atlasCols } = atlasFromObjectSet(objSet);
+            if (img) {
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+                0,
+                itemKey,
+                originX,
+                originY,
+                topPart,
+                cols,
+                img,
+                atlasCols,
+                tileW,
+                tileH,
+                false
+              );
+              const px = snapPx(originX * tileW + (cols * tileW) / 2);
+              const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
+              ctx.drawImage(scCan, px - scOx, py - scOy);
+              ctx.restore();
+            }
           }
         }
       } else if (item.type === 'building') {
