@@ -1,3 +1,4 @@
+import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { parseShape } from '../tessellation-logic.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -11,6 +12,12 @@ import {
   strengthRelocateCarriedDetail,
   strengthDropCarriedAsPickup
 } from './play-crystal-tackle.js';
+import { getWildPokemonEntities, applyPlayerTackleEffectOnWildFromPoint } from '../wild-pokemon/wild-pokemon-manager.js';
+import {
+  getPokemonHurtboxCenterWorldXY,
+  getPokemonHurtboxRadiusTiles,
+  projectileZInPokemonHurtbox
+} from '../pokemon/pokemon-combat-hurtbox.js';
 
 function strengthRockItemKeyAllowed(itemKey) {
   const k = String(itemKey || '').toLowerCase();
@@ -110,6 +117,86 @@ function tryStrengthGrab(player, data, nowSec) {
   return true;
 }
 
+/** Match padding used in wild `tryPlayerTackleHitWild` sweep test. */
+const THROW_WILD_SWEEP_PAD = 0.34;
+const THROW_SPEED_TILES = 7.85;
+const THROW_VZ0 = 4.35;
+const THROW_Z_GRAV = 13.5;
+const THROW_H_DRAG = 1.78;
+const THROW_MAX_AGE_SEC = 2.35;
+
+/**
+ * @typedef {{
+ *   x: number,
+ *   y: number,
+ *   z: number,
+ *   vx: number,
+ *   vy: number,
+ *   vz: number,
+ *   liftOx: number,
+ *   liftOy: number,
+ *   itemKey: string,
+ *   cols: number,
+ *   rows: number,
+ *   age: number
+ * }} StrengthThrowState
+ */
+
+/** @type {StrengthThrowState[]} */
+const activeStrengthThrows = [];
+
+function distPointSegmentSq(px, py, ax, ay, bx, by) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const abLen2 = abx * abx + aby * aby;
+  let t = abLen2 > 1e-8 ? (apx * abx + apy * aby) / abLen2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * abx;
+  const cy = ay + t * aby;
+  const dx = px - cx;
+  const dy = py - cy;
+  return dx * dx + dy * dy;
+}
+
+function segmentHitsCircle(ax, ay, bx, by, cx, cy, r) {
+  return distPointSegmentSq(cx, cy, ax, ay, bx, by) <= r * r;
+}
+
+function removeStrengthThrow(t) {
+  const i = activeStrengthThrows.indexOf(t);
+  if (i >= 0) activeStrengthThrows.splice(i, 1);
+}
+
+function finalizeStrengthThrowLand(t, data, landX, landY) {
+  removeStrengthThrow(t);
+  if (!data) return;
+  const nowSec = performance.now() * 0.001;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const lx = Math.max(0.5, Math.min(microW - 0.5, landX));
+  const ly = Math.max(0.5, Math.min(microH - 0.5, landY));
+  const nox = Math.floor(lx);
+  const noy = Math.floor(ly);
+  if (
+    strengthRelocateCarriedDetail(
+      t.liftOx,
+      t.liftOy,
+      nox,
+      noy,
+      t.itemKey,
+      t.cols,
+      t.rows,
+      data,
+      nowSec
+    )
+  ) {
+    return;
+  }
+  strengthDropCarriedAsPickup(t.liftOx, t.liftOy, t.cols, t.rows, t.itemKey, lx, ly);
+}
+
 function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
   const carry = player._strengthCarry;
   if (!carry) return false;
@@ -158,16 +245,121 @@ function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
 }
 
 /**
- * LMB field skill when Strength is selected: grab nearby rock/crystal, or place / drop if already carrying.
- * @returns {boolean} true if a grab or place/drop was attempted (even if grab missed)
+ * Play key `E`: grab a nearby liftable rock, or place / drop when already carrying.
+ * @returns {boolean} true if grab succeeded or a carry was cleared (place/drop)
  */
-export function tryStrengthFieldSkillPress(player, data, charged = false) {
+export function tryStrengthInteractKeyE(player, data) {
   if (!player || !data) return false;
   const nowSec = performance.now() * 0.001;
   if (player._strengthCarry) {
-    tryStrengthPlaceOrDrop(player, data, nowSec, charged);
+    tryStrengthPlaceOrDrop(player, data, nowSec, false);
     return true;
   }
-  tryStrengthGrab(player, data, nowSec);
+  return tryStrengthGrab(player, data, nowSec);
+}
+
+/**
+ * LMB release while carrying: throw toward cursor with a short arc; clears carry.
+ * @returns {boolean} true if a throw was started
+ */
+export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
+  if (!player?._strengthCarry || !data) return false;
+  const carry = player._strengthCarry;
+  const sx = (player.visualX ?? player.x) + 0.5;
+  const sy = (player.visualY ?? player.y) + 0.5;
+  const dx = Number(aimTx) - sx;
+  const dy = Number(aimTy) - sy;
+  const len = Math.hypot(dx, dy) || 1;
+  activeStrengthThrows.push({
+    x: sx,
+    y: sy,
+    z: 0.26,
+    vx: (dx / len) * THROW_SPEED_TILES,
+    vy: (dy / len) * THROW_SPEED_TILES,
+    vz: THROW_VZ0,
+    liftOx: carry.liftOx,
+    liftOy: carry.liftOy,
+    itemKey: carry.itemKey,
+    cols: carry.cols,
+    rows: carry.rows,
+    age: 0
+  });
+  player._strengthCarry = null;
   return true;
+}
+
+/**
+ * @param {number} dt
+ * @param {object | null | undefined} data
+ */
+export function updateStrengthThrows(dt, data) {
+  if (!data || activeStrengthThrows.length === 0) return;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const drag = Math.exp(-THROW_H_DRAG * dt);
+  for (let i = activeStrengthThrows.length - 1; i >= 0; i--) {
+    const t = activeStrengthThrows[i];
+    t.age += dt;
+    const prevX = t.x;
+    const prevY = t.y;
+    const prevZ = t.z;
+    t.vx *= drag;
+    t.vy *= drag;
+    t.vz -= THROW_Z_GRAV * dt;
+    t.x += t.vx * dt;
+    t.y += t.vy * dt;
+    t.z += t.vz * dt;
+
+    let hitEntity = null;
+    let bestD2 = Infinity;
+    for (const e of getWildPokemonEntities()) {
+      if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+      const dex = e.dexId ?? 1;
+      if (!projectileZInPokemonHurtbox(t.z, dex, e.z ?? 0)) continue;
+      const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
+      const r = getPokemonHurtboxRadiusTiles(dex) + THROW_WILD_SWEEP_PAD;
+      if (!segmentHitsCircle(prevX, prevY, t.x, t.y, hx, hy, r)) continue;
+      const d2 = (t.x - hx) * (t.x - hx) + (t.y - hy) * (t.y - hy);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        hitEntity = e;
+      }
+    }
+    if (hitEntity) {
+      applyPlayerTackleEffectOnWildFromPoint(hitEntity, t.x, t.y);
+      finalizeStrengthThrowLand(t, data, hitEntity.x, hitEntity.y);
+      continue;
+    }
+
+    const airbornLongEnough = t.age > 0.05;
+    if (airbornLongEnough && t.z <= 0.02 && t.vz <= 0.15) {
+      t.z = 0;
+      finalizeStrengthThrowLand(t, data, t.x, t.y);
+      continue;
+    }
+    if (t.age > THROW_MAX_AGE_SEC || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
+      finalizeStrengthThrowLand(t, data, t.x, t.y);
+    } else if (prevZ > 0.04 && t.z < -0.08) {
+      t.z = 0;
+      finalizeStrengthThrowLand(t, data, t.x, t.y);
+    }
+  }
+}
+
+/**
+ * @param {Array<{ type?: string, sortY?: number }>} renderItems
+ */
+export function appendStrengthThrowRenderItems(renderItems) {
+  for (const t of activeStrengthThrows) {
+    renderItems.push({
+      type: 'strengthThrowRock',
+      sortY: t.y + 0.5,
+      x: t.x,
+      y: t.y,
+      z: t.z,
+      itemKey: t.itemKey,
+      cols: t.cols,
+      rows: t.rows
+    });
+  }
 }

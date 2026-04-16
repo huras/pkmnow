@@ -317,7 +317,7 @@ export class CharacterSelector {
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut/strength, hold+release LMB = charge; Cut = 3-hit combo) · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
+          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut; hold+release LMB = charge; Cut = 3-hit combo) · E = pegar/soltar pedra · com pedra: soltar LMB = arremessar · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div

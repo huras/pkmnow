@@ -14,7 +14,7 @@ import {
 } from '../moves/moves-manager.js';
 import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
-import { tryStrengthFieldSkillPress } from './play-strength-carry.js';
+import { beginStrengthThrowFromPointer } from './play-strength-carry.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
 import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
@@ -30,12 +30,11 @@ const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
 const FIELD_SKILL_CUT_ADVANCE_TILES = 0.5;
-const FIELD_SKILLS = ['tackle', 'cut', 'strength'];
+const FIELD_SKILLS = ['tackle', 'cut'];
 const FIELD_SKILL_STORAGE_KEY = 'pkmn_field_skill_by_dex';
 const FIELD_SKILL_LABEL = {
   tackle: 'Tackle',
-  cut: 'Cut',
-  strength: 'Strength'
+  cut: 'Cut'
 };
 
 /** Hold `2` (Digit2) to pick which move RMB executes (special attack wheel). */
@@ -78,7 +77,7 @@ let fieldSkillWheelOpen = false;
 let fieldSkillWheelHoverIndex = 0;
 /** @type {HTMLDivElement | null} */
 let fieldSkillWheelRoot = null;
-/** @type {Record<string, 'tackle' | 'cut' | 'strength'>} */
+/** @type {Record<string, 'tackle' | 'cut'>} */
 let fieldSkillByDex = loadStoredFieldSkillByDex();
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
@@ -97,7 +96,9 @@ let specialAttackWheelRoot = null;
 let specialAttackByDex = loadStoredSpecialAttackByDex();
 
 function normalizeFieldSkillId(skillId) {
-  return FIELD_SKILLS.includes(String(skillId)) ? String(skillId) : 'tackle';
+  const s = String(skillId || '');
+  if (s === 'strength') return 'tackle';
+  return FIELD_SKILLS.includes(s) ? s : 'tackle';
 }
 
 function loadStoredFieldSkillByDex() {
@@ -106,13 +107,13 @@ function loadStoredFieldSkillByDex() {
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return {};
-    /** @type {Record<string, 'tackle' | 'cut' | 'strength'>} */
+    /** @type {Record<string, 'tackle' | 'cut'>} */
     const out = {};
     for (const [dexKey, skillId] of Object.entries(parsed)) {
       const dex = Math.floor(Number(dexKey) || 0);
       if (dex < 1 || dex > 151) continue;
       const norm = normalizeFieldSkillId(skillId);
-      out[String(dex)] = /** @type {'tackle' | 'cut' | 'strength'} */ (norm);
+      out[String(dex)] = /** @type {'tackle' | 'cut'} */ (norm);
     }
     return out;
   } catch {
@@ -142,7 +143,7 @@ function dispatchFieldSkillChange(dexId, skillId) {
 function persistSelectedFieldSkillForDex(dexId) {
   const dex = Math.floor(Number(dexId) || 0);
   if (dex < 1 || dex > 151) return;
-  fieldSkillByDex[String(dex)] = /** @type {'tackle' | 'cut' | 'strength'} */ (normalizeFieldSkillId(selectedFieldSkillId));
+  fieldSkillByDex[String(dex)] = /** @type {'tackle' | 'cut'} */ (normalizeFieldSkillId(selectedFieldSkillId));
   saveStoredFieldSkillByDex();
 }
 
@@ -256,7 +257,6 @@ function ensureFieldSkillWheelDom() {
       <div class="play-field-skill-wheel__hint">Hold 1 · release to select</div>
       <button type="button" class="play-field-skill-wheel__item" data-skill="tackle">Tackle</button>
       <button type="button" class="play-field-skill-wheel__item" data-skill="cut">Cut</button>
-      <button type="button" class="play-field-skill-wheel__item" data-skill="strength">Strength</button>
     </div>
   `;
   document.body.appendChild(root);
@@ -608,13 +608,6 @@ function castPlayerCut(player, data, charged = false) {
   cutGrassInCircle(centerX, centerY, useRadius, data);
 }
 
-function castPlayerStrengthPlaceholder(player, data, charged = false) {
-  if (!player || !data) return;
-  const { sx, sy, tx, ty } = aimAtCursor(player);
-  triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-  tryStrengthFieldSkillPress(player, data, charged);
-}
-
 function castChargedFieldSpinAttack(player, data) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
@@ -638,11 +631,6 @@ function castChargedFieldSpinAttack(player, data) {
     knockback = profile.knockback + 1.8;
     fieldCutComboStep = 0;
     fieldCutComboTimerSec = 0;
-  } else if (selectedFieldSkillId === 'strength') {
-    styleId = 'strength';
-    radius = 2.45;
-    damage = 22;
-    knockback = 6.4;
   }
   spawnFieldSpinAttackFx(centerX, centerY, headingRad, {
     radiusTiles: radius,
@@ -677,10 +665,6 @@ function castSelectedFieldSkill(player, data, charged = false, charge01 = 0) {
   }
   if (selectedFieldSkillId === 'cut') {
     castPlayerCut(player, data, false);
-    return;
-  }
-  if (selectedFieldSkillId === 'strength') {
-    castPlayerStrengthPlaceholder(player, data, charged);
     return;
   }
   fieldCutComboStep = 0;
@@ -813,7 +797,7 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   updateFieldSkillWheelHover(player);
   updateSpecialAttackWheelHover(player);
-  if (leftHeld && !combatModifierHeld()) {
+  if (leftHeld && !combatModifierHeld() && !player._strengthCarry) {
     const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec());
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
   } else {
@@ -913,7 +897,13 @@ export function installPlayPointerCombat(deps) {
         const heldMs = now - leftDownAt;
         const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
         const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
-        castSelectedFieldSkill(player, getCurrentData?.() ?? null, charged, charge01);
+        const data = getCurrentData?.() ?? null;
+        const threw = !!(player._strengthCarry && data && beginStrengthThrowFromPointer(player, data, tx, ty));
+        if (threw) {
+          triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+        } else {
+          castSelectedFieldSkill(player, data, charged, charge01);
+        }
       }
       playInputState.chargeLeft01 = 0;
     }

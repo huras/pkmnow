@@ -1773,6 +1773,23 @@ export function tryPlayerTackleHitWild(player, data) {
 }
 
 /**
+ * Same damage / knockback / feedback as `tryPlayerTackleHitWild`, from an arbitrary impact point (e.g. thrown rock).
+ * @returns {boolean} true if the entity was valid and effects were applied
+ */
+export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
+  if (!entity || entity.isDespawning || entity.deadState) return false;
+  const px = Number(fromX);
+  const py = Number(fromY);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+  if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  setEmotion(entity, 5, false, 'Pain');
+  applyWildKnockbackFromPoint(entity, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);
+  pushRecentNearbyEvent(entity, 'player_field_move', 1.18);
+  broadcastNearbyPlayerEvent(entity.x, entity.y, 'player_field_move', 0.78, entity);
+  return true;
+}
+
+/**
  * Circular melee hit used by field skills like Cut.
  * @param {{ x?: number, y?: number } | null | undefined} player
  * @param {object | null | undefined} data

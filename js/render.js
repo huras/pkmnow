@@ -75,6 +75,7 @@ import {
   isPlayFormalTreeRootDestroyed,
   appendTreeTopFallRenderItems
 } from './main/play-crystal-tackle.js';
+import { appendStrengthThrowRenderItems } from './main/play-strength-carry.js';
 import {
   getBorrowDigPlaceholderDex,
   isUndergroundBurrowerDex,
@@ -1811,6 +1812,8 @@ export function render(canvas, data, options = {}) {
       });
     }
 
+    appendStrengthThrowRenderItems(renderItems);
+
     appendTreeTopFallRenderItems(renderItems, performance.now() * 0.001, tileW, tileH);
 
     // --- SORT BY Y (`sortY`: pivot — Pokémon vy+0.5; formal + scatter canopy originY+1 per translate; else `y`) ---
@@ -2452,6 +2455,31 @@ export function render(canvas, data, options = {}) {
             });
           });
         }
+      } else if (item.type === 'strengthThrowRock') {
+        const sc = item;
+        const objSet = OBJECT_SETS[sc.itemKey];
+        if (objSet) {
+          const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+          const tid = base?.ids?.[0];
+          const { img, cols: atlasCols } = atlasFromObjectSet(objSet);
+          if (img && tid != null) {
+            const cols = Math.max(1, Number(sc.cols) || 1);
+            const rows = Math.max(1, Number(sc.rows) || 1);
+            const srcW = 16 * cols;
+            const srcH = 16 * rows;
+            const scale = 0.38;
+            const dw = srcW * scale * (tileW / 16);
+            const dh = srcH * scale * (tileH / 16);
+            const z = Number(sc.z) || 0;
+            const cx = snapPx(sc.x * tileW);
+            const cy = snapPx(sc.y * tileH - z * tileH);
+            const tx = snapPx(cx - dw * 0.5);
+            const ty = snapPx(cy - dh * 0.55);
+            const sx0 = (tid % atlasCols) * 16;
+            const sy0 = Math.floor(tid / atlasCols) * 16;
+            ctx.drawImage(img, sx0, sy0, srcW, srcH, tx, ty, dw, dh);
+          }
+        }
       } else if (item.type === 'crystalShard') {
         const s = item.shard;
         const path = s.imgPath;
@@ -2955,6 +2983,31 @@ export function render(canvas, data, options = {}) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'multiply';
       ctx.fillStyle = `rgb(${tint.r},${tint.g},${tint.b})`;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    }
+
+    /** Misty Woods (GHOST_WOODS): soft white screen-space fog after day tint. */
+    const mistTile = getCached(overlayMx, overlayMy);
+    if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {
+      const fogLodMul = lodDetail >= 2 ? 0.52 : lodDetail >= 1 ? 0.82 : 1;
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      const mt = (time || 0) * 0.26;
+      const gcx = cw * 0.5 + Math.sin(mt) * cw * 0.065;
+      const gcy = ch * 0.46 + Math.cos(mt * 0.88) * ch * 0.038;
+      const r0 = Math.min(cw, ch) * 0.16;
+      const r1 = Math.hypot(cw, ch) * 0.62;
+      const g = ctx.createRadialGradient(gcx, gcy, r0, gcx, gcy, r1);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.42, `rgba(255,255,255,${0.1 * fogLodMul})`);
+      g.addColorStop(1, `rgba(250,252,255,${0.32 * fogLodMul})`);
+      ctx.fillStyle = g;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+      ctx.globalAlpha = 0.1 * fogLodMul;
       ctx.fillRect(0, 0, cw, ch);
       ctx.restore();
     }

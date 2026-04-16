@@ -16,6 +16,7 @@ import {
   handleSpecialAttackHotkeyDown,
   handleSpecialAttackHotkeyUp
 } from './play-mouse-combat.js';
+import { updateStrengthThrows, tryStrengthInteractKeyE } from './play-strength-carry.js';
 import {
   updateCrystalShardParticles,
   updateCrystalDropsAndPickup,
@@ -140,6 +141,7 @@ export function createGameLoop(api) {
       updateBreakdown.updWildMs = performance.now() - tWild0;
       const tPointer0 = performance.now();
       updatePlayPointerCombat(dt, player, currentData);
+      updateStrengthThrows(dt, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
@@ -344,6 +346,11 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
       } else if (!e.repeat && handleSpecialAttackHotkeyDown(e.code)) {
         e.preventDefault();
+      } else if (!e.repeat && e.code === 'KeyE') {
+        const data = getCurrentData();
+        if (data && tryStrengthInteractKeyE(player, data)) {
+          e.preventDefault();
+        }
       }
 
       if (e.key === 'Escape') {
