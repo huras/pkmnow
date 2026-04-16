@@ -1,7 +1,7 @@
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
 import { getBiomeBgmUrlsForBiome } from './biome-bgm-tracks.js';
 import { getMicroTile } from '../chunking.js';
-import { getBgmMix01 } from './play-audio-mix-settings.js';
+import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
 
 const TUNING = {
   fadeOutSec: 1.15,
@@ -74,7 +74,7 @@ function ensureSlots() {
     const gain = ctx.createGain();
     gain.gain.value = 0;
     const userGain = ctx.createGain();
-    userGain.gain.value = getBgmMix01();
+    userGain.gain.value = getEffectiveBgmMix01();
     source.connect(gain);
     gain.connect(userGain);
     userGain.connect(ctx.destination);
@@ -88,7 +88,7 @@ function ensureSlots() {
  * Applies {@link getBgmMix01} to both BGM slots (post-fade trim). Safe to call any time after {@link ensureSlots}.
  */
 export function applyBgmUserMixFromStorage() {
-  const v = getBgmMix01();
+  const v = getEffectiveBgmMix01();
   if (slot0?.userGain) {
     try {
       slot0.userGain.gain.value = v;

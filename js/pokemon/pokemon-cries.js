@@ -5,7 +5,7 @@ import {
   setSpatialSourceWorldPosition,
   centerSpatialSourceOnListener
 } from '../audio/spatial-audio.js';
-import { getCriesMix01 } from '../audio/play-audio-mix-settings.js';
+import { getEffectiveCriesMix01 } from '../audio/play-audio-mix-settings.js';
 
 /** Two slots per dex so overlapping wild cries do not cancel each other. */
 const POOL_SIZE = 2;
@@ -26,7 +26,7 @@ const CRY_FADE_OUT_T_POWER = 2.75;
 const CRY_HURT_TAIL_U_POWER = 2.35;
 
 function clampCryVol(v) {
-  return Math.max(0, Math.min(1, v * CRY_VOL_BOOST * CRY_VOL_RANGE_SCALE * getCriesMix01()));
+  return Math.max(0, Math.min(1, v * CRY_VOL_BOOST * CRY_VOL_RANGE_SCALE * getEffectiveCriesMix01()));
 }
 /** @type {Map<number, HTMLAudioElement[]>} */
 const pools = new Map();

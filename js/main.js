@@ -31,6 +31,7 @@ import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
+import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { createPlaySocialOverlay } from './main/play-social-overlay.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
@@ -46,6 +47,9 @@ import {
   clearPlayCameraSnapshot
 } from './render/play-camera-snapshot.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
+import { OBJECT_SETS } from './tessellation-data.js';
+import { parseShape } from './tessellation-logic.js';
+import { TessellationEngine } from './tessellation-engine.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
@@ -260,6 +264,35 @@ let lastHudTileKey = '';
 let lastHudMs = 0;
 const HUD_MIN_INTERVAL_MS = 100;
 
+function detailLabelFromItemKey(itemKey) {
+  const raw = String(itemKey || '').replace(/\s*\[[^\]]+\]\s*$/g, '');
+  return raw
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function detailPreviewHtmlForInfoBar(itemKey) {
+  const objSet = OBJECT_SETS[String(itemKey || '')];
+  if (!objSet) return '';
+  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+  if (!base?.ids?.length) return '';
+  const { cols } = parseShape(objSet.shape || '[1x1]');
+  const imgPath = TessellationEngine.getImagePath(objSet.file);
+  if (!imgPath) return '';
+  const atlasCols = imgPath.includes('caves') ? 50 : 57;
+  const previewIds = base.ids.slice(0, Math.max(1, Math.min(4, cols)));
+  const tiles = previewIds
+    .map((id) => {
+      const sx = (id % atlasCols) * 16;
+      const sy = Math.floor(id / atlasCols) * 16;
+      return `<span style="display:inline-block;width:14px;height:14px;background-image:url('${imgPath}');background-repeat:no-repeat;background-size:auto;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.18) inset"></span>`;
+    })
+    .join('');
+  return `<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
+}
+
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
 function refreshPlayModeInfoBar(force = false) {
   if (!infoBar || !currentData || appMode !== 'play') return;
@@ -302,8 +335,12 @@ function refreshPlayModeInfoBar(force = false) {
       ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
       : '';
   const ifr = (player.projIFrameSec ?? 0) > 0 ? ` · i-frames ${(player.projIFrameSec ?? 0).toFixed(2)}s` : '';
+  const grabPrompt = getStrengthGrabPromptInfo(player, currentData);
+  const grabHint = grabPrompt
+    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${detailPreviewHtmlForInfoBar(grabPrompt.itemKey)}(${detailLabelFromItemKey(grabPrompt.itemKey)}) Grab [E]</span>`
+    : '';
   const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
-  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${telem}`;
+  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${grabHint}${telem}`;
 }
 
 function readWorldHoursPerRealSec() {

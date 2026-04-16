@@ -301,6 +301,22 @@ export function updateStrengthCarryInteraction(dt, player, data) {
 }
 
 /**
+ * Returns a grab prompt payload when a liftable Strength detail is in range.
+ * @returns {{ itemKey: string } | null}
+ */
+export function getStrengthGrabPromptInfo(player, data) {
+  if (!player || !data) return null;
+  if (player._strengthCarry || player._strengthGrabAction) return null;
+  const cand = findBestStrengthGrabOrigin(player, data, true);
+  if (!cand) return null;
+  const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
+  if (!p) return null;
+  const itemKey = String(p.itemKey || '');
+  if (!itemKey) return null;
+  return { itemKey };
+}
+
+/**
  * Player got hit while interacting with Strength carry mechanics.
  * - Interrupts current lift initialization.
  * - While carrying, every hit adds stagger; at 3 hits, carried detail falls nearby and hurts the carrier.
