@@ -2633,10 +2633,12 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'crystalDrop') {
         const d = item.drop;
         if (String(d.itemKey || '') === 'charcoal') {
-          const bob = Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
+          const suctionT = Math.max(0, Math.min(1, Number(d.collectShrink) || 0));
+          const bob = (1 - suctionT) * Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
           const px = snapPx(d.x * tileW);
           const py = snapPx(d.y * tileH - bob);
-          const rr = Math.max(2, tileW * 0.16);
+          const rr = Math.max(1.2, tileW * (0.16 - suctionT * 0.07));
+          ctx.globalAlpha = 1 - suctionT * 0.38;
           ctx.fillStyle = 'rgba(22,22,22,0.95)';
           ctx.beginPath();
           ctx.arc(px, py, rr, 0, Math.PI * 2);
@@ -2648,13 +2650,15 @@ export function render(canvas, data, options = {}) {
           ctx.beginPath();
           ctx.arc(px - rr * 0.25, py - rr * 0.25, Math.max(1, rr * 0.35), 0, Math.PI * 2);
           ctx.fill();
+          ctx.globalAlpha = 1;
         } else {
         const path = d.imgPath;
         const img = path ? imageCache.get(path) : null;
         if (img && d.tileId != null && d.tileId >= 0 && d.cols > 0) {
+          const suctionT = Math.max(0, Math.min(1, Number(d.collectShrink) || 0));
           const pulse = 0.88 + Math.sin((d.age || 0) * 8 + (d.bobSeed || 0) * 6.28) * 0.12;
-          const bob = Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
-          const scale = 0.56 * pulse;
+          const bob = (1 - suctionT) * Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
+          const scale = 0.56 * pulse * (1 - suctionT * 0.28);
           const tileIds = Array.isArray(d.tileIds) && d.tileIds.length ? d.tileIds : [d.tileId];
           const shapeCols = Math.max(1, Number(d.shapeCols) || 1);
           const shapeRows = Math.max(1, Number(d.shapeRows) || Math.ceil(tileIds.length / shapeCols));
@@ -2666,7 +2670,7 @@ export function render(canvas, data, options = {}) {
           const footH = shapeRows * tileH * scale;
           const ox0 = px - footW * 0.5;
           const oy0 = py - footH * 0.5;
-          ctx.globalAlpha = 0.94;
+          ctx.globalAlpha = 0.94 - suctionT * 0.34;
           for (let i2 = 0; i2 < tileIds.length; i2++) {
             const tid = tileIds[i2];
             if (tid == null || tid < 0) continue;

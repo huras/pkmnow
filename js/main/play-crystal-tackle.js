@@ -181,6 +181,9 @@ const TACKLE_DETAIL_HURTBOX_RADIUS_MULT = 2;
 const TACKLE_ORIGIN_SCAN_STEP_TILES = 0.2;
 /** Ground pickup radius for dropped crystal items (tiles). */
 const CRYSTAL_DROP_PICK_RADIUS_TILES = 1.35;
+const CRYSTAL_DROP_SUCTION_SPEED_TILES = 11.5;
+const CRYSTAL_DROP_SUCTION_ACCEL = 26;
+const CRYSTAL_DROP_SUCTION_FINISH_RADIUS = 0.18;
 /** Spawned "small crystal" chunks that remain on ground after a large crystal breaks. */
 export const activeSpawnedSmallCrystals = [];
 /** Pickable drops created after breaking a small crystal chunk. */
@@ -904,11 +907,15 @@ export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
     id: crystalDynIdSeq++,
     x,
     y,
+    vx: 0,
+    vy: 0,
     pickRadius: CRYSTAL_DROP_PICK_RADIUS_TILES,
     stackCount: resolvedStackCount,
     age: 0,
     bobSeed: seededHash(Math.floor(x * 10), Math.floor(y * 10), 13291),
     maxAge: 90,
+    collecting: false,
+    collectShrink: 0,
     ...visual,
     itemKey: resolvedItemKey
   });
@@ -1432,13 +1439,38 @@ export function updateCrystalDropsAndPickup(dt, player) {
     if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
     const dx = px - d.x;
     const dy = py - d.y;
+    if (d.collecting) {
+      const dist = Math.hypot(dx, dy);
+      const nx = dist > 1e-4 ? dx / dist : 0;
+      const ny = dist > 1e-4 ? dy / dist : 0;
+      const targetSp = Math.min(CRYSTAL_DROP_SUCTION_SPEED_TILES, 3.8 + dist * 7.5);
+      const curVx = Number(d.vx) || 0;
+      const curVy = Number(d.vy) || 0;
+      d.vx = curVx + (nx * targetSp - curVx) * Math.min(1, dt * CRYSTAL_DROP_SUCTION_ACCEL);
+      d.vy = curVy + (ny * targetSp - curVy) * Math.min(1, dt * CRYSTAL_DROP_SUCTION_ACCEL);
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.collectShrink = Math.min(1, (d.collectShrink || 0) + dt * 5.5);
+      if (dist <= CRYSTAL_DROP_SUCTION_FINISH_RADIUS) {
+        const stack = Math.max(1, Number(d.stackCount) || 1);
+        const key = String(d.itemKey || 'unknown');
+        collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
+        if (isCrystalItemKey(key)) crystalLootCount += stack;
+        playItemPickupSfx(player);
+        activeCrystalDrops.splice(i, 1);
+      }
+      continue;
+    }
     if (dx * dx + dy * dy <= (d.pickRadius || 1.1) * (d.pickRadius || 1.1)) {
-      const stack = Math.max(1, Number(d.stackCount) || 1);
-      const key = String(d.itemKey || 'unknown');
-      collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
-      if (isCrystalItemKey(key)) crystalLootCount += stack;
-      playItemPickupSfx(player);
-      activeCrystalDrops.splice(i, 1);
+      d.collecting = true;
+      d.vx = Number(d.vx) || 0;
+      d.vy = Number(d.vy) || 0;
+      d.collectShrink = 0;
+      continue;
+    }
+    if (Number(d.vx) || Number(d.vy)) {
+      d.vx = (Number(d.vx) || 0) * Math.max(0, 1 - dt * 8);
+      d.vy = (Number(d.vy) || 0) * Math.max(0, 1 - dt * 8);
     }
   }
 }

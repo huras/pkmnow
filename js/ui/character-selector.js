@@ -555,6 +555,7 @@ export class CharacterSelector {
             <span class="move-slot__timer" aria-live="polite"></span>
           </div>
           <span class="move-slot__key">${hk}</span>
+          <span class="move-slot__name">${label}</span>
         </div>`;
       };
       const bind = getPlayerInputBindings(player.dexId);

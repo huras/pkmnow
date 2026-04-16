@@ -124,7 +124,7 @@ let leftHeld = false;
 let leftDownAt = 0;
 let rightHeld = false;
 let rightDownAt = 0;
-/** Left Ctrl held when primary button went down (locks “no charge build” for that press). */
+/** Modifier state captured on LMB down (currently informational only). */
 let leftShiftAtDown = false;
 /** True after at least one flamethrower puff this RMB press (hold-stream). */
 let rightFlameStreamedThisPress = false;
@@ -1002,27 +1002,25 @@ export function installPlayPointerCombat(deps) {
     if (getAppMode() !== 'play') return;
     const pl = getPlayer();
     const now = performance.now();
-    const shUp = combatModifierHeld();
     const dex = Math.floor(Number(pl?.dexId) || 0);
     const bind = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
 
     if (e.button === 0 && leftHeld) {
       leftHeld = false;
-      if (!(leftShiftAtDown || shUp)) {
-        const { sx, sy, tx, ty } = aimAtCursor(pl);
-        const heldMs = now - leftDownAt;
-        const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-        const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
-        const data = getCurrentData?.() ?? null;
-        const threw = !!(pl._strengthCarry && data && beginStrengthThrowFromPointer(pl, data, tx, ty));
-        if (threw) {
-          triggerPlayerLmbAttack(pl, tx - sx, ty - sy);
-        } else if (isMeleeTackleOrCut(bind.lmb)) {
-          castSelectedFieldSkill(pl, data, charged, charge01, bind.lmb);
-        } else {
-          finishMoveButtonUp(bind.lmb, pl, data, heldMs, charge01, 'l');
-        }
+      const { sx, sy, tx, ty } = aimAtCursor(pl);
+      const heldMs = now - leftDownAt;
+      const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+      const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
+      const data = getCurrentData?.() ?? null;
+      const threw = !!(pl._strengthCarry && data && beginStrengthThrowFromPointer(pl, data, tx, ty));
+      if (threw) {
+        triggerPlayerLmbAttack(pl, tx - sx, ty - sy);
+      } else if (isMeleeTackleOrCut(bind.lmb)) {
+        castSelectedFieldSkill(pl, data, charged, charge01, bind.lmb);
+      } else {
+        finishMoveButtonUp(bind.lmb, pl, data, heldMs, charge01, 'l');
       }
+      leftShiftAtDown = false;
       playInputState.chargeLeft01 = 0;
     }
     if (e.button === 2 && rightHeld) {
@@ -1047,6 +1045,7 @@ export function installPlayPointerCombat(deps) {
   canvas.addEventListener('pointerleave', () => {
     if (getAppMode() !== 'play') return;
     leftHeld = false;
+    leftShiftAtDown = false;
     rightHeld = false;
     middleHeld = false;
     bindingWheelArmed = false;
