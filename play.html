@@ -55,6 +55,20 @@
             <div class="minimap-panel__header-actions">
               <button
                 type="button"
+                id="minimap-zoom-btn"
+                class="minimap-panel__zoom-btn"
+                title="Alterar zoom do minimapa"
+                aria-label="Alterar zoom do minimapa"
+              >
+                <svg class="minimap-panel__zoom-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  <line x1="11" y1="8" x2="11" y2="14"/>
+                  <line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-audio-toggle"
                 class="minimap-panel__music-btn"
                 title="Volume BGM e gritos"
@@ -103,7 +117,7 @@
               </button>
             </div>
           </header>
-          <canvas id="minimap" width="128" height="128" aria-label="Minimapa da região"></canvas>
+          <canvas id="minimap" width="192" height="192" data-zoom="mid" aria-label="Minimapa da região"></canvas>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
         <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">

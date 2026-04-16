@@ -6,6 +6,7 @@ import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
 } from './wild-pokemon/wild-pokemon-manager.js';
+import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
@@ -48,6 +49,7 @@ import { setPlayForceLod0Always } from './render/play-view-camera.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
+import { cycleMinimapZoom } from './render/render-minimap.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -109,6 +111,26 @@ if (canvas) {
 const minimap = document.getElementById('minimap');
 const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
+const btnMinimapZoom = document.getElementById('minimap-zoom-btn');
+
+/** Zoom labels shown in the panel badge */
+const ZOOM_LABELS = { far: '🗺 Far', mid: '🔍 Mid', close: '🔍+ Close' };
+
+function syncMinimapZoomBadge() {
+  if (!minimap || !minimapPanel) return;
+  const zoom = minimap.dataset.zoom || 'mid';
+  minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
+}
+
+if (btnMinimapZoom && minimap) {
+  btnMinimapZoom.addEventListener('click', () => {
+    const next = cycleMinimapZoom(/** @type {HTMLCanvasElement} */ (minimap));
+    syncMinimapZoomBadge();
+    // Tooltip update to reflect new state
+    const NEXT_LABELS = { far: 'Zoom: mapa completo — clique para zoom médio', mid: 'Zoom: médio — clique para zoom aproximado', close: 'Zoom: aproximado — clique para mapa completo' };
+    btnMinimapZoom.title = NEXT_LABELS[next] ?? 'Alterar zoom';
+  });
+}
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
@@ -393,6 +415,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
+    playCharacterSelector?.updatePlayFieldMoveChargeHud();
     playCharacterSelector?.updatePlayItemsHud();
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
@@ -450,6 +473,7 @@ function run() {
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
   resetWildPokemonManager();
+  resetThrownMapDetailEntities();
   playDetailColliderHighlight = null;
   updateView();
 }
@@ -550,6 +574,7 @@ canvas.addEventListener('mouseleave', () => {
 
 function enterPlayMode(gx, gy) {
   resetWildPokemonManager();
+  resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;
@@ -558,9 +583,10 @@ function enterPlayMode(gx, gy) {
   btnBackToMap?.classList.remove('hidden');
   if (minimapPanel) minimapPanel.classList.remove('hidden');
   else minimap?.classList.remove('hidden');
+  syncMinimapZoomBadge();
   minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB = investida (sprite avança na direção do cursor; corpo fica no lugar) — se o tile à frente tiver cristal scatter, quebra em 4 estilhaços. RMB = 2º golpe do moveset, segure RMB = carregado (Ember/água etc.), Psybeam no 2º slot: segure RMB = orbe rosa e solte = raio longo, Left Ctrl+LMB 3º golpe, Left Ctrl+RMB 4º golpe, MMB Ultimate. Hotkeys: 1 Ember · 2 Flamethrower · … · - Silk Shoot. Social: Numpad 1-9. Debug: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Golpes: 5 entradas — clique esquerdo, direito, meio da rolagem, rolagem para cima, rolagem para baixo — cada uma dispara o golpe que você amarrou nela. Segure 1–5 um instante para abrir a roda e escolher o golpe daquele botão (qualquer golpe da lista). Tackle/Cut no clique esquerdo: combo do Cut e carregar soltando como antes. Carregar pedra: E; com pedra, soltar LMB arremessa na mira. Social: Numpad 1–9. Debug: Ctrl+clique direito.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 

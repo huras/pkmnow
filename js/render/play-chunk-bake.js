@@ -20,7 +20,8 @@ import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
 import { PLAY_CHUNK_SIZE, VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
-import { isPlayDetailScatterOriginDestroyed } from '../main/play-crystal-tackle.js';
+import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from '../main/play-crystal-tackle.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
@@ -354,6 +355,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
 
       // 1. Formal Trees (2x1)
       if (isFormalRoot(mxScan, myScan)) {
+        if (isPlayFormalTreeRootDestroyed(mxScan, myScan)) continue;
         // STRICT HEIGHT CHECK: Formal trees only start on flat ground
         const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         const roleOrig = setRoot
@@ -394,6 +396,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
 
         if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
           if (
+            hasScatterItemKeyOverride(mxScan, myScan) ||
             validScatterOriginMicro(
               mxScan,
               myScan,
@@ -405,7 +408,9 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
             )
           ) {
             const items = BIOME_VEGETATION[tile.biomeId] || [];
-            const itemKey = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            const itemKey =
+              getScatterItemKeyOverride(mxScan, myScan) ||
+              items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
             if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
             const objSet = OBJECT_SETS[itemKey];
             if (objSet) {

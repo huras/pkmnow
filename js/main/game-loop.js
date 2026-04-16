@@ -9,7 +9,15 @@ import {
 } from '../wild-pokemon/wild-pokemon-manager.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
-import { updatePlayPointerCombat, castMappedMoveByHotkey } from './play-mouse-combat.js';
+import {
+  updatePlayPointerCombat,
+  handleFieldSkillHotkeyDown,
+  handleFieldSkillHotkeyUp,
+  handleSpecialAttackHotkeyDown,
+  handleSpecialAttackHotkeyUp
+} from './play-mouse-combat.js';
+import { tryStrengthInteractKeyE, updateStrengthCarryInteraction } from './play-strength-carry.js';
+import { updateThrownMapDetailEntities } from './thrown-map-detail-entities.js';
 import {
   updateCrystalShardParticles,
   updateCrystalDropsAndPickup,
@@ -17,6 +25,7 @@ import {
 } from './play-crystal-tackle.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
+import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 
@@ -115,6 +124,7 @@ export function createGameLoop(api) {
     const tUpdPlayer0 = performance.now();
     updatePlayer(dt, currentData);
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+    updatePlayGrassRustle(dt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
       updateCrystalShardParticles(dt);
@@ -133,7 +143,9 @@ export function createGameLoop(api) {
       updateWildPokemon(dt, currentData, pvx, pvy);
       updateBreakdown.updWildMs = performance.now() - tWild0;
       const tPointer0 = performance.now();
-      updatePlayPointerCombat(dt, player);
+      updatePlayPointerCombat(dt, player, currentData);
+      updateStrengthCarryInteraction(dt, player, currentData);
+      updateThrownMapDetailEntities(dt, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
@@ -334,8 +346,15 @@ export function registerPlayKeyboard(api) {
         tryJumpPlayer(getCurrentData());
       }
 
-      if (!e.repeat && castMappedMoveByHotkey(e.code, player)) {
+      if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {
         e.preventDefault();
+      } else if (!e.repeat && handleSpecialAttackHotkeyDown(e.code)) {
+        e.preventDefault();
+      } else if (!e.repeat && e.code === 'KeyE') {
+        const data = getCurrentData();
+        if (data && tryStrengthInteractKeyE(player, data)) {
+          e.preventDefault();
+        }
       }
 
       if (e.key === 'Escape') {
@@ -368,6 +387,11 @@ export function registerPlayKeyboard(api) {
     }
     if (e.code === 'ControlLeft') {
       playInputState.ctrlLeftHeld = false;
+    }
+    if (getAppMode() === 'play' && handleFieldSkillHotkeyUp(e.code, player, getCurrentData())) {
+      e.preventDefault();
+    } else if (getAppMode() === 'play' && handleSpecialAttackHotkeyUp(e.code, player)) {
+      e.preventDefault();
     }
     const dir = keyToDir(e.key);
     if (dir) heldKeys.delete(dir);

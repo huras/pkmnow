@@ -22,6 +22,8 @@ import {
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
+import { strengthCarryBlocksWalk, onStrengthCarrierDamaged } from './main/play-strength-carry.js';
+import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
@@ -29,6 +31,7 @@ import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js'
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
+import { playJumpSfx } from './audio/jump-sfx.js';
 
 const MAX_SPEED = 3.2;
 const ACCEL = 32.0;
@@ -67,6 +70,8 @@ const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
 const RUN_SPEED_CAP_MULT = 2;
+/** Hold-LMB combat charge: movement stays possible but slower. */
+const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */
 const DIG_IDLE_ANIM_SPEED = 2.8;
@@ -150,7 +155,26 @@ export const player = {
   socialEmotionAge: 0,
   socialEmotionPortraitSlug: null,
   /** Creative flight: dashed feet↔sprite tether allowed this frame (render / debug overlay). */
-  flightGroundTetherVisible: false
+  flightGroundTetherVisible: false,
+  /**
+   * Strength grab: lifted scatter rock/crystal (world origin while carried is “broken” until placed/dropped).
+   * `hitsRemaining/hitsMax` preserve breakable HP while carried/thrown.
+   * @type {null | {
+   *   liftOx: number, liftOy: number, itemKey: string, cols: number, rows: number, weightTier: number,
+   *   hitsRemaining?: number, hitsMax?: number
+   * }}
+   */
+  _strengthCarry: null,
+  /** Consecutive hits absorbed while carrying a lifted detail. */
+  _strengthCarryHitStreak: 0,
+  /**
+   * Strength pick-up channel in progress.
+   * @type {null | {
+   *   ox: number, oy: number, itemKey: string, cols: number, rows: number, weightTier: number,
+   *   durationSec: number, elapsedSec: number, startX: number, startY: number, startedAtSec: number
+   * }}
+   */
+  _strengthGrabAction: null
 };
 
 export function setPlayerSpecies(dexId) {
@@ -183,9 +207,27 @@ export function setPlayerSpecies(dexId) {
   player.flightGroundTetherVisible = false;
   player.jumpsUsed = 0;
   player.jumpSerial = 0;
+  player._strengthCarry = null;
+  player._strengthCarryHitStreak = 0;
+  player._strengthGrabAction = null;
 }
 
 export function setPlayerPos(x, y) {
+  player._strengthGrabAction = null;
+  player._strengthCarryHitStreak = 0;
+  const carry = player._strengthCarry;
+  if (carry) {
+    strengthDropCarriedAsPickup(
+      carry.liftOx,
+      carry.liftOy,
+      carry.cols,
+      carry.rows,
+      carry.itemKey,
+      x + 0.5,
+      y + 0.5
+    );
+    player._strengthCarry = null;
+  }
   player.x = x;
   player.y = y;
   player.visualX = x;
@@ -240,13 +282,17 @@ export function showPlayerSocialEmotion(action) {
  * @param {boolean} [applyPoisonVisual]
  * @returns {boolean} true if damage was applied (not blocked by iframes)
  */
-export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false) {
+export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null) {
   if (player.projIFrameSec > 0) return false;
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
   player.hp = Math.max(0, cur - amount);
   player.projIFrameSec = 0.55;
   if (applyPoisonVisual) player.poisonVisualSec = 3;
+  const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
+  if (extraCarryDropDamage > 0) {
+    player.hp = Math.max(0, (player.hp ?? maxH) - extraCarryDropDamage);
+  }
   return true;
 }
 
@@ -487,6 +533,7 @@ export function tryJumpPlayer(data) {
   player.jumping = true;
   player.jumpsUsed = (player.jumpsUsed || 0) + 1;
   player.jumpSerial = (player.jumpSerial || 0) + 1;
+  playJumpSfx(player);
   return true;
 }
 
@@ -543,6 +590,12 @@ export function updatePlayer(dt, data) {
     !raisingHeightOnFlight
       ? FLIGHT_HORIZONTAL_MOVE_SPEED_MULT
       : 1;
+
+  if (strengthCarryBlocksWalk(player)) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
+  }
 
   // 1. Horizontal Input & Physics
   if (player.inputX !== 0 || player.inputY !== 0) {
@@ -626,8 +679,21 @@ export function updatePlayer(dt, data) {
       ? FLIGHT_LEVITATION_MAX_SPEED_MULT
       : FLIGHT_WINGED_MAX_SPEED_MULT
     : 1;
+  const combatChargeSlowMul =
+    (playInputState.chargeLeft01 > 0.02 ||
+      playInputState.chargeRight01 > 0.02 ||
+      playInputState.chargeMmb01 > 0.02) &&
+    !playInputState.ctrlLeftHeld
+      ? LMB_COMBAT_CHARGE_SPEED_MUL
+      : 1;
   const currentMaxSpeed =
-    MAX_SPEED * Math.max(1.0, inputMag) * runMul * terrainSlowMul * flightMul * flightHorizontalMoveBoost;
+    MAX_SPEED *
+    Math.max(1.0, inputMag) *
+    runMul *
+    terrainSlowMul *
+    flightMul *
+    flightHorizontalMoveBoost *
+    combatChargeSlowMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
@@ -781,7 +847,9 @@ export function updatePlayer(dt, data) {
   const inCombatCharge =
     hasChargeAsset &&
     !player.digBurrowMode &&
-    (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
+    (playInputState.chargeLeft01 > 0.02 ||
+      playInputState.chargeRight01 > 0.02 ||
+      playInputState.chargeMmb01 > 0.02) &&
     !playInputState.ctrlLeftHeld;
 
   const shootRemain0 = player.moveShootAnimSec || 0;

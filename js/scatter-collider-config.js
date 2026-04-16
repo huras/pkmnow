@@ -5,7 +5,7 @@
  */
 
 /** Strip width fraction: base radius = (footprintWidthTiles × this) / 2 in micro-tile space. */
-export const TRUNK_STRIP_WIDTH_FRAC = 0.3;
+export const TRUNK_STRIP_WIDTH_FRAC = 0.35;
 
 /** Formal broadleaf trunk span on X (micro tiles) × {@link TRUNK_STRIP_WIDTH_FRAC}. */
 export const FORMAL_TRUNK_BASE_WIDTH_TILES = 2;

@@ -31,7 +31,8 @@ import {
   scatterSolidStemRadiusMultiplier,
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
-import { isPlayDetailScatterOriginDestroyed } from './main/play-crystal-tackle.js';
+import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/scatter-item-override.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -370,6 +371,7 @@ function circleIntersectsUnitSquare(cx, cy, r, x0, y0) {
  * Shared by collision, bake, and debug.
  */
 export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
+  if (isPlayFormalTreeRootDestroyed(rootX, rootY)) return false;
   const t = getMicroTile(rootX, rootY, data);
   if (!t) return false;
   const tt = getTreeType(t.biomeId, rootX, rootY, data.seed);
@@ -512,23 +514,27 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
 /**
  * One scatter **origin** → at most one physics circle (tree trunk or, when experiment on, non-tree solid “stem”).
  * Deduplicates `validScatterOriginMicro` + itemKey between tree / solid paths (hot: `gatherTreeTrunkCirclesNearWorldPoint`).
+ * @param {{ ignoreDestroyed?: boolean }} [opts] — When `ignoreDestroyed`, skip the “origin destroyed” check (charred-stump / harvest helpers still use the same trunk geometry as the living tree).
  * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, itemKey: string }}
  */
-export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null) {
+export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null, opts = undefined) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   const seed = data.seed;
   const getT = getTileFn || ((x, y) => getMicroTile(x, y, data));
   if (ox0 < 0 || oy0 < 0 || ox0 >= microW || oy0 >= microH) return null;
-  if (isPlayDetailScatterOriginDestroyed(ox0, oy0)) return null;
+  if (!opts?.ignoreDestroyed && isPlayDetailScatterOriginDestroyed(ox0, oy0)) return null;
 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;
-  if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
+  const hasForcedItemKey = hasScatterItemKeyOverride(ox0, oy0);
+  if (!hasForcedItemKey && !validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
 
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
   if (!itemsO.length) return null;
-  const itemKey = itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
+  const forcedItemKey = getScatterItemKeyOverride(ox0, oy0);
+  const itemKey =
+    forcedItemKey || itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
   const isTree = scatterItemKeyIsTree(itemKey);
   const isSolid = scatterItemKeyIsSolid(itemKey);
   if (!isTree && !(EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER && isSolid && !isTree)) return null;

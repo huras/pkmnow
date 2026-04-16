@@ -20,6 +20,7 @@ import {
   castConfusion,
   castBubble,
   castWaterGun,
+  castBubbleBeam,
   castPsybeam,
   castPrismaticLaser,
   castPoisonPowder,
@@ -47,7 +48,8 @@ import {
   getEffectiveWildBehavior,
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
-import { tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
+import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
+import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -61,6 +63,10 @@ function bumpPlayerMoveCastVisual(sourceEntity) {
 
 export const activeProjectiles = [];
 export const activeParticles = [];
+/** Front cut sweep angle in degrees (requested configurable constant). */
+export const FIELD_CUT_VINE_ARC_DEG = 120;
+/** Psychic slash arc angle in degrees (can be tuned independently). */
+export const FIELD_CUT_PSYCHIC_ARC_DEG = 120;
 
 let playerEmberCooldown = 0;
 let playerWaterCooldown = 0;
@@ -72,6 +78,7 @@ let playerFlamethrowerCooldown = 0;
 let playerConfusionCooldown = 0;
 let playerBubbleCooldown = 0;
 let playerWaterGunCooldown = 0;
+let playerBubbleBeamCooldown = 0;
 let playerPsybeamCooldown = 0;
 let playerPrismaticLaserCooldown = 0;
 let playerPoisonPowderCooldown = 0;
@@ -80,6 +87,11 @@ let playerSilkShootCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.072;
+/** Water-gun stream cadence (hold-to-spray, like flamethrower). */
+const WATER_GUN_STREAM_INTERVAL = 0.074;
+/** Bubble-beam stream cadence (hold-to-spray, long-range water ring stream). */
+const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
+const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
 const PRISMATIC_STREAM_INTERVAL = 0.076;
@@ -92,6 +104,69 @@ function pushProjectile(p) {
 function pushParticle(p) {
   while (activeParticles.length >= MAX_PARTICLES) activeParticles.shift();
   activeParticles.push(p);
+}
+
+function pushFieldCutArcParticle(type, centerX, centerY, headingRad, opts = {}) {
+  const life = Math.max(0.12, Number(opts.lifeSec) || 0.3);
+  pushParticle({
+    type,
+    x: Number(centerX) || 0,
+    y: Number(centerY) || 0,
+    z: Math.max(0, Number(opts.z) || 0.08),
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    life,
+    maxLife: life,
+    headingRad: Number(headingRad) || 0,
+    arcDeg: Math.max(30, Number(opts.arcDeg) || 120),
+    radiusTiles: Math.max(0.3, Number(opts.radiusTiles) || 1.25)
+  });
+}
+
+export function spawnFieldCutVineSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutVineArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG,
+    radiusTiles: opts.radiusTiles ?? 1.55,
+    lifeSec: opts.lifeSec ?? 0.36
+  });
+}
+
+export function spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutPsychicArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG,
+    radiusTiles: opts.radiusTiles ?? 1.62,
+    lifeSec: opts.lifeSec ?? 0.34
+  });
+}
+
+export function spawnFieldCutSlashFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutSlashArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? 108,
+    radiusTiles: opts.radiusTiles ?? 1.46,
+    lifeSec: opts.lifeSec ?? 0.28
+  });
+}
+
+export function spawnFieldSpinAttackFx(centerX, centerY, headingRad, opts = {}) {
+  const life = Math.max(0.16, Number(opts.lifeSec) || 0.4);
+  pushParticle({
+    type: 'fieldSpinAttack',
+    styleId: String(opts.styleId || 'slash'),
+    x: Number(centerX) || 0,
+    y: Number(centerY) || 0,
+    z: Math.max(0, Number(opts.z) || 0.08),
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    life,
+    maxLife: life,
+    headingRad: Number(headingRad) || 0,
+    radiusTiles: Math.max(0.6, Number(opts.radiusTiles) || 2)
+  });
 }
 
 /**
@@ -192,6 +267,14 @@ function broadPhaseOk(px, py, tx, ty) {
   return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
 }
 
+function isProjectileBlockedByTree(proj, data) {
+  if (!proj || !data) return false;
+  if (!TREE_BLOCKING_FIRE_PROJECTILE_TYPES.has(proj.type)) return false;
+  const z = Number(proj.z) || 0;
+  if (Math.abs(z) > 1.35) return false;
+  return formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data) || scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data);
+}
+
 /**
  * @param {import('../player.js').player} player
  */
@@ -261,13 +344,70 @@ function applySplashToWild(proj, wildList, splashZ) {
  * @param {number} targetY
  * @param {object | null} sourceEntity
  */
+function resolveMoveRuntimeAlias(moveId) {
+  switch (String(moveId || '')) {
+    case 'absorb':
+    case 'megaDrain':
+      return 'bubbleBeam';
+    case 'acid':
+    case 'sludge':
+      return 'poisonSting';
+    case 'smog':
+      return 'poisonPowder';
+    case 'auroraBeam':
+    case 'iceBeam':
+      return 'bubbleBeam';
+    case 'blizzard':
+      return 'bubble';
+    case 'dragonRage':
+      return 'incinerate';
+    case 'dreamEater':
+    case 'nightShade':
+      return 'confusion';
+    case 'fireBlast':
+      return 'incinerate';
+    case 'fireSpin':
+      return 'flamethrower';
+    case 'gust':
+    case 'razorWind':
+      return 'silkShoot';
+    case 'hydroPump':
+      return 'waterGun';
+    case 'hyperBeam':
+      return 'prismaticLaser';
+    case 'petalDance':
+      return 'bubble';
+    case 'psychic':
+      return 'psybeam';
+    case 'psywave':
+      return 'confusion';
+    case 'solarBeam':
+      return 'prismaticLaser';
+    case 'sonicBoom':
+    case 'swift':
+      return 'psybeam';
+    case 'surf':
+      return 'waterGun';
+    case 'thunder':
+    case 'thunderbolt':
+    case 'triAttack':
+      return 'prismaticLaser';
+    case 'thunderShock':
+      return 'psybeam';
+    default:
+      return String(moveId || '');
+  }
+}
+
 export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  moveId = resolveMoveRuntimeAlias(moveId);
   if (moveId === 'ember') return castEmber(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'flamethrower') return castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'confusion') return castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'bubble') return castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterBurst') return castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterGun') return castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'bubbleBeam') return castBubbleBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -281,6 +421,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
  * Charged variant dispatch (falls back to normal if no dedicated charge impl).
  */
 export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  moveId = resolveMoveRuntimeAlias(moveId);
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -355,6 +496,22 @@ export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceE
   return tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
+/**
+ * One water-gun stream puff toward floor aim (short cadence like flamethrower).
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerWaterGunCooldown > 0) return false;
+  playerWaterGunCooldown = WATER_GUN_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    streamPuff: true
+  });
+  return true;
+}
+
 export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerConfusionCooldown > 0) return false;
   playerConfusionCooldown = 0.6;
@@ -378,14 +535,27 @@ export function castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity 
 }
 
 export function castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerWaterGunCooldown > 0) return false;
-  playerWaterGunCooldown = 0.65;
+  return tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * One bubble-beam stream puff toward floor aim (white hollow bubbles, long range).
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerBubbleBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerBubbleBeamCooldown > 0) return false;
+  playerBubbleBeamCooldown = BUBBLE_BEAM_STREAM_INTERVAL;
   bumpPlayerMoveCastVisual(sourceEntity);
-  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+  castBubbleBeam(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
-    pushProjectile
+    pushProjectile,
+    streamPuff: true
   });
   return true;
+}
+
+export function castBubbleBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerBubbleBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -615,6 +785,8 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
  * @param {string} moveId
  */
 export function getPlayerMoveCooldownUiMax(moveId) {
+  if (String(moveId || '').startsWith('field:')) return 1;
+  moveId = resolveMoveRuntimeAlias(moveId);
   switch (moveId) {
     case 'ember':
       return 0.48;
@@ -629,7 +801,9 @@ export function getPlayerMoveCooldownUiMax(moveId) {
     case 'bubble':
       return 0.55;
     case 'waterGun':
-      return 0.65;
+      return WATER_GUN_STREAM_INTERVAL;
+    case 'bubbleBeam':
+      return BUBBLE_BEAM_STREAM_INTERVAL;
     case 'psybeam':
       return 0.75;
     case 'prismaticLaser':
@@ -653,6 +827,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
  * @returns {number}
  */
 export function getPlayerMoveCooldownRemaining(moveId) {
+  if (String(moveId || '').startsWith('field:')) return 0;
+  moveId = resolveMoveRuntimeAlias(moveId);
   switch (moveId) {
     case 'ember':
       return playerEmberCooldown;
@@ -668,6 +844,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerBubbleCooldown;
     case 'waterGun':
       return playerWaterGunCooldown;
+    case 'bubbleBeam':
+      return playerBubbleBeamCooldown;
     case 'psybeam':
       return playerPsybeamCooldown;
     case 'prismaticLaser':
@@ -703,6 +881,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerConfusionCooldown = Math.max(0, playerConfusionCooldown - dt);
   playerBubbleCooldown = Math.max(0, playerBubbleCooldown - dt);
   playerWaterGunCooldown = Math.max(0, playerWaterGunCooldown - dt);
+  playerBubbleBeamCooldown = Math.max(0, playerBubbleBeamCooldown - dt);
   playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
@@ -720,6 +899,14 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     }
     if (p.type === 'grassFire') {
       p.z = 0.08;
+      continue;
+    }
+    if (
+      p.type === 'fieldCutVineArc' ||
+      p.type === 'fieldCutPsychicArc' ||
+      p.type === 'fieldCutSlashArc' ||
+      p.type === 'fieldSpinAttack'
+    ) {
       continue;
     }
     p.x += p.vx * dt;
@@ -768,7 +955,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
-            if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
+            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
               spawnHitParticles(hx, hy, player.z ?? 0);
             }
             proj.playerBeamHitDone = true;
@@ -806,7 +993,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       if (proj.hasTackleTrait && data) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
-        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet });
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle' });
       }
 
       if (proj.timeToLive <= 0) {
@@ -846,6 +1033,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
             maxLife: GRASS_FIRE_PARTICLE_SEC
           });
         }
+        tryApplyFireHitToFormalTreesAt(proj.x, proj.y, zz, proj.type, data);
         grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
       }
       activeProjectiles.splice(i, 1);
@@ -855,7 +1043,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     const trailType =
       proj.type === 'ember'
         ? 'emberTrail'
-        : proj.type === 'waterShot' || proj.type === 'waterGunShot' || proj.type === 'bubbleShot'
+        : proj.type === 'waterShot' || proj.type === 'waterGunShot' || proj.type === 'bubbleShot' || proj.type === 'bubbleBeamShot'
           ? 'waterTrail'
           : proj.type === 'poisonPowderShot'
             ? 'powderTrail'
@@ -888,6 +1076,18 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       }
     }
 
+    if (data && isProjectileBlockedByTree(proj, data)) {
+      const impactZ = Math.max(0, Number(proj.z) || 0);
+      spawnHitParticles(proj.x, proj.y, impactZ);
+      tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
+      if (proj.type === 'incinerateCore') {
+        applySplashToWild(proj, wildList, impactZ);
+        spawnIncinerateShards(proj, pushProjectile, impactZ);
+      }
+      activeProjectiles.splice(i, 1);
+      continue;
+    }
+
     let hit = false;
 
     if (proj.hitsPlayer && checkPlayerHit(proj, player)) {
@@ -895,7 +1095,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
       const poison = poisonCapable && Math.random() < poisonChance;
       const pz = player.z ?? 0;
-      if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
+      if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
         spawnHitParticles(proj.x, proj.y, pz);
       }
       if (proj.type === 'incinerateCore') {

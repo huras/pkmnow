@@ -15,14 +15,20 @@ export const playInputState = {
   mouseY: 0,
   /** False until first `mousemove` in play on the canvas (avoids (0,0) aim before hover). */
   mouseValid: false,
-  /** Legacy field (LMB no longer builds charge). Cleared on pointer events. */
+  /** 0-1 while holding LMB in play (field-move charge). */
   chargeLeft01: 0,
   /** 0–1 while holding RMB (no Shift) — charged water shot. */
   chargeRight01: 0,
-  /** Unused (LMB is melee pose only). Cleared on pointer leave. */
+  /** 0–1 while holding MMB (no Shift) — same idea as RMB for bound move. */
+  chargeMmb01: 0,
+  /** Psybeam with LMB when psybeam is bound to LMB. */
   psybeamLeftHold: /** @type {{ pulse: number } | null} */ (null),
-  /** Psybeam: RMB held with Psybeam in secondary slot. */
-  psybeamRightHold: /** @type {{ pulse: number } | null} */ (null)
+  /** Psybeam: RMB held with psybeam bound to RMB. */
+  psybeamRightHold: /** @type {{ pulse: number } | null} */ (null),
+  /** Psybeam: MMB held. */
+  psybeamMiddleHold: /** @type {{ pulse: number } | null} */ (null),
+  /** LMB held while carrying a Strength rock — show throw arc preview. */
+  strengthCarryLmbAim: false
 };
 
 export function isShiftDigHeld() {

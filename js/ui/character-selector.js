@@ -6,13 +6,15 @@ import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portrai
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
+import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
-import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
 import {
   getPlayerMoveCooldownRemaining,
   getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
+import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
+import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -64,6 +66,20 @@ export class CharacterSelector {
     this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
     this.allSpecies = [];
     this.isOpen = false;
+    this._onFieldSkillChange = (ev) => {
+      const dex = Math.floor(Number(ev?.detail?.dexId) || 0);
+      if (dex === (player.dexId ?? 0)) {
+        this.updateFieldSkillDisplay();
+        void this.refreshPlayerMovesHud();
+      }
+    };
+    this._onInputBindingsChange = (ev) => {
+      const dex = Math.floor(Number(ev?.detail?.dexId) || 0);
+      if (dex === (player.dexId ?? 0)) {
+        this.updateFieldSkillDisplay();
+        void this.refreshPlayerMovesHud();
+      }
+    };
     /** @type {'full' | 'minimal'} */
     this.layoutMode =
       localStorage.getItem(LAYOUT_STORAGE_KEY) === 'minimal' ? 'minimal' : 'full';
@@ -87,6 +103,8 @@ export class CharacterSelector {
     this.attachEvents();
     this.applyLayoutMode();
     this.applyPlayImmersiveChrome();
+    syncSelectedFieldSkillForDex(player.dexId);
+    syncSelectedSpecialAttackForDex(player.dexId);
     this.updatePreview().catch(() => {});
   }
 
@@ -295,8 +313,15 @@ export class CharacterSelector {
 
         <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
           <div class="player-moves-title">Moves</div>
+          <div class="player-field-skill-chip" id="player-field-skill-chip" title="Move bound to LMB (hold 1 to change)">
+            LMB: <span id="player-field-skill-label">Tackle</span>
+          </div>
+          <div class="player-field-charge hidden" id="player-field-charge" aria-label="Field move charge">
+            <div class="player-field-charge__bar"><div class="player-field-charge__fill" id="player-field-charge-fill"></div></div>
+            <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
+          </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = ataque · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 1–0 e -</div>
+          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut; hold+release LMB = charge; Cut = 3-hit combo) · E = pegar/soltar pedra · com pedra: soltar LMB = arremessar · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div
@@ -379,6 +404,33 @@ export class CharacterSelector {
         this.setPlayImmersiveChrome(!this.playImmersiveChrome);
       });
     }
+    window.addEventListener('play-field-skill-change', this._onFieldSkillChange);
+    window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
+  }
+
+  async refreshPlayerMovesHud() {
+    if (!this.container) return;
+    await this.updatePreview();
+  }
+
+  updateFieldSkillDisplay() {
+    const labelEl = this.container?.querySelector('#player-field-skill-label');
+    if (!labelEl) return;
+    const skillId = getPlayerInputBindings(player.dexId).lmb;
+    labelEl.textContent = getBindableMoveLabel(skillId);
+  }
+
+  updatePlayFieldMoveChargeHud() {
+    const wrap = this.container?.querySelector('#player-field-charge');
+    const fill = this.container?.querySelector('#player-field-charge-fill');
+    const label = this.container?.querySelector('#player-field-charge-label');
+    if (!(wrap instanceof HTMLElement) || !(fill instanceof HTMLElement) || !(label instanceof HTMLElement)) return;
+    const skillId = getPlayerInputBindings(player.dexId).lmb;
+    const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+    const shouldShow = skillId === 'tackle' && p > 0.005;
+    wrap.classList.toggle('hidden', !shouldShow);
+    fill.style.width = `${Math.round(p * 100)}%`;
+    label.textContent = `Tackle Charge ${Math.round(p * 100)}%`;
   }
 
   syncPlayPointerModeRadios() {
@@ -460,6 +512,8 @@ export class CharacterSelector {
   async selectSpecies(id) {
     // 1. Update player data
     setPlayerSpecies(id);
+    syncSelectedFieldSkillForDex(id);
+    syncSelectedSpecialAttackForDex(id);
     
     // 2. Clear focus/search
     this.container.querySelector('#species-search')?.blur();
@@ -488,35 +542,43 @@ export class CharacterSelector {
 
     const movesEl = this.container.querySelector('#current-player-moves');
     if (movesEl) {
-      const moves = getPokemonMoveset(player.dexId);
-      const hotkeys = ['—', 'RMB', 'LCtrl+LMB', 'LCtrl+RMB'];
-      const slotHtml = (moveId, hk, title) => {
-        const label = getMoveLabel(moveId);
+      const hotkeys = ['LMB', 'RMB', 'MMB', 'Wheel↑', 'Wheel↓'];
+      const slotHtml = (hudMoveId, iconFile, hk, title, labelText) => {
+        const label = labelText != null && String(labelText).length ? labelText : getBindableMoveLabel(String(hudMoveId).replace(/^field:/, ''));
         const abbrev = moveAbbrevFromLabel(label);
-        const src = `${SKILL_ICON_BASE}/${moveId}.png`;
-        const uClass = moveId === 'ultimate' ? ' move-slot--ultimate' : '';
-        return `<div class="move-slot${uClass}" data-move-id="${moveId}" title="${title || label}">
+        const src = `${SKILL_ICON_BASE}/${iconFile}.png`;
+        const uClass = hudMoveId === 'ultimate' ? ' move-slot--ultimate' : '';
+        return `<div class="move-slot${uClass}" data-move-id="${hudMoveId}" title="${title || label}">
           <div class="move-slot__icon-wrap" data-abbrev="${abbrev}">
             <img class="move-slot__icon" src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async" />
             <span class="move-slot__sweep" aria-hidden="true" style="--cd-p:0"></span>
             <span class="move-slot__timer" aria-live="polite"></span>
           </div>
           <span class="move-slot__key">${hk}</span>
+          <span class="move-slot__name">${label}</span>
         </div>`;
       };
-      const slotsHtml = moves
-        .map((m, i) => {
-          const hk = hotkeys[i] || '—';
-          const title =
-            i === 0
-              ? `${getMoveLabel(m)} — golpes: teclas 1–0 e - no play; LMB só animação de ataque`
-              : `${getMoveLabel(m)} (${hk})`;
-          return slotHtml(m, hk, title);
-        })
-        .join('');
-      const ultimateHtml = slotHtml('ultimate', 'MMB', 'Ultimate — nova ring toward cursor');
+      const bind = getPlayerInputBindings(player.dexId);
+      const slotDefs = [
+        { moveId: bind.lmb, hk: hotkeys[0], digit: 1 },
+        { moveId: bind.rmb, hk: hotkeys[1], digit: 2 },
+        { moveId: bind.mmb, hk: hotkeys[2], digit: 3 },
+        { moveId: bind.wheelUp, hk: hotkeys[3], digit: 4 },
+        { moveId: bind.wheelDown, hk: hotkeys[4], digit: 5 }
+      ];
+      const slots = slotDefs.map(({ moveId, hk, digit }) => {
+        const label = getBindableMoveLabel(moveId);
+        return {
+          hudMoveId: moveId,
+          iconFile: moveId,
+          hk,
+          title: `${label} — slot ${hk} (segure ${digit} para trocar na roda)`,
+          labelText: label
+        };
+      });
+      const slotsHtml = slots.map((s) => slotHtml(s.hudMoveId, s.iconFile, s.hk, s.title, s.labelText)).join('');
       movesEl.classList.add('player-moves-list--slots');
-      movesEl.innerHTML = slotsHtml + ultimateHtml;
+      movesEl.innerHTML = slotsHtml;
       for (const img of movesEl.querySelectorAll('.move-slot__icon')) {
         img.addEventListener('error', () => {
           img.classList.add('move-slot__icon--missing');
@@ -524,6 +586,7 @@ export class CharacterSelector {
         });
       }
     }
+    this.updateFieldSkillDisplay();
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');
     if (!portraitEl) {
