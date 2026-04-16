@@ -7,6 +7,7 @@ import {
   isPlayScatterTreeOriginBurning,
   isPlayScatterTreeOriginCharred,
   isScatterDetailLiftableRockAt,
+  showBreakableDetailHpAtOrigin,
   tryStrengthLiftSolidScatterAt,
   strengthRelocateCarriedDetailNear
 } from './play-crystal-tackle.js';
@@ -68,7 +69,7 @@ export function strengthCarryBlocksWalk(player) {
   return c.weightTier > maxWalkableCarryTierForDex(dex);
 }
 
-function findBestStrengthGrabOrigin(player, data) {
+function findBestStrengthGrabOrigin(player, data, requireLiftable = true) {
   if (!player || !data) return null;
   const px = Number(player.x) || 0;
   const py = Number(player.y) || 0;
@@ -91,7 +92,7 @@ function findBestStrengthGrabOrigin(player, data) {
       if (!p || scatterItemKeyIsTree(String(p.itemKey))) continue;
       const itemKey = String(p.itemKey);
       if (!strengthRockItemKeyAllowed(itemKey)) continue;
-      if (!isScatterDetailLiftableRockAt(ox, oy, itemKey)) continue;
+      if (requireLiftable && !isScatterDetailLiftableRockAt(ox, oy, itemKey)) continue;
       const ddx = p.cx - (px + 0.5);
       const ddy = p.cy - (py + 0.5);
       const dist2 = ddx * ddx + ddy * ddy;
@@ -110,8 +111,12 @@ function findBestStrengthGrabOrigin(player, data) {
 }
 
 function tryStrengthGrab(player, data, nowSec) {
-  const cand = findBestStrengthGrabOrigin(player, data);
-  if (!cand) return false;
+  const cand = findBestStrengthGrabOrigin(player, data, true);
+  if (!cand) {
+    const blocked = findBestStrengthGrabOrigin(player, data, false);
+    if (blocked) showBreakableDetailHpAtOrigin(blocked.ox, blocked.oy, data);
+    return false;
+  }
   const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
   if (!p) return false;
   const itemKey = String(p.itemKey);
@@ -284,6 +289,7 @@ export function updateStrengthCarryInteraction(dt, player, data) {
     return;
   }
   if (!isScatterDetailLiftableRockAt(action.ox, action.oy, action.itemKey)) {
+    showBreakableDetailHpAtOrigin(action.ox, action.oy, data);
     player._strengthGrabAction = null;
     return;
   }
@@ -292,6 +298,22 @@ export function updateStrengthCarryInteraction(dt, player, data) {
   const nowSec = performance.now() * 0.001;
   finalizeStrengthGrab(player, data, nowSec, action);
   player._strengthGrabAction = null;
+}
+
+/**
+ * Returns a grab prompt payload when a liftable Strength detail is in range.
+ * @returns {{ itemKey: string } | null}
+ */
+export function getStrengthGrabPromptInfo(player, data) {
+  if (!player || !data) return null;
+  if (player._strengthCarry || player._strengthGrabAction) return null;
+  const cand = findBestStrengthGrabOrigin(player, data, true);
+  if (!cand) return null;
+  const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
+  if (!p) return null;
+  const itemKey = String(p.itemKey || '');
+  if (!itemKey) return null;
+  return { itemKey };
 }
 
 /**
