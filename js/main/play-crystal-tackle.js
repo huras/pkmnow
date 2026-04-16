@@ -17,6 +17,7 @@ import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
 import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';
 import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
+import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -84,7 +85,8 @@ const MAX_TREE_TOP_FALLS = 56;
 /**
  * @type {Array<
  *   | { kind: 'formal'; rootX: number; my: number; treeType: string; startWallSec: number }
- *   | { kind: 'scatter'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
+ *   | { kind: 'scatterCanopy'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
+ *   | { kind: 'scatterFade'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
  * >}
  */
 const activeTreeTopFalls = [];
@@ -101,6 +103,42 @@ function pruneTreeTopFalls(wallSec) {
   }
 }
 
+function isCrystalBreakItemKey(itemKey) {
+  return String(itemKey || '').toLowerCase().includes('crystal');
+}
+
+/** Fall + fade for tree canopy, or ground fade for other vegetation (grass, tree-without-top, etc.). Crystals skipped (shard FX). */
+function pushVegetationDissolveFromSt(st, startWallSec) {
+  if (!st?.itemKey) return;
+  if (isCrystalBreakItemKey(st.itemKey)) return;
+  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
+  if (scatterItemKeyIsTree(st.itemKey)) {
+    const objSet = OBJECT_SETS[st.itemKey];
+    const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
+    if (topPart?.ids?.length) {
+      activeTreeTopFalls.push({
+        kind: 'scatterCanopy',
+        ox: st.ox,
+        oy: st.oy,
+        itemKey: st.itemKey,
+        cols: st.cols,
+        rows: st.rows,
+        startWallSec
+      });
+      return;
+    }
+  }
+  activeTreeTopFalls.push({
+    kind: 'scatterFade',
+    ox: st.ox,
+    oy: st.oy,
+    itemKey: st.itemKey,
+    cols: st.cols,
+    rows: st.rows,
+    startWallSec
+  });
+}
+
 function pushFormalTreeTopFall(rootX, my, treeType, startWallSec) {
   const ids = TREE_TILES[treeType];
   if (!ids?.top?.length) return;
@@ -108,25 +146,7 @@ function pushFormalTreeTopFall(rootX, my, treeType, startWallSec) {
   activeTreeTopFalls.push({ kind: 'formal', rootX, my, treeType, startWallSec });
 }
 
-function pushScatterTreeTopFallFromSt(st, startWallSec) {
-  if (!st || !scatterItemKeyIsTree(st.itemKey)) return;
-  const objSet = OBJECT_SETS[st.itemKey];
-  if (!objSet) return;
-  const topPart = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
-  if (!topPart?.ids?.length) return;
-  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
-  activeTreeTopFalls.push({
-    kind: 'scatter',
-    ox: st.ox,
-    oy: st.oy,
-    itemKey: st.itemKey,
-    cols: st.cols,
-    rows: st.rows,
-    startWallSec: startWallSec
-  });
-}
-
-/** Enqueues sorted `renderItems` entries for falling tree tops (cached composites + alpha only). */
+/** Enqueues sorted `renderItems` for canopy fall + fade (trees) or in-place fade (ground vegetation). */
 export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, tileH) {
   void tileW;
   void tileH;
@@ -134,7 +154,7 @@ export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, til
   for (const e of activeTreeTopFalls) {
     const u = Math.max(0, Math.min(1, (wallNowSec - e.startWallSec) / TREE_TOP_FALL_SEC));
     if (u >= 1) continue;
-    const dropYTiles = easeOutQuadTreeFall(u) * 0.9;
+    const dropYTiles = e.kind === 'scatterFade' ? 0 : easeOutQuadTreeFall(u) * 0.9;
     const alpha = Math.max(0, Math.min(1, 1 - Math.pow(Math.max(0, u - 0.08) / 0.92, 1.22)));
     if (alpha < 0.02) continue;
     if (e.kind === 'formal') {
@@ -147,7 +167,7 @@ export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, til
         alpha,
         sortY: e.my + 1 + dropYTiles * 0.36
       });
-    } else {
+    } else if (e.kind === 'scatterCanopy') {
       renderItems.push({
         type: 'scatterTreeCanopyFall',
         originX: e.ox,
@@ -158,6 +178,18 @@ export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, til
         dropYTiles,
         alpha,
         sortY: e.oy + e.rows - 0.1 + dropYTiles * 0.36
+      });
+    } else {
+      renderItems.push({
+        type: 'scatterVegetationFadeOut',
+        originX: e.ox,
+        originY: e.oy,
+        itemKey: e.itemKey,
+        cols: e.cols,
+        rows: e.rows,
+        dropYTiles: 0,
+        alpha,
+        sortY: e.oy + e.rows - 0.1
       });
     }
   }
@@ -687,7 +719,7 @@ export function tryStrengthLiftSolidScatterAt(ox, oy, data, nowSec) {
   pauseStrengthCarriedScatterRegen(ox, oy);
   detailHitHpBars.delete(key);
   detailHitShakeAtSec.delete(key);
-  markDestroyedDetailAndScheduleRegen(st, nowSec);
+  markDestroyedDetailAndScheduleRegen(st, nowSec, { skipTreeTopFall: true });
   return true;
 }
 
@@ -950,7 +982,7 @@ export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
 function markDestroyedDetailAndScheduleRegen(st, nowSec, opts = {}) {
   if (!st || st.destroyed) return;
   setScatterItemKeyOverride(st.ox, st.oy, null);
-  if (!opts.skipTreeTopFall) pushScatterTreeTopFallFromSt(st, nowSec);
+  if (!opts.skipTreeTopFall) pushVegetationDissolveFromSt(st, nowSec);
   st.destroyed = true;
   st.regenAtSec = nowSec + DETAIL_REGEN_AFTER_BREAK_SEC;
   registerDestroyedCrystalOrigin(st.ox, st.oy);
@@ -1279,6 +1311,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       activeSpawnedSmallCrystals.splice(idx, 1);
       if (spawnedHitOnceSet) spawnedHitOnceSet.add(c.id);
       const cSet = OBJECT_SETS[c.itemKey];
+      playCrystalClinkSfx({ x: c.x, y: c.y });
       spawnPickableCrystalDropAt(c.x, c.y, c.itemKey, countSpritesInObjectSet(cSet));
       spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
       continue;
@@ -1395,6 +1428,9 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
     if (treeDamage > 0 || !isTreeHit) {
       markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+    }
+    if (isCrystalItemKey(hit.itemKey) && st.hitsRemaining < hpBefore) {
+      playCrystalClinkSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
     }
     markDetailHitShake(worldKey, nowSec);
     spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);

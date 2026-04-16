@@ -437,7 +437,7 @@ export function collectRenderItems(options) {
 
   // 6. Specialist Injections (Strength, Tree Falling)
   appendStrengthThrowRenderItems(renderItems, startX, startY, endX, endY);
-  appendTreeTopFallRenderItems(renderItems, startX, startY, endX, endY, performance.now() * 0.001);
+  appendTreeTopFallRenderItems(renderItems, performance.now() * 0.001, tileW, tileH);
 
   const pushPsybeamChargeOrbs = () => {
     const z0 = player.z ?? 0;

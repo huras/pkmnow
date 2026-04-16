@@ -505,7 +505,25 @@ export function render(canvas, data, options = {}) {
       else if (item.type === 'playerAimIndicator') { ctx.save(); drawPlayerAimIndicator(ctx, item, { snapPx, player, flightHudActive, tileW, tileH, aimAtCursor }); ctx.restore(); }
       else if (item.type === 'strengthThrowAimPreview') { ctx.save(); drawStrengthThrowAimPreview(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
       else if (item.type === 'psybeamChargeBall') { ctx.save(); drawPsybeamChargeBall(ctx, item, { snapPx, tileW }); ctx.restore(); }
-      else if (item.type === 'formalTreeCanopyFall' || item.type === 'scatterTreeCanopyFall') { ctx.save(); drawTreeTopFall(ctx, item, { snapPx, natureImg, TCOLS_NATURE, tileW, tileH }); ctx.restore(); }
+      else if (
+        item.type === 'formalTreeCanopyFall' ||
+        item.type === 'scatterTreeCanopyFall' ||
+        item.type === 'scatterVegetationFadeOut'
+      ) {
+        ctx.save();
+        drawTreeTopFall(ctx, item, {
+          snapPx,
+          natureImg,
+          TCOLS_NATURE,
+          tileW,
+          tileH,
+          imageCache,
+          getCached,
+          lodDetail,
+          canopyAnimTime
+        });
+        ctx.restore();
+      }
     }
 
     if (batchedEffects.length > 0) {

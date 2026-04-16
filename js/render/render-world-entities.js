@@ -513,10 +513,106 @@ export function drawPsybeamChargeBall(ctx, item, options) {
 }
 
 /**
- * Handles drawing of falling tree tops.
+ * In-place fade for broken scatter (grass, flowers, tree-without-top, rocks, etc.) — no vertical drop.
+ */
+export function drawScatterVegetationFadeOut(ctx, item, options) {
+  const { originX, originY, itemKey, cols, rows, alpha } = item;
+  const objSet = OBJECT_SETS[itemKey];
+  if (!objSet || alpha < 0.02) return;
+  ctx.save();
+  ctx.globalAlpha = ctx.globalAlpha * alpha;
+  drawScatter(
+    ctx,
+    {
+      type: 'scatter',
+      objSet,
+      originX,
+      originY,
+      cols,
+      rows,
+      itemKey,
+      isSortable: true,
+      isBurning: false,
+      isCharred: false,
+      windSway: false
+    },
+    {
+      ...options,
+      time: 0,
+      canopyAnimTime: 0,
+      lodDetail: 1
+    }
+  );
+  ctx.restore();
+}
+
+/**
+ * Falling canopy (formal / scatter trees with tops) or legacy pre-baked `canvas` items.
  */
 export function drawTreeTopFall(ctx, item, options) {
-  const { snapPx, natureImg, TCOLS_NATURE, tileW, tileH } = options;
+  const { snapPx, natureImg, TCOLS_NATURE, tileW, tileH, imageCache } = options;
+  const ga = ctx.globalAlpha;
+
+  if (item.type === 'formalTreeCanopyFall') {
+    const { originX, originY, treeType, dropYTiles, alpha } = item;
+    const ids = TREE_TILES[treeType];
+    if (!ids?.top?.length || alpha < 0.02) return;
+    ctx.save();
+    ctx.globalAlpha = ga * alpha;
+    const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+      0,
+      treeType,
+      originX,
+      originY,
+      ids.top,
+      natureImg,
+      TCOLS_NATURE,
+      tileW,
+      tileH
+    );
+    const px = snapPx(originX * tileW + tileW);
+    const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
+    ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+    ctx.restore();
+    return;
+  }
+
+  if (item.type === 'scatterTreeCanopyFall') {
+    const { originX, originY, itemKey, cols, rows, dropYTiles, alpha } = item;
+    if (alpha < 0.02 || !imageCache) return;
+    const objSet = OBJECT_SETS[itemKey];
+    if (!objSet) return;
+    const topPart = objSet.parts.find((p) => p.role === 'top' || p.role === 'tops');
+    if (!topPart?.ids?.length) return;
+    const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
+    if (!img) return;
+    ctx.save();
+    ctx.globalAlpha = ga * alpha;
+    const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+      0,
+      itemKey,
+      originX,
+      originY,
+      topPart,
+      cols,
+      img,
+      atlasCols,
+      tileW,
+      tileH,
+      false
+    );
+    const px = snapPx(originX * tileW + (cols * tileW) / 2);
+    const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
+    ctx.drawImage(scCan, px - scOx, py - scOy);
+    ctx.restore();
+    return;
+  }
+
+  if (item.type === 'scatterVegetationFadeOut') {
+    drawScatterVegetationFadeOut(ctx, item, options);
+    return;
+  }
+
   const { canvas } = item;
   if (canvas) {
     const px = snapPx(item.x * tileW);
@@ -524,7 +620,7 @@ export function drawTreeTopFall(ctx, item, options) {
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(item.rotation || 0);
-    ctx.globalAlpha = item.alpha ?? 1;
+    ctx.globalAlpha = ga * (item.alpha ?? 1);
     ctx.drawImage(canvas, -item.ox, -item.oy);
     ctx.restore();
   }

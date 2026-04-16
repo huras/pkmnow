@@ -18,6 +18,7 @@ import {
   getPokemonHurtboxRadiusTiles,
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
+import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 
 function strengthRockItemKeyAllowed(itemKey) {
   const k = String(itemKey || '').toLowerCase();
@@ -397,6 +398,9 @@ export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
     phase: 'air',
     rollAge: 0
   });
+  if (String(carry.itemKey || '').toLowerCase().includes('crystal')) {
+    playCrystalClinkSfx({ x: sx, y: sy });
+  }
   player._strengthCarry = null;
   return true;
 }
