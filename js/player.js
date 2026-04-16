@@ -658,7 +658,12 @@ export function updatePlayer(dt, data) {
       : FLIGHT_WINGED_MAX_SPEED_MULT
     : 1;
   const combatChargeSlowMul =
-    playInputState.chargeLeft01 > 0.02 && !playInputState.ctrlLeftHeld ? LMB_COMBAT_CHARGE_SPEED_MUL : 1;
+    (playInputState.chargeLeft01 > 0.02 ||
+      playInputState.chargeRight01 > 0.02 ||
+      playInputState.chargeMmb01 > 0.02) &&
+    !playInputState.ctrlLeftHeld
+      ? LMB_COMBAT_CHARGE_SPEED_MUL
+      : 1;
   const currentMaxSpeed =
     MAX_SPEED *
     Math.max(1.0, inputMag) *
@@ -820,7 +825,9 @@ export function updatePlayer(dt, data) {
   const inCombatCharge =
     hasChargeAsset &&
     !player.digBurrowMode &&
-    (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
+    (playInputState.chargeLeft01 > 0.02 ||
+      playInputState.chargeRight01 > 0.02 ||
+      playInputState.chargeMmb01 > 0.02) &&
     !playInputState.ctrlLeftHeld;
 
   const shootRemain0 = player.moveShootAnimSec || 0;

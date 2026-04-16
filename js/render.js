@@ -1716,7 +1716,9 @@ export function render(canvas, data, options = {}) {
     const combatLmbAttack = (player.lmbAttackAnimSec || 0) > 0;
     const combatCharge =
       !player.digBurrowMode &&
-      (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
+      (playInputState.chargeLeft01 > 0.02 ||
+        playInputState.chargeRight01 > 0.02 ||
+        playInputState.chargeMmb01 > 0.02) &&
       !playInputState.ctrlLeftHeld &&
       !!pChargeSheet;
 

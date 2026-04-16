@@ -561,7 +561,7 @@ function enterPlayMode(gx, gy) {
   else minimap?.classList.remove('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
   infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Mouse: LMB = field move selecionado (Cut tem combo de 3 cliques; segure e solte LMB para versão carregada com Charge anim + movimento lento). Carregar pedra: E pega/solta; com pedra na mão, soltar LMB = arremesso na mira. RMB = ataque especial escolhido (segure RMB = carregado quando o golpe tiver versão carregada; Psybeam: segure RMB = orbe rosa e solte = raio longo). MMB = Ultimate. Segure 1 = field move wheel (Tackle / Cut). Segure 2 = special attack wheel (define o golpe do RMB). Social: Numpad 1-9. Debug: Ctrl+RMB.</span>";
+    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Golpes: 5 entradas — clique esquerdo, direito, meio da rolagem, rolagem para cima, rolagem para baixo — cada uma dispara o golpe que você amarrou nela. Segure 1–5 um instante para abrir a roda e escolher o golpe daquele botão (qualquer golpe da lista). Tackle/Cut no clique esquerdo: combo do Cut e carregar soltando como antes. Carregar pedra: E; com pedra, soltar LMB arremessa na mira. Social: Numpad 1–9. Debug: Ctrl+clique direito.</span>";
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 

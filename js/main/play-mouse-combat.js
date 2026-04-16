@@ -1,5 +1,5 @@
 import { playInputState } from './play-input-state.js';
-import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack } from '../player.js';
+import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack, player } from '../player.js';
 import {
   castMoveById,
   castMoveChargedById,
@@ -14,7 +14,16 @@ import {
   tryCastPlayerPrismaticStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
-import { getPokemonMoveset, getMoveLabel, PLAYER_SPECIAL_WHEEL_MOVE_IDS } from '../moves/pokemon-moveset-config.js';
+import {
+  PLAYER_BINDABLE_MOVE_IDS,
+  digitToBindingSlotIndex,
+  getBindableMoveLabel,
+  getPlayerInputBindings,
+  setPlayerInputBinding,
+  dispatchPlayerInputBindingsChanged,
+  getInputSlotId,
+  slotIndexToUiHotkey
+} from './player-input-slots.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
 import { beginStrengthThrowFromPointer } from './play-strength-carry.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
@@ -28,27 +37,17 @@ const FIELD_LMB_CHARGE_MIN_HOLD_MS = 180;
 const FIELD_CUT_COMBO_RESET_SEC = 1.15;
 const FIELD_TACKLE_CHARGE_MAX_SEC = 2.0;
 const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 8.0;
-const FIELD_SKILL_WHEEL_HOLD_MS = 170;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
 const FIELD_SKILL_CUT_ADVANCE_TILES = 0.5;
-const FIELD_SKILLS = ['tackle', 'cut'];
-const FIELD_SKILL_STORAGE_KEY = 'pkmn_field_skill_by_dex';
 const FIELD_SKILL_LABEL = {
   tackle: 'Tackle',
   cut: 'Cut'
 };
 
-/** Hold `2` (Digit2) to pick which move RMB executes (special attack wheel). */
-const SPECIAL_ATTACK_WHEEL_HOLD_MS = 170;
-const SPECIAL_ATTACK_STORAGE_KEY = 'pkmn_special_attack_by_dex';
+/** Hold digit 1–5 briefly to open the bind wheel for LMB / RMB / MMB / wheel↑ / wheel↓. */
+const BIND_SLOT_WHEEL_HOLD_MS = 170;
 /** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
-const SPECIAL_ATTACK_MOVE_IDS = PLAYER_SPECIAL_WHEEL_MOVE_IDS;
-
-function getFieldSkillTypeClass(skillId) {
-  if (skillId === 'cut') return 'type-grass';
-  return 'type-normal';
-}
 
 function getMoveTypeClass(moveId) {
   switch (moveId) {
@@ -108,6 +107,10 @@ function getMoveTypeClass(moveId) {
       return 'type-bug';
     case 'ultimate':
       return 'type-normal';
+    case 'tackle':
+      return 'type-normal';
+    case 'cut':
+      return 'type-grass';
     default:
       return 'type-normal';
   }
@@ -129,270 +132,67 @@ let rightWaterStreamedThisPress = false;
 let rightBubbleBeamStreamedThisPress = false;
 /** True after at least one prismatic laser stream puff this RMB press. */
 let rightPrismaticStreamedThisPress = false;
-let selectedFieldSkillId = 'tackle';
-let fieldSkillWheelHoldStartMs = 0;
-let fieldSkillWheelArmed = false;
-let fieldSkillWheelOpen = false;
-let fieldSkillWheelHoverIndex = 0;
-/** @type {HTMLDivElement | null} */
-let fieldSkillWheelRoot = null;
-/** @type {Record<string, 'tackle' | 'cut'>} */
-let fieldSkillByDex = loadStoredFieldSkillByDex();
+let leftFlameStreamedThisPress = false;
+let leftWaterStreamedThisPress = false;
+let leftBubbleBeamStreamedThisPress = false;
+let leftPrismaticStreamedThisPress = false;
+let middleHeld = false;
+let middleDownAt = 0;
+let middleFlameStreamedThisPress = false;
+let middleWaterStreamedThisPress = false;
+let middleBubbleBeamStreamedThisPress = false;
+let middlePrismaticStreamedThisPress = false;
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
 let lastComboDexId = 0;
 let fieldWheelMouseClientX = 0;
 let fieldWheelMouseClientY = 0;
+/** Last wheel step time (play canvas) to avoid scroll spam. */
+let lastScrollBindCastMs = 0;
 
-let selectedSpecialMoveId = /** @type {MoveId} */ ('ember');
-let specialAttackWheelHoldStartMs = 0;
-let specialAttackWheelArmed = false;
-let specialAttackWheelOpen = false;
-let specialAttackWheelHoverIndex = 0;
+/** 0..4 = Digit1..Digit5 slot being edited, or -1. */
+let bindingWheelSlotIdx = -1;
+let bindingWheelHoldStartMs = 0;
+let bindingWheelArmed = false;
+let bindingWheelOpen = false;
+let bindingWheelHoverIndex = 0;
 /** @type {HTMLDivElement | null} */
-let specialAttackWheelRoot = null;
-/** @type {Record<string, MoveId>} */
-let specialAttackByDex = loadStoredSpecialAttackByDex();
-
-function normalizeFieldSkillId(skillId) {
-  const s = String(skillId || '');
-  if (s === 'strength') return 'tackle';
-  return FIELD_SKILLS.includes(s) ? s : 'tackle';
-}
-
-function loadStoredFieldSkillByDex() {
-  try {
-    const raw = localStorage.getItem(FIELD_SKILL_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-    /** @type {Record<string, 'tackle' | 'cut'>} */
-    const out = {};
-    for (const [dexKey, skillId] of Object.entries(parsed)) {
-      const dex = Math.floor(Number(dexKey) || 0);
-      if (dex < 1 || dex > 151) continue;
-      const norm = normalizeFieldSkillId(skillId);
-      out[String(dex)] = /** @type {'tackle' | 'cut'} */ (norm);
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function saveStoredFieldSkillByDex() {
-  try {
-    localStorage.setItem(FIELD_SKILL_STORAGE_KEY, JSON.stringify(fieldSkillByDex));
-  } catch {
-    // Ignore storage failures (private mode, quota, etc.).
-  }
-}
-
-function dispatchFieldSkillChange(dexId, skillId) {
-  window.dispatchEvent(
-    new CustomEvent('play-field-skill-change', {
-      detail: {
-        dexId: Math.floor(Number(dexId) || 0),
-        skillId: normalizeFieldSkillId(skillId)
-      }
-    })
-  );
-}
-
-function persistSelectedFieldSkillForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) return;
-  fieldSkillByDex[String(dex)] = /** @type {'tackle' | 'cut'} */ (normalizeFieldSkillId(selectedFieldSkillId));
-  saveStoredFieldSkillByDex();
-}
-
-function setSelectedFieldSkill(skillId, dexId, persist = false) {
-  selectedFieldSkillId = normalizeFieldSkillId(skillId);
-  fieldSkillWheelHoverIndex = Math.max(0, FIELD_SKILLS.indexOf(selectedFieldSkillId));
-  if (persist) persistSelectedFieldSkillForDex(dexId);
-  syncFieldSkillWheelDom();
-  if (Number.isFinite(Number(dexId))) {
-    dispatchFieldSkillChange(dexId, selectedFieldSkillId);
-  }
-}
+let bindingWheelRoot = null;
 
 export function getFieldSkillLabel(skillId) {
-  const norm = normalizeFieldSkillId(skillId);
-  return FIELD_SKILL_LABEL[norm] || 'Tackle';
+  const s = String(skillId || '');
+  if (s === 'strength') return FIELD_SKILL_LABEL.tackle;
+  if (FIELD_SKILL_LABEL[s]) return FIELD_SKILL_LABEL[s];
+  return getBindableMoveLabel(s);
 }
 
+/** @deprecated Use `getPlayerInputBindings(dex).lmb` — kept for older call sites (LMB melee chip). */
 export function getSelectedFieldSkillForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) return 'tackle';
-  return normalizeFieldSkillId(fieldSkillByDex[String(dex)] || 'tackle');
+  const l = getPlayerInputBindings(dexId).lmb;
+  return l === 'cut' || l === 'tackle' ? l : 'tackle';
 }
 
 export function syncSelectedFieldSkillForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  setSelectedFieldSkill(getSelectedFieldSkillForDex(dex), dex, false);
-  return selectedFieldSkillId;
-}
-
-function normalizeSpecialMoveId(moveId) {
-  const m = String(moveId || '');
-  return SPECIAL_ATTACK_MOVE_IDS.includes(/** @type {any} */ (m)) ? /** @type {MoveId} */ (m) : 'ember';
-}
-
-function loadStoredSpecialAttackByDex() {
-  try {
-    const raw = localStorage.getItem(SPECIAL_ATTACK_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
-    /** @type {Record<string, MoveId>} */
-    const out = {};
-    for (const [dexKey, moveId] of Object.entries(parsed)) {
-      const dex = Math.floor(Number(dexKey) || 0);
-      if (dex < 1 || dex > 151) continue;
-      out[String(dex)] = normalizeSpecialMoveId(moveId);
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function saveStoredSpecialAttackByDex() {
-  try {
-    localStorage.setItem(SPECIAL_ATTACK_STORAGE_KEY, JSON.stringify(specialAttackByDex));
-  } catch {
-    // Ignore storage failures (private mode, quota, etc.).
-  }
-}
-
-function dispatchSpecialAttackChange(dexId, moveId) {
-  window.dispatchEvent(
-    new CustomEvent('play-special-attack-change', {
-      detail: {
-        dexId: Math.floor(Number(dexId) || 0),
-        moveId: normalizeSpecialMoveId(moveId)
-      }
-    })
-  );
-}
-
-function persistSelectedSpecialAttackForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) return;
-  specialAttackByDex[String(dex)] = normalizeSpecialMoveId(selectedSpecialMoveId);
-  saveStoredSpecialAttackByDex();
-}
-
-function setSelectedSpecialMove(moveId, dexId, persist = false) {
-  selectedSpecialMoveId = normalizeSpecialMoveId(moveId);
-  specialAttackWheelHoverIndex = Math.max(0, SPECIAL_ATTACK_MOVE_IDS.indexOf(selectedSpecialMoveId));
-  if (persist) persistSelectedSpecialAttackForDex(dexId);
-  syncSpecialAttackWheelDom();
-  if (Number.isFinite(Number(dexId))) {
-    dispatchSpecialAttackChange(dexId, selectedSpecialMoveId);
-  }
+  void dexId;
+  return getSelectedFieldSkillForDex(dexId);
 }
 
 export function getSelectedSpecialAttackMoveForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) return /** @type {MoveId} */ ('ember');
-  return normalizeSpecialMoveId(specialAttackByDex[String(dex)] || 'ember');
+  return /** @type {MoveId} */ (getPlayerInputBindings(dexId).rmb);
 }
 
 export function syncSelectedSpecialAttackForDex(dexId) {
-  const dex = Math.floor(Number(dexId) || 0);
-  setSelectedSpecialMove(getSelectedSpecialAttackMoveForDex(dex), dex, false);
-  return selectedSpecialMoveId;
+  void dexId;
+  return getSelectedSpecialAttackMoveForDex(dexId);
 }
 
-function ensureFieldSkillWheelDom() {
-  if (fieldSkillWheelRoot) return fieldSkillWheelRoot;
+function ensureBindWheelDom() {
+  if (bindingWheelRoot) return bindingWheelRoot;
   const root = document.createElement('div');
-  root.id = 'play-field-skill-wheel';
-  root.className = 'play-field-skill-wheel hidden';
-  root.setAttribute('aria-hidden', 'true');
-  root.innerHTML = `
-    <div class="play-field-skill-wheel__ring">
-      <div class="play-field-skill-wheel__hint">Hold 1 · release to select</div>
-      <button type="button" class="play-field-skill-wheel__item type-icon ${getFieldSkillTypeClass('tackle')}" data-skill="tackle">Tackle</button>
-      <button type="button" class="play-field-skill-wheel__item type-icon ${getFieldSkillTypeClass('cut')}" data-skill="cut">Cut</button>
-    </div>
-  `;
-  document.body.appendChild(root);
-  fieldSkillWheelRoot = root;
-  syncFieldSkillWheelDom();
-  return root;
-}
-
-function syncFieldSkillWheelDom() {
-  if (!fieldSkillWheelRoot) return;
-  fieldSkillWheelRoot.classList.toggle('hidden', !fieldSkillWheelOpen);
-  fieldSkillWheelRoot.setAttribute('aria-hidden', fieldSkillWheelOpen ? 'false' : 'true');
-  const hoverSkill = FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId;
-  for (const el of fieldSkillWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
-    const skillId = String(el.getAttribute('data-skill') || '');
-    el.classList.toggle('is-hover', fieldSkillWheelOpen && skillId === hoverSkill);
-    el.classList.toggle('is-selected', skillId === selectedFieldSkillId);
-  }
-}
-
-function openFieldSkillWheel() {
-  fieldSkillWheelOpen = true;
-  ensureFieldSkillWheelDom();
-  syncFieldSkillWheelDom();
-}
-
-function closeFieldSkillWheel() {
-  fieldSkillWheelOpen = false;
-  syncFieldSkillWheelDom();
-}
-
-function normalizeAngleSigned(rad) {
-  let a = Number(rad) || 0;
-  while (a <= -Math.PI) a += Math.PI * 2;
-  while (a > Math.PI) a -= Math.PI * 2;
-  return a;
-}
-
-function resolveFieldWheelHoverFromScreenAngle() {
-  if (!fieldSkillWheelRoot) return fieldSkillWheelHoverIndex;
-  const ring = fieldSkillWheelRoot.querySelector('.play-field-skill-wheel__ring');
-  if (!(ring instanceof HTMLElement)) return fieldSkillWheelHoverIndex;
-  const ringRect = ring.getBoundingClientRect();
-  const cx = ringRect.left + ringRect.width * 0.5;
-  const cy = ringRect.top + ringRect.height * 0.5;
-  const dx = fieldWheelMouseClientX - cx;
-  const dy = fieldWheelMouseClientY - cy;
-  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 14) {
-    return fieldSkillWheelHoverIndex;
-  }
-  const mouseAngle = Math.atan2(dy, dx);
-  let bestIdx = fieldSkillWheelHoverIndex;
-  let bestDelta = Infinity;
-  for (let i = 0; i < FIELD_SKILLS.length; i++) {
-    const skillId = FIELD_SKILLS[i];
-    const item = fieldSkillWheelRoot.querySelector(`.play-field-skill-wheel__item[data-skill="${skillId}"]`);
-    if (!(item instanceof HTMLElement)) continue;
-    const ir = item.getBoundingClientRect();
-    const ix = ir.left + ir.width * 0.5;
-    const iy = ir.top + ir.height * 0.5;
-    const itemAngle = Math.atan2(iy - cy, ix - cx);
-    const d = Math.abs(normalizeAngleSigned(mouseAngle - itemAngle));
-    if (d < bestDelta) {
-      bestDelta = d;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
-}
-
-function ensureSpecialAttackWheelDom() {
-  if (specialAttackWheelRoot) return specialAttackWheelRoot;
-  const root = document.createElement('div');
-  root.id = 'play-special-attack-wheel';
+  root.id = 'play-move-bind-wheel';
   root.className = 'play-field-skill-wheel play-field-skill-wheel--special hidden';
   root.setAttribute('aria-hidden', 'true');
-  const count = Math.max(1, SPECIAL_ATTACK_MOVE_IDS.length);
+  const count = Math.max(1, PLAYER_BINDABLE_MOVE_IDS.length);
   const startDeg = -90;
   const ringCounts =
     count <= 14
@@ -407,14 +207,14 @@ function ensureSpecialAttackWheelDom() {
             return [outer, mid, inner];
           })();
   const ringRadiusPct = [45, 33, 23];
-  /** @type {Array<{ id: MoveId, ringIdx: number, slotIdx: number, ringCount: number }>} */
+  /** @type {Array<{ id: string, ringIdx: number, slotIdx: number, ringCount: number }>} */
   const wheelEntries = [];
   let moveCursor = 0;
   for (let ringIdx = 0; ringIdx < ringCounts.length; ringIdx++) {
     const ringCount = Math.max(0, ringCounts[ringIdx] || 0);
     for (let slotIdx = 0; slotIdx < ringCount && moveCursor < count; slotIdx++) {
       wheelEntries.push({
-        id: /** @type {MoveId} */ (SPECIAL_ATTACK_MOVE_IDS[moveCursor]),
+        id: PLAYER_BINDABLE_MOVE_IDS[moveCursor],
         ringIdx,
         slotIdx,
         ringCount
@@ -429,62 +229,78 @@ function ensureSpecialAttackWheelDom() {
       const radiusPct = ringRadiusPct[ringIdx] ?? ringRadiusPct[ringRadiusPct.length - 1];
       const left = 50 + Math.cos(a) * radiusPct;
       const top = 50 + Math.sin(a) * radiusPct;
-      return `<button type="button" class="play-field-skill-wheel__item type-icon ${getMoveTypeClass(id)}" data-move="${id}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${getMoveLabel(id)}</button>`;
+      return `<button type="button" class="play-field-skill-wheel__item type-icon ${getMoveTypeClass(id)}" data-move="${id}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${getBindableMoveLabel(id)}</button>`;
     })
     .join('');
   root.innerHTML = `
     <div class="play-field-skill-wheel__ring">
-      <div class="play-field-skill-wheel__hint">Hold 2 · release to select (RMB)</div>
+      <div class="play-field-skill-wheel__hint" id="play-move-bind-wheel__hint">Hold 1–5 · pick move for slot</div>
       ${buttons}
     </div>
   `;
   document.body.appendChild(root);
-  specialAttackWheelRoot = root;
-  syncSpecialAttackWheelDom();
+  bindingWheelRoot = root;
+  syncBindWheelDom();
   return root;
 }
 
-function syncSpecialAttackWheelDom() {
-  if (!specialAttackWheelRoot) return;
-  specialAttackWheelRoot.classList.toggle('hidden', !specialAttackWheelOpen);
-  specialAttackWheelRoot.setAttribute('aria-hidden', specialAttackWheelOpen ? 'false' : 'true');
-  const hoverMove = SPECIAL_ATTACK_MOVE_IDS[specialAttackWheelHoverIndex] || selectedSpecialMoveId;
-  for (const el of specialAttackWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
+function syncBindWheelDom() {
+  if (!bindingWheelRoot) return;
+  bindingWheelRoot.classList.toggle('hidden', !bindingWheelOpen);
+  bindingWheelRoot.setAttribute('aria-hidden', bindingWheelOpen ? 'false' : 'true');
+  const hint = bindingWheelRoot.querySelector('#play-move-bind-wheel__hint');
+  if (hint instanceof HTMLElement && bindingWheelSlotIdx >= 0) {
+    const n = bindingWheelSlotIdx + 1;
+    hint.textContent = `Hold ${n} · release — move for ${slotIndexToUiHotkey(bindingWheelSlotIdx)}`;
+  }
+  const hoverMove = PLAYER_BINDABLE_MOVE_IDS[bindingWheelHoverIndex] || 'tackle';
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  const slotId = bindingWheelSlotIdx >= 0 ? getInputSlotId(bindingWheelSlotIdx) : 'lmb';
+  const b = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
+  const selectedMove = b[slotId] ?? b.lmb;
+  for (const el of bindingWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
     const moveId = String(el.getAttribute('data-move') || '');
-    el.classList.toggle('is-hover', specialAttackWheelOpen && moveId === hoverMove);
-    el.classList.toggle('is-selected', moveId === selectedSpecialMoveId);
+    el.classList.toggle('is-hover', bindingWheelOpen && moveId === hoverMove);
+    el.classList.toggle('is-selected', moveId === selectedMove);
   }
 }
 
-function openSpecialAttackWheel() {
-  specialAttackWheelOpen = true;
-  ensureSpecialAttackWheelDom();
-  syncSpecialAttackWheelDom();
+function openBindWheel() {
+  bindingWheelOpen = true;
+  ensureBindWheelDom();
+  syncBindWheelDom();
 }
 
-function closeSpecialAttackWheel() {
-  specialAttackWheelOpen = false;
-  syncSpecialAttackWheelDom();
+function closeBindWheel() {
+  bindingWheelOpen = false;
+  syncBindWheelDom();
 }
 
-function resolveSpecialAttackWheelHoverFromScreenAngle() {
-  if (!specialAttackWheelRoot) return specialAttackWheelHoverIndex;
-  const ring = specialAttackWheelRoot.querySelector('.play-field-skill-wheel__ring');
-  if (!(ring instanceof HTMLElement)) return specialAttackWheelHoverIndex;
+function normalizeAngleSigned(rad) {
+  let a = Number(rad) || 0;
+  while (a <= -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
+}
+
+function resolveBindWheelHoverFromScreenAngle() {
+  if (!bindingWheelRoot) return bindingWheelHoverIndex;
+  const ring = bindingWheelRoot.querySelector('.play-field-skill-wheel__ring');
+  if (!(ring instanceof HTMLElement)) return bindingWheelHoverIndex;
   const ringRect = ring.getBoundingClientRect();
   const cx = ringRect.left + ringRect.width * 0.5;
   const cy = ringRect.top + ringRect.height * 0.5;
   const dx = fieldWheelMouseClientX - cx;
   const dy = fieldWheelMouseClientY - cy;
   if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 14) {
-    return specialAttackWheelHoverIndex;
+    return bindingWheelHoverIndex;
   }
   const mouseAngle = Math.atan2(dy, dx);
-  let bestIdx = specialAttackWheelHoverIndex;
+  let bestIdx = bindingWheelHoverIndex;
   let bestDelta = Infinity;
-  for (let i = 0; i < SPECIAL_ATTACK_MOVE_IDS.length; i++) {
-    const moveId = SPECIAL_ATTACK_MOVE_IDS[i];
-    const item = specialAttackWheelRoot.querySelector(`.play-field-skill-wheel__item[data-move="${moveId}"]`);
+  for (let i = 0; i < PLAYER_BINDABLE_MOVE_IDS.length; i++) {
+    const moveId = PLAYER_BINDABLE_MOVE_IDS[i];
+    const item = bindingWheelRoot.querySelector(`.play-field-skill-wheel__item[data-move="${moveId}"]`);
     if (!(item instanceof HTMLElement)) continue;
     const ir = item.getBoundingClientRect();
     const ix = ir.left + ir.width * 0.5;
@@ -499,44 +315,72 @@ function resolveSpecialAttackWheelHoverFromScreenAngle() {
   return bestIdx;
 }
 
-function updateSpecialAttackWheelHover(player) {
-  void player;
-  if (!specialAttackWheelOpen) return;
-  const idx = resolveSpecialAttackWheelHoverFromScreenAngle();
-  if (idx !== specialAttackWheelHoverIndex) {
-    specialAttackWheelHoverIndex = idx;
-    syncSpecialAttackWheelDom();
+function updateBindWheelHover(p) {
+  void p;
+  if (!bindingWheelOpen) return;
+  const idx = resolveBindWheelHoverFromScreenAngle();
+  if (idx !== bindingWheelHoverIndex) {
+    bindingWheelHoverIndex = idx;
+    syncBindWheelDom();
   }
+}
+
+export function handleBindSlotHotkeyDown(code) {
+  const idx = digitToBindingSlotIndex(code);
+  if (idx < 0) return false;
+  bindingWheelSlotIdx = idx;
+  bindingWheelArmed = true;
+  bindingWheelOpen = false;
+  bindingWheelHoldStartMs = performance.now();
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  const slotId = getInputSlotId(idx);
+  const cur = (dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1))[slotId];
+  bindingWheelHoverIndex = Math.max(0, PLAYER_BINDABLE_MOVE_IDS.indexOf(cur));
+  syncBindWheelDom();
+  return true;
+}
+
+export function handleBindSlotHotkeyUp(code, pl) {
+  const idx = digitToBindingSlotIndex(code);
+  if (idx < 0) return false;
+  if (idx !== bindingWheelSlotIdx) return false;
+  if (!bindingWheelArmed && !bindingWheelOpen) return false;
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  const b0 = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
+  const slotId = getInputSlotId(idx);
+  const pick = bindingWheelOpen
+    ? PLAYER_BINDABLE_MOVE_IDS[bindingWheelHoverIndex] || b0[slotId]
+    : b0[slotId];
+  if (dex >= 1) {
+    setPlayerInputBinding(dex, idx, pick);
+    dispatchPlayerInputBindingsChanged(dex);
+    window.dispatchEvent(
+      new CustomEvent('play-field-skill-change', {
+        detail: { dexId: dex, skillId: getSelectedFieldSkillForDex(dex) }
+      })
+    );
+  }
+  bindingWheelArmed = false;
+  bindingWheelSlotIdx = -1;
+  closeBindWheel();
+  return true;
+}
+
+export function handleFieldSkillHotkeyDown(code) {
+  return handleBindSlotHotkeyDown(code);
+}
+
+export function handleFieldSkillHotkeyUp(code, pl, data) {
+  void data;
+  return handleBindSlotHotkeyUp(code, pl);
 }
 
 export function handleSpecialAttackHotkeyDown(code) {
-  if (code !== 'Digit2') return false;
-  fieldSkillWheelArmed = false;
-  closeFieldSkillWheel();
-  if (!specialAttackWheelArmed) {
-    specialAttackWheelArmed = true;
-    specialAttackWheelOpen = false;
-    specialAttackWheelHoldStartMs = performance.now();
-    specialAttackWheelHoverIndex = Math.max(0, SPECIAL_ATTACK_MOVE_IDS.indexOf(selectedSpecialMoveId));
-    syncSpecialAttackWheelDom();
-  }
-  return true;
+  return handleBindSlotHotkeyDown(code);
 }
 
-export function handleSpecialAttackHotkeyUp(code, player) {
-  if (code !== 'Digit2') return false;
-  if (!specialAttackWheelArmed && !specialAttackWheelOpen) return false;
-  fieldSkillWheelArmed = false;
-  closeFieldSkillWheel();
-  const dex = Math.floor(Number(player?.dexId) || 0);
-  if (specialAttackWheelOpen) {
-    setSelectedSpecialMove(SPECIAL_ATTACK_MOVE_IDS[specialAttackWheelHoverIndex] || selectedSpecialMoveId, dex, true);
-  } else if (dex >= 1) {
-    setSelectedSpecialMove(selectedSpecialMoveId, dex, true);
-  }
-  specialAttackWheelArmed = false;
-  closeSpecialAttackWheel();
-  return true;
+export function handleSpecialAttackHotkeyUp(code, pl) {
+  return handleBindSlotHotkeyUp(code, pl);
 }
 
 function resolveCutStyleForDex(dexId) {
@@ -555,8 +399,8 @@ function resolveCutProfile(styleId) {
   return { radius: FIELD_SKILL_CUT_RADIUS, damage: 9, knockback: 3.1 };
 }
 
-function resolveFieldLmbChargeMaxSec() {
-  if (selectedFieldSkillId === 'tackle') return FIELD_TACKLE_CHARGE_MAX_SEC;
+function resolveFieldLmbChargeMaxSec(meleeId) {
+  if (meleeId === 'tackle') return FIELD_TACKLE_CHARGE_MAX_SEC;
   return FIELD_LMB_CHARGE_MAX_SEC_DEFAULT;
 }
 
@@ -703,7 +547,7 @@ function castPlayerCut(player, data, charged = false) {
   cutGrassInCircle(centerX, centerY, useRadius, data);
 }
 
-function castChargedFieldSpinAttack(player, data) {
+function castChargedFieldSpinAttack(player, data, meleeId) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
@@ -717,7 +561,7 @@ function castChargedFieldSpinAttack(player, data) {
   let damage = 16;
   let knockback = 5;
   let styleId = 'slash';
-  if (selectedFieldSkillId === 'cut') {
+  if (meleeId === 'cut') {
     const cutStyle = resolveCutStyleForDex(player.dexId ?? 1);
     const profile = resolveCutProfile(cutStyle);
     styleId = cutStyle;
@@ -736,7 +580,7 @@ function castChargedFieldSpinAttack(player, data) {
   const worldHitOnceSet = new Set();
   const spawnedHitOnceSet = new Set();
   const rays = 24;
-  const spinHitSource = selectedFieldSkillId === 'cut' ? 'cut' : 'tackle';
+  const spinHitSource = meleeId === 'cut' ? 'cut' : 'tackle';
   for (let i = 0; i < rays; i++) {
     const ang = (i / rays) * Math.PI * 2;
     const ex = centerX + Math.cos(ang) * radius;
@@ -747,18 +591,18 @@ function castChargedFieldSpinAttack(player, data) {
       hitSource: spinHitSource
     });
   }
-  if (selectedFieldSkillId === 'cut') {
+  if (meleeId === 'cut') {
     cutGrassInCircle(centerX, centerY, radius, data);
   }
 }
 
-function castSelectedFieldSkill(player, data, charged = false, charge01 = 0) {
+function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, meleeId = 'tackle') {
   if (!player) return;
-  if (charged && selectedFieldSkillId === 'cut') {
-    castChargedFieldSpinAttack(player, data);
+  if (charged && meleeId === 'cut') {
+    castChargedFieldSpinAttack(player, data, meleeId);
     return;
   }
-  if (selectedFieldSkillId === 'cut') {
+  if (meleeId === 'cut') {
     castPlayerCut(player, data, false);
     return;
   }
@@ -771,54 +615,13 @@ function castSelectedFieldSkill(player, data, charged = false, charge01 = 0) {
   } else {
     triggerPlayerLmbAttack(player, tx - sx, ty - sy);
   }
-  if (selectedFieldSkillId === 'tackle') {
+  if (meleeId === 'tackle') {
     const u = Math.max(0, Math.min(1, Number(charge01) || 0));
     const chargedReach = 2 + (FIELD_TACKLE_CHARGE_MAX_REACH_TILES - 2) * u;
     player._tackleReachTiles = Math.max(2, chargedReach);
   }
   tryPlayerTackleHitWild(player, data);
   tryBreakCrystalOnPlayerTackle(player, data);
-}
-
-function updateFieldSkillWheelHover(player) {
-  void player;
-  if (!fieldSkillWheelOpen) return;
-  const idx = resolveFieldWheelHoverFromScreenAngle();
-  if (idx !== fieldSkillWheelHoverIndex) {
-    fieldSkillWheelHoverIndex = idx;
-    syncFieldSkillWheelDom();
-  }
-}
-
-export function handleFieldSkillHotkeyDown(code) {
-  if (code !== 'Digit1') return false;
-  specialAttackWheelArmed = false;
-  closeSpecialAttackWheel();
-  if (!fieldSkillWheelArmed) {
-    fieldSkillWheelArmed = true;
-    fieldSkillWheelOpen = false;
-    fieldSkillWheelHoldStartMs = performance.now();
-    fieldSkillWheelHoverIndex = Math.max(0, FIELD_SKILLS.indexOf(selectedFieldSkillId));
-    syncFieldSkillWheelDom();
-  }
-  return true;
-}
-
-export function handleFieldSkillHotkeyUp(code, player, data) {
-  void data;
-  if (code !== 'Digit1') return false;
-  if (!fieldSkillWheelArmed && !fieldSkillWheelOpen) return false;
-  specialAttackWheelArmed = false;
-  closeSpecialAttackWheel();
-  const dex = Math.floor(Number(player?.dexId) || 0);
-  if (fieldSkillWheelOpen) {
-    setSelectedFieldSkill(FIELD_SKILLS[fieldSkillWheelHoverIndex] || selectedFieldSkillId, dex, true);
-  } else if (dex >= 1) {
-    setSelectedFieldSkill(selectedFieldSkillId, dex, true);
-  }
-  fieldSkillWheelArmed = false;
-  closeFieldSkillWheel();
-  return true;
 }
 
 function isHoldStreamMoveId(moveId) {
@@ -858,21 +661,100 @@ export function aimAtCursor(player) {
 }
 
 /**
- * Legacy digit hotkeys were removed: play combat is now 3-slot (LMB field skill, RMB special via wheel on `2`, MMB ultimate).
+ * Legacy digit hotkeys were removed: play combat uses five pointer binds + 1–5 to configure.
  * @returns {boolean}
  */
 export function castMappedMoveByHotkey(_code, _player) {
   return false;
 }
 
-function resolveSlots(player) {
-  const dex = Math.floor(Number(player?.dexId) || 0);
-  const moves = getPokemonMoveset(player?.dexId || 1);
-  const rightTap = dex >= 1 ? getSelectedSpecialAttackMoveForDex(dex) : /** @type {MoveId} */ ('ember');
-  return {
-    leftTap: moves[0],
-    rightTap
-  };
+function getBindingsOrDefault(pl) {
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  return dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
+}
+
+function isMeleeTackleOrCut(moveId) {
+  return moveId === 'tackle' || moveId === 'cut';
+}
+
+/**
+ * @param {string} moveId
+ * @param {import('../player.js').player} pl
+ * @param {object | null} data
+ */
+function castScrollSlotMove(moveId, pl, data) {
+  if (!pl || !data) return;
+  if (isMeleeTackleOrCut(moveId)) {
+    castSelectedFieldSkill(pl, data, false, 0, moveId);
+    return;
+  }
+  const { sx, sy, tx, ty } = aimAtCursor(pl);
+  if (moveId === 'ultimate') {
+    castUltimate(sx, sy, tx, ty, pl);
+    return;
+  }
+  castMoveById(moveId, sx, sy, tx, ty, pl);
+}
+
+/**
+ * @param {string} moveId
+ * @param {import('../player.js').player} pl
+ * @param {object | null} data
+ * @param {number} heldMs
+ * @param {number} charge01
+ * @param {'l' | 'r' | 'm'} which
+ */
+function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
+  if (isMeleeTackleOrCut(moveId)) {
+    const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
+    castSelectedFieldSkill(pl, data, charged, charge01, moveId);
+    return;
+  }
+  const { sx, sy, tx, ty } = aimAtCursor(pl);
+  if (moveId === 'ultimate') {
+    castUltimate(sx, sy, tx, ty, pl);
+    return;
+  }
+  const flame = which === 'l' ? leftFlameStreamedThisPress : which === 'm' ? middleFlameStreamedThisPress : rightFlameStreamedThisPress;
+  const water = which === 'l' ? leftWaterStreamedThisPress : which === 'm' ? middleWaterStreamedThisPress : rightWaterStreamedThisPress;
+  const bubble = which === 'l' ? leftBubbleBeamStreamedThisPress : which === 'm' ? middleBubbleBeamStreamedThisPress : rightBubbleBeamStreamedThisPress;
+  const prismatic = which === 'l' ? leftPrismaticStreamedThisPress : which === 'm' ? middlePrismaticStreamedThisPress : rightPrismaticStreamedThisPress;
+
+  if (moveId === 'flamethrower' || moveId === 'fireSpin') {
+    if (!flame) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'waterGun' || moveId === 'hydroPump') {
+    if (!water) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'bubbleBeam' || moveId === 'surf') {
+    if (!bubble) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (
+    moveId === 'prismaticLaser' ||
+    moveId === 'solarBeam' ||
+    moveId === 'hyperBeam' ||
+    moveId === 'thunder' ||
+    moveId === 'thunderbolt' ||
+    moveId === 'triAttack'
+  ) {
+    if (!prismatic) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'psybeam') {
+    applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+    tryReleasePlayerPsybeam(sx, sy, tx, ty, pl);
+  } else if (heldMs < TAP_MS) {
+    castMoveById(moveId, sx, sy, tx, ty, pl);
+  } else {
+    castMoveChargedById(moveId, sx, sy, tx, ty, pl, charge01 || 0);
+  }
 }
 
 /**
@@ -881,78 +763,150 @@ function resolveSlots(player) {
  * @param {object | null | undefined} data
  */
 export function updatePlayPointerCombat(dt, player, data) {
+  void data;
   if (!player) return;
   const dex = Math.floor(Number(player?.dexId) || 0);
   if (dex !== lastComboDexId) {
     fieldCutComboStep = 0;
     fieldCutComboTimerSec = 0;
     lastComboDexId = dex;
-    syncSelectedSpecialAttackForDex(dex);
   }
   if (fieldCutComboTimerSec > 0) {
     fieldCutComboTimerSec = Math.max(0, fieldCutComboTimerSec - dt);
     if (fieldCutComboTimerSec <= 0) fieldCutComboStep = 0;
   }
-  if (fieldSkillWheelArmed && !fieldSkillWheelOpen) {
-    if (performance.now() - fieldSkillWheelHoldStartMs >= FIELD_SKILL_WHEEL_HOLD_MS) {
-      openFieldSkillWheel();
+  if (bindingWheelArmed && !bindingWheelOpen && bindingWheelSlotIdx >= 0) {
+    if (performance.now() - bindingWheelHoldStartMs >= BIND_SLOT_WHEEL_HOLD_MS) {
+      openBindWheel();
     }
   }
-  if (specialAttackWheelArmed && !specialAttackWheelOpen) {
-    if (performance.now() - specialAttackWheelHoldStartMs >= SPECIAL_ATTACK_WHEEL_HOLD_MS) {
-      openSpecialAttackWheel();
-    }
-  }
-  updateFieldSkillWheelHover(player);
-  updateSpecialAttackWheelHover(player);
+  updateBindWheelHover(player);
+
+  const b = getBindingsOrDefault(player);
+  const lmb = b.lmb;
+  const rmb = b.rmb;
+  const mmb = b.mmb;
+
   playInputState.strengthCarryLmbAim = !!(
-    leftHeld &&
-    !combatModifierHeld() &&
-    player._strengthCarry &&
-    playInputState.mouseValid
+    leftHeld && !combatModifierHeld() && player._strengthCarry && playInputState.mouseValid
   );
-  if (leftHeld && !combatModifierHeld() && !player._strengthCarry) {
-    const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec());
-    playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
+
+  const mod = combatModifierHeld();
+
+  if (leftHeld && !mod && !player._strengthCarry) {
+    if (isMeleeTackleOrCut(lmb)) {
+      const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec(lmb));
+      playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
+    } else if (!isHoldStreamMoveId(lmb) && lmb !== 'psybeam') {
+      playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
+    }
   } else {
     playInputState.chargeLeft01 = 0;
   }
-  const slots = resolveSlots(player);
-  const mod = combatModifierHeld();
-  if (rightHeld && !mod && !isHoldStreamMoveId(slots.rightTap) && slots.rightTap !== 'psybeam') {
+
+  if (rightHeld && !mod && !isHoldStreamMoveId(rmb) && rmb !== 'psybeam') {
     playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
   }
-  if (rightHeld && !mod && slots.rightTap === 'psybeam') {
+  if (middleHeld && !mod && !isHoldStreamMoveId(mmb) && mmb !== 'psybeam') {
+    playInputState.chargeMmb01 = Math.min(1, (playInputState.chargeMmb01 || 0) + dt / CHARGE_MAX_SEC);
+  }
+
+  if (leftHeld && !mod && lmb === 'psybeam') {
+    if (!playInputState.psybeamLeftHold) playInputState.psybeamLeftHold = { pulse: 0 };
+    playInputState.psybeamLeftHold.pulse += dt * 7.2;
+  } else {
+    playInputState.psybeamLeftHold = null;
+  }
+  if (rightHeld && !mod && rmb === 'psybeam') {
     if (!playInputState.psybeamRightHold) playInputState.psybeamRightHold = { pulse: 0 };
     playInputState.psybeamRightHold.pulse += dt * 7.2;
   } else {
     playInputState.psybeamRightHold = null;
   }
+  if (middleHeld && !mod && mmb === 'psybeam') {
+    if (!playInputState.psybeamMiddleHold) playInputState.psybeamMiddleHold = { pulse: 0 };
+    playInputState.psybeamMiddleHold.pulse += dt * 7.2;
+  } else {
+    playInputState.psybeamMiddleHold = null;
+  }
+
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (rightHeld && !mod && (slots.rightTap === 'flamethrower' || slots.rightTap === 'fireSpin')) {
+  if (leftHeld && !mod && (lmb === 'flamethrower' || lmb === 'fireSpin')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) leftFlameStreamedThisPress = true;
+  }
+  if (leftHeld && !mod && (lmb === 'waterGun' || lmb === 'hydroPump')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) leftWaterStreamedThisPress = true;
+  }
+  if (leftHeld && !mod && (lmb === 'bubbleBeam' || lmb === 'surf')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) leftBubbleBeamStreamedThisPress = true;
+  }
+  if (
+    leftHeld &&
+    !mod &&
+    (lmb === 'prismaticLaser' ||
+      lmb === 'solarBeam' ||
+      lmb === 'hyperBeam' ||
+      lmb === 'thunder' ||
+      lmb === 'thunderbolt' ||
+      lmb === 'triAttack')
+  ) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) leftPrismaticStreamedThisPress = true;
+  }
+
+  if (rightHeld && !mod && (rmb === 'flamethrower' || rmb === 'fireSpin')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
   }
-  if (rightHeld && !mod && (slots.rightTap === 'waterGun' || slots.rightTap === 'hydroPump')) {
+  if (rightHeld && !mod && (rmb === 'waterGun' || rmb === 'hydroPump')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) rightWaterStreamedThisPress = true;
   }
-  if (rightHeld && !mod && (slots.rightTap === 'bubbleBeam' || slots.rightTap === 'surf')) {
+  if (rightHeld && !mod && (rmb === 'bubbleBeam' || rmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) rightBubbleBeamStreamedThisPress = true;
   }
   if (
     rightHeld &&
     !mod &&
-    (slots.rightTap === 'prismaticLaser' ||
-      slots.rightTap === 'solarBeam' ||
-      slots.rightTap === 'hyperBeam' ||
-      slots.rightTap === 'thunder' ||
-      slots.rightTap === 'thunderbolt' ||
-      slots.rightTap === 'triAttack')
+    (rmb === 'prismaticLaser' ||
+      rmb === 'solarBeam' ||
+      rmb === 'hyperBeam' ||
+      rmb === 'thunder' ||
+      rmb === 'thunderbolt' ||
+      rmb === 'triAttack')
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
+  }
+
+  if (middleHeld && !mod && (mmb === 'flamethrower' || mmb === 'fireSpin')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) middleFlameStreamedThisPress = true;
+  }
+  if (middleHeld && !mod && (mmb === 'waterGun' || mmb === 'hydroPump')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) middleWaterStreamedThisPress = true;
+  }
+  if (middleHeld && !mod && (mmb === 'bubbleBeam' || mmb === 'surf')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) middleBubbleBeamStreamedThisPress = true;
+  }
+  if (
+    middleHeld &&
+    !mod &&
+    (mmb === 'prismaticLaser' ||
+      mmb === 'solarBeam' ||
+      mmb === 'hyperBeam' ||
+      mmb === 'thunder' ||
+      mmb === 'thunderbolt' ||
+      mmb === 'triAttack')
+  ) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) middlePrismaticStreamedThisPress = true;
   }
 }
 
@@ -963,7 +917,6 @@ export function installPlayPointerCombat(deps) {
   const { canvas, getAppMode, getPlayer, getCurrentData } = deps;
   fieldWheelMouseClientX = window.innerWidth * 0.5;
   fieldWheelMouseClientY = window.innerHeight * 0.5;
-  syncSelectedSpecialAttackForDex(Math.floor(Number(getPlayer()?.dexId) || 0));
 
   window.addEventListener(
     'pointermove',
@@ -971,8 +924,7 @@ export function installPlayPointerCombat(deps) {
       fieldWheelMouseClientX = Number(e.clientX) || 0;
       fieldWheelMouseClientY = Number(e.clientY) || 0;
       const p = getPlayer();
-      if (fieldSkillWheelOpen) updateFieldSkillWheelHover(p);
-      if (specialAttackWheelOpen) updateSpecialAttackWheelHover(p);
+      if (bindingWheelOpen) updateBindWheelHover(p);
     },
     true
   );
@@ -982,11 +934,30 @@ export function installPlayPointerCombat(deps) {
   });
 
   canvas.addEventListener(
+    'wheel',
+    (e) => {
+      if (getAppMode() !== 'play' || e.target !== canvas) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (now - lastScrollBindCastMs < 95) return;
+      lastScrollBindCastMs = now;
+      const pl = getPlayer();
+      const dex = Math.floor(Number(pl?.dexId) || 0);
+      if (dex < 1) return;
+      const bb = getPlayerInputBindings(dex);
+      const moveId = e.deltaY < 0 ? bb.wheelUp : bb.wheelDown;
+      const data = getCurrentData?.() ?? null;
+      castScrollSlotMove(moveId, pl, data);
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener(
     'pointerdown',
     (e) => {
       if (getAppMode() !== 'play') return;
       if (e.target !== canvas) return;
-      const player = getPlayer();
+      const pl = getPlayer();
       const sh = combatModifierHeld();
 
       if (e.button === 0) {
@@ -997,6 +968,10 @@ export function installPlayPointerCombat(deps) {
         leftDownAt = performance.now();
         leftShiftAtDown = sh;
         playInputState.chargeLeft01 = 0;
+        leftFlameStreamedThisPress = false;
+        leftWaterStreamedThisPress = false;
+        leftBubbleBeamStreamedThisPress = false;
+        leftPrismaticStreamedThisPress = false;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
         e.preventDefault();
@@ -1010,8 +985,14 @@ export function installPlayPointerCombat(deps) {
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 1) {
         e.preventDefault();
-        const { sx, sy, tx, ty } = aimAtCursor(player);
-        castUltimate(sx, sy, tx, ty, player);
+        middleHeld = true;
+        middleDownAt = performance.now();
+        middleFlameStreamedThisPress = false;
+        middleWaterStreamedThisPress = false;
+        middleBubbleBeamStreamedThisPress = false;
+        middlePrismaticStreamedThisPress = false;
+        playInputState.chargeMmb01 = 0;
+        canvas.setPointerCapture?.(e.pointerId);
       }
     },
     { passive: false }
@@ -1019,23 +1000,27 @@ export function installPlayPointerCombat(deps) {
 
   const onPointerUp = (e) => {
     if (getAppMode() !== 'play') return;
-    const player = getPlayer();
+    const pl = getPlayer();
     const now = performance.now();
     const shUp = combatModifierHeld();
+    const dex = Math.floor(Number(pl?.dexId) || 0);
+    const bind = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
 
     if (e.button === 0 && leftHeld) {
       leftHeld = false;
       if (!(leftShiftAtDown || shUp)) {
-        const { sx, sy, tx, ty } = aimAtCursor(player);
+        const { sx, sy, tx, ty } = aimAtCursor(pl);
         const heldMs = now - leftDownAt;
         const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
         const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= 0.16;
         const data = getCurrentData?.() ?? null;
-        const threw = !!(player._strengthCarry && data && beginStrengthThrowFromPointer(player, data, tx, ty));
+        const threw = !!(pl._strengthCarry && data && beginStrengthThrowFromPointer(pl, data, tx, ty));
         if (threw) {
-          triggerPlayerLmbAttack(player, tx - sx, ty - sy);
+          triggerPlayerLmbAttack(pl, tx - sx, ty - sy);
+        } else if (isMeleeTackleOrCut(bind.lmb)) {
+          castSelectedFieldSkill(pl, data, charged, charge01, bind.lmb);
         } else {
-          castSelectedFieldSkill(player, data, charged, charge01);
+          finishMoveButtonUp(bind.lmb, pl, data, heldMs, charge01, 'l');
         }
       }
       playInputState.chargeLeft01 = 0;
@@ -1043,46 +1028,16 @@ export function installPlayPointerCombat(deps) {
     if (e.button === 2 && rightHeld) {
       rightHeld = false;
       const heldMs = now - rightDownAt;
-      const { sx, sy, tx, ty } = aimAtCursor(player);
-      const slots = resolveSlots(player);
-      if (slots.rightTap === 'ultimate') {
-        castUltimate(sx, sy, tx, ty, player);
-      } else if (slots.rightTap === 'flamethrower' || slots.rightTap === 'fireSpin') {
-        if (!rightFlameStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (slots.rightTap === 'waterGun' || slots.rightTap === 'hydroPump') {
-        if (!rightWaterStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (slots.rightTap === 'bubbleBeam' || slots.rightTap === 'surf') {
-        if (!rightBubbleBeamStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (
-        slots.rightTap === 'prismaticLaser' ||
-        slots.rightTap === 'solarBeam' ||
-        slots.rightTap === 'hyperBeam' ||
-        slots.rightTap === 'thunder' ||
-        slots.rightTap === 'thunderbolt' ||
-        slots.rightTap === 'triAttack'
-      ) {
-        if (!rightPrismaticStreamedThisPress) {
-          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-          tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);
-        }
-      } else if (slots.rightTap === 'psybeam') {
-        applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-        tryReleasePlayerPsybeam(sx, sy, tx, ty, player);
-      } else if (heldMs < TAP_MS) {
-        castMoveById(slots.rightTap, sx, sy, tx, ty, player);
-      } else {
-        castMoveChargedById(slots.rightTap, sx, sy, tx, ty, player, playInputState.chargeRight01 || 0);
-      }
+      const data = getCurrentData?.() ?? null;
+      finishMoveButtonUp(bind.rmb, pl, data, heldMs, playInputState.chargeRight01 || 0, 'r');
       playInputState.chargeRight01 = 0;
+    }
+    if (e.button === 1 && middleHeld) {
+      middleHeld = false;
+      const heldMs = now - middleDownAt;
+      const data = getCurrentData?.() ?? null;
+      finishMoveButtonUp(bind.mmb, pl, data, heldMs, playInputState.chargeMmb01 || 0, 'm');
+      playInputState.chargeMmb01 = 0;
     }
   };
 
@@ -1093,14 +1048,16 @@ export function installPlayPointerCombat(deps) {
     if (getAppMode() !== 'play') return;
     leftHeld = false;
     rightHeld = false;
-    fieldSkillWheelArmed = false;
-    closeFieldSkillWheel();
-    specialAttackWheelArmed = false;
-    closeSpecialAttackWheel();
+    middleHeld = false;
+    bindingWheelArmed = false;
+    bindingWheelSlotIdx = -1;
+    closeBindWheel();
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
+    playInputState.chargeMmb01 = 0;
     playInputState.psybeamLeftHold = null;
     playInputState.psybeamRightHold = null;
+    playInputState.psybeamMiddleHold = null;
     playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
   });

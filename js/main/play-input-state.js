@@ -19,10 +19,14 @@ export const playInputState = {
   chargeLeft01: 0,
   /** 0–1 while holding RMB (no Shift) — charged water shot. */
   chargeRight01: 0,
-  /** Unused (LMB is melee pose only). Cleared on pointer leave. */
+  /** 0–1 while holding MMB (no Shift) — same idea as RMB for bound move. */
+  chargeMmb01: 0,
+  /** Psybeam with LMB when psybeam is bound to LMB. */
   psybeamLeftHold: /** @type {{ pulse: number } | null} */ (null),
-  /** Psybeam: RMB held with Psybeam in secondary slot. */
+  /** Psybeam: RMB held with psybeam bound to RMB. */
   psybeamRightHold: /** @type {{ pulse: number } | null} */ (null),
+  /** Psybeam: MMB held. */
+  psybeamMiddleHold: /** @type {{ pulse: number } | null} */ (null),
   /** LMB held while carrying a Strength rock — show throw arc preview. */
   strengthCarryLmbAim: false
 };
