@@ -9,10 +9,12 @@ import {
   spawnFieldSpinAttackFx,
   spawnFieldCutVineSlashFx,
   tryCastPlayerFlamethrowerStreamPuff,
+  tryCastPlayerWaterGunStreamPuff,
+  tryCastPlayerBubbleBeamStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
-import { getPokemonMoveset, getMoveLabel } from '../moves/pokemon-moveset-config.js';
+import { getPokemonMoveset, getMoveLabel, PLAYER_SPECIAL_WHEEL_MOVE_IDS } from '../moves/pokemon-moveset-config.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
 import { beginStrengthThrowFromPointer } from './play-strength-carry.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
@@ -41,20 +43,75 @@ const FIELD_SKILL_LABEL = {
 const SPECIAL_ATTACK_WHEEL_HOLD_MS = 170;
 const SPECIAL_ATTACK_STORAGE_KEY = 'pkmn_special_attack_by_dex';
 /** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
-const SPECIAL_ATTACK_MOVE_IDS = /** @type {const} */ ([
-  'ember',
-  'flamethrower',
-  'confusion',
-  'bubble',
-  'waterBurst',
-  'waterGun',
-  'psybeam',
-  'prismaticLaser',
-  'poisonSting',
-  'poisonPowder',
-  'incinerate',
-  'silkShoot'
-]);
+const SPECIAL_ATTACK_MOVE_IDS = PLAYER_SPECIAL_WHEEL_MOVE_IDS;
+
+function getFieldSkillTypeClass(skillId) {
+  if (skillId === 'cut') return 'type-grass';
+  return 'type-normal';
+}
+
+function getMoveTypeClass(moveId) {
+  switch (moveId) {
+    case 'ember':
+    case 'fireBlast':
+    case 'fireSpin':
+    case 'flamethrower':
+    case 'incinerate':
+      return 'type-fire';
+    case 'absorb':
+    case 'megaDrain':
+    case 'petalDance':
+    case 'solarBeam':
+      return 'type-grass';
+    case 'bubble':
+    case 'waterBurst':
+    case 'waterGun':
+    case 'bubbleBeam':
+    case 'hydroPump':
+    case 'surf':
+      return 'type-water';
+    case 'acid':
+    case 'sludge':
+    case 'smog':
+    case 'poisonSting':
+    case 'poisonPowder':
+      return 'type-poison';
+    case 'auroraBeam':
+    case 'blizzard':
+    case 'iceBeam':
+      return 'type-ice';
+    case 'thunder':
+    case 'thunderShock':
+    case 'thunderbolt':
+      return 'type-electric';
+    case 'confusion':
+    case 'psychic':
+    case 'psywave':
+    case 'psybeam':
+    case 'prismaticLaser':
+      return 'type-psychic';
+    case 'dragonRage':
+      return 'type-dragon';
+    case 'nightShade':
+      return 'type-ghost';
+    case 'gust':
+      return 'type-flying';
+    case 'razorWind':
+    case 'sonicBoom':
+    case 'swift':
+    case 'hyperBeam':
+    case 'triAttack':
+      return 'type-normal';
+    case 'dreamEater':
+      return 'type-psychic';
+    case 'silkShoot':
+      return 'type-bug';
+    case 'ultimate':
+      return 'type-normal';
+    default:
+      return 'type-normal';
+  }
+}
 
 function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
   setPlayerFacingFromWorldAimDelta(player, tx - sx, ty - sy);
@@ -68,6 +125,8 @@ let rightDownAt = 0;
 let leftShiftAtDown = false;
 /** True after at least one flamethrower puff this RMB press (hold-stream). */
 let rightFlameStreamedThisPress = false;
+let rightWaterStreamedThisPress = false;
+let rightBubbleBeamStreamedThisPress = false;
 /** True after at least one prismatic laser stream puff this RMB press. */
 let rightPrismaticStreamedThisPress = false;
 let selectedFieldSkillId = 'tackle';
@@ -255,8 +314,8 @@ function ensureFieldSkillWheelDom() {
   root.innerHTML = `
     <div class="play-field-skill-wheel__ring">
       <div class="play-field-skill-wheel__hint">Hold 1 · release to select</div>
-      <button type="button" class="play-field-skill-wheel__item" data-skill="tackle">Tackle</button>
-      <button type="button" class="play-field-skill-wheel__item" data-skill="cut">Cut</button>
+      <button type="button" class="play-field-skill-wheel__item type-icon ${getFieldSkillTypeClass('tackle')}" data-skill="tackle">Tackle</button>
+      <button type="button" class="play-field-skill-wheel__item type-icon ${getFieldSkillTypeClass('cut')}" data-skill="cut">Cut</button>
     </div>
   `;
   document.body.appendChild(root);
@@ -331,12 +390,48 @@ function ensureSpecialAttackWheelDom() {
   if (specialAttackWheelRoot) return specialAttackWheelRoot;
   const root = document.createElement('div');
   root.id = 'play-special-attack-wheel';
-  root.className = 'play-field-skill-wheel hidden';
+  root.className = 'play-field-skill-wheel play-field-skill-wheel--special hidden';
   root.setAttribute('aria-hidden', 'true');
-  const buttons = SPECIAL_ATTACK_MOVE_IDS.map(
-    (id) =>
-      `<button type="button" class="play-field-skill-wheel__item" data-move="${id}">${getMoveLabel(id)}</button>`
-  ).join('');
+  const count = Math.max(1, SPECIAL_ATTACK_MOVE_IDS.length);
+  const startDeg = -90;
+  const ringCounts =
+    count <= 14
+      ? [count]
+      : count <= 30
+        ? [Math.ceil(count / 2), Math.floor(count / 2)]
+        : (() => {
+            const outer = Math.ceil(count / 3);
+            const left = count - outer;
+            const mid = Math.ceil(left / 2);
+            const inner = left - mid;
+            return [outer, mid, inner];
+          })();
+  const ringRadiusPct = [45, 33, 23];
+  /** @type {Array<{ id: MoveId, ringIdx: number, slotIdx: number, ringCount: number }>} */
+  const wheelEntries = [];
+  let moveCursor = 0;
+  for (let ringIdx = 0; ringIdx < ringCounts.length; ringIdx++) {
+    const ringCount = Math.max(0, ringCounts[ringIdx] || 0);
+    for (let slotIdx = 0; slotIdx < ringCount && moveCursor < count; slotIdx++) {
+      wheelEntries.push({
+        id: /** @type {MoveId} */ (SPECIAL_ATTACK_MOVE_IDS[moveCursor]),
+        ringIdx,
+        slotIdx,
+        ringCount
+      });
+      moveCursor++;
+    }
+  }
+  const buttons = wheelEntries
+    .map(({ id, ringIdx, slotIdx, ringCount }) => {
+      const offset = ringIdx * (360 / Math.max(3, ringCount)) * 0.23;
+      const a = (startDeg + offset + (360 * slotIdx) / Math.max(1, ringCount)) * (Math.PI / 180);
+      const radiusPct = ringRadiusPct[ringIdx] ?? ringRadiusPct[ringRadiusPct.length - 1];
+      const left = 50 + Math.cos(a) * radiusPct;
+      const top = 50 + Math.sin(a) * radiusPct;
+      return `<button type="button" class="play-field-skill-wheel__item type-icon ${getMoveTypeClass(id)}" data-move="${id}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${getMoveLabel(id)}</button>`;
+    })
+    .join('');
   root.innerHTML = `
     <div class="play-field-skill-wheel__ring">
       <div class="play-field-skill-wheel__hint">Hold 2 · release to select (RMB)</div>
@@ -727,7 +822,20 @@ export function handleFieldSkillHotkeyUp(code, player, data) {
 }
 
 function isHoldStreamMoveId(moveId) {
-  return moveId === 'flamethrower' || moveId === 'prismaticLaser';
+  return (
+    moveId === 'flamethrower' ||
+    moveId === 'fireSpin' ||
+    moveId === 'waterGun' ||
+    moveId === 'hydroPump' ||
+    moveId === 'bubbleBeam' ||
+    moveId === 'surf' ||
+    moveId === 'prismaticLaser' ||
+    moveId === 'solarBeam' ||
+    moveId === 'hyperBeam' ||
+    moveId === 'thunder' ||
+    moveId === 'thunderbolt' ||
+    moveId === 'triAttack'
+  );
 }
 
 function combatModifierHeld() {
@@ -815,11 +923,28 @@ export function updatePlayPointerCombat(dt, player, data) {
     playInputState.psybeamRightHold = null;
   }
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (rightHeld && !mod && slots.rightTap === 'flamethrower') {
+  if (rightHeld && !mod && (slots.rightTap === 'flamethrower' || slots.rightTap === 'fireSpin')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
   }
-  if (rightHeld && !mod && slots.rightTap === 'prismaticLaser') {
+  if (rightHeld && !mod && (slots.rightTap === 'waterGun' || slots.rightTap === 'hydroPump')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) rightWaterStreamedThisPress = true;
+  }
+  if (rightHeld && !mod && (slots.rightTap === 'bubbleBeam' || slots.rightTap === 'surf')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) rightBubbleBeamStreamedThisPress = true;
+  }
+  if (
+    rightHeld &&
+    !mod &&
+    (slots.rightTap === 'prismaticLaser' ||
+      slots.rightTap === 'solarBeam' ||
+      slots.rightTap === 'hyperBeam' ||
+      slots.rightTap === 'thunder' ||
+      slots.rightTap === 'thunderbolt' ||
+      slots.rightTap === 'triAttack')
+  ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
   }
@@ -872,6 +997,8 @@ export function installPlayPointerCombat(deps) {
         rightHeld = true;
         rightDownAt = performance.now();
         rightFlameStreamedThisPress = false;
+        rightWaterStreamedThisPress = false;
+        rightBubbleBeamStreamedThisPress = false;
         rightPrismaticStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
@@ -912,12 +1039,31 @@ export function installPlayPointerCombat(deps) {
       const heldMs = now - rightDownAt;
       const { sx, sy, tx, ty } = aimAtCursor(player);
       const slots = resolveSlots(player);
-      if (slots.rightTap === 'flamethrower') {
+      if (slots.rightTap === 'ultimate') {
+        castUltimate(sx, sy, tx, ty, player);
+      } else if (slots.rightTap === 'flamethrower' || slots.rightTap === 'fireSpin') {
         if (!rightFlameStreamedThisPress) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player);
         }
-      } else if (slots.rightTap === 'prismaticLaser') {
+      } else if (slots.rightTap === 'waterGun' || slots.rightTap === 'hydroPump') {
+        if (!rightWaterStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player);
+        }
+      } else if (slots.rightTap === 'bubbleBeam' || slots.rightTap === 'surf') {
+        if (!rightBubbleBeamStreamedThisPress) {
+          applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+          tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player);
+        }
+      } else if (
+        slots.rightTap === 'prismaticLaser' ||
+        slots.rightTap === 'solarBeam' ||
+        slots.rightTap === 'hyperBeam' ||
+        slots.rightTap === 'thunder' ||
+        slots.rightTap === 'thunderbolt' ||
+        slots.rightTap === 'triAttack'
+      ) {
         if (!rightPrismaticStreamedThisPress) {
           applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
           tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player);

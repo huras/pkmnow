@@ -26,6 +26,16 @@ function hasCuttableGrass(mx, my, data) {
   return !!(layers.base || layers.top);
 }
 
+/**
+ * True when PASS 5a-style animated grass would show under the player tile (not cut-suppressed).
+ * Matches `drawGrass5aForCell` eligibility for rustle / footfall audio.
+ */
+export function playerHasAnimatedGrassUnderfoot(mx, my, data) {
+  if (!data) return false;
+  if (grassCutSuppressesAnimatedGrassAt(mx, my)) return false;
+  return hasCuttableGrass(mx, my, data);
+}
+
 export function clearGrassCutStateForNewMap() {
   cutTileStates.clear();
 }

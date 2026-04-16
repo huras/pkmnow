@@ -120,12 +120,15 @@ export function castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, opt
 }
 
 export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  const { fromWild = false, pushProjectile } = opts;
+  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
   const maxR = fromWild ? 9 : 11;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.04;
-  const count = 8;
+  const count = streamPuff ? 4 : 8;
+  const spreadMag = streamPuff ? 0.12 : 0.16;
+  const dmg = streamPuff ? (fromWild ? 2.3 : 2.7) : fromWild ? 3 : 5;
+  const speedBase = streamPuff ? 16.2 : 14.5;
   for (let i = 0; i < count; i++) {
-    const spread = (Math.random() - 0.5) * 0.16;
+    const spread = (Math.random() - 0.5) * spreadMag;
     const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
     const reach = 4.8;
     const rawTx = sourceX + Math.cos(a) * reach;
@@ -139,7 +142,7 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
       rawTy,
       sourceX,
       sourceY,
-      14.5,
+      speedBase + Math.random() * (streamPuff ? 1.4 : 0.8),
       maxR,
       { ttlMargin: 1.05, ttlPad: 0.08 }
     );
@@ -151,9 +154,62 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
       vy,
       vz,
       z: sp.startZ,
-      radius: 0.25,
+      radius: streamPuff ? 0.22 : 0.25,
       timeToLive,
-      damage: fromWild ? 3 : 5,
+      damage: dmg,
+      sourceEntity,
+      fromWild,
+      hitsWild: !fromWild,
+      hitsPlayer: !!fromWild,
+      trailAcc: WATER_TRAIL_INTERVAL * (i / count)
+    });
+  }
+}
+
+/**
+ * Bubble Beam: same hold-stream feel as Water Gun, but with bigger range and hollow bubble-ring visuals.
+ * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ */
+export function castBubbleBeam(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
+  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
+  const maxR = fromWild ? 12 : 15;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.05;
+  const count = streamPuff ? 4 : 8;
+  const spreadMag = streamPuff ? 0.11 : 0.15;
+  const dmg = streamPuff ? (fromWild ? 2.5 : 3) : fromWild ? 3.5 : 5.5;
+  const speedBase = streamPuff ? 17.2 : 15.4;
+  for (let i = 0; i < count; i++) {
+    const spread = (Math.random() - 0.5) * spreadMag;
+    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const reach = 6.9;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
+    const maxHorizForTtl = Math.max(0.2, Math.min(maxR, dist0));
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.35);
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      aimX,
+      aimY,
+      sourceX,
+      sourceY,
+      speedBase + Math.random() * (streamPuff ? 1.5 : 1.0),
+      maxHorizForTtl,
+      { ttlMargin: 1.06, ttlPad: 0.08 }
+    );
+    pushLinearProjectile(pushProjectile, {
+      type: 'bubbleBeamShot',
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
+      radius: streamPuff ? 0.22 : 0.27,
+      timeToLive,
+      damage: dmg,
       sourceEntity,
       fromWild,
       hitsWild: !fromWild,

@@ -31,6 +31,7 @@ import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js'
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
+import { playJumpSfx } from './audio/jump-sfx.js';
 
 const MAX_SPEED = 3.2;
 const ACCEL = 32.0;
@@ -510,6 +511,7 @@ export function tryJumpPlayer(data) {
   player.jumping = true;
   player.jumpsUsed = (player.jumpsUsed || 0) + 1;
   player.jumpSerial = (player.jumpSerial || 0) + 1;
+  playJumpSfx(player);
   return true;
 }
 

@@ -364,6 +364,7 @@ button.btn-secondary:hover {
   position: absolute;
   width: 86px;
   min-height: 36px;
+  font-family: 'Inter', system-ui, sans-serif;
   border-radius: 999px;
   border: 1px solid rgba(154, 216, 255, 0.28);
   background: rgba(21, 31, 48, 0.82);
@@ -375,19 +376,27 @@ button.btn-secondary:hover {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.44);
 }
 
+/* Reuse `type-icon type-*` palette without inheriting unrelated table/list sizing. */
+.play-field-skill-wheel__item.type-icon {
+  margin-bottom: 0;
+  line-height: 1.1;
+  text-transform: none;
+  width: 86px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+}
+
 .play-field-skill-wheel__item[data-skill="tackle"] {
   left: 50%;
-  top: 18%;
+  top: 22%;
 }
 
 .play-field-skill-wheel__item[data-skill="cut"] {
-  left: 20%;
-  top: 70%;
-}
-
-.play-field-skill-wheel__item[data-skill="strength"] {
-  left: 80%;
-  top: 70%;
+  left: 50%;
+  top: 78%;
 }
 
 .play-field-skill-wheel__item.is-hover {
@@ -399,6 +408,32 @@ button.btn-secondary:hover {
 .play-field-skill-wheel__item.is-selected {
   background: rgba(22, 62, 102, 0.88);
   border-color: rgba(111, 189, 255, 0.96);
+}
+
+/* Special attack wheel (Digit2): supports many entries without overlap. */
+.play-field-skill-wheel--special .play-field-skill-wheel__ring {
+  width: 620px;
+  height: 620px;
+}
+
+.play-field-skill-wheel--special .play-field-skill-wheel__hint {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.play-field-skill-wheel--special .play-field-skill-wheel__item {
+  width: 84px;
+  min-height: 32px;
+  font-size: 0.61rem;
+  line-height: 1.12;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: normal;
+}
+
+.play-field-skill-wheel--special .play-field-skill-wheel__item.type-icon {
+  width: 84px;
+  min-height: 32px;
 }
 
 .minimap-panel__music-btn:hover {

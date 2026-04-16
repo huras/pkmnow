@@ -1,15 +1,44 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'ember'|'flamethrower'|'confusion'|'bubble'|'waterBurst'|'waterGun'|'psybeam'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'ember'|'fireBlast'|'fireSpin'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
+  absorb: 'Absorb',
+  acid: 'Acid',
+  auroraBeam: 'Aurora Beam',
+  blizzard: 'Blizzard',
+  dragonRage: 'Dragon Rage',
+  dreamEater: 'Dream Eater',
   ember: 'Ember',
+  fireBlast: 'Fire Blast',
+  fireSpin: 'Fire Spin',
   flamethrower: 'Flamethrower',
+  gust: 'Gust',
+  hydroPump: 'Hydro Pump',
+  hyperBeam: 'Hyper Beam',
+  iceBeam: 'Ice Beam',
+  megaDrain: 'Mega Drain',
+  nightShade: 'Night Shade',
+  petalDance: 'Petal Dance',
+  psychic: 'Psychic',
+  psywave: 'Psywave',
+  razorWind: 'Razor Wind',
+  sludge: 'Sludge',
+  smog: 'Smog',
+  solarBeam: 'Solar Beam',
+  sonicBoom: 'Sonic Boom',
+  surf: 'Surf',
+  swift: 'Swift',
+  thunder: 'Thunder',
+  thunderShock: 'Thunder Shock',
+  thunderbolt: 'Thunderbolt',
+  triAttack: 'Tri Attack',
   confusion: 'Confusion',
   bubble: 'Bubble',
   waterBurst: 'Water Burst',
   waterGun: 'Water Gun',
+  bubbleBeam: 'Bubble Beam',
   psybeam: 'Psybeam',
   prismaticLaser: 'Prismatic Laser',
   poisonSting: 'Poison Sting',
@@ -19,9 +48,64 @@ export const MOVE_LABELS = Object.freeze({
   ultimate: 'Ultimate'
 });
 
+/** Player-usable projectile move IDs (RMB wheel on `2`). Keep in sync with `castMoveById`. */
+export const PLAYER_PROJECTILE_MOVE_IDS = Object.freeze(
+  /** @type {MoveId[]} */ ([
+    'absorb',
+    'acid',
+    'auroraBeam',
+    'blizzard',
+    'dragonRage',
+    'dreamEater',
+    'ember',
+    'fireBlast',
+    'fireSpin',
+    'flamethrower',
+    'gust',
+    'hydroPump',
+    'hyperBeam',
+    'iceBeam',
+    'megaDrain',
+    'nightShade',
+    'petalDance',
+    'psychic',
+    'psywave',
+    'razorWind',
+    'sludge',
+    'smog',
+    'solarBeam',
+    'sonicBoom',
+    'surf',
+    'swift',
+    'thunder',
+    'thunderShock',
+    'thunderbolt',
+    'triAttack',
+    'confusion',
+    'bubble',
+    'waterBurst',
+    'waterGun',
+    'bubbleBeam',
+    'psybeam',
+    'prismaticLaser',
+    'poisonSting',
+    'poisonPowder',
+    'incinerate',
+    'silkShoot'
+  ])
+);
+
+/** All moves currently selectable in the `2` wheel (RMB). */
+export const PLAYER_SPECIAL_WHEEL_MOVE_IDS = Object.freeze(
+  /** @type {MoveId[]} */ ([
+    ...PLAYER_PROJECTILE_MOVE_IDS,
+    'ultimate'
+  ])
+);
+
 const TYPE_PRESETS = Object.freeze({
   fire: /** @type {MoveId[]} */ (['ember', 'flamethrower', 'incinerate', 'poisonSting']),
-  water: /** @type {MoveId[]} */ (['waterBurst', 'bubble', 'waterGun', 'silkShoot']),
+  water: /** @type {MoveId[]} */ (['waterBurst', 'bubbleBeam', 'waterGun', 'silkShoot']),
   psychic: /** @type {MoveId[]} */ (['confusion', 'psybeam', 'prismaticLaser', 'poisonPowder']),
   poison: /** @type {MoveId[]} */ (['poisonSting', 'poisonPowder', 'silkShoot', 'confusion']),
   bug: /** @type {MoveId[]} */ (['silkShoot', 'poisonPowder', 'poisonSting', 'bubble']),

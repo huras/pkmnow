@@ -160,15 +160,83 @@ function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     const r = Math.max(4, tileW * 0.19);
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.fill();
-  } else if (p.type === 'waterGunShot' || p.type === 'bubbleShot') {
-    ctx.fillStyle = p.type === 'bubbleShot' ? 'rgba(235,248,255,0.6)' : 'rgba(110,185,255,0.88)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 1.5;
-    const r = p.type === 'bubbleShot' ? Math.max(5, tileW * 0.22) : Math.max(4, tileW * 0.17);
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fill();
-    if (p.type === 'bubbleShot') ctx.stroke();
+  } else if (p.type === 'waterGunShot' || p.type === 'bubbleShot' || p.type === 'bubbleBeamShot') {
+    if (p.type === 'bubbleShot') {
+      ctx.fillStyle = 'rgba(235,248,255,0.6)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1.5;
+      const r = Math.max(5, tileW * 0.22);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (p.type === 'bubbleBeamShot') {
+      const vx = Number(p.vx) || 0;
+      const vy = Number(p.vy) || 0;
+      const speed = Math.hypot(vx, vy);
+      const wiggle = Math.sin(time * 22 + (p.x ?? 0) * 8 + (p.y ?? 0) * 5) * 0.18;
+      const outerR = Math.max(5.6, tileW * 0.23);
+      const innerR = Math.max(2.6, outerR * 0.5);
+      const haloR = outerR * 1.32;
+      ctx.save();
+      ctx.translate(px, py);
+      if (speed > 1e-4) ctx.rotate(Math.atan2(vy, vx));
+      if (speed > 1e-4) ctx.translate(Math.max(0, tileW * 0.03 + wiggle), 0);
+
+      // Soft outer aura for "beam" readability at long range.
+      ctx.beginPath();
+      ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220,240,255,0.22)';
+      ctx.fill();
+
+      // White ring.
+      ctx.beginPath();
+      ctx.arc(0, 0, outerR, 0, Math.PI * 2);
+      ctx.lineWidth = Math.max(2.1, tileW * 0.085);
+      ctx.strokeStyle = 'rgba(252,252,255,0.96)';
+      ctx.stroke();
+
+      // Transparent center (clear "hollow bubble").
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(0, 0, innerR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Small specular glint.
+      ctx.beginPath();
+      ctx.ellipse(-outerR * 0.28, -outerR * 0.34, outerR * 0.18, outerR * 0.12, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.fill();
+      ctx.restore();
+    } else {
+      const vx = Number(p.vx) || 0;
+      const vy = Number(p.vy) || 0;
+      const ang = Math.atan2(vy, vx || 1e-6);
+      const bodyR = Math.max(3.2, tileW * 0.145);
+      const tailLen = Math.max(4.5, tileW * 0.24);
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      // Tear drop profile (pointed tip toward travel direction).
+      ctx.moveTo(bodyR + tailLen, 0);
+      ctx.quadraticCurveTo(bodyR * 0.95, bodyR * 1.05, -bodyR * 1.05, bodyR * 0.68);
+      ctx.quadraticCurveTo(-bodyR * 1.5, 0, -bodyR * 1.05, -bodyR * 0.68);
+      ctx.quadraticCurveTo(bodyR * 0.95, -bodyR * 1.05, bodyR + tailLen, 0);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(86,170,255,0.92)';
+      ctx.fill();
+
+      // Inner gloss highlight.
+      ctx.beginPath();
+      ctx.ellipse(-bodyR * 0.15, -bodyR * 0.2, bodyR * 0.45, bodyR * 0.28, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(214,240,255,0.78)';
+      ctx.fill();
+      ctx.restore();
+    }
   } else if (p.type === 'flamethrowerShot' || p.type === 'incinerateCore' || p.type === 'incinerateShard') {
     ctx.fillStyle = p.type === 'flamethrowerShot' ? '#ff6a00' : '#ff4500';
     ctx.beginPath();

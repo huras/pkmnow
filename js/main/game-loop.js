@@ -24,6 +24,7 @@ import {
 } from './play-crystal-tackle.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
+import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 
@@ -122,6 +123,7 @@ export function createGameLoop(api) {
     const tUpdPlayer0 = performance.now();
     updatePlayer(dt, currentData);
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+    updatePlayGrassRustle(dt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
       updateCrystalShardParticles(dt);

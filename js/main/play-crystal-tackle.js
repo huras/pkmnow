@@ -13,6 +13,10 @@ import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircl
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { setScatterItemKeyOverride, clearScatterItemKeyOverrides } from './scatter-item-override.js';
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
+import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
+import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
+import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';
+import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -1198,8 +1202,17 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
       if (isPlayFormalTreeRootDestroyed(hit.rootOx, hit.rootOy)) {
         if (allowChargedStumpHarvest) {
+          if (hitSource === 'cut') {
+            playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          }
+          if (hitSource === 'tackle') {
+            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          }
           tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
         } else {
+          if (hitSource === 'tackle') {
+            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          }
           markDetailHitShake(bumpKey, nowSec);
           spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
         }
@@ -1210,9 +1223,16 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       }
       markDetailHitShake(bumpKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+      if (hitSource === 'cut') {
+        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
       if (allowFormalTreeDestroy) {
+        playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
         registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec, 'cut', data);
       } else {
+        if (hitSource === 'tackle') {
+          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
         const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
         tryApplyTreeTackleEffects(
           hit.cx ?? hit.rootOx + 1,
@@ -1227,9 +1247,18 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     }
     if (hit.type === 'charredScatterTree') {
       if (allowChargedStumpHarvest) {
+        if (hitSource === 'cut') {
+          playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
+        if (hitSource === 'tackle') {
+          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
         tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
       } else {
         const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+        if (hitSource === 'tackle') {
+          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
         markDetailHitShake(bumpKey, nowSec);
         spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
         const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
@@ -1247,6 +1276,9 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
     if (hitSource !== 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
       const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+      if (hitSource === 'tackle') {
+        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
       markDetailHitShake(bumpKey, nowSec);
       spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
       const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
@@ -1263,9 +1295,16 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
     markDetailHitShake(worldKey, nowSec);
     spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+    if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
+      playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+    }
     if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
     if (st.hitsRemaining > 0) {
       continue;
+    }
+
+    if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
+      playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
     }
 
     markDestroyedDetailAndScheduleRegen(st, nowSec);
@@ -1335,6 +1374,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
       const key = String(d.itemKey || 'unknown');
       collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
       if (isCrystalItemKey(key)) crystalLootCount += stack;
+      playItemPickupSfx(player);
       activeCrystalDrops.splice(i, 1);
     }
   }
