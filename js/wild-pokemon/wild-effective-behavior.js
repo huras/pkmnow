@@ -2,7 +2,7 @@ import { getSpeciesBehavior } from './pokemon-behavior.js';
 
 /**
  * Runtime overlay: non-aggressive species can temporarily act aggressive
- * (`wildTempAggressiveSec` on the entity, managed in `wild-pokemon-manager.js`).
+ * (`wildTempAggressiveSec` on the entity, managed in the wild update/social modules).
  *
  * @param {object | null | undefined} entity
  */

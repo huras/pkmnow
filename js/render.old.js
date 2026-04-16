@@ -32,7 +32,7 @@ import { isGroundDigLatchEligible, isPlayerIdleOnWaitingFrame } from './player.j
 import { imageCache } from './image-cache.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 import { wildSexHudLabel } from './pokemon/pokemon-sex.js';
-import { getWildPokemonEntities } from './wild-pokemon/wild-pokemon-manager.js';
+import { getWildPokemonEntities } from './wild-pokemon/index.js';
 import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
 import {
 	ensurePokemonSheetsLoaded,

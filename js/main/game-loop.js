@@ -6,7 +6,7 @@ import {
   syncWildPokemonWindow,
   updateWildPokemon,
   getWildPokemonEntities
-} from '../wild-pokemon/wild-pokemon-manager.js';
+} from '../wild-pokemon/index.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
 import {

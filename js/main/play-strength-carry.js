@@ -9,7 +9,7 @@ import {
   getWildPokemonEntityByKey,
   detachFaintedWildEntityByKey,
   restoreCarriedFaintedWildNear
-} from '../wild-pokemon/wild-pokemon-manager.js';
+} from '../wild-pokemon/index.js';
 import {
   isPlayScatterTreeOriginBurning,
   isPlayScatterTreeOriginCharred,

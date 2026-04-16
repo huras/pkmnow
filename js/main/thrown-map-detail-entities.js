@@ -10,7 +10,7 @@ import {
   getWildPokemonEntities,
   applyPlayerTackleEffectOnWildFromPoint,
   restoreCarriedFaintedWildNear
-} from '../wild-pokemon/wild-pokemon-manager.js';
+} from '../wild-pokemon/index.js';
 import {
   getPokemonHurtboxCenterWorldXY,
   getPokemonHurtboxRadiusTiles,

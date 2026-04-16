@@ -11,7 +11,7 @@ import {
 } from '../biome-tiles.js';
 import { MACRO_TILE_STRIDE, foliageDensity, foliageType } from '../chunking.js';
 import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
-import { getWildPokemonEntities } from '../wild-pokemon/wild-pokemon-manager.js';
+import { getWildPokemonEntities } from '../wild-pokemon/index.js';
 import { activeProjectiles, activeParticles } from '../moves/moves-manager.js';
 import {
   activeCrystalDrops,

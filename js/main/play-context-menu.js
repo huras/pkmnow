@@ -1,7 +1,7 @@
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { setPlayerPos } from '../player.js';
 import { getPlayPointerMode } from './play-pointer-mode.js';
-import { tryPlayerFieldMoveOnTile } from '../wild-pokemon/wild-pokemon-manager.js';
+import { tryPlayerFieldMoveOnTile } from '../wild-pokemon/index.js';
 import { playScreenPixelsToWorldTileCoords } from '../render/play-camera-snapshot.js';
 
 /**

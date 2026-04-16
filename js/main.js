@@ -5,7 +5,7 @@ import { render, loadTilesetImages } from './render.js';
 import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
-} from './wild-pokemon/wild-pokemon-manager.js';
+} from './wild-pokemon/index.js';
 import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';

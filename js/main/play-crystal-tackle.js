@@ -1166,7 +1166,7 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
       const pick = pool[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77133) * pool.length)];
       const dex = encounterNameToDex(pick);
       if (dex != null) {
-        void import('../wild-pokemon/wild-pokemon-manager.js').then((m) => {
+        void import('../wild-pokemon/index.js').then((m) => {
           if (m?.summonDebugWildPokemon) m.summonDebugWildPokemon(dex, data, cx, cy);
         });
       }
