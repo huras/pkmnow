@@ -227,3 +227,31 @@ export function drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH) {
           : '#ff6363';
   ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
 }
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ cx: number, cy: number, pivotY: number, _strengthGrabAction?: any }} item
+ */
+export function drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx) {
+  const g = item?._strengthGrabAction;
+  if (!g) return;
+  const duration = Math.max(0.001, Number(g.durationSec) || 0.001);
+  const elapsed = Math.max(0, Number(g.elapsedSec) || 0);
+  const p = Math.max(0, Math.min(1, elapsed / duration));
+  const w = Math.max(20, Math.floor(tileW * 0.88));
+  const h = Math.max(4, Math.floor(tileH * 0.11));
+  const x = snapPx(item.cx + tileW * 0.52);
+  const y = snapPx(item.cy - item.pivotY + tileH * 0.52);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.58)';
+  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  const grad = ctx.createLinearGradient(x, y, x + w, y);
+  grad.addColorStop(0, '#ffe58a');
+  grad.addColorStop(1, '#ffb347');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, Math.max(0, Math.floor(w * p)), h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+}

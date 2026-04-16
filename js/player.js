@@ -22,7 +22,7 @@ import {
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
-import { strengthCarryBlocksWalk } from './main/play-strength-carry.js';
+import { strengthCarryBlocksWalk, onStrengthCarrierDamaged } from './main/play-strength-carry.js';
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
@@ -158,9 +158,23 @@ export const player = {
   flightGroundTetherVisible: false,
   /**
    * Strength grab: lifted scatter rock/crystal (world origin while carried is “broken” until placed/dropped).
-   * @type {null | { liftOx: number, liftOy: number, itemKey: string, cols: number, rows: number, weightTier: number }}
+   * `hitsRemaining/hitsMax` preserve breakable HP while carried/thrown.
+   * @type {null | {
+   *   liftOx: number, liftOy: number, itemKey: string, cols: number, rows: number, weightTier: number,
+   *   hitsRemaining?: number, hitsMax?: number
+   * }}
    */
-  _strengthCarry: null
+  _strengthCarry: null,
+  /** Consecutive hits absorbed while carrying a lifted detail. */
+  _strengthCarryHitStreak: 0,
+  /**
+   * Strength pick-up channel in progress.
+   * @type {null | {
+   *   ox: number, oy: number, itemKey: string, cols: number, rows: number, weightTier: number,
+   *   durationSec: number, elapsedSec: number, startX: number, startY: number, startedAtSec: number
+   * }}
+   */
+  _strengthGrabAction: null
 };
 
 export function setPlayerSpecies(dexId) {
@@ -194,9 +208,13 @@ export function setPlayerSpecies(dexId) {
   player.jumpsUsed = 0;
   player.jumpSerial = 0;
   player._strengthCarry = null;
+  player._strengthCarryHitStreak = 0;
+  player._strengthGrabAction = null;
 }
 
 export function setPlayerPos(x, y) {
+  player._strengthGrabAction = null;
+  player._strengthCarryHitStreak = 0;
   const carry = player._strengthCarry;
   if (carry) {
     strengthDropCarriedAsPickup(
@@ -264,13 +282,17 @@ export function showPlayerSocialEmotion(action) {
  * @param {boolean} [applyPoisonVisual]
  * @returns {boolean} true if damage was applied (not blocked by iframes)
  */
-export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false) {
+export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null) {
   if (player.projIFrameSec > 0) return false;
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
   player.hp = Math.max(0, cur - amount);
   player.projIFrameSec = 0.55;
   if (applyPoisonVisual) player.poisonVisualSec = 3;
+  const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
+  if (extraCarryDropDamage > 0) {
+    player.hp = Math.max(0, (player.hp ?? maxH) - extraCarryDropDamage);
+  }
   return true;
 }
 

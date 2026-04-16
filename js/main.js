@@ -6,6 +6,7 @@ import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
 } from './wild-pokemon/wild-pokemon-manager.js';
+import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
@@ -472,6 +473,7 @@ function run() {
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
   resetWildPokemonManager();
+  resetThrownMapDetailEntities();
   playDetailColliderHighlight = null;
   updateView();
 }
@@ -572,6 +574,7 @@ canvas.addEventListener('mouseleave', () => {
 
 function enterPlayMode(gx, gy) {
   resetWildPokemonManager();
+  resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;

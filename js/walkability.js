@@ -32,7 +32,7 @@ import {
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
 import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
-import { getScatterItemKeyOverride } from './main/scatter-item-override.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/scatter-item-override.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -527,7 +527,8 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;
-  if (!validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
+  const hasForcedItemKey = hasScatterItemKeyOverride(ox0, oy0);
+  if (!hasForcedItemKey && !validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
 
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
   if (!itemsO.length) return null;

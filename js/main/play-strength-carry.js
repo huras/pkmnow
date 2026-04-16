@@ -1,4 +1,3 @@
-import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { parseShape } from '../tessellation-logic.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -9,16 +8,8 @@ import {
   isPlayScatterTreeOriginCharred,
   isScatterDetailLiftableRockAt,
   tryStrengthLiftSolidScatterAt,
-  strengthRelocateCarriedDetail,
   strengthRelocateCarriedDetailNear
 } from './play-crystal-tackle.js';
-import { getWildPokemonEntities, applyPlayerTackleEffectOnWildFromPoint } from '../wild-pokemon/wild-pokemon-manager.js';
-import {
-  getPokemonHurtboxCenterWorldXY,
-  getPokemonHurtboxRadiusTiles,
-  projectileZInPokemonHurtbox
-} from '../pokemon/pokemon-combat-hurtbox.js';
-import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 
 function strengthRockItemKeyAllowed(itemKey) {
   const k = String(itemKey || '').toLowerCase();
@@ -46,6 +37,28 @@ function computeCarryWeightTier(itemKey, cols, rows) {
   if ((k.includes('crystal') && area >= 4) || area >= 5) return 3;
   if (area >= 2 || k.includes('crystal')) return 2;
   return 1;
+}
+
+function countSpritesInObjectSet(objSet) {
+  if (!objSet?.parts?.length) return 1;
+  let n = 0;
+  for (const part of objSet.parts) n += Array.isArray(part.ids) ? part.ids.length : 0;
+  return Math.max(1, n);
+}
+
+function strengthPowerScoreForDex(dex) {
+  const tier = maxWalkableCarryTierForDex(dex);
+  const cfg = getPokemonConfig(dex);
+  const h = Number(cfg?.heightTiles) || 1.2;
+  return Math.max(1, tier + Math.min(1.2, h / 5.5));
+}
+
+function computeStrengthGrabDurationSec(dex, spriteCount, weightTier) {
+  const sp = Math.max(1, spriteCount | 0);
+  const power = strengthPowerScoreForDex(dex);
+  const base = 0.24 + sp * 0.045;
+  const weightMul = 0.85 + Math.max(1, weightTier | 0) * 0.22;
+  return Math.max(0.18, Math.min(2.1, (base * weightMul) / (0.72 + power * 0.55)));
 }
 
 export function strengthCarryBlocksWalk(player) {
@@ -105,185 +118,43 @@ function tryStrengthGrab(player, data, nowSec) {
   const objSet = OBJECT_SETS[itemKey];
   if (!objSet) return false;
   const { cols, rows } = parseShape(objSet.shape || '[1x1]');
-  if (!tryStrengthLiftSolidScatterAt(cand.ox, cand.oy, data, nowSec)) return false;
   const weightTier = computeCarryWeightTier(itemKey, cols, rows);
-  player._strengthCarry = {
-    liftOx: cand.ox,
-    liftOy: cand.oy,
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  const durationSec = computeStrengthGrabDurationSec(dex, countSpritesInObjectSet(objSet), weightTier);
+  player._strengthGrabAction = {
+    ox: cand.ox,
+    oy: cand.oy,
     itemKey,
     cols: Math.max(1, cols),
     rows: Math.max(1, rows),
-    weightTier
+    weightTier,
+    durationSec,
+    elapsedSec: 0,
+    startX: Number(player.x) || 0,
+    startY: Number(player.y) || 0,
+    originCx: Number(p.cx) || cand.ox + 0.5,
+    originCy: Number(p.cy) || cand.oy + 0.5,
+    startedAtSec: nowSec
   };
   return true;
 }
 
-/** Match padding used in wild `tryPlayerTackleHitWild` sweep test. */
-const THROW_WILD_SWEEP_PAD = 0.34;
-const THROW_SPEED_TILES = 11.2;
-const THROW_VZ0 = 5.65;
-const THROW_Z_GRAV = 13.5;
-const THROW_H_DRAG = 1.22;
-const THROW_MAX_AGE_SEC = 3.15;
-/** Ground slide after landing before the rock is written back into scatter. */
-const THROW_ROLL_DRAG = 7.4;
-const THROW_ROLL_STOP_SPEED = 0.12;
-const THROW_ROLL_MAX_SEC = 2.05;
-
-/**
- * @typedef {{
- *   x: number,
- *   y: number,
- *   z: number,
- *   vx: number,
- *   vy: number,
- *   vz: number,
- *   liftOx: number,
- *   liftOy: number,
- *   itemKey: string,
- *   cols: number,
- *   rows: number,
- *   age: number,
- *   phase: 'air' | 'roll',
- *   rollAge: number
- * }} StrengthThrowState
- */
-
-/** @type {StrengthThrowState[]} */
-const activeStrengthThrows = [];
-
-const PREVIEW_DT = 1 / 90;
-
-/**
- * Tile-space arc samples for aim UI (matches {@link beginStrengthThrowFromPointer} launch).
- * @param {import('../player.js').player | null | undefined} player
- * @param {object} data
- * @param {number} aimTx
- * @param {number} aimTy
- * @returns {{ points: Array<{ x: number, y: number, z: number }>, landX: number, landY: number } | null}
- */
-export function sampleStrengthThrowAimArc(player, data, aimTx, aimTy) {
-  if (!player || !data) return null;
-  const microW = data.width * MACRO_TILE_STRIDE;
-  const microH = data.height * MACRO_TILE_STRIDE;
-  const sx = (player.visualX ?? player.x) + 0.5;
-  const sy = (player.visualY ?? player.y) + 0.5;
-  const dx = Number(aimTx) - sx;
-  const dy = Number(aimTy) - sy;
-  const len = Math.hypot(dx, dy) || 1;
-  let vx = (dx / len) * THROW_SPEED_TILES;
-  let vy = (dy / len) * THROW_SPEED_TILES;
-  let vz = THROW_VZ0;
-  let x = sx;
-  let y = sy;
-  let z = 0.26;
-  /** @type {Array<{ x: number, y: number, z: number }>} */
-  const points = [{ x, y, z }];
-  let phase = /** @type {'air' | 'roll'} */ ('air');
-  let rollAge = 0;
-  let t = 0;
-  while (t < THROW_MAX_AGE_SEC + THROW_ROLL_MAX_SEC + 0.25) {
-    t += PREVIEW_DT;
-    if (phase === 'air') {
-      const prevZ = z;
-      const drag = Math.exp(-THROW_H_DRAG * PREVIEW_DT);
-      vx *= drag;
-      vy *= drag;
-      vz -= THROW_Z_GRAV * PREVIEW_DT;
-      x += vx * PREVIEW_DT;
-      y += vy * PREVIEW_DT;
-      z += vz * PREVIEW_DT;
-      points.push({ x, y, z });
-      const landed = t > 0.05 && z <= 0.02 && vz <= 0.15;
-      const tunnel = prevZ > 0.04 && z < -0.08;
-      if (landed || tunnel) {
-        z = 0;
-        vz = 0;
-        phase = 'roll';
-      }
-    } else {
-      rollAge += PREVIEW_DT;
-      const rDrag = Math.exp(-THROW_ROLL_DRAG * PREVIEW_DT);
-      vx *= rDrag;
-      vy *= rDrag;
-      x += vx * PREVIEW_DT;
-      y += vy * PREVIEW_DT;
-      z = 0;
-      points.push({ x, y, z });
-      const sp = Math.hypot(vx, vy);
-      if (sp < THROW_ROLL_STOP_SPEED || rollAge > THROW_ROLL_MAX_SEC) break;
-    }
-    if (
-      phase === 'air' &&
-      (t > THROW_MAX_AGE_SEC || x < -2 || y < -2 || x > microW + 2 || y > microH + 2)
-    ) {
-      break;
-    }
-  }
-  const lx = Math.max(0.5, Math.min(microW - 0.5, x));
-  const ly = Math.max(0.5, Math.min(microH - 0.5, y));
-  return { points, landX: lx, landY: ly };
-}
-
-function distPointSegmentSq(px, py, ax, ay, bx, by) {
-  const abx = bx - ax;
-  const aby = by - ay;
-  const apx = px - ax;
-  const apy = py - ay;
-  const abLen2 = abx * abx + aby * aby;
-  let t = abLen2 > 1e-8 ? (apx * abx + apy * aby) / abLen2 : 0;
-  t = Math.max(0, Math.min(1, t));
-  const cx = ax + t * abx;
-  const cy = ay + t * aby;
-  const dx = px - cx;
-  const dy = py - cy;
-  return dx * dx + dy * dy;
-}
-
-function segmentHitsCircle(ax, ay, bx, by, cx, cy, r) {
-  return distPointSegmentSq(cx, cy, ax, ay, bx, by) <= r * r;
-}
-
-function removeStrengthThrow(t) {
-  const i = activeStrengthThrows.indexOf(t);
-  if (i >= 0) activeStrengthThrows.splice(i, 1);
-}
-
-function finalizeStrengthThrowLand(t, data, landX, landY) {
-  removeStrengthThrow(t);
-  if (!data) return;
-  const nowSec = performance.now() * 0.001;
-  const microW = data.width * MACRO_TILE_STRIDE;
-  const microH = data.height * MACRO_TILE_STRIDE;
-  const lx = Math.max(0.5, Math.min(microW - 0.5, landX));
-  const ly = Math.max(0.5, Math.min(microH - 0.5, landY));
-  if (
-    !strengthRelocateCarriedDetailNear(
-      t.liftOx,
-      t.liftOy,
-      lx,
-      ly,
-      t.itemKey,
-      t.cols,
-      t.rows,
-      data,
-      nowSec,
-      12
-    )
-  ) {
-    strengthRelocateCarriedDetailNear(
-      t.liftOx,
-      t.liftOy,
-      lx,
-      ly,
-      t.itemKey,
-      t.cols,
-      t.rows,
-      data,
-      nowSec,
-      32
-    );
-  }
+function finalizeStrengthGrab(player, data, nowSec, action) {
+  if (!action || !data) return false;
+  const liftState = tryStrengthLiftSolidScatterAt(action.ox, action.oy, data, nowSec);
+  if (!liftState) return false;
+  player._strengthCarry = {
+    liftOx: action.ox,
+    liftOy: action.oy,
+    itemKey: action.itemKey,
+    cols: Math.max(1, action.cols),
+    rows: Math.max(1, action.rows),
+    weightTier: action.weightTier,
+    hitsRemaining: Math.max(1, Math.floor(Number(liftState.hitsRemaining) || 1)),
+    hitsMax: Math.max(1, Math.floor(Number(liftState.hitsMax) || 1))
+  };
+  player._strengthCarryHitStreak = 0;
+  return true;
 }
 
 function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
@@ -312,10 +183,13 @@ function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
         carry.rows,
         data,
         nowSec,
-        6
+        6,
+        carry.hitsRemaining,
+        carry.hitsMax
       )
     ) {
       player._strengthCarry = null;
+      player._strengthCarryHitStreak = 0;
       return true;
     }
   }
@@ -330,10 +204,13 @@ function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
       carry.rows,
       data,
       nowSec,
-      12
+      12,
+      carry.hitsRemaining,
+      carry.hitsMax
     )
   ) {
     player._strengthCarry = null;
+    player._strengthCarryHitStreak = 0;
     return true;
   }
   if (
@@ -347,10 +224,13 @@ function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
       carry.rows,
       data,
       nowSec,
-      28
+      28,
+      carry.hitsRemaining,
+      carry.hitsMax
     )
   ) {
     player._strengthCarry = null;
+    player._strengthCarryHitStreak = 0;
     return true;
   }
   return false;
@@ -364,147 +244,123 @@ export function tryStrengthInteractKeyE(player, data) {
   if (!player || !data) return false;
   const nowSec = performance.now() * 0.001;
   if (player._strengthCarry) {
+    player._strengthGrabAction = null;
     tryStrengthPlaceOrDrop(player, data, nowSec, false);
     return true;
   }
+  if (player._strengthGrabAction) return true;
   return tryStrengthGrab(player, data, nowSec);
 }
 
 /**
- * LMB release while carrying: throw toward cursor with a short arc; clears carry.
- * @returns {boolean} true if a throw was started
+ * Advances Strength grab-channel action (`E` hold-to-lift feel).
+ * Cancels if player moves away / target becomes invalid.
  */
-export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
-  if (!player?._strengthCarry || !data) return false;
+export function updateStrengthCarryInteraction(dt, player, data) {
+  if (!player || !data) return;
+  const action = player._strengthGrabAction;
+  if (!action) return;
+  if (player._strengthCarry) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  if (player.jumping || player.digBurrowMode) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  const px = Number(player.x) || 0;
+  const py = Number(player.y) || 0;
+  if (Math.hypot(px - action.startX, py - action.startY) > 0.38) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  if (isPlayScatterTreeOriginCharred(action.ox, action.oy) || isPlayScatterTreeOriginBurning(action.ox, action.oy)) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  const p = scatterPhysicsCircleAtOrigin(action.ox, action.oy, data);
+  if (!p || String(p.itemKey) !== String(action.itemKey)) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  if (!isScatterDetailLiftableRockAt(action.ox, action.oy, action.itemKey)) {
+    player._strengthGrabAction = null;
+    return;
+  }
+  action.elapsedSec = Math.min(action.durationSec, action.elapsedSec + Math.max(0, dt));
+  if (action.elapsedSec + 1e-6 < action.durationSec) return;
+  const nowSec = performance.now() * 0.001;
+  finalizeStrengthGrab(player, data, nowSec, action);
+  player._strengthGrabAction = null;
+}
+
+/**
+ * Player got hit while interacting with Strength carry mechanics.
+ * - Interrupts current lift initialization.
+ * - While carrying, every hit adds stagger; at 3 hits, carried detail falls nearby and hurts the carrier.
+ * @returns {number} extra self-damage from dropped detail (0 when none).
+ */
+export function onStrengthCarrierDamaged(player, data) {
+  if (!player || !data) return 0;
+  if (player._strengthGrabAction) {
+    player._strengthGrabAction = null;
+    return 0;
+  }
   const carry = player._strengthCarry;
-  const sx = (player.visualX ?? player.x) + 0.5;
-  const sy = (player.visualY ?? player.y) + 0.5;
-  const dx = Number(aimTx) - sx;
-  const dy = Number(aimTy) - sy;
-  const len = Math.hypot(dx, dy) || 1;
-  activeStrengthThrows.push({
-    x: sx,
-    y: sy,
-    z: 0.26,
-    vx: (dx / len) * THROW_SPEED_TILES,
-    vy: (dy / len) * THROW_SPEED_TILES,
-    vz: THROW_VZ0,
-    liftOx: carry.liftOx,
-    liftOy: carry.liftOy,
-    itemKey: carry.itemKey,
-    cols: carry.cols,
-    rows: carry.rows,
-    age: 0,
-    phase: 'air',
-    rollAge: 0
-  });
-  if (String(carry.itemKey || '').toLowerCase().includes('crystal')) {
-    playCrystalClinkSfx({ x: sx, y: sy });
+  if (!carry) return 0;
+  const nextHits = Math.max(0, Number(player._strengthCarryHitStreak) || 0) + 1;
+  player._strengthCarryHitStreak = nextHits;
+  if (nextHits < 3) return 0;
+  const nowSec = performance.now() * 0.001;
+  const px = (Number(player.x) || 0) + 0.5;
+  const py = (Number(player.y) || 0) + 0.5;
+  let placed = strengthRelocateCarriedDetailNear(
+    carry.liftOx,
+    carry.liftOy,
+    px,
+    py,
+    carry.itemKey,
+    carry.cols,
+    carry.rows,
+    data,
+    nowSec,
+    12,
+    carry.hitsRemaining,
+    carry.hitsMax
+  );
+  if (!placed) {
+    placed = strengthRelocateCarriedDetailNear(
+      carry.liftOx,
+      carry.liftOy,
+      px,
+      py,
+      carry.itemKey,
+      carry.cols,
+      carry.rows,
+      data,
+      nowSec,
+      28,
+      carry.hitsRemaining,
+      carry.hitsMax
+    );
+  }
+  if (!placed) {
+    strengthRelocateCarriedDetailNear(
+      carry.liftOx,
+      carry.liftOy,
+      px,
+      py,
+      carry.itemKey,
+      carry.cols,
+      carry.rows,
+      data,
+      nowSec,
+      52,
+      carry.hitsRemaining,
+      carry.hitsMax
+    );
   }
   player._strengthCarry = null;
-  return true;
-}
-
-/**
- * @param {number} dt
- * @param {object | null | undefined} data
- */
-export function updateStrengthThrows(dt, data) {
-  if (!data || activeStrengthThrows.length === 0) return;
-  const microW = data.width * MACRO_TILE_STRIDE;
-  const microH = data.height * MACRO_TILE_STRIDE;
-  const airDrag = Math.exp(-THROW_H_DRAG * dt);
-  const rollDrag = Math.exp(-THROW_ROLL_DRAG * dt);
-  for (let i = activeStrengthThrows.length - 1; i >= 0; i--) {
-    const t = activeStrengthThrows[i];
-    t.age += dt;
-    const prevX = t.x;
-    const prevY = t.y;
-    const prevZ = t.z;
-
-    if (t.phase === 'roll') {
-      t.rollAge += dt;
-      t.vx *= rollDrag;
-      t.vy *= rollDrag;
-      t.vz = 0;
-      t.z = 0;
-      t.x += t.vx * dt;
-      t.y += t.vy * dt;
-    } else {
-      t.vx *= airDrag;
-      t.vy *= airDrag;
-      t.vz -= THROW_Z_GRAV * dt;
-      t.x += t.vx * dt;
-      t.y += t.vy * dt;
-      t.z += t.vz * dt;
-    }
-
-    let hitEntity = null;
-    let bestD2 = Infinity;
-    for (const e of getWildPokemonEntities()) {
-      if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
-      const dex = e.dexId ?? 1;
-      if (!projectileZInPokemonHurtbox(t.z, dex, e.z ?? 0)) continue;
-      const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
-      const r = getPokemonHurtboxRadiusTiles(dex) + THROW_WILD_SWEEP_PAD;
-      if (!segmentHitsCircle(prevX, prevY, t.x, t.y, hx, hy, r)) continue;
-      const d2 = (t.x - hx) * (t.x - hx) + (t.y - hy) * (t.y - hy);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        hitEntity = e;
-      }
-    }
-    if (hitEntity) {
-      applyPlayerTackleEffectOnWildFromPoint(hitEntity, t.x, t.y);
-      finalizeStrengthThrowLand(t, data, hitEntity.x, hitEntity.y);
-      continue;
-    }
-
-    if (t.phase === 'roll') {
-      const sp = Math.hypot(t.vx, t.vy);
-      if (sp < THROW_ROLL_STOP_SPEED || t.rollAge > THROW_ROLL_MAX_SEC) {
-        finalizeStrengthThrowLand(t, data, t.x, t.y);
-        continue;
-      }
-      if (t.age > THROW_MAX_AGE_SEC + THROW_ROLL_MAX_SEC + 0.5 || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
-        finalizeStrengthThrowLand(t, data, t.x, t.y);
-      }
-      continue;
-    }
-
-    const airbornLongEnough = t.age > 0.05;
-    if (airbornLongEnough && t.z <= 0.02 && t.vz <= 0.15) {
-      t.z = 0;
-      t.vz = 0;
-      t.phase = 'roll';
-      t.rollAge = 0;
-      continue;
-    }
-    if (t.age > THROW_MAX_AGE_SEC || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
-      finalizeStrengthThrowLand(t, data, t.x, t.y);
-    } else if (prevZ > 0.04 && t.z < -0.08) {
-      t.z = 0;
-      t.vz = 0;
-      t.phase = 'roll';
-      t.rollAge = 0;
-    }
-  }
-}
-
-/**
- * @param {Array<{ type?: string, sortY?: number }>} renderItems
- */
-export function appendStrengthThrowRenderItems(renderItems) {
-  for (const t of activeStrengthThrows) {
-    renderItems.push({
-      type: 'strengthThrowRock',
-      sortY: t.y + 0.5,
-      x: t.x,
-      y: t.y,
-      z: t.z,
-      itemKey: t.itemKey,
-      cols: t.cols,
-      rows: t.rows
-    });
-  }
+  player._strengthCarryHitStreak = 0;
+  return 7;
 }

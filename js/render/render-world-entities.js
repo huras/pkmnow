@@ -461,33 +461,103 @@ export function drawPlayerAimIndicator(ctx, item, options) {
 }
 
 /**
- * Handles drawing of the strength throw aim preview arc.
+ * Handles drawing of the strength throw aim preview arc (grenade-style HUD: arc, ticks, landing reticle).
  */
 export function drawStrengthThrowAimPreview(ctx, item, options) {
   const { snapPx, tileW, tileH } = options;
   const pts = item.pointsTile;
-  if (Array.isArray(pts) && pts.length > 1) {
-    ctx.strokeStyle = 'rgba(255, 215, 120, 0.88)';
-    ctx.lineWidth = Math.max(1.2, tileW * 0.055);
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    for (let pi = 0; pi < pts.length; pi++) {
-      const p = pts[pi];
-      const pxx = snapPx(p.x * tileW);
-      const pyy = snapPx(p.y * tileH - (p.z || 0) * tileH);
-      if (pi === 0) ctx.moveTo(pxx, pyy);
-      else ctx.lineTo(pxx, pyy);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const lc = snapPx(item.landX * tileW), lg = snapPx(item.landY * tileH);
-    const footprint = Math.max(1, Math.hypot(Number(item.cols) || 1, Number(item.rows) || 1));
-    const cr = Math.max(tileW * 0.32, footprint * tileW * 0.2);
-    ctx.fillStyle = 'rgba(255, 200, 90, 0.14)';
-    ctx.beginPath(); ctx.arc(lc, lg, cr, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 165, 55, 0.95)';
-    ctx.lineWidth = 2; ctx.stroke();
+  if (!Array.isArray(pts) || pts.length < 2) return;
+
+  const toPx = (p) => ({
+    x: snapPx(p.x * tileW),
+    y: snapPx(p.y * tileH - (p.z || 0) * tileH)
+  });
+
+  const lineW = Math.max(1.4, tileW * 0.048);
+  const glowW = lineW + 5;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Soft outer glow
+  ctx.strokeStyle = 'rgba(255, 140, 40, 0.22)';
+  ctx.lineWidth = glowW;
+  ctx.beginPath();
+  for (let pi = 0; pi < pts.length; pi++) {
+    const q = toPx(pts[pi]);
+    if (pi === 0) ctx.moveTo(q.x, q.y);
+    else ctx.lineTo(q.x, q.y);
   }
+  ctx.stroke();
+
+  // Main trajectory
+  ctx.strokeStyle = 'rgba(255, 235, 160, 0.92)';
+  ctx.lineWidth = lineW;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  for (let pi = 0; pi < pts.length; pi++) {
+    const q = toPx(pts[pi]);
+    if (pi === 0) ctx.moveTo(q.x, q.y);
+    else ctx.lineTo(q.x, q.y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Range ticks along path (every N samples)
+  const tickEvery = Math.max(3, Math.floor(pts.length / 14));
+  const tickR = Math.max(2, tileW * 0.04);
+  for (let pi = tickEvery; pi < pts.length - 1; pi += tickEvery) {
+    const a = toPx(pts[pi - 1]);
+    const b = toPx(pts[pi]);
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    ctx.fillStyle = 'rgba(255, 210, 120, 0.55)';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, tickR * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 200, 80, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(b.x + Math.cos(ang + Math.PI / 2) * tickR, b.y + Math.sin(ang + Math.PI / 2) * tickR);
+    ctx.lineTo(b.x - Math.cos(ang + Math.PI / 2) * tickR, b.y - Math.sin(ang + Math.PI / 2) * tickR);
+    ctx.stroke();
+  }
+
+  // Landing zone + crosshair
+  const lc = snapPx(item.landX * tileW);
+  const lg = snapPx(item.landY * tileH);
+  const footprint = Math.max(1, Math.hypot(Number(item.cols) || 1, Number(item.rows) || 1));
+  const cr = Math.max(tileW * 0.34, footprint * tileW * 0.22);
+  ctx.fillStyle = 'rgba(255, 200, 90, 0.12)';
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 165, 55, 0.92)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const ch = cr * 0.55;
+  ctx.strokeStyle = 'rgba(255, 248, 220, 0.95)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(lc - ch, lg);
+  ctx.lineTo(lc + ch, lg);
+  ctx.moveTo(lc, lg - ch);
+  ctx.lineTo(lc, lg + ch);
+  ctx.stroke();
+
+  // Origin ring (throw point)
+  const o0 = toPx(pts[0]);
+  ctx.strokeStyle = 'rgba(120, 255, 210, 0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(o0.x, o0.y, Math.max(3, tileW * 0.08), 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 /**

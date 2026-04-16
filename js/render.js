@@ -45,6 +45,7 @@ import {
 import {
   drawDetailHitHpBar,
   drawDetailHitPulse,
+  drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
   drawWildHpBar
 } from './render/render-ui-world.js';
@@ -453,17 +454,6 @@ export function render(canvas, data, options = {}) {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
         }
 
-        if (item.type === 'player' && item.strengthCarry) {
-          const sc = item.strengthCarry;
-          const objSet = OBJECT_SETS[sc.itemKey];
-          const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
-          if (img) {
-            const base = objSet.parts.find(p => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-            const dw = 16 * (Number(sc.cols) || 1) * 0.38 * (tileW / 16);
-            const dh = 16 * (Number(sc.rows) || 1) * 0.38 * (tileH / 16);
-            ctx.drawImage(img, (base.ids[0] % atlasCols) * 16, Math.floor(base.ids[0] / atlasCols) * 16, 16 * (Number(sc.cols) || 1), 16 * (Number(sc.rows) || 1), snapPx(item.cx - dw * 0.35 + tackleOx * 0.12), snapPx(pxT0 - dh * 0.72 + tackleOy * 0.12), dw, dh);
-          }
-        }
         ctx.filter = 'none';
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
 
@@ -479,6 +469,55 @@ export function render(canvas, data, options = {}) {
             }
           }
         }
+
+        // Strength carry visual (and lift-in-progress travel from origin -> above carrier).
+        if (item.type === 'player' && (item.strengthCarry || item._strengthGrabAction)) {
+          const sc = item.strengthCarry || item._strengthGrabAction;
+          const objSet = OBJECT_SETS[sc.itemKey];
+          if (objSet) {
+            const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+            const tid = base?.ids?.[0];
+            const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
+            if (img && tid != null) {
+              const cols = Math.max(1, Number(sc.cols) || 1);
+              const rows = Math.max(1, Number(sc.rows) || 1);
+              const srcW = 16 * cols;
+              const srcH = 16 * rows;
+              const dw = Math.ceil(tileW * cols);
+              const dh = Math.ceil(tileH * rows);
+              const sx0 = (tid % atlasCols) * 16;
+              const sy0 = Math.floor(tid / atlasCols) * 16;
+              const tackX = tackleOx * 0.12;
+              const tackY = tackleOy * 0.12;
+              const carryCx = item.cx + tackX;
+              const carryCy = pxT0 - tackY - Math.max(dw, dh) * 0.48;
+              let drawCx = carryCx;
+              let drawCy = carryCy;
+              let rot = Math.PI / 2;
+              if (!item.strengthCarry && item._strengthGrabAction) {
+                const g = item._strengthGrabAction;
+                const dur = Math.max(0.001, Number(g.durationSec) || 0.001);
+                const pRaw = Math.max(0, Math.min(1, (Number(g.elapsedSec) || 0) / dur));
+                const p = 1 - Math.pow(1 - pRaw, 2.35);
+                const fromX = (Number(g.originCx) || 0) * tileW;
+                const fromY = (Number(g.originCy) || 0) * tileH;
+                const arcLift = Math.sin(Math.PI * p) * tileH * 0.55;
+                drawCx = fromX + (carryCx - fromX) * p;
+                drawCy = fromY + (carryCy - fromY) * p - arcLift;
+                rot = (Math.PI / 2) * p;
+              }
+              ctx.save();
+              ctx.translate(snapPx(drawCx), snapPx(drawCy));
+              ctx.rotate(rot);
+              ctx.drawImage(img, sx0, sy0, srcW, srcH, -dw * 0.5, -dh * 0.5, dw, dh);
+              ctx.restore();
+            }
+          }
+        }
+        if (item.type === 'player' && item._strengthGrabAction) {
+          drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx);
+        }
+
         ctx.restore();
       } else if (item.type === 'wildEmotion' || item.type === 'playerEmotion') {
         ctx.save();

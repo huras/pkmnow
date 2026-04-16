@@ -21,7 +21,7 @@ import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
 import { PLAY_CHUNK_SIZE, VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
 import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from '../main/play-crystal-tackle.js';
-import { getScatterItemKeyOverride } from '../main/scatter-item-override.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
@@ -396,6 +396,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
 
         if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
           if (
+            hasScatterItemKeyOverride(mxScan, myScan) ||
             validScatterOriginMicro(
               mxScan,
               myScan,

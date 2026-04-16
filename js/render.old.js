@@ -57,7 +57,7 @@ import {
 import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
-import { getScatterItemKeyOverride } from './main/scatter-item-override.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/scatter-item-override.js';
 import {
 	activeCrystalDrops,
 	activeCrystalShards,
@@ -75,7 +75,10 @@ import {
 	isPlayFormalTreeRootDestroyed,
 	appendTreeTopFallRenderItems
 } from './main/play-crystal-tackle.js';
-import { appendStrengthThrowRenderItems, sampleStrengthThrowAimArc } from './main/play-strength-carry.js';
+import {
+  appendStrengthThrowRenderItems,
+  sampleStrengthThrowAimArc
+} from './main/thrown-map-detail-entities.js';
 import {
 	getBorrowDigPlaceholderDex,
 	isUndergroundBurrowerDex,
@@ -769,14 +772,17 @@ export function render(canvas, data, options = {}) {
 						const objSet = OBJECT_SETS[itemKey];
 						if (
 							objSet &&
-							validScatterOriginMicro(
-								mxScan,
-								myScan,
-								data.seed,
-								width * MACRO_TILE_STRIDE,
-								height * MACRO_TILE_STRIDE,
-								(c, r) => getCached(c, r),
-								scatterOriginMemoRender
+							(
+								hasScatterItemKeyOverride(mxScan, myScan) ||
+								validScatterOriginMicro(
+									mxScan,
+									myScan,
+									data.seed,
+									width * MACRO_TILE_STRIDE,
+									height * MACRO_TILE_STRIDE,
+									(c, r) => getCached(c, r),
+									scatterOriginMemoRender
+								)
 							)
 						) {
 							const scatterDestroyed = isPlayDetailScatterOriginDestroyed(mxScan, myScan);

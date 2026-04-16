@@ -27,8 +27,11 @@ import {
   isPlayFormalTreeRootDestroyed,
   appendTreeTopFallRenderItems
 } from '../main/play-crystal-tackle.js';
-import { appendStrengthThrowRenderItems } from '../main/play-strength-carry.js';
-import { getScatterItemKeyOverride } from '../main/scatter-item-override.js';
+import {
+  appendStrengthThrowRenderItems,
+  sampleStrengthThrowAimArc
+} from '../main/thrown-map-detail-entities.js';
+import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 import { aimAtCursor } from '../main/play-mouse-combat.js';
 import { wildSexHudLabel } from '../pokemon/pokemon-sex.js';
 import { defaultPortraitSlugForBalloon } from '../pokemon/spritecollab-portraits.js';
@@ -370,9 +373,11 @@ export function collectRenderItems(options) {
       // b. Scatters
       const sType = foliageType(mxScan, myScan, data.seed + 1234);
       const items = BIOME_VEGETATION[t.biomeId] || [];
-      const sItem = getScatterItemKeyOverride(mxScan, myScan) || items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+      const forcedScatter = getScatterItemKeyOverride(mxScan, myScan);
+      const sItem = forcedScatter || items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
       if (sItem && isSortableScatter(sItem)) {
-        if (validScatterOriginMicro(mxScan, myScan, data.seed, width * microStride, height * microStride, getCached, scatterOriginMemoRender)) {
+        const forcedOrigin = hasScatterItemKeyOverride(mxScan, myScan);
+        if (forcedOrigin || validScatterOriginMicro(mxScan, myScan, data.seed, width * microStride, height * microStride, getCached, scatterOriginMemoRender)) {
           if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
           const objSet = OBJECT_SETS[sItem];
           if (objSet) {
@@ -437,6 +442,29 @@ export function collectRenderItems(options) {
 
   // 6. Specialist Injections (Strength, Tree Falling)
   appendStrengthThrowRenderItems(renderItems, startX, startY, endX, endY);
+
+  if (playInputState.strengthCarryLmbAim && player._strengthCarry && data) {
+    const { tx, ty } = aimAtCursor(player);
+    const arc = sampleStrengthThrowAimArc(player, data, tx, ty);
+    if (arc?.points?.length > 1) {
+      const sc = player._strengthCarry;
+      const py = player.visualY ?? player.y;
+      let maxArcY = py;
+      for (const p of arc.points) {
+        if (p.y > maxArcY) maxArcY = p.y;
+      }
+      renderItems.push({
+        type: 'strengthThrowAimPreview',
+        sortY: maxArcY + 0.72,
+        pointsTile: arc.points,
+        landX: arc.landX,
+        landY: arc.landY,
+        cols: sc.cols,
+        rows: sc.rows
+      });
+    }
+  }
+
   appendTreeTopFallRenderItems(renderItems, performance.now() * 0.001, tileW, tileH);
 
   const pushPsybeamChargeOrbs = () => {

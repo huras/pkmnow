@@ -16,7 +16,8 @@ import {
   handleSpecialAttackHotkeyDown,
   handleSpecialAttackHotkeyUp
 } from './play-mouse-combat.js';
-import { updateStrengthThrows, tryStrengthInteractKeyE } from './play-strength-carry.js';
+import { tryStrengthInteractKeyE, updateStrengthCarryInteraction } from './play-strength-carry.js';
+import { updateThrownMapDetailEntities } from './thrown-map-detail-entities.js';
 import {
   updateCrystalShardParticles,
   updateCrystalDropsAndPickup,
@@ -143,7 +144,8 @@ export function createGameLoop(api) {
       updateBreakdown.updWildMs = performance.now() - tWild0;
       const tPointer0 = performance.now();
       updatePlayPointerCombat(dt, player, currentData);
-      updateStrengthThrows(dt, currentData);
+      updateStrengthCarryInteraction(dt, player, currentData);
+      updateThrownMapDetailEntities(dt, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
       updateMoves(dt, getWildPokemonEntities(), currentData, player);

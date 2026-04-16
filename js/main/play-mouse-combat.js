@@ -25,7 +25,7 @@ import {
   slotIndexToUiHotkey
 } from './player-input-slots.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
-import { beginStrengthThrowFromPointer } from './play-strength-carry.js';
+import { beginStrengthThrowFromPointer } from './thrown-map-detail-entities.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/wild-pokemon-manager.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
 import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';

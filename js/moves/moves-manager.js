@@ -955,7 +955,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
-            if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
+            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
               spawnHitParticles(hx, hy, player.z ?? 0);
             }
             proj.playerBeamHitDone = true;
@@ -1095,7 +1095,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
       const poison = poisonCapable && Math.random() < poisonChance;
       const pz = player.z ?? 0;
-      if (tryDamagePlayerFromProjectile(proj.damage, poison)) {
+      if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
         spawnHitParticles(proj.x, proj.y, pz);
       }
       if (proj.type === 'incinerateCore') {
