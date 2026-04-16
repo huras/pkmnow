@@ -36,6 +36,71 @@ const timeoutHandles = [];
 /** @type {Map<number, string>} */
 const lastUrlByBiome = new Map();
 
+/**
+ * Seeded shuffle session: `Date.now()` once per play session (see {@link resetBgmShuffleSession}).
+ * @type {number}
+ */
+let bgmShuffleSessionSeed = 0;
+/** Shuffled order per biome (lazy); cursor is round-robin into this list. */
+/** @type {Map<number, string[]>} */
+const shuffledUrlsByBiome = new Map();
+/** @type {Map<number, number>} */
+const shuffleCursorByBiome = new Map();
+
+/**
+ * @param {number} seed32
+ * @returns {() => number} uniform in [0, 1)
+ */
+function mulberry32(seed32) {
+  let a = seed32 >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * @param {number} sessionMs
+ * @param {number} biomeId
+ * @returns {number}
+ */
+function mixShuffleSeed(sessionMs, biomeId) {
+  const lo = sessionMs >>> 0;
+  const hi = (Math.floor(sessionMs / 0x100000000) >>> 0) ^ (biomeId << 16);
+  return (lo ^ hi ^ Math.imul(biomeId + 1, 0x9e3779b1)) >>> 0;
+}
+
+/**
+ * @param {readonly string[]} urls
+ * @param {() => number} rnd01
+ * @returns {string[]}
+ */
+function fisherYatesShuffle(urls, rnd01) {
+  const a = urls.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd01() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
+
+function ensureBgmShuffleSessionSeed() {
+  if (bgmShuffleSessionSeed === 0) {
+    bgmShuffleSessionSeed = Date.now();
+  }
+}
+
+function resetBgmShuffleSession() {
+  bgmShuffleSessionSeed = 0;
+  shuffledUrlsByBiome.clear();
+  shuffleCursorByBiome.clear();
+}
+
 /** While a fade→gap→play chain is resolving toward this biome, ignore duplicate syncs. */
 let transitionTargetBiome = /** @type {number | null} */ (null);
 
@@ -145,12 +210,30 @@ function pickNextUrl(biomeId) {
     lastUrlByBiome.set(biomeId, u);
     return u;
   }
+  let shuffled = shuffledUrlsByBiome.get(biomeId);
+  if (!shuffled) {
+    ensureBgmShuffleSessionSeed();
+    const rnd = mulberry32(mixShuffleSeed(bgmShuffleSessionSeed, biomeId));
+    shuffled = fisherYatesShuffle(urls, rnd);
+    shuffledUrlsByBiome.set(biomeId, shuffled);
+    shuffleCursorByBiome.set(biomeId, 0);
+  }
   const last = lastUrlByBiome.get(biomeId);
-  const candidates = urls.filter((u) => u !== last);
-  const pool = candidates.length ? candidates : [...urls];
-  const pick = pool[Math.floor(Math.random() * pool.length)];
-  lastUrlByBiome.set(biomeId, pick);
-  return pick;
+  const n = shuffled.length;
+  let cursor = shuffleCursorByBiome.get(biomeId) ?? 0;
+  for (let k = 0; k < n; k++) {
+    const pick = shuffled[cursor % n];
+    cursor = (cursor + 1) % n;
+    if (pick !== last || n <= 1) {
+      shuffleCursorByBiome.set(biomeId, cursor);
+      lastUrlByBiome.set(biomeId, pick);
+      return pick;
+    }
+  }
+  const fallback = shuffled[cursor % n];
+  shuffleCursorByBiome.set(biomeId, (cursor + 1) % n);
+  lastUrlByBiome.set(biomeId, fallback);
+  return fallback;
 }
 
 /**
@@ -522,5 +605,6 @@ export function stopBiomeBgm() {
   transitionTargetBiome = null;
   coldPlayRetryNotBeforeMs = 0;
   lastUrlByBiome.clear();
+  resetBgmShuffleSession();
   stopBiomeBgmInternal(false);
 }
