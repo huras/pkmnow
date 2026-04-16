@@ -905,6 +905,12 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   updateFieldSkillWheelHover(player);
   updateSpecialAttackWheelHover(player);
+  playInputState.strengthCarryLmbAim = !!(
+    leftHeld &&
+    !combatModifierHeld() &&
+    player._strengthCarry &&
+    playInputState.mouseValid
+  );
   if (leftHeld && !combatModifierHeld() && !player._strengthCarry) {
     const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec());
     playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
@@ -1095,6 +1101,7 @@ export function installPlayPointerCombat(deps) {
     playInputState.chargeRight01 = 0;
     playInputState.psybeamLeftHold = null;
     playInputState.psybeamRightHold = null;
+    playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
   });
 }

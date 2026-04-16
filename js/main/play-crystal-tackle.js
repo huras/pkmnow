@@ -73,6 +73,8 @@ const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   incinerateCore: 54
 });
 const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
+/** Strength-relocated rock: drop override + detail state after no hits / grabs (frees override map memory). */
+const STRENGTH_RELOC_IDLE_CLEAR_SEC = 52;
 const DETAIL_SWEEP_STEP = 96;
 const DETAIL_SWEEP_INTERVAL_SEC = 0.5;
 const DETAIL_HIT_BAR_ANIM_SEC = 0.16;
@@ -700,9 +702,58 @@ export function strengthRelocateCarriedDetail(liftOx, liftOy, nox, noy, itemKey,
   st.lastHitAtSec = nowSec;
   destroyedCrystalScatterOrigins.delete(nk);
   setScatterItemKeyOverride(nox, noy, itemKey);
+  st.strengthReloPlaced = true;
   invalidateChunksOverlappingFootprint(nox, noy, st.cols, st.rows);
   clearScatterSolidBlockCache();
   return true;
+}
+
+/**
+ * Strength: re-embed carried scatter at the closest valid micro-origin to `(landX, landY)`,
+ * then at the lift cell if needed — always world scatter (override + detail state), never a pickup.
+ * @param {number} chebRadius — Chebyshev radius from `floor(landX),floor(landY)` to search.
+ * @returns {boolean}
+ */
+export function strengthRelocateCarriedDetailNear(
+  liftOx,
+  liftOy,
+  landX,
+  landY,
+  itemKey,
+  cols,
+  rows,
+  data,
+  nowSec,
+  chebRadius = 10
+) {
+  if (!data) return false;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const cx = Math.max(0.5, Math.min(microW - 0.5, landX));
+  const cy = Math.max(0.5, Math.min(microH - 0.5, landY));
+  const ix = Math.floor(cx);
+  const iy = Math.floor(cy);
+  const R = Math.max(0, Math.floor(chebRadius));
+  /** @type {{ ox: number, oy: number, d2: number }[]} */
+  const cand = [];
+  for (let oy = iy - R; oy <= iy + R; oy++) {
+    for (let ox = ix - R; ox <= ix + R; ox++) {
+      if (ox < 0 || oy < 0 || ox >= microW || oy >= microH) continue;
+      const ddx = ox + 0.5 - cx;
+      const ddy = oy + 0.5 - cy;
+      cand.push({ ox, oy, d2: ddx * ddx + ddy * ddy });
+    }
+  }
+  cand.sort((a, b) => a.d2 - b.d2);
+  for (const c of cand) {
+    if (strengthRelocateCarriedDetail(liftOx, liftOy, c.ox, c.oy, itemKey, cols, rows, data, nowSec)) {
+      return true;
+    }
+  }
+  if (liftOx >= 0 && liftOy >= 0 && liftOx < microW && liftOy < microH) {
+    return strengthRelocateCarriedDetail(liftOx, liftOy, liftOx, liftOy, itemKey, cols, rows, data, nowSec);
+  }
+  return false;
 }
 
 /**
@@ -910,7 +961,19 @@ function sweepDetailBreakState(data, nowSec) {
       }
       continue;
     }
+    if (st.strengthReloPlaced) {
+      if (nowSec - st.lastHitAtSec >= STRENGTH_RELOC_IDLE_CLEAR_SEC) {
+        setScatterItemKeyOverride(st.ox, st.oy, null);
+        detailBreakStateByOrigin.delete(key);
+        detailHitHpBars.delete(key);
+        detailHitShakeAtSec.delete(key);
+        invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        clearScatterSolidBlockCache();
+      }
+      continue;
+    }
     if (nowSec - st.lastHitAtSec >= DETAIL_PARTIAL_DAMAGE_FORGET_SEC) {
+      setScatterItemKeyOverride(st.ox, st.oy, null);
       detailBreakStateByOrigin.delete(key);
       detailHitHpBars.delete(key);
       detailHitShakeAtSec.delete(key);

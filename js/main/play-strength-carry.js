@@ -10,7 +10,7 @@ import {
   isScatterDetailLiftableRockAt,
   tryStrengthLiftSolidScatterAt,
   strengthRelocateCarriedDetail,
-  strengthDropCarriedAsPickup
+  strengthRelocateCarriedDetailNear
 } from './play-crystal-tackle.js';
 import { getWildPokemonEntities, applyPlayerTackleEffectOnWildFromPoint } from '../wild-pokemon/wild-pokemon-manager.js';
 import {
@@ -119,11 +119,15 @@ function tryStrengthGrab(player, data, nowSec) {
 
 /** Match padding used in wild `tryPlayerTackleHitWild` sweep test. */
 const THROW_WILD_SWEEP_PAD = 0.34;
-const THROW_SPEED_TILES = 7.85;
-const THROW_VZ0 = 4.35;
+const THROW_SPEED_TILES = 11.2;
+const THROW_VZ0 = 5.65;
 const THROW_Z_GRAV = 13.5;
-const THROW_H_DRAG = 1.78;
-const THROW_MAX_AGE_SEC = 2.35;
+const THROW_H_DRAG = 1.22;
+const THROW_MAX_AGE_SEC = 3.15;
+/** Ground slide after landing before the rock is written back into scatter. */
+const THROW_ROLL_DRAG = 7.4;
+const THROW_ROLL_STOP_SPEED = 0.12;
+const THROW_ROLL_MAX_SEC = 2.05;
 
 /**
  * @typedef {{
@@ -138,12 +142,87 @@ const THROW_MAX_AGE_SEC = 2.35;
  *   itemKey: string,
  *   cols: number,
  *   rows: number,
- *   age: number
+ *   age: number,
+ *   phase: 'air' | 'roll',
+ *   rollAge: number
  * }} StrengthThrowState
  */
 
 /** @type {StrengthThrowState[]} */
 const activeStrengthThrows = [];
+
+const PREVIEW_DT = 1 / 90;
+
+/**
+ * Tile-space arc samples for aim UI (matches {@link beginStrengthThrowFromPointer} launch).
+ * @param {import('../player.js').player | null | undefined} player
+ * @param {object} data
+ * @param {number} aimTx
+ * @param {number} aimTy
+ * @returns {{ points: Array<{ x: number, y: number, z: number }>, landX: number, landY: number } | null}
+ */
+export function sampleStrengthThrowAimArc(player, data, aimTx, aimTy) {
+  if (!player || !data) return null;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const sx = (player.visualX ?? player.x) + 0.5;
+  const sy = (player.visualY ?? player.y) + 0.5;
+  const dx = Number(aimTx) - sx;
+  const dy = Number(aimTy) - sy;
+  const len = Math.hypot(dx, dy) || 1;
+  let vx = (dx / len) * THROW_SPEED_TILES;
+  let vy = (dy / len) * THROW_SPEED_TILES;
+  let vz = THROW_VZ0;
+  let x = sx;
+  let y = sy;
+  let z = 0.26;
+  /** @type {Array<{ x: number, y: number, z: number }>} */
+  const points = [{ x, y, z }];
+  let phase = /** @type {'air' | 'roll'} */ ('air');
+  let rollAge = 0;
+  let t = 0;
+  while (t < THROW_MAX_AGE_SEC + THROW_ROLL_MAX_SEC + 0.25) {
+    t += PREVIEW_DT;
+    if (phase === 'air') {
+      const prevZ = z;
+      const drag = Math.exp(-THROW_H_DRAG * PREVIEW_DT);
+      vx *= drag;
+      vy *= drag;
+      vz -= THROW_Z_GRAV * PREVIEW_DT;
+      x += vx * PREVIEW_DT;
+      y += vy * PREVIEW_DT;
+      z += vz * PREVIEW_DT;
+      points.push({ x, y, z });
+      const landed = t > 0.05 && z <= 0.02 && vz <= 0.15;
+      const tunnel = prevZ > 0.04 && z < -0.08;
+      if (landed || tunnel) {
+        z = 0;
+        vz = 0;
+        phase = 'roll';
+      }
+    } else {
+      rollAge += PREVIEW_DT;
+      const rDrag = Math.exp(-THROW_ROLL_DRAG * PREVIEW_DT);
+      vx *= rDrag;
+      vy *= rDrag;
+      x += vx * PREVIEW_DT;
+      y += vy * PREVIEW_DT;
+      z = 0;
+      points.push({ x, y, z });
+      const sp = Math.hypot(vx, vy);
+      if (sp < THROW_ROLL_STOP_SPEED || rollAge > THROW_ROLL_MAX_SEC) break;
+    }
+    if (
+      phase === 'air' &&
+      (t > THROW_MAX_AGE_SEC || x < -2 || y < -2 || x > microW + 2 || y > microH + 2)
+    ) {
+      break;
+    }
+  }
+  const lx = Math.max(0.5, Math.min(microW - 0.5, x));
+  const ly = Math.max(0.5, Math.min(microH - 0.5, y));
+  return { points, landX: lx, landY: ly };
+}
 
 function distPointSegmentSq(px, py, ax, ay, bx, by) {
   const abx = bx - ax;
@@ -177,24 +256,33 @@ function finalizeStrengthThrowLand(t, data, landX, landY) {
   const microH = data.height * MACRO_TILE_STRIDE;
   const lx = Math.max(0.5, Math.min(microW - 0.5, landX));
   const ly = Math.max(0.5, Math.min(microH - 0.5, landY));
-  const nox = Math.floor(lx);
-  const noy = Math.floor(ly);
   if (
-    strengthRelocateCarriedDetail(
+    !strengthRelocateCarriedDetailNear(
       t.liftOx,
       t.liftOy,
-      nox,
-      noy,
+      lx,
+      ly,
       t.itemKey,
       t.cols,
       t.rows,
       data,
-      nowSec
+      nowSec,
+      12
     )
   ) {
-    return;
+    strengthRelocateCarriedDetailNear(
+      t.liftOx,
+      t.liftOy,
+      lx,
+      ly,
+      t.itemKey,
+      t.cols,
+      t.rows,
+      data,
+      nowSec,
+      32
+    );
   }
-  strengthDropCarriedAsPickup(t.liftOx, t.liftOy, t.cols, t.rows, t.itemKey, lx, ly);
 }
 
 function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
@@ -212,36 +300,59 @@ function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
   for (const d of dists) {
     const tx = px + fx * d;
     const ty = py + fy * d;
-    const nox = Math.floor(tx);
-    const noy = Math.floor(ty);
     if (
-      strengthRelocateCarriedDetail(
+      strengthRelocateCarriedDetailNear(
         carry.liftOx,
         carry.liftOy,
-        nox,
-        noy,
+        tx,
+        ty,
         carry.itemKey,
         carry.cols,
         carry.rows,
         data,
-        nowSec
+        nowSec,
+        6
       )
     ) {
       player._strengthCarry = null;
       return true;
     }
   }
-  strengthDropCarriedAsPickup(
-    carry.liftOx,
-    carry.liftOy,
-    carry.cols,
-    carry.rows,
-    carry.itemKey,
-    px + 0.5,
-    py + 0.5
-  );
-  player._strengthCarry = null;
-  return true;
+  if (
+    strengthRelocateCarriedDetailNear(
+      carry.liftOx,
+      carry.liftOy,
+      px + 0.5,
+      py + 0.5,
+      carry.itemKey,
+      carry.cols,
+      carry.rows,
+      data,
+      nowSec,
+      12
+    )
+  ) {
+    player._strengthCarry = null;
+    return true;
+  }
+  if (
+    strengthRelocateCarriedDetailNear(
+      carry.liftOx,
+      carry.liftOy,
+      px + 0.5,
+      py + 0.5,
+      carry.itemKey,
+      carry.cols,
+      carry.rows,
+      data,
+      nowSec,
+      28
+    )
+  ) {
+    player._strengthCarry = null;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -282,7 +393,9 @@ export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
     itemKey: carry.itemKey,
     cols: carry.cols,
     rows: carry.rows,
-    age: 0
+    age: 0,
+    phase: 'air',
+    rollAge: 0
   });
   player._strengthCarry = null;
   return true;
@@ -296,19 +409,31 @@ export function updateStrengthThrows(dt, data) {
   if (!data || activeStrengthThrows.length === 0) return;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
-  const drag = Math.exp(-THROW_H_DRAG * dt);
+  const airDrag = Math.exp(-THROW_H_DRAG * dt);
+  const rollDrag = Math.exp(-THROW_ROLL_DRAG * dt);
   for (let i = activeStrengthThrows.length - 1; i >= 0; i--) {
     const t = activeStrengthThrows[i];
     t.age += dt;
     const prevX = t.x;
     const prevY = t.y;
     const prevZ = t.z;
-    t.vx *= drag;
-    t.vy *= drag;
-    t.vz -= THROW_Z_GRAV * dt;
-    t.x += t.vx * dt;
-    t.y += t.vy * dt;
-    t.z += t.vz * dt;
+
+    if (t.phase === 'roll') {
+      t.rollAge += dt;
+      t.vx *= rollDrag;
+      t.vy *= rollDrag;
+      t.vz = 0;
+      t.z = 0;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+    } else {
+      t.vx *= airDrag;
+      t.vy *= airDrag;
+      t.vz -= THROW_Z_GRAV * dt;
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      t.z += t.vz * dt;
+    }
 
     let hitEntity = null;
     let bestD2 = Infinity;
@@ -331,17 +456,33 @@ export function updateStrengthThrows(dt, data) {
       continue;
     }
 
+    if (t.phase === 'roll') {
+      const sp = Math.hypot(t.vx, t.vy);
+      if (sp < THROW_ROLL_STOP_SPEED || t.rollAge > THROW_ROLL_MAX_SEC) {
+        finalizeStrengthThrowLand(t, data, t.x, t.y);
+        continue;
+      }
+      if (t.age > THROW_MAX_AGE_SEC + THROW_ROLL_MAX_SEC + 0.5 || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
+        finalizeStrengthThrowLand(t, data, t.x, t.y);
+      }
+      continue;
+    }
+
     const airbornLongEnough = t.age > 0.05;
     if (airbornLongEnough && t.z <= 0.02 && t.vz <= 0.15) {
       t.z = 0;
-      finalizeStrengthThrowLand(t, data, t.x, t.y);
+      t.vz = 0;
+      t.phase = 'roll';
+      t.rollAge = 0;
       continue;
     }
     if (t.age > THROW_MAX_AGE_SEC || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
       finalizeStrengthThrowLand(t, data, t.x, t.y);
     } else if (prevZ > 0.04 && t.z < -0.08) {
       t.z = 0;
-      finalizeStrengthThrowLand(t, data, t.x, t.y);
+      t.vz = 0;
+      t.phase = 'roll';
+      t.rollAge = 0;
     }
   }
 }

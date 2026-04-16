@@ -75,7 +75,7 @@ import {
   isPlayFormalTreeRootDestroyed,
   appendTreeTopFallRenderItems
 } from './main/play-crystal-tackle.js';
-import { appendStrengthThrowRenderItems } from './main/play-strength-carry.js';
+import { appendStrengthThrowRenderItems, sampleStrengthThrowAimArc } from './main/play-strength-carry.js';
 import {
   getBorrowDigPlaceholderDex,
   isUndergroundBurrowerDex,
@@ -1882,6 +1882,23 @@ export function render(canvas, data, options = {}) {
 
     appendStrengthThrowRenderItems(renderItems);
 
+    if (playInputState.strengthCarryLmbAim && player._strengthCarry && data) {
+      const { tx, ty } = aimAtCursor(player);
+      const arc = sampleStrengthThrowAimArc(player, data, tx, ty);
+      if (arc?.points?.length > 1) {
+        const sc = player._strengthCarry;
+        renderItems.push({
+          type: 'strengthThrowAimPreview',
+          sortY: vy + 1.92,
+          pointsTile: arc.points,
+          landX: arc.landX,
+          landY: arc.landY,
+          cols: sc.cols,
+          rows: sc.rows
+        });
+      }
+    }
+
     appendTreeTopFallRenderItems(renderItems, performance.now() * 0.001, tileW, tileH);
 
     // --- SORT BY Y (`sortY`: pivot — Pokémon vy+0.5; formal + scatter canopy originY+1 per translate; else `y`) ---
@@ -2254,6 +2271,34 @@ export function render(canvas, data, options = {}) {
           ctx.stroke();
         }
         ctx.setLineDash([]);
+      } else if (item.type === 'strengthThrowAimPreview') {
+        const pts = item.pointsTile;
+        if (Array.isArray(pts) && pts.length > 1) {
+          ctx.strokeStyle = 'rgba(255, 215, 120, 0.88)';
+          ctx.lineWidth = Math.max(1.2, tileW * 0.055);
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          for (let pi = 0; pi < pts.length; pi++) {
+            const p = pts[pi];
+            const pxx = snapPx(p.x * tileW);
+            const pyy = snapPx(p.y * tileH - (p.z || 0) * tileH);
+            if (pi === 0) ctx.moveTo(pxx, pyy);
+            else ctx.lineTo(pxx, pyy);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          const lc = snapPx(item.landX * tileW);
+          const lg = snapPx(item.landY * tileH);
+          const footprint = Math.max(1, Math.hypot(Number(item.cols) || 1, Number(item.rows) || 1));
+          const cr = Math.max(tileW * 0.32, footprint * tileW * 0.2);
+          ctx.fillStyle = 'rgba(255, 200, 90, 0.14)';
+          ctx.beginPath();
+          ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 165, 55, 0.95)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       } else if (item.type === 'psybeamChargeBall') {
         const px = snapPx(item.bx * tileW);
         const py = snapPx(item.by * tileH - item.bz * tileH);

@@ -22,7 +22,9 @@ export const playInputState = {
   /** Unused (LMB is melee pose only). Cleared on pointer leave. */
   psybeamLeftHold: /** @type {{ pulse: number } | null} */ (null),
   /** Psybeam: RMB held with Psybeam in secondary slot. */
-  psybeamRightHold: /** @type {{ pulse: number } | null} */ (null)
+  psybeamRightHold: /** @type {{ pulse: number } | null} */ (null),
+  /** LMB held while carrying a Strength rock — show throw arc preview. */
+  strengthCarryLmbAim: false
 };
 
 export function isShiftDigHeld() {
