@@ -172,7 +172,8 @@ const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 let playSocialOverlay = {
   flashAction: () => {},
-  clearActive: () => {}
+  clearActive: () => {},
+  refreshPortraits: () => Promise.resolve()
 };
 
 let currentData = null;
@@ -992,6 +993,10 @@ loadTilesetImages().then(async () => {
     defaultPlayImmersiveChrome: document.documentElement?.dataset?.appShell === 'play'
   });
   playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
+  void playSocialOverlay.refreshPortraits(player.dexId);
+  window.addEventListener('pkmn-player-species-changed', () => {
+    void playSocialOverlay.refreshPortraits(player.dexId);
+  });
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   run();

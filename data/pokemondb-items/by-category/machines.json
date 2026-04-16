@@ -1,0 +1,866 @@
+[
+  {
+    "name": "HM01",
+    "slug": "hm01",
+    "category": "Machines",
+    "effect": "Teaches the move Cut.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/hm01"
+  },
+  {
+    "name": "HM02",
+    "slug": "hm02",
+    "category": "Machines",
+    "effect": "Teaches the move Fly.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/hm02"
+  },
+  {
+    "name": "HM03",
+    "slug": "hm03",
+    "category": "Machines",
+    "effect": "Teaches the move Surf.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/hm03"
+  },
+  {
+    "name": "HM04",
+    "slug": "hm04",
+    "category": "Machines",
+    "effect": "Teaches the move Strength.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/hm04"
+  },
+  {
+    "name": "HM05",
+    "slug": "hm05",
+    "category": "Machines",
+    "effect": "Teaches the move Flash/Defog/Whirlpool/Waterfall.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/hm05"
+  },
+  {
+    "name": "HM06",
+    "slug": "hm06",
+    "category": "Machines",
+    "effect": "Teaches the move Whirlpool/Rock Smash/Dive.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/hm06"
+  },
+  {
+    "name": "HM07",
+    "slug": "hm07",
+    "category": "Machines",
+    "effect": "Teaches the move Waterfall.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/hm07"
+  },
+  {
+    "name": "HM08",
+    "slug": "hm08",
+    "category": "Machines",
+    "effect": "Teaches the move Dive/Rock Climb.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/hm08"
+  },
+  {
+    "name": "TM001",
+    "slug": "tm001",
+    "category": "Machines",
+    "effect": "Teaches the move Mega Punch/Dynamic Punch/Focus Punch/Hone Claws/Work Up/Headbutt/Mega Kick/Take Down.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm001"
+  },
+  {
+    "name": "TM002",
+    "slug": "tm002",
+    "category": "Machines",
+    "effect": "Teaches the move Razor Wind/Headbutt/Dragon Claw/Taunt/Pay Day/Charm.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dragon.png",
+    "itemUrl": "https://pokemondb.net/item/tm002"
+  },
+  {
+    "name": "TM003",
+    "slug": "tm003",
+    "category": "Machines",
+    "effect": "Teaches the move Swords Dance/Curse/Water Pulse/Psyshock/Helping Hand/Fire Punch/Fake Tears.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm003"
+  },
+  {
+    "name": "TM004",
+    "slug": "tm004",
+    "category": "Machines",
+    "effect": "Teaches the move Whirlwind/Rollout/Calm Mind/Teleport/Ice Punch/Agility.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm004"
+  },
+  {
+    "name": "TM005",
+    "slug": "tm005",
+    "category": "Machines",
+    "effect": "Teaches the move Mega Kick/Roar/Rest/Thunder Punch/Mud-Slap.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm005"
+  },
+  {
+    "name": "TM006",
+    "slug": "tm006",
+    "category": "Machines",
+    "effect": "Teaches the move Toxic/Light Screen/Fly/Scary Face.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png",
+    "itemUrl": "https://pokemondb.net/item/tm006"
+  },
+  {
+    "name": "TM007",
+    "slug": "tm007",
+    "category": "Machines",
+    "effect": "Teaches the move Horn Drill/Zap Cannon/Hail/Protect/Pin Missile/Protect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png",
+    "itemUrl": "https://pokemondb.net/item/tm007"
+  },
+  {
+    "name": "TM008",
+    "slug": "tm008",
+    "category": "Machines",
+    "effect": "Teaches the move Body Slam/Rock Smash/Bulk Up/Substitute/Hyper Beam/Fire Fang.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png",
+    "itemUrl": "https://pokemondb.net/item/tm008"
+  },
+  {
+    "name": "TM009",
+    "slug": "tm009",
+    "category": "Machines",
+    "effect": "Teaches the move Take Down/Psych Up/Bullet Seed/Venoshock/Reflect/Giga Impact/Thunder Fang.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png",
+    "itemUrl": "https://pokemondb.net/item/tm009"
+  },
+  {
+    "name": "TM010",
+    "slug": "tm010",
+    "category": "Machines",
+    "effect": "Teaches the move Double-Edge/Hidden Power/Dig/Magical Leaf/Work Up/Ice Fang.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm010"
+  },
+  {
+    "name": "TM011",
+    "slug": "tm011",
+    "category": "Machines",
+    "effect": "Teaches the move BubbleBeam/Sunny Day/Will-O-Wisp/Solar Beam/Water Pulse.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm011"
+  },
+  {
+    "name": "TM012",
+    "slug": "tm012",
+    "category": "Machines",
+    "effect": "Teaches the move Water Gun/Sweet Scent/Taunt/Facade/Solar Blade/Low Kick.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm012"
+  },
+  {
+    "name": "TM013",
+    "slug": "tm013",
+    "category": "Machines",
+    "effect": "Teaches the move Ice Beam/Snore/Brick Break/Fire Spin/Acid Spray.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png",
+    "itemUrl": "https://pokemondb.net/item/tm013"
+  },
+  {
+    "name": "TM014",
+    "slug": "tm014",
+    "category": "Machines",
+    "effect": "Teaches the move Blizzard/Fly/Thunder Wave/Acrobatics.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png",
+    "itemUrl": "https://pokemondb.net/item/tm014"
+  },
+  {
+    "name": "TM015",
+    "slug": "tm015",
+    "category": "Machines",
+    "effect": "Teaches the move Hyper Beam/Seismic Toss/Dig/Struggle Bug.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm015"
+  },
+  {
+    "name": "TM016",
+    "slug": "tm016",
+    "category": "Machines",
+    "effect": "Teaches the move Pay Day/Icy Wind/Light Screen/Thunder Wave/Screech/Psybeam.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm016"
+  },
+  {
+    "name": "TM017",
+    "slug": "tm017",
+    "category": "Machines",
+    "effect": "Teaches the move Submission/Protect/Dragon Tail/Light Screen/Confuse Ray.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm017"
+  },
+  {
+    "name": "TM018",
+    "slug": "tm018",
+    "category": "Machines",
+    "effect": "Teaches the move Counter/Rain Dance/U-turn/Reflect/Thief.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/tm018"
+  },
+  {
+    "name": "TM019",
+    "slug": "tm019",
+    "category": "Machines",
+    "effect": "Teaches the move Seismic Toss/Giga Drain/Telekinesis/Roost/Iron Tail/Safeguard/Disarming Voice.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/tm019"
+  },
+  {
+    "name": "TM020",
+    "slug": "tm020",
+    "category": "Machines",
+    "effect": "Teaches the move Rage/Endure/Safeguard/Dark Pulse/Self-Destruct/Trailblaze.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm020"
+  },
+  {
+    "name": "TM021",
+    "slug": "tm021",
+    "category": "Machines",
+    "effect": "Teaches the move Mega Drain/Frustration/Foul Play/Rest/Dazzling Gleam/Pounce.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm021"
+  },
+  {
+    "name": "TM022",
+    "slug": "tm022",
+    "category": "Machines",
+    "effect": "Teaches the move SolarBeam/Rock Slide/Chilling Water.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png",
+    "itemUrl": "https://pokemondb.net/item/tm022"
+  },
+  {
+    "name": "TM023",
+    "slug": "tm023",
+    "category": "Machines",
+    "effect": "Teaches the move Dragon Rage/Iron Tail/Smack Down/Thunder Punch/Thief/Charge Beam.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm023"
+  },
+  {
+    "name": "TM024",
+    "slug": "tm024",
+    "category": "Machines",
+    "effect": "Teaches the move Thunderbolt/DragonBreath/X-Scissor/Snore/Fire Spin.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm024"
+  },
+  {
+    "name": "TM025",
+    "slug": "tm025",
+    "category": "Machines",
+    "effect": "Teaches the move Thunder/Waterfall/Protect/Facade.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm025"
+  },
+  {
+    "name": "TM026",
+    "slug": "tm026",
+    "category": "Machines",
+    "effect": "Teaches the move Earthquake/Poison Jab/Scary Face/Poison Tail.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ground.png",
+    "itemUrl": "https://pokemondb.net/item/tm026"
+  },
+  {
+    "name": "TM027",
+    "slug": "tm027",
+    "category": "Machines",
+    "effect": "Teaches the move Fissure/Return/Toxic/Icy Wind/Low Sweep/Aerial Ace.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm027"
+  },
+  {
+    "name": "TM028",
+    "slug": "tm028",
+    "category": "Machines",
+    "effect": "Teaches the move Dig/Leech Life/Tri Attack/Giga Drain/Bulldoze.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png",
+    "itemUrl": "https://pokemondb.net/item/tm028"
+  },
+  {
+    "name": "TM029",
+    "slug": "tm029",
+    "category": "Machines",
+    "effect": "Teaches the move Psychic/Scald/Charm/Hex.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm029"
+  },
+  {
+    "name": "TM030",
+    "slug": "tm030",
+    "category": "Machines",
+    "effect": "Teaches the move Teleport/Shadow Ball/Bulk Up/Steel Wing/Snarl.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ghost.png",
+    "itemUrl": "https://pokemondb.net/item/tm030"
+  },
+  {
+    "name": "TM031",
+    "slug": "tm031",
+    "category": "Machines",
+    "effect": "Teaches the move Mimic/Mud-Slap/Brick Break/Fire Punch/Attract/Metal Claw.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png",
+    "itemUrl": "https://pokemondb.net/item/tm031"
+  },
+  {
+    "name": "TM032",
+    "slug": "tm032",
+    "category": "Machines",
+    "effect": "Teaches the move Double Team/Dazzling Gleam/Sandstorm/Swift.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm032"
+  },
+  {
+    "name": "TM033",
+    "slug": "tm033",
+    "category": "Machines",
+    "effect": "Teaches the move Ice Punch/Reflect/Calm Mind/Rain Dance/Magical Leaf.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm033"
+  },
+  {
+    "name": "TM034",
+    "slug": "tm034",
+    "category": "Machines",
+    "effect": "Teaches the move Bide/Swagger/Shock Wave/Sludge Wave/Dragon Pulse/Sunny Day/Icy Wind.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png",
+    "itemUrl": "https://pokemondb.net/item/tm034"
+  },
+  {
+    "name": "TM035",
+    "slug": "tm035",
+    "category": "Machines",
+    "effect": "Teaches the move Metronome/Sleep Talk/Flamethrower/Ice Punch/Hail/Mud Shot.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm035"
+  },
+  {
+    "name": "TM036",
+    "slug": "tm036",
+    "category": "Machines",
+    "effect": "Teaches the move Self-Destruct/Sludge Bomb/Thunderbolt/Whirlpool/Rock Tomb.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png",
+    "itemUrl": "https://pokemondb.net/item/tm036"
+  },
+  {
+    "name": "TM037",
+    "slug": "tm037",
+    "category": "Machines",
+    "effect": "Teaches the move Egg Bomb/Sandstorm/Flamethrower/Beat Up/Draining Kiss.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm037"
+  },
+  {
+    "name": "TM038",
+    "slug": "tm038",
+    "category": "Machines",
+    "effect": "Teaches the move Fire Blast/Thunder/Will-O-Wisp/Flame Charge.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm038"
+  },
+  {
+    "name": "TM039",
+    "slug": "tm039",
+    "category": "Machines",
+    "effect": "Teaches the move Swift/Rock Tomb/Outrage/Facade/Low Sweep.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm039"
+  },
+  {
+    "name": "TM040",
+    "slug": "tm040",
+    "category": "Machines",
+    "effect": "Teaches the move Skull Bash/Defense Curl/Aerial Ace/Psychic/Swift/Air Cutter.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/tm040"
+  },
+  {
+    "name": "TM041",
+    "slug": "tm041",
+    "category": "Machines",
+    "effect": "Teaches the move Soft-Boiled/Thunder Punch/Torment/Earthquake/Helping Hand/Stored Power.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm041"
+  },
+  {
+    "name": "TM042",
+    "slug": "tm042",
+    "category": "Machines",
+    "effect": "Teaches the move Dream Eater/Facade/Self-Destruct/Revenge/Night Shade.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm042"
+  },
+  {
+    "name": "TM043",
+    "slug": "tm043",
+    "category": "Machines",
+    "effect": "Teaches the move Sky Attack/Detect/Secret Power/Flame Charge/Shadow Ball/Brick Break/Volt Switch/Fling.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm043"
+  },
+  {
+    "name": "TM044",
+    "slug": "tm044",
+    "category": "Machines",
+    "effect": "Teaches the move Rest/Play Rough/Imprison/Dragon Tail.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm044"
+  },
+  {
+    "name": "TM045",
+    "slug": "tm045",
+    "category": "Machines",
+    "effect": "Teaches the move Thunder Wave/Attract/Solar Beam/Dive/Venoshock.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm045"
+  },
+  {
+    "name": "TM046",
+    "slug": "tm046",
+    "category": "Machines",
+    "effect": "Teaches the move Psywave/Thief/Fire Blast/Weather Ball/Avalanche.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm046"
+  },
+  {
+    "name": "TM047",
+    "slug": "tm047",
+    "category": "Machines",
+    "effect": "Teaches the move Explosion/Steel Wing/Low Sweep/Surf/Fake Tears/Endure.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png",
+    "itemUrl": "https://pokemondb.net/item/tm047"
+  },
+  {
+    "name": "TM048",
+    "slug": "tm048",
+    "category": "Machines",
+    "effect": "Teaches the move Rock Slide/Fire Punch/Skill Swap/Round/Hyper Beam/Rock Tomb/Volt Switch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm048"
+  },
+  {
+    "name": "TM049",
+    "slug": "tm049",
+    "category": "Machines",
+    "effect": "Teaches the move Tri Attack/Fury Cutter/Snatch/Echoed Voice/Superpower/Sand Tomb/Scald/Sunny Day.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm049"
+  },
+  {
+    "name": "TM050",
+    "slug": "tm050",
+    "category": "Machines",
+    "effect": "Teaches the move Substitute/Nightmare/Overheat/Roost/Bullet Seed/Rain Dance.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm050"
+  },
+  {
+    "name": "TM051",
+    "slug": "tm051",
+    "category": "Machines",
+    "effect": "Teaches the move Roost/Ally Switch/Steel Wing/Blizzard/Icicle Spear/Sandstorm.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png",
+    "itemUrl": "https://pokemondb.net/item/tm051"
+  },
+  {
+    "name": "TM052",
+    "slug": "tm052",
+    "category": "Machines",
+    "effect": "Teaches the move Focus Blast/Sludge Bomb/Bounce/Snowscape.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png",
+    "itemUrl": "https://pokemondb.net/item/tm052"
+  },
+  {
+    "name": "TM053",
+    "slug": "tm053",
+    "category": "Machines",
+    "effect": "Teaches the move Energy Ball/Mega Drain/Mud Shot/Smart Strike.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png",
+    "itemUrl": "https://pokemondb.net/item/tm053"
+  },
+  {
+    "name": "TM054",
+    "slug": "tm054",
+    "category": "Machines",
+    "effect": "Teaches the move False Swipe/Flash Cannon/Rock Blast/Psyshock.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm054"
+  },
+  {
+    "name": "TM055",
+    "slug": "tm055",
+    "category": "Machines",
+    "effect": "Teaches the move Brine/Scald/Ice Beam/Dig.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/tm055"
+  },
+  {
+    "name": "TM056",
+    "slug": "tm056",
+    "category": "Machines",
+    "effect": "Teaches the move Fling/Stealth Rock/U-turn/Bullet Seed.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm056"
+  },
+  {
+    "name": "TM057",
+    "slug": "tm057",
+    "category": "Machines",
+    "effect": "Teaches the move Charge Beam/Pay Day/Payback/False Swipe.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm057"
+  },
+  {
+    "name": "TM058",
+    "slug": "tm058",
+    "category": "Machines",
+    "effect": "Teaches the move Endure/Sky Drop/Drill Run/Assurance/Brick Break.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/tm058"
+  },
+  {
+    "name": "TM059",
+    "slug": "tm059",
+    "category": "Machines",
+    "effect": "Teaches the move Dragon Pulse/Incinerate/Brutal Swing/Dream Eater/Fling/Zen Headbutt.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm059"
+  },
+  {
+    "name": "TM060",
+    "slug": "tm060",
+    "category": "Machines",
+    "effect": "Teaches the move Drain Punch/Quash/Megahorn/Power Swap/U-turn.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm060"
+  },
+  {
+    "name": "TM061",
+    "slug": "tm061",
+    "category": "Machines",
+    "effect": "Teaches the move Will-O-Wisp/Guard Swap/Shadow Claw.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png",
+    "itemUrl": "https://pokemondb.net/item/tm061"
+  },
+  {
+    "name": "TM062",
+    "slug": "tm062",
+    "category": "Machines",
+    "effect": "Teaches the move Silver Wind/Acrobatics/Speed Swap/Bug Buzz/Foul Play.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/tm062"
+  },
+  {
+    "name": "TM063",
+    "slug": "tm063",
+    "category": "Machines",
+    "effect": "Teaches the move Embargo/Drain Punch/Nasty Plot/Psychic Fangs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm063"
+  },
+  {
+    "name": "TM064",
+    "slug": "tm064",
+    "category": "Machines",
+    "effect": "Teaches the move Explosion/Avalanche/Bulk Up.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm064"
+  },
+  {
+    "name": "TM065",
+    "slug": "tm065",
+    "category": "Machines",
+    "effect": "Teaches the move Shadow Claw/Air Slash.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ghost.png",
+    "itemUrl": "https://pokemondb.net/item/tm065"
+  },
+  {
+    "name": "TM066",
+    "slug": "tm066",
+    "category": "Machines",
+    "effect": "Teaches the move Payback/Thunder Fang/Body Slam.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm066"
+  },
+  {
+    "name": "TM067",
+    "slug": "tm067",
+    "category": "Machines",
+    "effect": "Teaches the move Recycle/Retaliate/Smart Strike/Ice Fang/Fire Punch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png",
+    "itemUrl": "https://pokemondb.net/item/tm067"
+  },
+  {
+    "name": "TM068",
+    "slug": "tm068",
+    "category": "Machines",
+    "effect": "Teaches the move Giga Impact/Fire Fang/Thunder Punch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm068"
+  },
+  {
+    "name": "TM069",
+    "slug": "tm069",
+    "category": "Machines",
+    "effect": "Teaches the move Rock Polish/Psycho Cut/Ice Punch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm069"
+  },
+  {
+    "name": "TM070",
+    "slug": "tm070",
+    "category": "Machines",
+    "effect": "Teaches the move Flash/Aurora Veil/Trick Room/Sleep Talk.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png",
+    "itemUrl": "https://pokemondb.net/item/tm070"
+  },
+  {
+    "name": "TM071",
+    "slug": "tm071",
+    "category": "Machines",
+    "effect": "Teaches the move Stone Edge/Wonder Room/Seed Bomb.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm071"
+  },
+  {
+    "name": "TM072",
+    "slug": "tm072",
+    "category": "Machines",
+    "effect": "Teaches the move Avalanche/Volt Switch/Magic Room/Electro Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm072"
+  },
+  {
+    "name": "TM073",
+    "slug": "tm073",
+    "category": "Machines",
+    "effect": "Teaches the move Thunder Wave/Cross Poison/Drain Punch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm073"
+  },
+  {
+    "name": "TM074",
+    "slug": "tm074",
+    "category": "Machines",
+    "effect": "Teaches the move Gyro Ball/Venoshock/Reflect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png",
+    "itemUrl": "https://pokemondb.net/item/tm074"
+  },
+  {
+    "name": "TM075",
+    "slug": "tm075",
+    "category": "Machines",
+    "effect": "Teaches the move Swords Dance/Low Sweep/Light Screen.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm075"
+  },
+  {
+    "name": "TM076",
+    "slug": "tm076",
+    "category": "Machines",
+    "effect": "Teaches the move Stealth Rock/Struggle Bug/Fly/Round/Rock Blast.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png",
+    "itemUrl": "https://pokemondb.net/item/tm076"
+  },
+  {
+    "name": "TM077",
+    "slug": "tm077",
+    "category": "Machines",
+    "effect": "Teaches the move Psych Up/Hex/Waterfall.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm077"
+  },
+  {
+    "name": "TM078",
+    "slug": "tm078",
+    "category": "Machines",
+    "effect": "Teaches the move Captivate/Bulldoze/Acrobatics/Snarl/Dragon Claw.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ground.png",
+    "itemUrl": "https://pokemondb.net/item/tm078"
+  },
+  {
+    "name": "TM079",
+    "slug": "tm079",
+    "category": "Machines",
+    "effect": "Teaches the move Dark Pulse/Frost Breath/Retaliate/Dazzling Gleam.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png",
+    "itemUrl": "https://pokemondb.net/item/tm079"
+  },
+  {
+    "name": "TM080",
+    "slug": "tm080",
+    "category": "Machines",
+    "effect": "Teaches the move Rock Slide/Volt Switch/Metronome.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png",
+    "itemUrl": "https://pokemondb.net/item/tm080"
+  },
+  {
+    "name": "TM081",
+    "slug": "tm081",
+    "category": "Machines",
+    "effect": "Teaches the move X-Scissor/Bulldoze/Grass Knot.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png",
+    "itemUrl": "https://pokemondb.net/item/tm081"
+  },
+  {
+    "name": "TM082",
+    "slug": "tm082",
+    "category": "Machines",
+    "effect": "Teaches the move Sleep Talk/Dragon Tail/Electroweb/Thunder Wave.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dragon.png",
+    "itemUrl": "https://pokemondb.net/item/tm082"
+  },
+  {
+    "name": "TM083",
+    "slug": "tm083",
+    "category": "Machines",
+    "effect": "Teaches the move Natural Gift/Work Up/Infestation/Razor Shell/Bulldoze/Poison Jab.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png",
+    "itemUrl": "https://pokemondb.net/item/tm083"
+  },
+  {
+    "name": "TM084",
+    "slug": "tm084",
+    "category": "Machines",
+    "effect": "Teaches the move Poison Jab/Tail Slap/Stomping Tantrum.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png",
+    "itemUrl": "https://pokemondb.net/item/tm084"
+  },
+  {
+    "name": "TM085",
+    "slug": "tm085",
+    "category": "Machines",
+    "effect": "Teaches the move Dream Eater/Snarl/Rest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm085"
+  },
+  {
+    "name": "TM086",
+    "slug": "tm086",
+    "category": "Machines",
+    "effect": "Teaches the move Grass Knot/Phantom Force/Rock Slide.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png",
+    "itemUrl": "https://pokemondb.net/item/tm086"
+  },
+  {
+    "name": "TM087",
+    "slug": "tm087",
+    "category": "Machines",
+    "effect": "Teaches the move Swagger/Draining Kiss/Taunt.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm087"
+  },
+  {
+    "name": "TM088",
+    "slug": "tm088",
+    "category": "Machines",
+    "effect": "Teaches the move Pluck/Sleep Talk/Grassy Terrain/Swords Dance.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm088"
+  },
+  {
+    "name": "TM089",
+    "slug": "tm089",
+    "category": "Machines",
+    "effect": "Teaches the move U-turn/Misty Terrain/Body Press.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png",
+    "itemUrl": "https://pokemondb.net/item/tm089"
+  },
+  {
+    "name": "TM090",
+    "slug": "tm090",
+    "category": "Machines",
+    "effect": "Teaches the move Substitute/Electric Terrain/Spikes.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm090"
+  },
+  {
+    "name": "TM091",
+    "slug": "tm091",
+    "category": "Machines",
+    "effect": "Teaches the move Flash Cannon/Psychic Terrain/Toxic Spikes.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png",
+    "itemUrl": "https://pokemondb.net/item/tm091"
+  },
+  {
+    "name": "TM092",
+    "slug": "tm092",
+    "category": "Machines",
+    "effect": "Teaches the move Trick Room/Mystical Fire/Imprison.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png",
+    "itemUrl": "https://pokemondb.net/item/tm092"
+  },
+  {
+    "name": "TM093",
+    "slug": "tm093",
+    "category": "Machines",
+    "effect": "Teaches the move Wild Charge/Eerie Impulse/Cut/Flash Cannon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png",
+    "itemUrl": "https://pokemondb.net/item/tm093"
+  },
+  {
+    "name": "TM094",
+    "slug": "tm094",
+    "category": "Machines",
+    "effect": "Teaches the move Rock Smash/Surf/False Swipe/Fly/Dark Pulse.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png",
+    "itemUrl": "https://pokemondb.net/item/tm094"
+  },
+  {
+    "name": "TM095",
+    "slug": "tm095",
+    "category": "Machines",
+    "effect": "Teaches the move Snarl/Air Slash/Surf/Leech Life.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm095"
+  },
+  {
+    "name": "TM096",
+    "slug": "tm096",
+    "category": "Machines",
+    "effect": "Teaches the move Nature Power/Smart Strike/Strength/Eerie Impulse.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm096"
+  },
+  {
+    "name": "TM097",
+    "slug": "tm097",
+    "category": "Machines",
+    "effect": "Teaches the move Dark Pulse/Brutal Swing/Defog/Fly.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png",
+    "itemUrl": "https://pokemondb.net/item/tm097"
+  },
+  {
+    "name": "TM098",
+    "slug": "tm098",
+    "category": "Machines",
+    "effect": "Teaches the move Power-Up Punch/Waterfall/Stomping Tantrum/Rock Smash/Skill Swap.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-water.png",
+    "itemUrl": "https://pokemondb.net/item/tm098"
+  },
+  {
+    "name": "TM099",
+    "slug": "tm099",
+    "category": "Machines",
+    "effect": "Teaches the move Dazzling Gleam/Breaking Swipe/Waterfall/Iron Head.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-fairy.png",
+    "itemUrl": "https://pokemondb.net/item/tm099"
+  },
+  {
+    "name": "TM100",
+    "slug": "tm100",
+    "category": "Machines",
+    "effect": "Teaches the move Confide/Rock Climb/Dragon Dance.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png",
+    "itemUrl": "https://pokemondb.net/item/tm100"
+  }
+]

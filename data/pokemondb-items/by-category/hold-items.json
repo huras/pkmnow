@@ -1,0 +1,2122 @@
+[
+  {
+    "name": "Ability Capsule",
+    "slug": "ability-capsule",
+    "category": "Hold items",
+    "effect": "A capsule that allows a Pokémon with two Abilities to switch between these Abilities when it is used.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ability-capsule.png",
+    "itemUrl": "https://pokemondb.net/item/ability-capsule"
+  },
+  {
+    "name": "Abomasite",
+    "slug": "abomasite",
+    "category": "Hold items",
+    "effect": "Enables Abomasnow to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/abomasite.png",
+    "itemUrl": "https://pokemondb.net/item/abomasite"
+  },
+  {
+    "name": "Absolite",
+    "slug": "absolite",
+    "category": "Hold items",
+    "effect": "Enables Absol to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/absolite.png",
+    "itemUrl": "https://pokemondb.net/item/absolite"
+  },
+  {
+    "name": "Absorb Bulb",
+    "slug": "absorb-bulb",
+    "category": "Hold items",
+    "effect": "A consumable bulb. If the holder is hit by a Water-type move, its Sp. Atk will rise.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/absorb-bulb.png",
+    "itemUrl": "https://pokemondb.net/item/absorb-bulb"
+  },
+  {
+    "name": "Adamant Orb",
+    "slug": "adamant-orb",
+    "category": "Hold items",
+    "effect": "Increases the power of Dragon- and Steel-type moves when held by Dialga.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/adamant-orb.png",
+    "itemUrl": "https://pokemondb.net/item/adamant-orb"
+  },
+  {
+    "name": "Adrenaline Orb",
+    "slug": "adrenaline-orb",
+    "category": "Hold items",
+    "effect": "Using it makes wild Pokémon more likely to call for help. If held by a Pokémon, it boosts Speed when intimidated. It can be used only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/adrenaline-orb.png",
+    "itemUrl": "https://pokemondb.net/item/adrenaline-orb"
+  },
+  {
+    "name": "Aerodactylite",
+    "slug": "aerodactylite",
+    "category": "Hold items",
+    "effect": "Enables Aerodactyl to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/aerodactylite.png",
+    "itemUrl": "https://pokemondb.net/item/aerodactylite"
+  },
+  {
+    "name": "Aggronite",
+    "slug": "aggronite",
+    "category": "Hold items",
+    "effect": "Enables Aggron to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/aggronite.png",
+    "itemUrl": "https://pokemondb.net/item/aggronite"
+  },
+  {
+    "name": "Air Balloon",
+    "slug": "air-balloon",
+    "category": "Hold items",
+    "effect": "When held by a Pokémon, the Pokémon will float into the air. When the holder is attacked, this item will burst.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/air-balloon.png",
+    "itemUrl": "https://pokemondb.net/item/air-balloon"
+  },
+  {
+    "name": "Alakazite",
+    "slug": "alakazite",
+    "category": "Hold items",
+    "effect": "Enables Alakazam to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/alakazite.png",
+    "itemUrl": "https://pokemondb.net/item/alakazite"
+  },
+  {
+    "name": "Aloraichium Z",
+    "slug": "aloraichium-z",
+    "category": "Hold items",
+    "effect": "Allows Alolan Raichu to upgrade Thunderbolt to a Z-Move, Stoked Sparksurfer.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/aloraichium-z.png",
+    "itemUrl": "https://pokemondb.net/item/aloraichium-z"
+  },
+  {
+    "name": "Altarianite",
+    "slug": "altarianite",
+    "category": "Hold items",
+    "effect": "Enables Altaria to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/altarianite.png",
+    "itemUrl": "https://pokemondb.net/item/altarianite"
+  },
+  {
+    "name": "Ampharosite",
+    "slug": "ampharosite",
+    "category": "Hold items",
+    "effect": "Enables Ampharos to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ampharosite.png",
+    "itemUrl": "https://pokemondb.net/item/ampharosite"
+  },
+  {
+    "name": "Amulet Coin",
+    "slug": "amulet-coin",
+    "category": "Hold items",
+    "effect": "Doubles prize money if held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/amulet-coin.png",
+    "itemUrl": "https://pokemondb.net/item/amulet-coin"
+  },
+  {
+    "name": "Assault Vest",
+    "slug": "assault-vest",
+    "category": "Hold items",
+    "effect": "Raises Special Defense but prevents the use of status moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/assault-vest.png",
+    "itemUrl": "https://pokemondb.net/item/assault-vest"
+  },
+  {
+    "name": "Audinite",
+    "slug": "audinite",
+    "category": "Hold items",
+    "effect": "Enables Audino to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/audinite.png",
+    "itemUrl": "https://pokemondb.net/item/audinite"
+  },
+  {
+    "name": "Banettite",
+    "slug": "banettite",
+    "category": "Hold items",
+    "effect": "Enables Banette to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/banettite.png",
+    "itemUrl": "https://pokemondb.net/item/banettite"
+  },
+  {
+    "name": "Beedrillite",
+    "slug": "beedrillite",
+    "category": "Hold items",
+    "effect": "Enables Beedrill to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/beedrillite.png",
+    "itemUrl": "https://pokemondb.net/item/beedrillite"
+  },
+  {
+    "name": "Big Root",
+    "slug": "big-root",
+    "category": "Hold items",
+    "effect": "Recovers more HP from HP-stealing moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/big-root.png",
+    "itemUrl": "https://pokemondb.net/item/big-root"
+  },
+  {
+    "name": "Binding Band",
+    "slug": "binding-band",
+    "category": "Hold items",
+    "effect": "A band that increases the power of binding moves when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/binding-band.png",
+    "itemUrl": "https://pokemondb.net/item/binding-band"
+  },
+  {
+    "name": "Black Belt",
+    "slug": "black-belt",
+    "category": "Hold items",
+    "effect": "Increases the power of Fighting-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/black-belt.png",
+    "itemUrl": "https://pokemondb.net/item/black-belt"
+  },
+  {
+    "name": "Black Glasses",
+    "slug": "black-glasses",
+    "category": "Hold items",
+    "effect": "Increases the power of Dark-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/black-glasses.png",
+    "itemUrl": "https://pokemondb.net/item/black-glasses"
+  },
+  {
+    "name": "Black Sludge",
+    "slug": "black-sludge",
+    "category": "Hold items",
+    "effect": "A held item that gradually restores the HP of Poison-type Pokémon. It inflicts damage on all other types.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/black-sludge.png",
+    "itemUrl": "https://pokemondb.net/item/black-sludge"
+  },
+  {
+    "name": "Blastoisinite",
+    "slug": "blastoisinite",
+    "category": "Hold items",
+    "effect": "Enables Blastoise to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blastoisinite.png",
+    "itemUrl": "https://pokemondb.net/item/blastoisinite"
+  },
+  {
+    "name": "Blazikenite",
+    "slug": "blazikenite",
+    "category": "Hold items",
+    "effect": "Enables Blaziken to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blazikenite.png",
+    "itemUrl": "https://pokemondb.net/item/blazikenite"
+  },
+  {
+    "name": "Bright Powder",
+    "slug": "bright-powder",
+    "category": "Hold items",
+    "effect": "Lowers the opponent's accuracy.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/bright-powder.png",
+    "itemUrl": "https://pokemondb.net/item/bright-powder"
+  },
+  {
+    "name": "Bug Gem",
+    "slug": "bug-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Bug-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/bug-gem.png",
+    "itemUrl": "https://pokemondb.net/item/bug-gem"
+  },
+  {
+    "name": "Bug Memory",
+    "slug": "bug-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Bug type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/bug-memory.png",
+    "itemUrl": "https://pokemondb.net/item/bug-memory"
+  },
+  {
+    "name": "Buginium Z",
+    "slug": "buginium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Savage Spin-Out, the Bug type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/buginium-z.png",
+    "itemUrl": "https://pokemondb.net/item/buginium-z"
+  },
+  {
+    "name": "Burn Drive",
+    "slug": "burn-drive",
+    "category": "Hold items",
+    "effect": "Changes Techno Blast to a Fire-type move when held by Genesect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/burn-drive.png",
+    "itemUrl": "https://pokemondb.net/item/burn-drive"
+  },
+  {
+    "name": "Cameruptite",
+    "slug": "cameruptite",
+    "category": "Hold items",
+    "effect": "Enables Camerupt to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cameruptite.png",
+    "itemUrl": "https://pokemondb.net/item/cameruptite"
+  },
+  {
+    "name": "Cell Battery",
+    "slug": "cell-battery",
+    "category": "Hold items",
+    "effect": "A consumable battery. If the holder is hit by an Electric-type move, its Attack will rise.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cell-battery.png",
+    "itemUrl": "https://pokemondb.net/item/cell-battery"
+  },
+  {
+    "name": "Charcoal",
+    "slug": "charcoal",
+    "category": "Hold items",
+    "effect": "Increases the power of Fire-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/charcoal.png",
+    "itemUrl": "https://pokemondb.net/item/charcoal"
+  },
+  {
+    "name": "Charizardite X",
+    "slug": "charizardite-x",
+    "category": "Hold items",
+    "effect": "Enables Charizard to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/charizardite-x.png",
+    "itemUrl": "https://pokemondb.net/item/charizardite-x"
+  },
+  {
+    "name": "Charizardite Y",
+    "slug": "charizardite-y",
+    "category": "Hold items",
+    "effect": "Enables Charizard to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/charizardite-y.png",
+    "itemUrl": "https://pokemondb.net/item/charizardite-y"
+  },
+  {
+    "name": "Chill Drive",
+    "slug": "chill-drive",
+    "category": "Hold items",
+    "effect": "Changes Techno Blast to an Ice-type move when held by Genesect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/chill-drive.png",
+    "itemUrl": "https://pokemondb.net/item/chill-drive"
+  },
+  {
+    "name": "Choice Band",
+    "slug": "choice-band",
+    "category": "Hold items",
+    "effect": "Raises Attack, but only one move can be used.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/choice-band.png",
+    "itemUrl": "https://pokemondb.net/item/choice-band"
+  },
+  {
+    "name": "Choice Scarf",
+    "slug": "choice-scarf",
+    "category": "Hold items",
+    "effect": "Raises Speed, but only one move can be used.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/choice-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/choice-scarf"
+  },
+  {
+    "name": "Choice Specs",
+    "slug": "choice-specs",
+    "category": "Hold items",
+    "effect": "Raises Special Attack, but only one move can be used.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/choice-specs.png",
+    "itemUrl": "https://pokemondb.net/item/choice-specs"
+  },
+  {
+    "name": "Cleanse Tag",
+    "slug": "cleanse-tag",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It helps keep wild Pokémon away if the holder is the first one in the party.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cleanse-tag.png",
+    "itemUrl": "https://pokemondb.net/item/cleanse-tag"
+  },
+  {
+    "name": "Damp Rock",
+    "slug": "damp-rock",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of the move Rain Dance used by the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/damp-rock.png",
+    "itemUrl": "https://pokemondb.net/item/damp-rock"
+  },
+  {
+    "name": "Dark Gem",
+    "slug": "dark-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Dark-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dark-gem.png",
+    "itemUrl": "https://pokemondb.net/item/dark-gem"
+  },
+  {
+    "name": "Dark Memory",
+    "slug": "dark-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Dark type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dark-memory.png",
+    "itemUrl": "https://pokemondb.net/item/dark-memory"
+  },
+  {
+    "name": "Darkinium Z",
+    "slug": "darkinium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Black Hole Eclipse, the Dark type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/darkinium-z.png",
+    "itemUrl": "https://pokemondb.net/item/darkinium-z"
+  },
+  {
+    "name": "Decidium Z",
+    "slug": "decidium-z",
+    "category": "Hold items",
+    "effect": "Allows Decidueye to upgrade Spirit Shackle to a Z-Move, Sinister Arrow Raid.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/decidium-z.png",
+    "itemUrl": "https://pokemondb.net/item/decidium-z"
+  },
+  {
+    "name": "Deep Sea Scale",
+    "slug": "deep-sea-scale",
+    "category": "Hold items",
+    "effect": "Increases Special Defense when held by Clamperl. Evolves Clamperl when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/deep-sea-scale.png",
+    "itemUrl": "https://pokemondb.net/item/deep-sea-scale"
+  },
+  {
+    "name": "Deep Sea Tooth",
+    "slug": "deep-sea-tooth",
+    "category": "Hold items",
+    "effect": "Increases Special Attack when held by Clamperl. Evolves Clamperl when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/deep-sea-tooth.png",
+    "itemUrl": "https://pokemondb.net/item/deep-sea-tooth"
+  },
+  {
+    "name": "Destiny Knot",
+    "slug": "destiny-knot",
+    "category": "Hold items",
+    "effect": "A long, thin, bright-red string to be held by a Pokémon. If the holder becomes infatuated, the foe does too.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/destiny-knot.png",
+    "itemUrl": "https://pokemondb.net/item/destiny-knot"
+  },
+  {
+    "name": "Diancite",
+    "slug": "diancite",
+    "category": "Hold items",
+    "effect": "Enables Diancie to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/diancite.png",
+    "itemUrl": "https://pokemondb.net/item/diancite"
+  },
+  {
+    "name": "Douse Drive",
+    "slug": "douse-drive",
+    "category": "Hold items",
+    "effect": "Changes Techno Blast to a Water-type move when held by Genesect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/douse-drive.png",
+    "itemUrl": "https://pokemondb.net/item/douse-drive"
+  },
+  {
+    "name": "Draco Plate",
+    "slug": "draco-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Dragon-type moves. Changes Arceus' type to Dragon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/draco-plate.png",
+    "itemUrl": "https://pokemondb.net/item/draco-plate"
+  },
+  {
+    "name": "Dragon Fang",
+    "slug": "dragon-fang",
+    "category": "Hold items",
+    "effect": "Increases the power of Dragon-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dragon-fang.png",
+    "itemUrl": "https://pokemondb.net/item/dragon-fang"
+  },
+  {
+    "name": "Dragon Gem",
+    "slug": "dragon-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Dragon-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dragon-gem.png",
+    "itemUrl": "https://pokemondb.net/item/dragon-gem"
+  },
+  {
+    "name": "Dragon Memory",
+    "slug": "dragon-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Dragon type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dragon-memory.png",
+    "itemUrl": "https://pokemondb.net/item/dragon-memory"
+  },
+  {
+    "name": "Dragonium Z",
+    "slug": "dragonium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Devastating Drake, the Dragon type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dragonium-z.png",
+    "itemUrl": "https://pokemondb.net/item/dragonium-z"
+  },
+  {
+    "name": "Dread Plate",
+    "slug": "dread-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Dark-type moves. Changes Arceus' type to Dark.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dread-plate.png",
+    "itemUrl": "https://pokemondb.net/item/dread-plate"
+  },
+  {
+    "name": "Dropped Item",
+    "slug": "dropped-item",
+    "category": "Hold items",
+    "effect": "The Xtransceiver found at the Nimbasa City amusement park. It seems it belongs to a boy.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/xtransceiver.png",
+    "itemUrl": "https://pokemondb.net/item/dropped-item"
+  },
+  {
+    "name": "Earth Plate",
+    "slug": "earth-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Ground-type moves. Changes Arceus' type to Ground.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/earth-plate.png",
+    "itemUrl": "https://pokemondb.net/item/earth-plate"
+  },
+  {
+    "name": "Eevium Z",
+    "slug": "eevium-z",
+    "category": "Hold items",
+    "effect": "Allows Eevee to upgrade Last Resort to a Z-Move, Extreme Evoboost.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/eevium-z.png",
+    "itemUrl": "https://pokemondb.net/item/eevium-z"
+  },
+  {
+    "name": "Eject Button",
+    "slug": "eject-button",
+    "category": "Hold items",
+    "effect": "If the holder is hit by an attack, it will switch with another Pokémon in your party.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/eject-button.png",
+    "itemUrl": "https://pokemondb.net/item/eject-button"
+  },
+  {
+    "name": "Electric Gem",
+    "slug": "electric-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of an Electric-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/electric-gem.png",
+    "itemUrl": "https://pokemondb.net/item/electric-gem"
+  },
+  {
+    "name": "Electric Memory",
+    "slug": "electric-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Electric type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/electric-memory.png",
+    "itemUrl": "https://pokemondb.net/item/electric-memory"
+  },
+  {
+    "name": "Electric Seed",
+    "slug": "electric-seed",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It boosts Defense on Electric Terrain. It can only be used once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/electric-seed.png",
+    "itemUrl": "https://pokemondb.net/item/electric-seed"
+  },
+  {
+    "name": "Electrium Z",
+    "slug": "electrium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Gigavolt Havoc, the Electric type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/electrium-z.png",
+    "itemUrl": "https://pokemondb.net/item/electrium-z"
+  },
+  {
+    "name": "Elevator Key",
+    "slug": "elevator-key",
+    "category": "Hold items",
+    "effect": "A card key that activates the elevator in Lysandre Labs. It is emblazoned with Team Flare's logo.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/elevator-key.png",
+    "itemUrl": "https://pokemondb.net/item/elevator-key"
+  },
+  {
+    "name": "Everstone",
+    "slug": "everstone",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. The Pokémon holding this peculiar stone is prevented from evolving.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/everstone.png",
+    "itemUrl": "https://pokemondb.net/item/everstone"
+  },
+  {
+    "name": "Eviolite",
+    "slug": "eviolite",
+    "category": "Hold items",
+    "effect": "A mysterious evolutionary lump. When held, it raises the Defense and Sp. Def of a Pokémon that can still evolve.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/eviolite.png",
+    "itemUrl": "https://pokemondb.net/item/eviolite"
+  },
+  {
+    "name": "Exp. Share",
+    "slug": "exp-share",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. The holder gets a share of a battle's Exp. Points without battling.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/exp-share.png",
+    "itemUrl": "https://pokemondb.net/item/exp-share"
+  },
+  {
+    "name": "Expert Belt",
+    "slug": "expert-belt",
+    "category": "Hold items",
+    "effect": "Increases the power of super-effective moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/expert-belt.png",
+    "itemUrl": "https://pokemondb.net/item/expert-belt"
+  },
+  {
+    "name": "Fairium Z",
+    "slug": "fairium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Twinkle Tackle, the Fairy type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fairium-z.png",
+    "itemUrl": "https://pokemondb.net/item/fairium-z"
+  },
+  {
+    "name": "Fairy Memory",
+    "slug": "fairy-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Fairy type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fairy-memory.png",
+    "itemUrl": "https://pokemondb.net/item/fairy-memory"
+  },
+  {
+    "name": "Fighting Gem",
+    "slug": "fighting-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Fighting-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fighting-gem.png",
+    "itemUrl": "https://pokemondb.net/item/fighting-gem"
+  },
+  {
+    "name": "Fighting Memory",
+    "slug": "fighting-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Fighting type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fighting-memory.png",
+    "itemUrl": "https://pokemondb.net/item/fighting-memory"
+  },
+  {
+    "name": "Fightinium Z",
+    "slug": "fightinium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of All-Out Pummeling, the Fighting type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fightinium-z.png",
+    "itemUrl": "https://pokemondb.net/item/fightinium-z"
+  },
+  {
+    "name": "Fire Gem",
+    "slug": "fire-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Fire-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fire-gem.png",
+    "itemUrl": "https://pokemondb.net/item/fire-gem"
+  },
+  {
+    "name": "Fire Memory",
+    "slug": "fire-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Fire type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fire-memory.png",
+    "itemUrl": "https://pokemondb.net/item/fire-memory"
+  },
+  {
+    "name": "Firium Z",
+    "slug": "firium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Inferno Overdrive, the Fire type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/firium-z.png",
+    "itemUrl": "https://pokemondb.net/item/firium-z"
+  },
+  {
+    "name": "Fist Plate",
+    "slug": "fist-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Fighting-type moves. Changes Arceus' type to Fighting.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fist-plate.png",
+    "itemUrl": "https://pokemondb.net/item/fist-plate"
+  },
+  {
+    "name": "Flame Orb",
+    "slug": "flame-orb",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It is a bizarre orb that inflicts a burn on the holder in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/flame-orb.png",
+    "itemUrl": "https://pokemondb.net/item/flame-orb"
+  },
+  {
+    "name": "Flame Plate",
+    "slug": "flame-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Fire-type moves. Changes Arceus' type to Fire.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/flame-plate.png",
+    "itemUrl": "https://pokemondb.net/item/flame-plate"
+  },
+  {
+    "name": "Float Stone",
+    "slug": "float-stone",
+    "category": "Hold items",
+    "effect": "A very light stone. It reduces the weight of a Pokémon when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/float-stone.png",
+    "itemUrl": "https://pokemondb.net/item/float-stone"
+  },
+  {
+    "name": "Flying Gem",
+    "slug": "flying-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Flying-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/flying-gem.png",
+    "itemUrl": "https://pokemondb.net/item/flying-gem"
+  },
+  {
+    "name": "Flying Memory",
+    "slug": "flying-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Flying type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/flying-memory.png",
+    "itemUrl": "https://pokemondb.net/item/flying-memory"
+  },
+  {
+    "name": "Flyinium Z",
+    "slug": "flyinium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Supersonic Skystrike, the Flying type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/flyinium-z.png",
+    "itemUrl": "https://pokemondb.net/item/flyinium-z"
+  },
+  {
+    "name": "Focus Band",
+    "slug": "focus-band",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. The holder may endure a potential KO attack, leaving it with just 1 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/focus-band.png",
+    "itemUrl": "https://pokemondb.net/item/focus-band"
+  },
+  {
+    "name": "Focus Sash",
+    "slug": "focus-sash",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. If it has full HP, the holder will endure one potential KO attack, leaving 1 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/focus-sash.png",
+    "itemUrl": "https://pokemondb.net/item/focus-sash"
+  },
+  {
+    "name": "Full Incense",
+    "slug": "full-incense",
+    "category": "Hold items",
+    "effect": "Holder always attacks last. Breeding Snorlax produces Munchlax when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/full-incense.png",
+    "itemUrl": "https://pokemondb.net/item/full-incense"
+  },
+  {
+    "name": "Galladite",
+    "slug": "galladite",
+    "category": "Hold items",
+    "effect": "Enables Gallade to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/galladite.png",
+    "itemUrl": "https://pokemondb.net/item/galladite"
+  },
+  {
+    "name": "Garchompite",
+    "slug": "garchompite",
+    "category": "Hold items",
+    "effect": "Enables Garchomp to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/garchompite.png",
+    "itemUrl": "https://pokemondb.net/item/garchompite"
+  },
+  {
+    "name": "Gardevoirite",
+    "slug": "gardevoirite",
+    "category": "Hold items",
+    "effect": "Enables Gardevoir to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/gardevoirite.png",
+    "itemUrl": "https://pokemondb.net/item/gardevoirite"
+  },
+  {
+    "name": "Gengarite",
+    "slug": "gengarite",
+    "category": "Hold items",
+    "effect": "Enables Gengar to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/gengarite.png",
+    "itemUrl": "https://pokemondb.net/item/gengarite"
+  },
+  {
+    "name": "Ghost Gem",
+    "slug": "ghost-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Ghost-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ghost-gem.png",
+    "itemUrl": "https://pokemondb.net/item/ghost-gem"
+  },
+  {
+    "name": "Ghost Memory",
+    "slug": "ghost-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Ghost type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ghost-memory.png",
+    "itemUrl": "https://pokemondb.net/item/ghost-memory"
+  },
+  {
+    "name": "Ghostium Z",
+    "slug": "ghostium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Never-Ending Nightmare, the Ghost type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ghostium-z.png",
+    "itemUrl": "https://pokemondb.net/item/ghostium-z"
+  },
+  {
+    "name": "Glalitite",
+    "slug": "glalitite",
+    "category": "Hold items",
+    "effect": "Enables Glalie to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/glalitite.png",
+    "itemUrl": "https://pokemondb.net/item/glalitite"
+  },
+  {
+    "name": "Grass Gem",
+    "slug": "grass-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Grass-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grass-gem.png",
+    "itemUrl": "https://pokemondb.net/item/grass-gem"
+  },
+  {
+    "name": "Grass Memory",
+    "slug": "grass-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Grass type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grass-memory.png",
+    "itemUrl": "https://pokemondb.net/item/grass-memory"
+  },
+  {
+    "name": "Grassium Z",
+    "slug": "grassium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Bloom Doom, the Grass type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grassium-z.png",
+    "itemUrl": "https://pokemondb.net/item/grassium-z"
+  },
+  {
+    "name": "Grassy Seed",
+    "slug": "grassy-seed",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It boosts Defense on Grassy Terrain. It can only be used once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grassy-seed.png",
+    "itemUrl": "https://pokemondb.net/item/grassy-seed"
+  },
+  {
+    "name": "Grip Claw",
+    "slug": "grip-claw",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of multiturn attacks like Bind and Wrap.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grip-claw.png",
+    "itemUrl": "https://pokemondb.net/item/grip-claw"
+  },
+  {
+    "name": "Griseous Orb",
+    "slug": "griseous-orb",
+    "category": "Hold items",
+    "effect": "Increases the power of Dragon- and Ghost-type moves when held by Giratina, and changes it to Origin Forme.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/griseous-orb.png",
+    "itemUrl": "https://pokemondb.net/item/griseous-orb"
+  },
+  {
+    "name": "Ground Gem",
+    "slug": "ground-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Ground-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ground-gem.png",
+    "itemUrl": "https://pokemondb.net/item/ground-gem"
+  },
+  {
+    "name": "Ground Memory",
+    "slug": "ground-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Ground type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ground-memory.png",
+    "itemUrl": "https://pokemondb.net/item/ground-memory"
+  },
+  {
+    "name": "Groundium Z",
+    "slug": "groundium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Tectonic Rage, the Ground type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/groundium-z.png",
+    "itemUrl": "https://pokemondb.net/item/groundium-z"
+  },
+  {
+    "name": "Grubby Hanky",
+    "slug": "grubby-hanky",
+    "category": "Hold items",
+    "effect": "A handkerchief dropped by a regular at Café Warehouse. It smells faintly like a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grubby-hanky.png",
+    "itemUrl": "https://pokemondb.net/item/grubby-hanky"
+  },
+  {
+    "name": "Gyaradosite",
+    "slug": "gyaradosite",
+    "category": "Hold items",
+    "effect": "Enables Gyarados to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/gyaradosite.png",
+    "itemUrl": "https://pokemondb.net/item/gyaradosite"
+  },
+  {
+    "name": "Hard Stone",
+    "slug": "hard-stone",
+    "category": "Hold items",
+    "effect": "Increases the power of Rock-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/hard-stone.png",
+    "itemUrl": "https://pokemondb.net/item/hard-stone"
+  },
+  {
+    "name": "Heat Rock",
+    "slug": "heat-rock",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of the move Sunny Day used by the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heat-rock.png",
+    "itemUrl": "https://pokemondb.net/item/heat-rock"
+  },
+  {
+    "name": "Heracronite",
+    "slug": "heracronite",
+    "category": "Hold items",
+    "effect": "Enables Heracross to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heracronite.png",
+    "itemUrl": "https://pokemondb.net/item/heracronite"
+  },
+  {
+    "name": "Honor Of Kalos",
+    "slug": "honor-of-kalos",
+    "category": "Hold items",
+    "effect": "A precious symbol that is awarded only to an individual who has done great things for the Kalos region.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/honor-of-kalos.png",
+    "itemUrl": "https://pokemondb.net/item/honor-of-kalos"
+  },
+  {
+    "name": "Houndoominite",
+    "slug": "houndoominite",
+    "category": "Hold items",
+    "effect": "Enables Houndoom to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/houndoominite.png",
+    "itemUrl": "https://pokemondb.net/item/houndoominite"
+  },
+  {
+    "name": "Ice Gem",
+    "slug": "ice-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of an Ice-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ice-gem.png",
+    "itemUrl": "https://pokemondb.net/item/ice-gem"
+  },
+  {
+    "name": "Ice Memory",
+    "slug": "ice-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Ice type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ice-memory.png",
+    "itemUrl": "https://pokemondb.net/item/ice-memory"
+  },
+  {
+    "name": "Icicle Plate",
+    "slug": "icicle-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Ice-type moves. Changes Arceus' type to Ice.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/icicle-plate.png",
+    "itemUrl": "https://pokemondb.net/item/icicle-plate"
+  },
+  {
+    "name": "Icium Z",
+    "slug": "icium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Subzero Slammer, the Ice type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/icium-z.png",
+    "itemUrl": "https://pokemondb.net/item/icium-z"
+  },
+  {
+    "name": "Icy Rock",
+    "slug": "icy-rock",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of the move Hail used by the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/icy-rock.png",
+    "itemUrl": "https://pokemondb.net/item/icy-rock"
+  },
+  {
+    "name": "Incinium Z",
+    "slug": "incinium-z",
+    "category": "Hold items",
+    "effect": "Allows Incineroar to upgrade Darkest Lariat to a Z-Move, Malicious Moonsault.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/incinium-z.png",
+    "itemUrl": "https://pokemondb.net/item/incinium-z"
+  },
+  {
+    "name": "Insect Plate",
+    "slug": "insect-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Bug-type moves. Changes Arceus' type to Bug.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/insect-plate.png",
+    "itemUrl": "https://pokemondb.net/item/insect-plate"
+  },
+  {
+    "name": "Intriguing Stone",
+    "slug": "intriguing-stone",
+    "category": "Hold items",
+    "effect": "A rather curious stone that might appear to be valuable to some. It's all in the eye of the beholder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/intriguing-stone.png",
+    "itemUrl": "https://pokemondb.net/item/intriguing-stone"
+  },
+  {
+    "name": "Iron Ball",
+    "slug": "iron-ball",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that cuts Speed. It makes Flying-type and levitating holders susceptible to Ground moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/iron-ball.png",
+    "itemUrl": "https://pokemondb.net/item/iron-ball"
+  },
+  {
+    "name": "Iron Plate",
+    "slug": "iron-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Steel-type moves. Changes Arceus' type to Steel.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/iron-plate.png",
+    "itemUrl": "https://pokemondb.net/item/iron-plate"
+  },
+  {
+    "name": "Kangaskhanite",
+    "slug": "kangaskhanite",
+    "category": "Hold items",
+    "effect": "Enables Kangaskhan to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kangaskhanite.png",
+    "itemUrl": "https://pokemondb.net/item/kangaskhanite"
+  },
+  {
+    "name": "King's Rock",
+    "slug": "kings-rock",
+    "category": "Hold items",
+    "effect": "May cause opponent to flinch. Evolves Poliwhirl and Slowpoke when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kings-rock.png",
+    "itemUrl": "https://pokemondb.net/item/kings-rock"
+  },
+  {
+    "name": "Kommonium Z",
+    "slug": "kommonium-z",
+    "category": "Hold items",
+    "effect": "Allows Kommo-o to upgrade Clanging Scales to a Z-Move, Clangorous Soulblaze.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kommonium-z.png",
+    "itemUrl": "https://pokemondb.net/item/kommonium-z"
+  },
+  {
+    "name": "Lagging Tail",
+    "slug": "lagging-tail",
+    "category": "Hold items",
+    "effect": "Holder always attacks last.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lagging-tail.png",
+    "itemUrl": "https://pokemondb.net/item/lagging-tail"
+  },
+  {
+    "name": "Latiasite",
+    "slug": "latiasite",
+    "category": "Hold items",
+    "effect": "Enables Latias to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/latiasite.png",
+    "itemUrl": "https://pokemondb.net/item/latiasite"
+  },
+  {
+    "name": "Latiosite",
+    "slug": "latiosite",
+    "category": "Hold items",
+    "effect": "Enables Latios to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/latiosite.png",
+    "itemUrl": "https://pokemondb.net/item/latiosite"
+  },
+  {
+    "name": "Lax Incense",
+    "slug": "lax-incense",
+    "category": "Hold items",
+    "effect": "Lowers the opponent's accuracy. Breeding Wobbuffet produces Wynaut when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lax-incense.png",
+    "itemUrl": "https://pokemondb.net/item/lax-incense"
+  },
+  {
+    "name": "Leek",
+    "slug": "leek",
+    "category": "Hold items",
+    "effect": "Increases critical-hit ratio when held by Farfetch'd.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/leek.png",
+    "itemUrl": "https://pokemondb.net/item/leek"
+  },
+  {
+    "name": "Leftovers",
+    "slug": "leftovers",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. The holder's HP is gradually restored during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/leftovers.png",
+    "itemUrl": "https://pokemondb.net/item/leftovers"
+  },
+  {
+    "name": "Life Orb",
+    "slug": "life-orb",
+    "category": "Hold items",
+    "effect": "Increases the power of moves, but loses HP each turn.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/life-orb.png",
+    "itemUrl": "https://pokemondb.net/item/life-orb"
+  },
+  {
+    "name": "Light Ball",
+    "slug": "light-ball",
+    "category": "Hold items",
+    "effect": "An item to be held by PIKACHU. It is a puzzling orb that raises the Attack and Sp. Atk stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/light-ball.png",
+    "itemUrl": "https://pokemondb.net/item/light-ball"
+  },
+  {
+    "name": "Light Clay",
+    "slug": "light-clay",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of barrier moves like Light Screen and Reflect used by the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/light-clay.png",
+    "itemUrl": "https://pokemondb.net/item/light-clay"
+  },
+  {
+    "name": "Looker Ticket",
+    "slug": "looker-ticket",
+    "category": "Hold items",
+    "effect": "A ticket that was handmade by Looker. It's decorated with a liberal amount of glittery paint.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/looker-ticket.png",
+    "itemUrl": "https://pokemondb.net/item/looker-ticket"
+  },
+  {
+    "name": "Lopunnite",
+    "slug": "lopunnite",
+    "category": "Hold items",
+    "effect": "Enables Lopunny to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lopunnite.png",
+    "itemUrl": "https://pokemondb.net/item/lopunnite"
+  },
+  {
+    "name": "Lucarionite",
+    "slug": "lucarionite",
+    "category": "Hold items",
+    "effect": "Enables Lucario to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lucarionite.png",
+    "itemUrl": "https://pokemondb.net/item/lucarionite"
+  },
+  {
+    "name": "Luck Incense",
+    "slug": "luck-incense",
+    "category": "Hold items",
+    "effect": "Doubles prize money if held. Breeding Chansey or Blissey produces Happiny when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/luck-incense.png",
+    "itemUrl": "https://pokemondb.net/item/luck-incense"
+  },
+  {
+    "name": "Lucky Egg",
+    "slug": "lucky-egg",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It is an egg filled with happiness that earns extra Exp. Points in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lucky-egg.png",
+    "itemUrl": "https://pokemondb.net/item/lucky-egg"
+  },
+  {
+    "name": "Lucky Punch",
+    "slug": "lucky-punch",
+    "category": "Hold items",
+    "effect": "Increases critical-hit ratio when held by Chansey.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lucky-punch.png",
+    "itemUrl": "https://pokemondb.net/item/lucky-punch"
+  },
+  {
+    "name": "Luminous Moss",
+    "slug": "luminous-moss",
+    "category": "Hold items",
+    "effect": "Raises Special Defense if hit by a Water-type move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/luminous-moss.png",
+    "itemUrl": "https://pokemondb.net/item/luminous-moss"
+  },
+  {
+    "name": "Lunalium Z",
+    "slug": "lunalium-z",
+    "category": "Hold items",
+    "effect": "Allows Lunala to upgrade Moongeist Beam to a Z-Move, Menacing Moonraze Maelstrom.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lunalium-z.png",
+    "itemUrl": "https://pokemondb.net/item/lunalium-z"
+  },
+  {
+    "name": "Lustrous Orb",
+    "slug": "lustrous-orb",
+    "category": "Hold items",
+    "effect": "Increases the power of Dragon- and Water-type moves when held by Palkia.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lustrous-orb.png",
+    "itemUrl": "https://pokemondb.net/item/lustrous-orb"
+  },
+  {
+    "name": "Lycanium Z",
+    "slug": "lycanium-z",
+    "category": "Hold items",
+    "effect": "Allows Lycanroc to upgrade Stone Edge to a Z-Move, Splintered Stormshards.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lycanium-z.png",
+    "itemUrl": "https://pokemondb.net/item/lycanium-z"
+  },
+  {
+    "name": "Macho Brace",
+    "slug": "macho-brace",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It is a stiff and heavy brace that promotes strong growth but lowers Speed.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/macho-brace.png",
+    "itemUrl": "https://pokemondb.net/item/macho-brace"
+  },
+  {
+    "name": "Magnet",
+    "slug": "magnet",
+    "category": "Hold items",
+    "effect": "Increases the power of Electric-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/magnet.png",
+    "itemUrl": "https://pokemondb.net/item/magnet"
+  },
+  {
+    "name": "Manectite",
+    "slug": "manectite",
+    "category": "Hold items",
+    "effect": "Enables Manectric to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/manectite.png",
+    "itemUrl": "https://pokemondb.net/item/manectite"
+  },
+  {
+    "name": "Marshadium Z",
+    "slug": "marshadium-z",
+    "category": "Hold items",
+    "effect": "Allows Marshadow to upgrade Spectral Thief to a Z-Move, Soul-Stealing 7-Star Strike.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/marshadium-z.png",
+    "itemUrl": "https://pokemondb.net/item/marshadium-z"
+  },
+  {
+    "name": "Mawilite",
+    "slug": "mawilite",
+    "category": "Hold items",
+    "effect": "Enables Mawile to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mawilite.png",
+    "itemUrl": "https://pokemondb.net/item/mawilite"
+  },
+  {
+    "name": "Meadow Plate",
+    "slug": "meadow-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Grass-type moves. Changes Arceus' type to Grass.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/meadow-plate.png",
+    "itemUrl": "https://pokemondb.net/item/meadow-plate"
+  },
+  {
+    "name": "Medichamite",
+    "slug": "medichamite",
+    "category": "Hold items",
+    "effect": "Enables Medicham to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/medichamite.png",
+    "itemUrl": "https://pokemondb.net/item/medichamite"
+  },
+  {
+    "name": "Mental Herb",
+    "slug": "mental-herb",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It snaps the holder out of infatuation. It can be used only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mental-herb.png",
+    "itemUrl": "https://pokemondb.net/item/mental-herb"
+  },
+  {
+    "name": "Metagrossite",
+    "slug": "metagrossite",
+    "category": "Hold items",
+    "effect": "Enables Metagross to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/metagrossite.png",
+    "itemUrl": "https://pokemondb.net/item/metagrossite"
+  },
+  {
+    "name": "Metal Coat",
+    "slug": "metal-coat",
+    "category": "Hold items",
+    "effect": "Increases the power of Steel-type moves. Evolves Onix and Scyther when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/metal-coat.png",
+    "itemUrl": "https://pokemondb.net/item/metal-coat"
+  },
+  {
+    "name": "Metal Powder",
+    "slug": "metal-powder",
+    "category": "Hold items",
+    "effect": "Increases Defense when held by Ditto.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/metal-powder.png",
+    "itemUrl": "https://pokemondb.net/item/metal-powder"
+  },
+  {
+    "name": "Metronome",
+    "slug": "metronome",
+    "category": "Hold items",
+    "effect": "Increases the power of moves used consecutively.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/metronome.png",
+    "itemUrl": "https://pokemondb.net/item/metronome"
+  },
+  {
+    "name": "Mewnium Z",
+    "slug": "mewnium-z",
+    "category": "Hold items",
+    "effect": "Allows Mew to upgrade Psychic to a Z-Move, Genesis Supernova.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mewnium-z.png",
+    "itemUrl": "https://pokemondb.net/item/mewnium-z"
+  },
+  {
+    "name": "Mewtwonite X",
+    "slug": "mewtwonite-x",
+    "category": "Hold items",
+    "effect": "Enables Mewtwo to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mewtwonite-x.png",
+    "itemUrl": "https://pokemondb.net/item/mewtwonite-x"
+  },
+  {
+    "name": "Mewtwonite Y",
+    "slug": "mewtwonite-y",
+    "category": "Hold items",
+    "effect": "Enables Mewtwo to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mewtwonite-y.png",
+    "itemUrl": "https://pokemondb.net/item/mewtwonite-y"
+  },
+  {
+    "name": "Mimikium Z",
+    "slug": "mimikium-z",
+    "category": "Hold items",
+    "effect": "Allows Mimikyu to upgrade Play Rough to a Z-Move, Let's Snuggle Forever.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mimikium-z.png",
+    "itemUrl": "https://pokemondb.net/item/mimikium-z"
+  },
+  {
+    "name": "Mind Plate",
+    "slug": "mind-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Psychic-type moves. Changes Arceus' type to Psychic.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mind-plate.png",
+    "itemUrl": "https://pokemondb.net/item/mind-plate"
+  },
+  {
+    "name": "Miracle Seed",
+    "slug": "miracle-seed",
+    "category": "Hold items",
+    "effect": "Increases the power of Grass-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/miracle-seed.png",
+    "itemUrl": "https://pokemondb.net/item/miracle-seed"
+  },
+  {
+    "name": "Misty Seed",
+    "slug": "misty-seed",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It boosts Sp. Def on Misty Terrain. It can only be used once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/misty-seed.png",
+    "itemUrl": "https://pokemondb.net/item/misty-seed"
+  },
+  {
+    "name": "Muscle Band",
+    "slug": "muscle-band",
+    "category": "Hold items",
+    "effect": "Increases the power of Physical-category moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/muscle-band.png",
+    "itemUrl": "https://pokemondb.net/item/muscle-band"
+  },
+  {
+    "name": "Mystic Water",
+    "slug": "mystic-water",
+    "category": "Hold items",
+    "effect": "Increases the power of Water-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mystic-water.png",
+    "itemUrl": "https://pokemondb.net/item/mystic-water"
+  },
+  {
+    "name": "Never-Melt Ice",
+    "slug": "never-melt-ice",
+    "category": "Hold items",
+    "effect": "Increases the power of Ice-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/never-melt-ice.png",
+    "itemUrl": "https://pokemondb.net/item/never-melt-ice"
+  },
+  {
+    "name": "Normal Gem",
+    "slug": "normal-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Normal-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/normal-gem.png",
+    "itemUrl": "https://pokemondb.net/item/normal-gem"
+  },
+  {
+    "name": "Normalium Z",
+    "slug": "normalium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Breakneck Blitz, the Normal type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/normalium-z.png",
+    "itemUrl": "https://pokemondb.net/item/normalium-z"
+  },
+  {
+    "name": "Odd Incense",
+    "slug": "odd-incense",
+    "category": "Hold items",
+    "effect": "Increases the power of Psychic-type moves. Breeding Mr. Mime produces Mime Jr. when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/odd-incense.png",
+    "itemUrl": "https://pokemondb.net/item/odd-incense"
+  },
+  {
+    "name": "Pass Orb",
+    "slug": "pass-orb",
+    "category": "Hold items",
+    "effect": "A mysterious orb containing the power of the Unova region, to be used when generating Pass Power.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pass-orb.png",
+    "itemUrl": "https://pokemondb.net/item/pass-orb"
+  },
+  {
+    "name": "Pidgeotite",
+    "slug": "pidgeotite",
+    "category": "Hold items",
+    "effect": "Enables Pidgeot to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pidgeotite.png",
+    "itemUrl": "https://pokemondb.net/item/pidgeotite"
+  },
+  {
+    "name": "Pikanium Z",
+    "slug": "pikanium-z",
+    "category": "Hold items",
+    "effect": "Allows Pikachu to upgrade Volt Tackle to a Z-Move, Catastropika.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pikanium-z.png",
+    "itemUrl": "https://pokemondb.net/item/pikanium-z"
+  },
+  {
+    "name": "Pikashunium Z",
+    "slug": "pikashunium-z",
+    "category": "Hold items",
+    "effect": "Allows Pikachu in a cap to upgrade Thunderbolt to a Z-Move, 10,000,000 Volt Thunderbolt.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pikashunium-z.png",
+    "itemUrl": "https://pokemondb.net/item/pikashunium-z"
+  },
+  {
+    "name": "Pink Nectar",
+    "slug": "pink-nectar",
+    "category": "Hold items",
+    "effect": "The flower nectar obtained at the flowering shrubs on Royal Avenue. It changes the form of certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pink-nectar.png",
+    "itemUrl": "https://pokemondb.net/item/pink-nectar"
+  },
+  {
+    "name": "Pinsirite",
+    "slug": "pinsirite",
+    "category": "Hold items",
+    "effect": "Enables Pinsir to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pinsirite.png",
+    "itemUrl": "https://pokemondb.net/item/pinsirite"
+  },
+  {
+    "name": "Pixie Plate",
+    "slug": "pixie-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Fairy-type moves. Changes Arceus' type to Fairy.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pixie-plate.png",
+    "itemUrl": "https://pokemondb.net/item/pixie-plate"
+  },
+  {
+    "name": "Plasma Card",
+    "slug": "plasma-card",
+    "category": "Hold items",
+    "effect": "A card key needed to enter the password inside the Plasma Frigate.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/plasma-card.png",
+    "itemUrl": "https://pokemondb.net/item/plasma-card"
+  },
+  {
+    "name": "Poison Barb",
+    "slug": "poison-barb",
+    "category": "Hold items",
+    "effect": "Increases the power of Poison-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poison-barb.png",
+    "itemUrl": "https://pokemondb.net/item/poison-barb"
+  },
+  {
+    "name": "Poison Gem",
+    "slug": "poison-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Poison-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poison-gem.png",
+    "itemUrl": "https://pokemondb.net/item/poison-gem"
+  },
+  {
+    "name": "Poison Memory",
+    "slug": "poison-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Poison type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poison-memory.png",
+    "itemUrl": "https://pokemondb.net/item/poison-memory"
+  },
+  {
+    "name": "Poisonium Z",
+    "slug": "poisonium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Acid Downpour, the Poison type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poisonium-z.png",
+    "itemUrl": "https://pokemondb.net/item/poisonium-z"
+  },
+  {
+    "name": "Power Anklet",
+    "slug": "power-anklet",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes Speed gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-anklet.png",
+    "itemUrl": "https://pokemondb.net/item/power-anklet"
+  },
+  {
+    "name": "Power Band",
+    "slug": "power-band",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes Sp. Def gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-band.png",
+    "itemUrl": "https://pokemondb.net/item/power-band"
+  },
+  {
+    "name": "Power Belt",
+    "slug": "power-belt",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes Defense gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-belt.png",
+    "itemUrl": "https://pokemondb.net/item/power-belt"
+  },
+  {
+    "name": "Power Bracer",
+    "slug": "power-bracer",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes Attack gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-bracer.png",
+    "itemUrl": "https://pokemondb.net/item/power-bracer"
+  },
+  {
+    "name": "Power Herb",
+    "slug": "power-herb",
+    "category": "Hold items",
+    "effect": "A single-use item to be held by a Pokémon. It allows the immediate use of a move that charges on the first turn.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-herb.png",
+    "itemUrl": "https://pokemondb.net/item/power-herb"
+  },
+  {
+    "name": "Power Lens",
+    "slug": "power-lens",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes Sp. Atk gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-lens.png",
+    "itemUrl": "https://pokemondb.net/item/power-lens"
+  },
+  {
+    "name": "Power Plant Pass",
+    "slug": "power-plant-pass",
+    "category": "Hold items",
+    "effect": "This pass serves as an ID card for gaining access to the power plant that lies along Route 13.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-plant-pass.png",
+    "itemUrl": "https://pokemondb.net/item/power-plant-pass"
+  },
+  {
+    "name": "Power Weight",
+    "slug": "power-weight",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that promotes HP gain on leveling, but reduces the Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/power-weight.png",
+    "itemUrl": "https://pokemondb.net/item/power-weight"
+  },
+  {
+    "name": "Primarium Z",
+    "slug": "primarium-z",
+    "category": "Hold items",
+    "effect": "Allows Primarina to upgrade Sparkling Aria to a Z-Move, Oceanic Operetta.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/primarium-z.png",
+    "itemUrl": "https://pokemondb.net/item/primarium-z"
+  },
+  {
+    "name": "Prison Bottle",
+    "slug": "prison-bottle",
+    "category": "Hold items",
+    "effect": "Transforms Hoopa Confined to Hoopa Unbound.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/prison-bottle.png",
+    "itemUrl": "https://pokemondb.net/item/prison-bottle"
+  },
+  {
+    "name": "Prof's Letter",
+    "slug": "profs-letter",
+    "category": "Hold items",
+    "effect": "A letter that Professor Sycamore wrote to your mother. A faint but pleasant perfume seems to cling to the paper.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/profs-letter.png",
+    "itemUrl": "https://pokemondb.net/item/profs-letter"
+  },
+  {
+    "name": "Protective Pads",
+    "slug": "protective-pads",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. These pads protect the holder from effects caused by making direct contact with the target.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/protective-pads.png",
+    "itemUrl": "https://pokemondb.net/item/protective-pads"
+  },
+  {
+    "name": "Psychic Gem",
+    "slug": "psychic-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Psychic-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/psychic-gem.png",
+    "itemUrl": "https://pokemondb.net/item/psychic-gem"
+  },
+  {
+    "name": "Psychic Memory",
+    "slug": "psychic-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Psychic type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/psychic-memory.png",
+    "itemUrl": "https://pokemondb.net/item/psychic-memory"
+  },
+  {
+    "name": "Psychic Seed",
+    "slug": "psychic-seed",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It boosts Sp. Def on Psychic Terrain. It can only be used once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/psychic-seed.png",
+    "itemUrl": "https://pokemondb.net/item/psychic-seed"
+  },
+  {
+    "name": "Psychium Z",
+    "slug": "psychium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Shattered Psyche, the Psychic type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/psychium-z.png",
+    "itemUrl": "https://pokemondb.net/item/psychium-z"
+  },
+  {
+    "name": "Pure Incense",
+    "slug": "pure-incense",
+    "category": "Hold items",
+    "effect": "Descreases the likelihood of meeting wild Pokémon. Breeding Chimecho produces Chingling when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pure-incense.png",
+    "itemUrl": "https://pokemondb.net/item/pure-incense"
+  },
+  {
+    "name": "Purple Nectar",
+    "slug": "purple-nectar",
+    "category": "Hold items",
+    "effect": "A flower nectar obtained at Poni Meadow. It changes the form of certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/purple-nectar.png",
+    "itemUrl": "https://pokemondb.net/item/purple-nectar"
+  },
+  {
+    "name": "Quick Claw",
+    "slug": "quick-claw",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. A light, sharp claw that lets the bearer move first occasionally.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-claw.png",
+    "itemUrl": "https://pokemondb.net/item/quick-claw"
+  },
+  {
+    "name": "Quick Powder",
+    "slug": "quick-powder",
+    "category": "Hold items",
+    "effect": "Increases Speed when held by Ditto.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-powder.png",
+    "itemUrl": "https://pokemondb.net/item/quick-powder"
+  },
+  {
+    "name": "Razor Claw",
+    "slug": "razor-claw",
+    "category": "Hold items",
+    "effect": "Increases critical-hit ratio. Evolves Sneasel when held at night.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/razor-claw.png",
+    "itemUrl": "https://pokemondb.net/item/razor-claw"
+  },
+  {
+    "name": "Razor Fang",
+    "slug": "razor-fang",
+    "category": "Hold items",
+    "effect": "May cause opponent to flinch. Evolves Gligar when held at night.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/razor-fang.png",
+    "itemUrl": "https://pokemondb.net/item/razor-fang"
+  },
+  {
+    "name": "Red Card",
+    "slug": "red-card",
+    "category": "Hold items",
+    "effect": "A card with a mysterious power. When the holder is struck by a foe, the attacker is removed from battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-card.png",
+    "itemUrl": "https://pokemondb.net/item/red-card"
+  },
+  {
+    "name": "Red Nectar",
+    "slug": "red-nectar",
+    "category": "Hold items",
+    "effect": "A flower nectar obtained at Ula'ula Meadow. It changes the form of certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-nectar.png",
+    "itemUrl": "https://pokemondb.net/item/red-nectar"
+  },
+  {
+    "name": "Ring Target",
+    "slug": "ring-target",
+    "category": "Hold items",
+    "effect": "Moves that would otherwise have no effect will land on the Pokémon that holds it.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ring-target.png",
+    "itemUrl": "https://pokemondb.net/item/ring-target"
+  },
+  {
+    "name": "Rock Gem",
+    "slug": "rock-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Rock-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rock-gem.png",
+    "itemUrl": "https://pokemondb.net/item/rock-gem"
+  },
+  {
+    "name": "Rock Incense",
+    "slug": "rock-incense",
+    "category": "Hold items",
+    "effect": "Increases the power of Rock-type moves. Breeding Sudowoodo produces Bonsly when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rock-incense.png",
+    "itemUrl": "https://pokemondb.net/item/rock-incense"
+  },
+  {
+    "name": "Rock Memory",
+    "slug": "rock-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Rock type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rock-memory.png",
+    "itemUrl": "https://pokemondb.net/item/rock-memory"
+  },
+  {
+    "name": "Rockium Z",
+    "slug": "rockium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Continental Crush, the Rock type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rockium-z.png",
+    "itemUrl": "https://pokemondb.net/item/rockium-z"
+  },
+  {
+    "name": "Rocky Helmet",
+    "slug": "rocky-helmet",
+    "category": "Hold items",
+    "effect": "If the holder of this item takes damage, the attacker will also be damaged upon contact.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rocky-helmet.png",
+    "itemUrl": "https://pokemondb.net/item/rocky-helmet"
+  },
+  {
+    "name": "Rose Incense",
+    "slug": "rose-incense",
+    "category": "Hold items",
+    "effect": "Increases the power of Grass-type moves. Breeding Roselia or Roserade produces Budew when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rose-incense.png",
+    "itemUrl": "https://pokemondb.net/item/rose-incense"
+  },
+  {
+    "name": "Sablenite",
+    "slug": "sablenite",
+    "category": "Hold items",
+    "effect": "Enables Sableye to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sablenite.png",
+    "itemUrl": "https://pokemondb.net/item/sablenite"
+  },
+  {
+    "name": "Safety Goggles",
+    "slug": "safety-goggles",
+    "category": "Hold items",
+    "effect": "Prevents damage from weather and powder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/safety-goggles.png",
+    "itemUrl": "https://pokemondb.net/item/safety-goggles"
+  },
+  {
+    "name": "Salamencite",
+    "slug": "salamencite",
+    "category": "Hold items",
+    "effect": "Enables Salamence to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/salamencite.png",
+    "itemUrl": "https://pokemondb.net/item/salamencite"
+  },
+  {
+    "name": "Sceptilite",
+    "slug": "sceptilite",
+    "category": "Hold items",
+    "effect": "Enables Sceptile to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sceptilite.png",
+    "itemUrl": "https://pokemondb.net/item/sceptilite"
+  },
+  {
+    "name": "Scizorite",
+    "slug": "scizorite",
+    "category": "Hold items",
+    "effect": "Enables Scizor to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/scizorite.png",
+    "itemUrl": "https://pokemondb.net/item/scizorite"
+  },
+  {
+    "name": "Scope Lens",
+    "slug": "scope-lens",
+    "category": "Hold items",
+    "effect": "Increases critical-hit ratio.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/scope-lens.png",
+    "itemUrl": "https://pokemondb.net/item/scope-lens"
+  },
+  {
+    "name": "Sea Incense",
+    "slug": "sea-incense",
+    "category": "Hold items",
+    "effect": "Increases the power of Water-type moves. Breeding Marill or Azumarill produces Azurill when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sea-incense.png",
+    "itemUrl": "https://pokemondb.net/item/sea-incense"
+  },
+  {
+    "name": "Sharp Beak",
+    "slug": "sharp-beak",
+    "category": "Hold items",
+    "effect": "Increases the power of Flying-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sharp-beak.png",
+    "itemUrl": "https://pokemondb.net/item/sharp-beak"
+  },
+  {
+    "name": "Sharpedonite",
+    "slug": "sharpedonite",
+    "category": "Hold items",
+    "effect": "Enables Sharpedo to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sharpedonite.png",
+    "itemUrl": "https://pokemondb.net/item/sharpedonite"
+  },
+  {
+    "name": "Shed Shell",
+    "slug": "shed-shell",
+    "category": "Hold items",
+    "effect": "A tough, discarded carapace to be held by a Pokémon. It enables the holder to switch with a waiting Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shed-shell.png",
+    "itemUrl": "https://pokemondb.net/item/shed-shell"
+  },
+  {
+    "name": "Shell Bell",
+    "slug": "shell-bell",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. The holder's HP is restored a little every time it inflicts damage.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shell-bell.png",
+    "itemUrl": "https://pokemondb.net/item/shell-bell"
+  },
+  {
+    "name": "Shock Drive",
+    "slug": "shock-drive",
+    "category": "Hold items",
+    "effect": "Changes Techno Blast to an Electric-type move when held by Genesect.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shock-drive.png",
+    "itemUrl": "https://pokemondb.net/item/shock-drive"
+  },
+  {
+    "name": "Silk Scarf",
+    "slug": "silk-scarf",
+    "category": "Hold items",
+    "effect": "Increases the power of Normal-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/silk-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/silk-scarf"
+  },
+  {
+    "name": "Silver Powder",
+    "slug": "silver-powder",
+    "category": "Hold items",
+    "effect": "Increases the power of Bug-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/silver-powder.png",
+    "itemUrl": "https://pokemondb.net/item/silver-powder"
+  },
+  {
+    "name": "Sky Plate",
+    "slug": "sky-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Flying-type moves. Changes Arceus' type to Flying.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sky-plate.png",
+    "itemUrl": "https://pokemondb.net/item/sky-plate"
+  },
+  {
+    "name": "Slowbronite",
+    "slug": "slowbronite",
+    "category": "Hold items",
+    "effect": "Enables Slowbro to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/slowbronite.png",
+    "itemUrl": "https://pokemondb.net/item/slowbronite"
+  },
+  {
+    "name": "Smoke Ball",
+    "slug": "smoke-ball",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It enables the holder to flee from any wild Pokémon without fail.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/smoke-ball.png",
+    "itemUrl": "https://pokemondb.net/item/smoke-ball"
+  },
+  {
+    "name": "Smooth Rock",
+    "slug": "smooth-rock",
+    "category": "Hold items",
+    "effect": "A Pokémon held item that extends the duration of the move Sandstorm used by the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/smooth-rock.png",
+    "itemUrl": "https://pokemondb.net/item/smooth-rock"
+  },
+  {
+    "name": "Snorlium Z",
+    "slug": "snorlium-z",
+    "category": "Hold items",
+    "effect": "Allows Snorlax to upgrade Giga Impact to a Z-Move, Pulverizing Pancake.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/snorlium-z.png",
+    "itemUrl": "https://pokemondb.net/item/snorlium-z"
+  },
+  {
+    "name": "Snowball",
+    "slug": "snowball",
+    "category": "Hold items",
+    "effect": "Raises Attack if hit by an Ice-type move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/snowball.png",
+    "itemUrl": "https://pokemondb.net/item/snowball"
+  },
+  {
+    "name": "Soft Sand",
+    "slug": "soft-sand",
+    "category": "Hold items",
+    "effect": "Increases the power of Ground-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/soft-sand.png",
+    "itemUrl": "https://pokemondb.net/item/soft-sand"
+  },
+  {
+    "name": "Solganium Z",
+    "slug": "solganium-z",
+    "category": "Hold items",
+    "effect": "Allows Solgaleo to upgrade Sunsteel Strike to a Z-Move, Searing Sunraze Smash.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/solganium-z.png",
+    "itemUrl": "https://pokemondb.net/item/solganium-z"
+  },
+  {
+    "name": "Soothe Bell",
+    "slug": "soothe-bell",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It is a bell with a comforting chime that calms the holder and makes it friendly.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/soothe-bell.png",
+    "itemUrl": "https://pokemondb.net/item/soothe-bell"
+  },
+  {
+    "name": "Soul Dew",
+    "slug": "soul-dew",
+    "category": "Hold items",
+    "effect": "Increases the power of Psychic- and Dragon-type moves when held by Latios or Latias. Increases Sp.Atk/Sp.Def prior to Gen 7.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/soul-dew.png",
+    "itemUrl": "https://pokemondb.net/item/soul-dew"
+  },
+  {
+    "name": "Spell Tag",
+    "slug": "spell-tag",
+    "category": "Hold items",
+    "effect": "Increases the power of Ghost-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/spell-tag.png",
+    "itemUrl": "https://pokemondb.net/item/spell-tag"
+  },
+  {
+    "name": "Splash Plate",
+    "slug": "splash-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Water-type moves. Changes Arceus' type to Water.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/splash-plate.png",
+    "itemUrl": "https://pokemondb.net/item/splash-plate"
+  },
+  {
+    "name": "Spooky Plate",
+    "slug": "spooky-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Ghost-type moves. Changes Arceus' type to Ghost.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/spooky-plate.png",
+    "itemUrl": "https://pokemondb.net/item/spooky-plate"
+  },
+  {
+    "name": "Steel Gem",
+    "slug": "steel-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Steel-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/steel-gem.png",
+    "itemUrl": "https://pokemondb.net/item/steel-gem"
+  },
+  {
+    "name": "Steel Memory",
+    "slug": "steel-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Steel type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/steel-memory.png",
+    "itemUrl": "https://pokemondb.net/item/steel-memory"
+  },
+  {
+    "name": "Steelium Z",
+    "slug": "steelium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Corkscrew Crash, the Steel type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/steelium-z.png",
+    "itemUrl": "https://pokemondb.net/item/steelium-z"
+  },
+  {
+    "name": "Steelixite",
+    "slug": "steelixite",
+    "category": "Hold items",
+    "effect": "Enables Steelix to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/steelixite.png",
+    "itemUrl": "https://pokemondb.net/item/steelixite"
+  },
+  {
+    "name": "Sticky Barb",
+    "slug": "sticky-barb",
+    "category": "Hold items",
+    "effect": "A held item that damages the holder on every turn. It may latch on to foes and allies that touch the holder.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sticky-barb.png",
+    "itemUrl": "https://pokemondb.net/item/sticky-barb"
+  },
+  {
+    "name": "Stone Plate",
+    "slug": "stone-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Rock-type moves. Changes Arceus' type to Rock.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/stone-plate.png",
+    "itemUrl": "https://pokemondb.net/item/stone-plate"
+  },
+  {
+    "name": "Swampertite",
+    "slug": "swampertite",
+    "category": "Hold items",
+    "effect": "Enables Swampert to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/swampertite.png",
+    "itemUrl": "https://pokemondb.net/item/swampertite"
+  },
+  {
+    "name": "Tapunium Z",
+    "slug": "tapunium-z",
+    "category": "Hold items",
+    "effect": "Allows the Tapus to upgrade Nature's Madness to a Z-Move, Guardian of Alola.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tapunium-z.png",
+    "itemUrl": "https://pokemondb.net/item/tapunium-z"
+  },
+  {
+    "name": "Terrain Extender",
+    "slug": "terrain-extender",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It extends the duration of the terrain caused by the holder's move or Ability.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/terrain-extender.png",
+    "itemUrl": "https://pokemondb.net/item/terrain-extender"
+  },
+  {
+    "name": "Thick Club",
+    "slug": "thick-club",
+    "category": "Hold items",
+    "effect": "Increases Attack when held by Cubone or Marowak.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/thick-club.png",
+    "itemUrl": "https://pokemondb.net/item/thick-club"
+  },
+  {
+    "name": "Toxic Orb",
+    "slug": "toxic-orb",
+    "category": "Hold items",
+    "effect": "An item to be held by a Pokémon. It is a bizarre orb that badly poisons the holder in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/toxic-orb.png",
+    "itemUrl": "https://pokemondb.net/item/toxic-orb"
+  },
+  {
+    "name": "Toxic Plate",
+    "slug": "toxic-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Poison-type moves. Changes Arceus' type to Poison.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/toxic-plate.png",
+    "itemUrl": "https://pokemondb.net/item/toxic-plate"
+  },
+  {
+    "name": "Twisted Spoon",
+    "slug": "twisted-spoon",
+    "category": "Hold items",
+    "effect": "Increases the power of Psychic-type moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/twisted-spoon.png",
+    "itemUrl": "https://pokemondb.net/item/twisted-spoon"
+  },
+  {
+    "name": "Tyranitarite",
+    "slug": "tyranitarite",
+    "category": "Hold items",
+    "effect": "Enables Tyranitar to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tyranitarite.png",
+    "itemUrl": "https://pokemondb.net/item/tyranitarite"
+  },
+  {
+    "name": "Ultranecrozium Z",
+    "slug": "ultranecrozium-z",
+    "category": "Hold items",
+    "effect": "Allows Ultra Necrozma to upgrade Photon Geyser to a Z-Move, Light That Burns the Sky.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ultranecrozium-z.png",
+    "itemUrl": "https://pokemondb.net/item/ultranecrozium-z"
+  },
+  {
+    "name": "Venusaurite",
+    "slug": "venusaurite",
+    "category": "Hold items",
+    "effect": "Enables Venusaur to Mega Evolve during battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/venusaurite.png",
+    "itemUrl": "https://pokemondb.net/item/venusaurite"
+  },
+  {
+    "name": "Water Gem",
+    "slug": "water-gem",
+    "category": "Hold items",
+    "effect": "Increases the power of a Water-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/water-gem.png",
+    "itemUrl": "https://pokemondb.net/item/water-gem"
+  },
+  {
+    "name": "Water Memory",
+    "slug": "water-memory",
+    "category": "Hold items",
+    "effect": "Changes Silvally and its move Multi-Attack to Water type.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/water-memory.png",
+    "itemUrl": "https://pokemondb.net/item/water-memory"
+  },
+  {
+    "name": "Waterium Z",
+    "slug": "waterium-z",
+    "category": "Hold items",
+    "effect": "Allows the use of Hydro Vortex, the Water type Z-Move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/waterium-z.png",
+    "itemUrl": "https://pokemondb.net/item/waterium-z"
+  },
+  {
+    "name": "Wave Incense",
+    "slug": "wave-incense",
+    "category": "Hold items",
+    "effect": "Increases the power of Water-type moves. Breeding Mantine produces Mantyke when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wave-incense.png",
+    "itemUrl": "https://pokemondb.net/item/wave-incense"
+  },
+  {
+    "name": "Weakness Policy",
+    "slug": "weakness-policy",
+    "category": "Hold items",
+    "effect": "Sharply raises Attack and Special Attack if hit by a super-effective move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/weakness-policy.png",
+    "itemUrl": "https://pokemondb.net/item/weakness-policy"
+  },
+  {
+    "name": "White Herb",
+    "slug": "white-herb",
+    "category": "Hold items",
+    "effect": "An item to be held by a POKéMON. It restores any lowered stat in battle. It can be used only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/white-herb.png",
+    "itemUrl": "https://pokemondb.net/item/white-herb"
+  },
+  {
+    "name": "Wide Lens",
+    "slug": "wide-lens",
+    "category": "Hold items",
+    "effect": "Increases the accuracy of moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wide-lens.png",
+    "itemUrl": "https://pokemondb.net/item/wide-lens"
+  },
+  {
+    "name": "Wise Glasses",
+    "slug": "wise-glasses",
+    "category": "Hold items",
+    "effect": "Increases the power of Special-category moves.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wise-glasses.png",
+    "itemUrl": "https://pokemondb.net/item/wise-glasses"
+  },
+  {
+    "name": "Yellow Nectar",
+    "slug": "yellow-nectar",
+    "category": "Hold items",
+    "effect": "A flower nectar obtained at Melemele Meadow. It changes the form of certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yellow-nectar.png",
+    "itemUrl": "https://pokemondb.net/item/yellow-nectar"
+  },
+  {
+    "name": "Zap Plate",
+    "slug": "zap-plate",
+    "category": "Hold items",
+    "effect": "Increases power of Electric-type moves. Changes Arceus' type to Electric.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/zap-plate.png",
+    "itemUrl": "https://pokemondb.net/item/zap-plate"
+  },
+  {
+    "name": "Zoom Lens",
+    "slug": "zoom-lens",
+    "category": "Hold items",
+    "effect": "Raises a move's accuracy if the holder moves after its target.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/zoom-lens.png",
+    "itemUrl": "https://pokemondb.net/item/zoom-lens"
+  }
+]

@@ -218,6 +218,17 @@ export function isBaseTerrainSpriteWalkable(spriteId) {
   return WALKABLE_SURFACE_TERRAIN_TILE_IDS.has(spriteId);
 }
 
+/** @param {number | null | undefined} spriteId @param {string} setName */
+function isSpriteInTerrainSet(spriteId, setName) {
+  const set = TERRAIN_SETS[setName];
+  if (!set || spriteId == null) return false;
+  if (set.centerId === spriteId) return true;
+  for (const id of Object.values(set.roles || {})) {
+    if (id === spriteId) return true;
+  }
+  return false;
+}
+
 /**
  * Só para lago roxo **sem** sprite de folhagem (`getFoliageOverlayTileId === null`): bloqueia CENTER e cantos IN_NE/NW/SE/SW.
  * Quinas OUT_* e bordas EDGE_* contam como margem seca → não bloqueiam aqui (overlay roxo: só CENTER/IN_* no Set abaixo).
@@ -853,7 +864,8 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
 
 /**
  * Specialty walkability for Wild Pokémon: allows swimming (oceano / lago raso), bloqueia penhascos,
- * paredes de autotile, lava/pools bloqueantes, lago roxo e props — alinhado a `canWalkMicroTile` com exceção de água.
+ * paredes de autotile; **lago/lava** (overlay + poça roxa + base lava-lake) são tratados como “fluido” caminhável.
+ * Props e troncos permanecem como no jogador.
  * `x,y` devem ser mundo contínuo (ex.: `worldFeetFromPivotCell`), como no jogador.
  * @param {boolean} [isAirborne=false] — durante salto, ignora degraus de altura, paredes EDGE e base/overlay “solo”.
  * @param {boolean} [ignoreTreeTrunks=false]
@@ -893,20 +905,14 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
   if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
   if (!isAirborne && setName.startsWith('altura ')) return false;
 
-  const overlayId = getFoliageOverlayTileId(mx, my, data);
-  if (!isAirborne && overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
-    return false;
-  }
-
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
-  if (!isAirborne && lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
-    return false;
-  }
 
   if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) {
+    const lavaSprite = isSpriteInTerrainSet(sid, 'lava-lake-dirt');
     const swimOk =
       targetTile.biomeId === BIOMES.OCEAN.id ||
-      (lakeWalkRole != null && !isPurpleLakePoolWalkBlockingRole(lakeWalkRole));
+      lakeWalkRole != null ||
+      lavaSprite;
     if (!swimOk) return false;
   }
 

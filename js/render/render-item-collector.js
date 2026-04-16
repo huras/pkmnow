@@ -124,9 +124,33 @@ export function collectRenderItems(options) {
     }
   }
 
+  // --- Player speech bubble (Sims-style) ---
+  if (player.speechBubble?.segments?.length && lodDetail < 2) {
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+    const targetHeightTiles = 1.1;
+    const targetHeightPx = targetHeightTiles * tileH;
+    const pmdPivotY = targetHeightPx * PMD_MON_SHEET.pivotYFrac;
+    renderItems.push({
+      type: 'playerSpeechBubble',
+      sortY: finalVY + 0.505,
+      x: finalVX,
+      y: finalVY,
+      cx: snapPx((finalVX + 0.5) * tileW),
+      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+      pivotY: pmdPivotY,
+      spawnPhase: 1,
+      spawnType: null,
+      dexId: playerDex,
+      speechBubble: player.speechBubble
+    });
+  }
+
   // --- Player Emotion ---
   const playerEmotionPayload =
-    player.socialEmotionType !== null && typeof player.socialEmotionType === 'number'
+    !player.speechBubble &&
+    player.socialEmotionType !== null &&
+    typeof player.socialEmotionType === 'number'
       ? {
           type: player.socialEmotionType,
           age: player.socialEmotionAge || 0,
@@ -309,9 +333,28 @@ export function collectRenderItems(options) {
           sexHud: wildSexHudLabel(w.sex)
         });
 
-        // 2b. Wild Emotion
+        // 2b. Sims-style speech bubble (rich segments) — takes priority over classic emotion overlay.
+        if (w.speechBubble?.segments?.length && lodDetail < 2) {
+          renderItems.push({
+            type: 'wildSpeechBubble',
+            sortY: (w.visualY ?? w.y) + 0.52,
+            x: w.x,
+            y: w.y,
+            cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
+            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - (w.z || 0) * tileH),
+            pivotY: pmdPivotY,
+            spawnPhase: w.spawnPhase ?? 1,
+            spawnType: w.spawnType,
+            dexId: wDex,
+            speechBubble: w.speechBubble
+          });
+        }
+
+        // 2c. Wild Emotion (RPG Maker / portrait) — hidden while a speech bubble is active.
         const emotionPayload =
-          w.emotionType !== null && typeof w.emotionType === 'number'
+          !w.speechBubble &&
+          w.emotionType !== null &&
+          typeof w.emotionType === 'number'
             ? {
                 type: w.emotionType,
                 age: w.emotionAge || 0,

@@ -1,0 +1,4147 @@
+{
+  "version": 1,
+  "meta": {
+    "generatedAt": "2026-04-16T22:02:37.493Z",
+    "sourceJson": "data/pokemondb-items/items-with-images.json",
+    "outRoot": "items-icons/pokemondb-sprites",
+    "totalListed": 687,
+    "downloaded": 9,
+    "skippedExisting": 678,
+    "failed": 0,
+    "layout": "items-icons/pokemondb-sprites/<category-slug>/<slug>.<ext>",
+    "note": "Use manifest.bySlug[slug].path as src/href from repo root (same as play.html)."
+  },
+  "bySlug": {
+    "ability-capsule": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ability-capsule.png",
+      "category": "Hold items",
+      "name": "Ability Capsule",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ability-capsule.png"
+    },
+    "ability-urge": {
+      "path": "items-icons/pokemondb-sprites/battle-items/ability-urge.png",
+      "category": "Battle items",
+      "name": "Ability Urge",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ability-urge.png"
+    },
+    "abomasite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/abomasite.png",
+      "category": "Hold items",
+      "name": "Abomasite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/abomasite.png"
+    },
+    "absolite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/absolite.png",
+      "category": "Hold items",
+      "name": "Absolite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/absolite.png"
+    },
+    "absorb-bulb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/absorb-bulb.png",
+      "category": "Hold items",
+      "name": "Absorb Bulb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/absorb-bulb.png"
+    },
+    "adamant-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/adamant-orb.png",
+      "category": "Hold items",
+      "name": "Adamant Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/adamant-orb.png"
+    },
+    "adrenaline-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/adrenaline-orb.png",
+      "category": "Hold items",
+      "name": "Adrenaline Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/adrenaline-orb.png"
+    },
+    "aerodactylite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/aerodactylite.png",
+      "category": "Hold items",
+      "name": "Aerodactylite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/aerodactylite.png"
+    },
+    "aggronite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/aggronite.png",
+      "category": "Hold items",
+      "name": "Aggronite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/aggronite.png"
+    },
+    "aguav-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/aguav-berry.png",
+      "category": "Berries",
+      "name": "Aguav Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/aguav-berry.png"
+    },
+    "air-balloon": {
+      "path": "items-icons/pokemondb-sprites/hold-items/air-balloon.png",
+      "category": "Hold items",
+      "name": "Air Balloon",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/air-balloon.png"
+    },
+    "alakazite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/alakazite.png",
+      "category": "Hold items",
+      "name": "Alakazite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/alakazite.png"
+    },
+    "aloraichium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/aloraichium-z.png",
+      "category": "Hold items",
+      "name": "Aloraichium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/aloraichium-z.png"
+    },
+    "altarianite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/altarianite.png",
+      "category": "Hold items",
+      "name": "Altarianite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/altarianite.png"
+    },
+    "ampharosite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ampharosite.png",
+      "category": "Hold items",
+      "name": "Ampharosite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ampharosite.png"
+    },
+    "amulet-coin": {
+      "path": "items-icons/pokemondb-sprites/hold-items/amulet-coin.png",
+      "category": "Hold items",
+      "name": "Amulet Coin",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/amulet-coin.png"
+    },
+    "antidote": {
+      "path": "items-icons/pokemondb-sprites/medicine/antidote.png",
+      "category": "Medicine",
+      "name": "Antidote",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/antidote.png"
+    },
+    "apicot-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/apicot-berry.png",
+      "category": "Berries",
+      "name": "Apicot Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/apicot-berry.png"
+    },
+    "armor-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/armor-fossil.png",
+      "category": "General items",
+      "name": "Armor Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/armor-fossil.png"
+    },
+    "aspear-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/aspear-berry.png",
+      "category": "Berries",
+      "name": "Aspear Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/aspear-berry.png"
+    },
+    "assault-vest": {
+      "path": "items-icons/pokemondb-sprites/hold-items/assault-vest.png",
+      "category": "Hold items",
+      "name": "Assault Vest",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/assault-vest.png"
+    },
+    "audinite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/audinite.png",
+      "category": "Hold items",
+      "name": "Audinite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/audinite.png"
+    },
+    "awakening": {
+      "path": "items-icons/pokemondb-sprites/medicine/awakening.png",
+      "category": "Medicine",
+      "name": "Awakening",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/awakening.png"
+    },
+    "babiri-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/babiri-berry.png",
+      "category": "Berries",
+      "name": "Babiri Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/babiri-berry.png"
+    },
+    "balm-mushroom": {
+      "path": "items-icons/pokemondb-sprites/general-items/balm-mushroom.png",
+      "category": "General items",
+      "name": "Balm Mushroom",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/balm-mushroom.png"
+    },
+    "banettite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/banettite.png",
+      "category": "Hold items",
+      "name": "Banettite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/banettite.png"
+    },
+    "beach-glass": {
+      "path": "items-icons/pokemondb-sprites/general-items/beach-glass.png",
+      "category": "General items",
+      "name": "Beach Glass",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/beach-glass.png"
+    },
+    "beast-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/beast-ball.png",
+      "category": "Pokeballs",
+      "name": "Beast Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/beast-ball.png"
+    },
+    "beedrillite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/beedrillite.png",
+      "category": "Hold items",
+      "name": "Beedrillite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/beedrillite.png"
+    },
+    "belue-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/belue-berry.png",
+      "category": "Berries",
+      "name": "Belue Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/belue-berry.png"
+    },
+    "berry-juice": {
+      "path": "items-icons/pokemondb-sprites/medicine/berry-juice.png",
+      "category": "Medicine",
+      "name": "Berry Juice",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/berry-juice.png"
+    },
+    "big-malasada": {
+      "path": "items-icons/pokemondb-sprites/medicine/big-malasada.png",
+      "category": "Medicine",
+      "name": "Big Malasada",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/big-malasada.png"
+    },
+    "big-mushroom": {
+      "path": "items-icons/pokemondb-sprites/general-items/big-mushroom.png",
+      "category": "General items",
+      "name": "Big Mushroom",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/big-mushroom.png"
+    },
+    "big-nugget": {
+      "path": "items-icons/pokemondb-sprites/general-items/big-nugget.png",
+      "category": "General items",
+      "name": "Big Nugget",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/big-nugget.png"
+    },
+    "big-pearl": {
+      "path": "items-icons/pokemondb-sprites/general-items/big-pearl.png",
+      "category": "General items",
+      "name": "Big Pearl",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/big-pearl.png"
+    },
+    "big-root": {
+      "path": "items-icons/pokemondb-sprites/hold-items/big-root.png",
+      "category": "Hold items",
+      "name": "Big Root",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/big-root.png"
+    },
+    "binding-band": {
+      "path": "items-icons/pokemondb-sprites/hold-items/binding-band.png",
+      "category": "Hold items",
+      "name": "Binding Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/binding-band.png"
+    },
+    "black-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/black-apricorn.png",
+      "category": "General items",
+      "name": "Black Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/black-apricorn.png"
+    },
+    "black-belt": {
+      "path": "items-icons/pokemondb-sprites/hold-items/black-belt.png",
+      "category": "Hold items",
+      "name": "Black Belt",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/black-belt.png"
+    },
+    "black-flute": {
+      "path": "items-icons/pokemondb-sprites/general-items/black-flute.png",
+      "category": "General items",
+      "name": "Black Flute",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/black-flute.png"
+    },
+    "black-glasses": {
+      "path": "items-icons/pokemondb-sprites/hold-items/black-glasses.png",
+      "category": "Hold items",
+      "name": "Black Glasses",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/black-glasses.png"
+    },
+    "black-sludge": {
+      "path": "items-icons/pokemondb-sprites/hold-items/black-sludge.png",
+      "category": "Hold items",
+      "name": "Black Sludge",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/black-sludge.png"
+    },
+    "blastoisinite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/blastoisinite.png",
+      "category": "Hold items",
+      "name": "Blastoisinite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blastoisinite.png"
+    },
+    "blazikenite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/blazikenite.png",
+      "category": "Hold items",
+      "name": "Blazikenite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blazikenite.png"
+    },
+    "blue-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/blue-apricorn.png",
+      "category": "General items",
+      "name": "Blue Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blue-apricorn.png"
+    },
+    "blue-flute": {
+      "path": "items-icons/pokemondb-sprites/general-items/blue-flute.png",
+      "category": "General items",
+      "name": "Blue Flute",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blue-flute.png"
+    },
+    "blue-scarf": {
+      "path": "items-icons/pokemondb-sprites/general-items/blue-scarf.png",
+      "category": "General items",
+      "name": "Blue Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blue-scarf.png"
+    },
+    "blue-shard": {
+      "path": "items-icons/pokemondb-sprites/general-items/blue-shard.png",
+      "category": "General items",
+      "name": "Blue Shard",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/blue-shard.png"
+    },
+    "bluk-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/bluk-berry.png",
+      "category": "Berries",
+      "name": "Bluk Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/bluk-berry.png"
+    },
+    "bottle-cap": {
+      "path": "items-icons/pokemondb-sprites/general-items/bottle-cap.png",
+      "category": "General items",
+      "name": "Bottle Cap",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/bottle-cap.png"
+    },
+    "bright-powder": {
+      "path": "items-icons/pokemondb-sprites/hold-items/bright-powder.png",
+      "category": "Hold items",
+      "name": "Bright Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/bright-powder.png"
+    },
+    "bug-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/bug-gem.png",
+      "category": "Hold items",
+      "name": "Bug Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/bug-gem.png"
+    },
+    "bug-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/bug-memory.png",
+      "category": "Hold items",
+      "name": "Bug Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/bug-memory.png"
+    },
+    "buginium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/buginium-z.png",
+      "category": "Hold items",
+      "name": "Buginium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/buginium-z.png"
+    },
+    "burn-drive": {
+      "path": "items-icons/pokemondb-sprites/hold-items/burn-drive.png",
+      "category": "Hold items",
+      "name": "Burn Drive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/burn-drive.png"
+    },
+    "burn-heal": {
+      "path": "items-icons/pokemondb-sprites/medicine/burn-heal.png",
+      "category": "Medicine",
+      "name": "Burn Heal",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/burn-heal.png"
+    },
+    "calcium": {
+      "path": "items-icons/pokemondb-sprites/medicine/calcium.png",
+      "category": "Medicine",
+      "name": "Calcium",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/calcium.png"
+    },
+    "cameruptite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/cameruptite.png",
+      "category": "Hold items",
+      "name": "Cameruptite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cameruptite.png"
+    },
+    "carbos": {
+      "path": "items-icons/pokemondb-sprites/medicine/carbos.png",
+      "category": "Medicine",
+      "name": "Carbos",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/carbos.png"
+    },
+    "casteliacone": {
+      "path": "items-icons/pokemondb-sprites/medicine/casteliacone.png",
+      "category": "Medicine",
+      "name": "Casteliacone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/casteliacone.png"
+    },
+    "cell-battery": {
+      "path": "items-icons/pokemondb-sprites/hold-items/cell-battery.png",
+      "category": "Hold items",
+      "name": "Cell Battery",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cell-battery.png"
+    },
+    "chalky-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/chalky-stone.png",
+      "category": "General items",
+      "name": "Chalky Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/chalky-stone.png"
+    },
+    "charcoal": {
+      "path": "items-icons/pokemondb-sprites/hold-items/charcoal.png",
+      "category": "Hold items",
+      "name": "Charcoal",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/charcoal.png"
+    },
+    "charizardite-x": {
+      "path": "items-icons/pokemondb-sprites/hold-items/charizardite-x.png",
+      "category": "Hold items",
+      "name": "Charizardite X",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/charizardite-x.png"
+    },
+    "charizardite-y": {
+      "path": "items-icons/pokemondb-sprites/hold-items/charizardite-y.png",
+      "category": "Hold items",
+      "name": "Charizardite Y",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/charizardite-y.png"
+    },
+    "charti-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/charti-berry.png",
+      "category": "Berries",
+      "name": "Charti Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/charti-berry.png"
+    },
+    "cheri-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/cheri-berry.png",
+      "category": "Berries",
+      "name": "Cheri Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cheri-berry.png"
+    },
+    "cherish-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/cherish-ball.png",
+      "category": "Pokeballs",
+      "name": "Cherish Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cherish-ball.png"
+    },
+    "chesto-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/chesto-berry.png",
+      "category": "Berries",
+      "name": "Chesto Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/chesto-berry.png"
+    },
+    "chilan-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/chilan-berry.png",
+      "category": "Berries",
+      "name": "Chilan Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/chilan-berry.png"
+    },
+    "chill-drive": {
+      "path": "items-icons/pokemondb-sprites/hold-items/chill-drive.png",
+      "category": "Hold items",
+      "name": "Chill Drive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/chill-drive.png"
+    },
+    "choice-band": {
+      "path": "items-icons/pokemondb-sprites/hold-items/choice-band.png",
+      "category": "Hold items",
+      "name": "Choice Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/choice-band.png"
+    },
+    "choice-scarf": {
+      "path": "items-icons/pokemondb-sprites/hold-items/choice-scarf.png",
+      "category": "Hold items",
+      "name": "Choice Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/choice-scarf.png"
+    },
+    "choice-specs": {
+      "path": "items-icons/pokemondb-sprites/hold-items/choice-specs.png",
+      "category": "Hold items",
+      "name": "Choice Specs",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/choice-specs.png"
+    },
+    "chople-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/chople-berry.png",
+      "category": "Berries",
+      "name": "Chople Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/chople-berry.png"
+    },
+    "claw-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/claw-fossil.png",
+      "category": "General items",
+      "name": "Claw Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/claw-fossil.png"
+    },
+    "cleanse-tag": {
+      "path": "items-icons/pokemondb-sprites/hold-items/cleanse-tag.png",
+      "category": "Hold items",
+      "name": "Cleanse Tag",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cleanse-tag.png"
+    },
+    "coba-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/coba-berry.png",
+      "category": "Berries",
+      "name": "Coba Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/coba-berry.png"
+    },
+    "colbur-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/colbur-berry.png",
+      "category": "Berries",
+      "name": "Colbur Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/colbur-berry.png"
+    },
+    "clever-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/clever-feather.png",
+      "category": "Medicine",
+      "name": "Clever Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/clever-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/clever-wing.png"
+    },
+    "comet-shard": {
+      "path": "items-icons/pokemondb-sprites/general-items/comet-shard.png",
+      "category": "General items",
+      "name": "Comet Shard",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/comet-shard.png"
+    },
+    "cornn-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/cornn-berry.png",
+      "category": "Berries",
+      "name": "Cornn Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cornn-berry.png"
+    },
+    "courage-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/courage-candy.png",
+      "category": "Medicine",
+      "name": "Courage Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/courage-candy.png"
+    },
+    "courage-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/courage-candy-l.png",
+      "category": "Medicine",
+      "name": "Courage Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/courage-candy-l.png"
+    },
+    "courage-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/courage-candy-xl.png",
+      "category": "Medicine",
+      "name": "Courage Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/courage-candy-xl.png"
+    },
+    "cover-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/cover-fossil.png",
+      "category": "General items",
+      "name": "Cover Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/cover-fossil.png"
+    },
+    "custap-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/custap-berry.png",
+      "category": "Berries",
+      "name": "Custap Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/custap-berry.png"
+    },
+    "damp-mulch": {
+      "path": "items-icons/pokemondb-sprites/general-items/damp-mulch.png",
+      "category": "General items",
+      "name": "Damp Mulch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/damp-mulch.png"
+    },
+    "damp-rock": {
+      "path": "items-icons/pokemondb-sprites/hold-items/damp-rock.png",
+      "category": "Hold items",
+      "name": "Damp Rock",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/damp-rock.png"
+    },
+    "dark-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dark-gem.png",
+      "category": "Hold items",
+      "name": "Dark Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dark-gem.png"
+    },
+    "dark-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dark-memory.png",
+      "category": "Hold items",
+      "name": "Dark Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dark-memory.png"
+    },
+    "darkinium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/darkinium-z.png",
+      "category": "Hold items",
+      "name": "Darkinium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/darkinium-z.png"
+    },
+    "dawn-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/dawn-stone.png",
+      "category": "General items",
+      "name": "Dawn Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dawn-stone.png"
+    },
+    "decidium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/decidium-z.png",
+      "category": "Hold items",
+      "name": "Decidium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/decidium-z.png"
+    },
+    "deep-sea-scale": {
+      "path": "items-icons/pokemondb-sprites/hold-items/deep-sea-scale.png",
+      "category": "Hold items",
+      "name": "Deep Sea Scale",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/deep-sea-scale.png"
+    },
+    "deep-sea-tooth": {
+      "path": "items-icons/pokemondb-sprites/hold-items/deep-sea-tooth.png",
+      "category": "Hold items",
+      "name": "Deep Sea Tooth",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/deep-sea-tooth.png"
+    },
+    "destiny-knot": {
+      "path": "items-icons/pokemondb-sprites/hold-items/destiny-knot.png",
+      "category": "Hold items",
+      "name": "Destiny Knot",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/destiny-knot.png"
+    },
+    "diancite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/diancite.png",
+      "category": "Hold items",
+      "name": "Diancite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/diancite.png"
+    },
+    "dire-hit": {
+      "path": "items-icons/pokemondb-sprites/battle-items/dire-hit.png",
+      "category": "Battle items",
+      "name": "Dire Hit",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dire-hit.png"
+    },
+    "dire-hit-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/dire-hit-2.png",
+      "category": "Battle items",
+      "name": "Dire Hit 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dire-hit-2.png"
+    },
+    "dire-hit-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/dire-hit-3.png",
+      "category": "Battle items",
+      "name": "Dire Hit 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dire-hit-3.png"
+    },
+    "discount-coupon": {
+      "path": "items-icons/pokemondb-sprites/general-items/discount-coupon.png",
+      "category": "General items",
+      "name": "Discount Coupon",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/discount-coupon.png"
+    },
+    "dive-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/dive-ball.png",
+      "category": "Pokeballs",
+      "name": "Dive Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dive-ball.png"
+    },
+    "dna-splicers": {
+      "path": "items-icons/pokemondb-sprites/general-items/dna-splicers.png",
+      "category": "General items",
+      "name": "DNA Splicers",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dna-splicers.png"
+    },
+    "dome-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/dome-fossil.png",
+      "category": "General items",
+      "name": "Dome Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dome-fossil.png"
+    },
+    "douse-drive": {
+      "path": "items-icons/pokemondb-sprites/hold-items/douse-drive.png",
+      "category": "Hold items",
+      "name": "Douse Drive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/douse-drive.png"
+    },
+    "draco-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/draco-plate.png",
+      "category": "Hold items",
+      "name": "Draco Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/draco-plate.png"
+    },
+    "dragon-fang": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dragon-fang.png",
+      "category": "Hold items",
+      "name": "Dragon Fang",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dragon-fang.png"
+    },
+    "dragon-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dragon-gem.png",
+      "category": "Hold items",
+      "name": "Dragon Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dragon-gem.png"
+    },
+    "dragon-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dragon-memory.png",
+      "category": "Hold items",
+      "name": "Dragon Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dragon-memory.png"
+    },
+    "dragon-scale": {
+      "path": "items-icons/pokemondb-sprites/general-items/dragon-scale.png",
+      "category": "General items",
+      "name": "Dragon Scale",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dragon-scale.png"
+    },
+    "dragonium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dragonium-z.png",
+      "category": "Hold items",
+      "name": "Dragonium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dragonium-z.png"
+    },
+    "dread-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dread-plate.png",
+      "category": "Hold items",
+      "name": "Dread Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dread-plate.png"
+    },
+    "dream-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/dream-ball.png",
+      "category": "Pokeballs",
+      "name": "Dream Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dream-ball.png"
+    },
+    "dropped-item": {
+      "path": "items-icons/pokemondb-sprites/hold-items/dropped-item.png",
+      "category": "Hold items",
+      "name": "Dropped Item",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/xtransceiver.png"
+    },
+    "dubious-disc": {
+      "path": "items-icons/pokemondb-sprites/general-items/dubious-disc.png",
+      "category": "General items",
+      "name": "Dubious Disc",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dubious-disc.png"
+    },
+    "durin-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/durin-berry.png",
+      "category": "Berries",
+      "name": "Durin Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/durin-berry.png"
+    },
+    "dusk-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/dusk-ball.png",
+      "category": "Pokeballs",
+      "name": "Dusk Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dusk-ball.png"
+    },
+    "dusk-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/dusk-stone.png",
+      "category": "General items",
+      "name": "Dusk Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/dusk-stone.png"
+    },
+    "earth-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/earth-plate.png",
+      "category": "Hold items",
+      "name": "Earth Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/earth-plate.png"
+    },
+    "eevium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/eevium-z.png",
+      "category": "Hold items",
+      "name": "Eevium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/eevium-z.png"
+    },
+    "eject-button": {
+      "path": "items-icons/pokemondb-sprites/hold-items/eject-button.png",
+      "category": "Hold items",
+      "name": "Eject Button",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/eject-button.png"
+    },
+    "electirizer": {
+      "path": "items-icons/pokemondb-sprites/general-items/electirizer.png",
+      "category": "General items",
+      "name": "Electirizer",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/electirizer.png"
+    },
+    "electric-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/electric-gem.png",
+      "category": "Hold items",
+      "name": "Electric Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/electric-gem.png"
+    },
+    "electric-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/electric-memory.png",
+      "category": "Hold items",
+      "name": "Electric Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/electric-memory.png"
+    },
+    "electric-seed": {
+      "path": "items-icons/pokemondb-sprites/hold-items/electric-seed.png",
+      "category": "Hold items",
+      "name": "Electric Seed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/electric-seed.png"
+    },
+    "electrium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/electrium-z.png",
+      "category": "Hold items",
+      "name": "Electrium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/electrium-z.png"
+    },
+    "elevator-key": {
+      "path": "items-icons/pokemondb-sprites/hold-items/elevator-key.png",
+      "category": "Hold items",
+      "name": "Elevator Key",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/elevator-key.png"
+    },
+    "elixir": {
+      "path": "items-icons/pokemondb-sprites/medicine/elixir.png",
+      "category": "Medicine",
+      "name": "Elixir",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/elixir.png"
+    },
+    "energy-powder": {
+      "path": "items-icons/pokemondb-sprites/medicine/energy-powder.png",
+      "category": "Medicine",
+      "name": "Energy Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/energy-powder.png"
+    },
+    "energy-root": {
+      "path": "items-icons/pokemondb-sprites/medicine/energy-root.png",
+      "category": "Medicine",
+      "name": "Energy Root",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/energy-root.png"
+    },
+    "enigma-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/enigma-berry.png",
+      "category": "Berries",
+      "name": "Enigma Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/enigma-berry.png"
+    },
+    "escape-rope": {
+      "path": "items-icons/pokemondb-sprites/general-items/escape-rope.png",
+      "category": "General items",
+      "name": "Escape Rope",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/escape-rope.png"
+    },
+    "ether": {
+      "path": "items-icons/pokemondb-sprites/medicine/ether.png",
+      "category": "Medicine",
+      "name": "Ether",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ether.png"
+    },
+    "everstone": {
+      "path": "items-icons/pokemondb-sprites/hold-items/everstone.png",
+      "category": "Hold items",
+      "name": "Everstone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/everstone.png"
+    },
+    "eviolite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/eviolite.png",
+      "category": "Hold items",
+      "name": "Eviolite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/eviolite.png"
+    },
+    "exp-share": {
+      "path": "items-icons/pokemondb-sprites/hold-items/exp-share.png",
+      "category": "Hold items",
+      "name": "Exp. Share",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/exp-share.png"
+    },
+    "expert-belt": {
+      "path": "items-icons/pokemondb-sprites/hold-items/expert-belt.png",
+      "category": "Hold items",
+      "name": "Expert Belt",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/expert-belt.png"
+    },
+    "fairium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fairium-z.png",
+      "category": "Hold items",
+      "name": "Fairium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fairium-z.png"
+    },
+    "fairy-gem": {
+      "path": "items-icons/pokemondb-sprites/general-items/fairy-gem.png",
+      "category": "General items",
+      "name": "Fairy Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fairy-gem.png"
+    },
+    "fairy-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fairy-memory.png",
+      "category": "Hold items",
+      "name": "Fairy Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fairy-memory.png"
+    },
+    "fast-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/fast-ball.png",
+      "category": "Pokeballs",
+      "name": "Fast Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fast-ball.png"
+    },
+    "festival-ticket": {
+      "path": "items-icons/pokemondb-sprites/general-items/festival-ticket.png",
+      "category": "General items",
+      "name": "Festival Ticket",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/festival-ticket.png"
+    },
+    "fighting-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fighting-gem.png",
+      "category": "Hold items",
+      "name": "Fighting Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fighting-gem.png"
+    },
+    "fighting-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fighting-memory.png",
+      "category": "Hold items",
+      "name": "Fighting Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fighting-memory.png"
+    },
+    "fightinium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fightinium-z.png",
+      "category": "Hold items",
+      "name": "Fightinium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fightinium-z.png"
+    },
+    "figy-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/figy-berry.png",
+      "category": "Berries",
+      "name": "Figy Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/figy-berry.png"
+    },
+    "fire-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fire-gem.png",
+      "category": "Hold items",
+      "name": "Fire Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fire-gem.png"
+    },
+    "fire-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fire-memory.png",
+      "category": "Hold items",
+      "name": "Fire Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fire-memory.png"
+    },
+    "fire-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/fire-stone.png",
+      "category": "General items",
+      "name": "Fire Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fire-stone.png"
+    },
+    "firium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/firium-z.png",
+      "category": "Hold items",
+      "name": "Firium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/firium-z.png"
+    },
+    "fist-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/fist-plate.png",
+      "category": "Hold items",
+      "name": "Fist Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fist-plate.png"
+    },
+    "flame-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/flame-orb.png",
+      "category": "Hold items",
+      "name": "Flame Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/flame-orb.png"
+    },
+    "flame-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/flame-plate.png",
+      "category": "Hold items",
+      "name": "Flame Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/flame-plate.png"
+    },
+    "float-stone": {
+      "path": "items-icons/pokemondb-sprites/hold-items/float-stone.png",
+      "category": "Hold items",
+      "name": "Float Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/float-stone.png"
+    },
+    "fluffy-tail": {
+      "path": "items-icons/pokemondb-sprites/general-items/fluffy-tail.png",
+      "category": "General items",
+      "name": "Fluffy Tail",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fluffy-tail.png"
+    },
+    "flying-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/flying-gem.png",
+      "category": "Hold items",
+      "name": "Flying Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/flying-gem.png"
+    },
+    "flying-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/flying-memory.png",
+      "category": "Hold items",
+      "name": "Flying Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/flying-memory.png"
+    },
+    "flyinium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/flyinium-z.png",
+      "category": "Hold items",
+      "name": "Flyinium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/flyinium-z.png"
+    },
+    "focus-band": {
+      "path": "items-icons/pokemondb-sprites/hold-items/focus-band.png",
+      "category": "Hold items",
+      "name": "Focus Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/focus-band.png"
+    },
+    "focus-sash": {
+      "path": "items-icons/pokemondb-sprites/hold-items/focus-sash.png",
+      "category": "Hold items",
+      "name": "Focus Sash",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/focus-sash.png"
+    },
+    "fresh-water": {
+      "path": "items-icons/pokemondb-sprites/medicine/fresh-water.png",
+      "category": "Medicine",
+      "name": "Fresh Water",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/fresh-water.png"
+    },
+    "friend-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/friend-ball.png",
+      "category": "Pokeballs",
+      "name": "Friend Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/friend-ball.png"
+    },
+    "full-heal": {
+      "path": "items-icons/pokemondb-sprites/medicine/full-heal.png",
+      "category": "Medicine",
+      "name": "Full Heal",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/full-heal.png"
+    },
+    "full-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/full-incense.png",
+      "category": "Hold items",
+      "name": "Full Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/full-incense.png"
+    },
+    "full-restore": {
+      "path": "items-icons/pokemondb-sprites/medicine/full-restore.png",
+      "category": "Medicine",
+      "name": "Full Restore",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/full-restore.png"
+    },
+    "galladite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/galladite.png",
+      "category": "Hold items",
+      "name": "Galladite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/galladite.png"
+    },
+    "ganlon-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/ganlon-berry.png",
+      "category": "Berries",
+      "name": "Ganlon Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ganlon-berry.png"
+    },
+    "garchompite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/garchompite.png",
+      "category": "Hold items",
+      "name": "Garchompite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/garchompite.png"
+    },
+    "gardevoirite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/gardevoirite.png",
+      "category": "Hold items",
+      "name": "Gardevoirite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/gardevoirite.png"
+    },
+    "gengarite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/gengarite.png",
+      "category": "Hold items",
+      "name": "Gengarite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/gengarite.png"
+    },
+    "ghost-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ghost-gem.png",
+      "category": "Hold items",
+      "name": "Ghost Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ghost-gem.png"
+    },
+    "ghost-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ghost-memory.png",
+      "category": "Hold items",
+      "name": "Ghost Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ghost-memory.png"
+    },
+    "ghostium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ghostium-z.png",
+      "category": "Hold items",
+      "name": "Ghostium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ghostium-z.png"
+    },
+    "genius-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/genius-feather.png",
+      "category": "Medicine",
+      "name": "Genius Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/genius-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/genius-wing.png"
+    },
+    "glalitite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/glalitite.png",
+      "category": "Hold items",
+      "name": "Glalitite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/glalitite.png"
+    },
+    "gold-bottle-cap": {
+      "path": "items-icons/pokemondb-sprites/general-items/gold-bottle-cap.png",
+      "category": "General items",
+      "name": "Gold Bottle Cap",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/gold-bottle-cap.png"
+    },
+    "golden-nanab-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/golden-nanab-berry.png",
+      "category": "Berries",
+      "name": "Golden Nanab Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/golden-nanab-berry.png"
+    },
+    "golden-pinap-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/golden-pinap-berry.png",
+      "category": "Berries",
+      "name": "Golden Pinap Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/golden-pinap-berry.png"
+    },
+    "golden-razz-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/golden-razz-berry.png",
+      "category": "Berries",
+      "name": "Golden Razz Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/golden-razz-berry.png"
+    },
+    "gooey-mulch": {
+      "path": "items-icons/pokemondb-sprites/general-items/gooey-mulch.png",
+      "category": "General items",
+      "name": "Gooey Mulch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/gooey-mulch.png"
+    },
+    "grass-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grass-gem.png",
+      "category": "Hold items",
+      "name": "Grass Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grass-gem.png"
+    },
+    "grass-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grass-memory.png",
+      "category": "Hold items",
+      "name": "Grass Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grass-memory.png"
+    },
+    "grassium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grassium-z.png",
+      "category": "Hold items",
+      "name": "Grassium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grassium-z.png"
+    },
+    "grassy-seed": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grassy-seed.png",
+      "category": "Hold items",
+      "name": "Grassy Seed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grassy-seed.png"
+    },
+    "great-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/great-ball.png",
+      "category": "Pokeballs",
+      "name": "Great Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/great-ball.png"
+    },
+    "green-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/green-apricorn.png",
+      "category": "General items",
+      "name": "Green Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/green-apricorn.png"
+    },
+    "green-scarf": {
+      "path": "items-icons/pokemondb-sprites/general-items/green-scarf.png",
+      "category": "General items",
+      "name": "Green Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/green-scarf.png"
+    },
+    "green-shard": {
+      "path": "items-icons/pokemondb-sprites/general-items/green-shard.png",
+      "category": "General items",
+      "name": "Green Shard",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/green-shard.png"
+    },
+    "grepa-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/grepa-berry.png",
+      "category": "Berries",
+      "name": "Grepa Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grepa-berry.png"
+    },
+    "grip-claw": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grip-claw.png",
+      "category": "Hold items",
+      "name": "Grip Claw",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grip-claw.png"
+    },
+    "griseous-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/griseous-orb.png",
+      "category": "Hold items",
+      "name": "Griseous Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/griseous-orb.png"
+    },
+    "ground-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ground-gem.png",
+      "category": "Hold items",
+      "name": "Ground Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ground-gem.png"
+    },
+    "ground-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ground-memory.png",
+      "category": "Hold items",
+      "name": "Ground Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ground-memory.png"
+    },
+    "groundium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/groundium-z.png",
+      "category": "Hold items",
+      "name": "Groundium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/groundium-z.png"
+    },
+    "growth-mulch": {
+      "path": "items-icons/pokemondb-sprites/general-items/growth-mulch.png",
+      "category": "General items",
+      "name": "Growth Mulch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/growth-mulch.png"
+    },
+    "grubby-hanky": {
+      "path": "items-icons/pokemondb-sprites/hold-items/grubby-hanky.png",
+      "category": "Hold items",
+      "name": "Grubby Hanky",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/grubby-hanky.png"
+    },
+    "guard-spec": {
+      "path": "items-icons/pokemondb-sprites/battle-items/guard-spec.png",
+      "category": "Battle items",
+      "name": "Guard Spec.",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/guard-spec.png"
+    },
+    "gyaradosite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/gyaradosite.png",
+      "category": "Hold items",
+      "name": "Gyaradosite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/gyaradosite.png"
+    },
+    "haban-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/haban-berry.png",
+      "category": "Berries",
+      "name": "Haban Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/haban-berry.png"
+    },
+    "hard-stone": {
+      "path": "items-icons/pokemondb-sprites/hold-items/hard-stone.png",
+      "category": "Hold items",
+      "name": "Hard Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/hard-stone.png"
+    },
+    "heal-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/heal-ball.png",
+      "category": "Pokeballs",
+      "name": "Heal Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heal-ball.png"
+    },
+    "heal-powder": {
+      "path": "items-icons/pokemondb-sprites/medicine/heal-powder.png",
+      "category": "Medicine",
+      "name": "Heal Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heal-powder.png"
+    },
+    "health-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/health-candy.png",
+      "category": "Medicine",
+      "name": "Health Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/health-candy.png"
+    },
+    "health-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/health-candy-l.png",
+      "category": "Medicine",
+      "name": "Health Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/health-candy-l.png"
+    },
+    "health-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/health-candy-xl.png",
+      "category": "Medicine",
+      "name": "Health Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/health-candy-xl.png"
+    },
+    "heart-scale": {
+      "path": "items-icons/pokemondb-sprites/general-items/heart-scale.png",
+      "category": "General items",
+      "name": "Heart Scale",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heart-scale.png"
+    },
+    "heat-rock": {
+      "path": "items-icons/pokemondb-sprites/hold-items/heat-rock.png",
+      "category": "Hold items",
+      "name": "Heat Rock",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heat-rock.png"
+    },
+    "heavy-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/heavy-ball.png",
+      "category": "Pokeballs",
+      "name": "Heavy Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heavy-ball.png"
+    },
+    "health-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/health-feather.png",
+      "category": "Medicine",
+      "name": "Health Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/health-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/health-wing.png"
+    },
+    "helix-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/helix-fossil.png",
+      "category": "General items",
+      "name": "Helix Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/helix-fossil.png"
+    },
+    "heracronite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/heracronite.png",
+      "category": "Hold items",
+      "name": "Heracronite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/heracronite.png"
+    },
+    "hm01": {
+      "path": "items-icons/pokemondb-sprites/machines/hm01.png",
+      "category": "Machines",
+      "name": "HM01",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "hm02": {
+      "path": "items-icons/pokemondb-sprites/machines/hm02.png",
+      "category": "Machines",
+      "name": "HM02",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "hm03": {
+      "path": "items-icons/pokemondb-sprites/machines/hm03.png",
+      "category": "Machines",
+      "name": "HM03",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "hm04": {
+      "path": "items-icons/pokemondb-sprites/machines/hm04.png",
+      "category": "Machines",
+      "name": "HM04",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "hm05": {
+      "path": "items-icons/pokemondb-sprites/machines/hm05.png",
+      "category": "Machines",
+      "name": "HM05",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "hm06": {
+      "path": "items-icons/pokemondb-sprites/machines/hm06.png",
+      "category": "Machines",
+      "name": "HM06",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "hm07": {
+      "path": "items-icons/pokemondb-sprites/machines/hm07.png",
+      "category": "Machines",
+      "name": "HM07",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "hm08": {
+      "path": "items-icons/pokemondb-sprites/machines/hm08.png",
+      "category": "Machines",
+      "name": "HM08",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "hondew-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/hondew-berry.png",
+      "category": "Berries",
+      "name": "Hondew Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/hondew-berry.png"
+    },
+    "honey": {
+      "path": "items-icons/pokemondb-sprites/general-items/honey.png",
+      "category": "General items",
+      "name": "Honey",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/honey.png"
+    },
+    "honor-of-kalos": {
+      "path": "items-icons/pokemondb-sprites/hold-items/honor-of-kalos.png",
+      "category": "Hold items",
+      "name": "Honor Of Kalos",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/honor-of-kalos.png"
+    },
+    "houndoominite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/houndoominite.png",
+      "category": "Hold items",
+      "name": "Houndoominite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/houndoominite.png"
+    },
+    "hp-up": {
+      "path": "items-icons/pokemondb-sprites/medicine/hp-up.png",
+      "category": "Medicine",
+      "name": "HP Up",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/hp-up.png"
+    },
+    "hyper-potion": {
+      "path": "items-icons/pokemondb-sprites/medicine/hyper-potion.png",
+      "category": "Medicine",
+      "name": "Hyper Potion",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/hyper-potion.png"
+    },
+    "iapapa-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/iapapa-berry.png",
+      "category": "Berries",
+      "name": "Iapapa Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/iapapa-berry.png"
+    },
+    "ice-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ice-gem.png",
+      "category": "Hold items",
+      "name": "Ice Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ice-gem.png"
+    },
+    "ice-heal": {
+      "path": "items-icons/pokemondb-sprites/medicine/ice-heal.png",
+      "category": "Medicine",
+      "name": "Ice Heal",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ice-heal.png"
+    },
+    "ice-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ice-memory.png",
+      "category": "Hold items",
+      "name": "Ice Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ice-memory.png"
+    },
+    "ice-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/ice-stone.png",
+      "category": "General items",
+      "name": "Ice Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ice-stone.png"
+    },
+    "icicle-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/icicle-plate.png",
+      "category": "Hold items",
+      "name": "Icicle Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/icicle-plate.png"
+    },
+    "icium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/icium-z.png",
+      "category": "Hold items",
+      "name": "Icium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/icium-z.png"
+    },
+    "icy-rock": {
+      "path": "items-icons/pokemondb-sprites/hold-items/icy-rock.png",
+      "category": "Hold items",
+      "name": "Icy Rock",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/icy-rock.png"
+    },
+    "incinium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/incinium-z.png",
+      "category": "Hold items",
+      "name": "Incinium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/incinium-z.png"
+    },
+    "insect-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/insect-plate.png",
+      "category": "Hold items",
+      "name": "Insect Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/insect-plate.png"
+    },
+    "intriguing-stone": {
+      "path": "items-icons/pokemondb-sprites/hold-items/intriguing-stone.png",
+      "category": "Hold items",
+      "name": "Intriguing Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/intriguing-stone.png"
+    },
+    "iron": {
+      "path": "items-icons/pokemondb-sprites/medicine/iron.png",
+      "category": "Medicine",
+      "name": "Iron",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/iron.png"
+    },
+    "iron-ball": {
+      "path": "items-icons/pokemondb-sprites/hold-items/iron-ball.png",
+      "category": "Hold items",
+      "name": "Iron Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/iron-ball.png"
+    },
+    "iron-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/iron-plate.png",
+      "category": "Hold items",
+      "name": "Iron Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/iron-plate.png"
+    },
+    "item-drop": {
+      "path": "items-icons/pokemondb-sprites/battle-items/item-drop.png",
+      "category": "Battle items",
+      "name": "Item Drop",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/item-drop.png"
+    },
+    "item-urge": {
+      "path": "items-icons/pokemondb-sprites/battle-items/item-urge.png",
+      "category": "Battle items",
+      "name": "Item Urge",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/item-urge.png"
+    },
+    "jaboca-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/jaboca-berry.png",
+      "category": "Berries",
+      "name": "Jaboca Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/jaboca-berry.png"
+    },
+    "kangaskhanite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/kangaskhanite.png",
+      "category": "Hold items",
+      "name": "Kangaskhanite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kangaskhanite.png"
+    },
+    "kasib-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/kasib-berry.png",
+      "category": "Berries",
+      "name": "Kasib Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kasib-berry.png"
+    },
+    "kebia-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/kebia-berry.png",
+      "category": "Berries",
+      "name": "Kebia Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kebia-berry.png"
+    },
+    "kee-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/kee-berry.png",
+      "category": "Berries",
+      "name": "Kee Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kee-berry.png"
+    },
+    "kelpsy-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/kelpsy-berry.png",
+      "category": "Berries",
+      "name": "Kelpsy Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kelpsy-berry.png"
+    },
+    "kings-rock": {
+      "path": "items-icons/pokemondb-sprites/hold-items/kings-rock.png",
+      "category": "Hold items",
+      "name": "King's Rock",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kings-rock.png"
+    },
+    "kommonium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/kommonium-z.png",
+      "category": "Hold items",
+      "name": "Kommonium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/kommonium-z.png"
+    },
+    "lagging-tail": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lagging-tail.png",
+      "category": "Hold items",
+      "name": "Lagging Tail",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lagging-tail.png"
+    },
+    "lansat-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/lansat-berry.png",
+      "category": "Berries",
+      "name": "Lansat Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lansat-berry.png"
+    },
+    "latiasite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/latiasite.png",
+      "category": "Hold items",
+      "name": "Latiasite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/latiasite.png"
+    },
+    "latiosite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/latiosite.png",
+      "category": "Hold items",
+      "name": "Latiosite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/latiosite.png"
+    },
+    "lava-cookie": {
+      "path": "items-icons/pokemondb-sprites/medicine/lava-cookie.png",
+      "category": "Medicine",
+      "name": "Lava Cookie",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lava-cookie.png"
+    },
+    "lax-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lax-incense.png",
+      "category": "Hold items",
+      "name": "Lax Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lax-incense.png"
+    },
+    "leaf-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/leaf-stone.png",
+      "category": "General items",
+      "name": "Leaf Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/leaf-stone.png"
+    },
+    "leftovers": {
+      "path": "items-icons/pokemondb-sprites/hold-items/leftovers.png",
+      "category": "Hold items",
+      "name": "Leftovers",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/leftovers.png"
+    },
+    "lemonade": {
+      "path": "items-icons/pokemondb-sprites/medicine/lemonade.png",
+      "category": "Medicine",
+      "name": "Lemonade",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lemonade.png"
+    },
+    "leek": {
+      "path": "items-icons/pokemondb-sprites/hold-items/leek.png",
+      "category": "Hold items",
+      "name": "Leek",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/leek.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/stick.png"
+    },
+    "leppa-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/leppa-berry.png",
+      "category": "Berries",
+      "name": "Leppa Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/leppa-berry.png"
+    },
+    "level-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/level-ball.png",
+      "category": "Pokeballs",
+      "name": "Level Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/level-ball.png"
+    },
+    "liechi-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/liechi-berry.png",
+      "category": "Berries",
+      "name": "Liechi Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/liechi-berry.png"
+    },
+    "life-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/life-orb.png",
+      "category": "Hold items",
+      "name": "Life Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/life-orb.png"
+    },
+    "light-ball": {
+      "path": "items-icons/pokemondb-sprites/hold-items/light-ball.png",
+      "category": "Hold items",
+      "name": "Light Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/light-ball.png"
+    },
+    "light-clay": {
+      "path": "items-icons/pokemondb-sprites/hold-items/light-clay.png",
+      "category": "Hold items",
+      "name": "Light Clay",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/light-clay.png"
+    },
+    "looker-ticket": {
+      "path": "items-icons/pokemondb-sprites/hold-items/looker-ticket.png",
+      "category": "Hold items",
+      "name": "Looker Ticket",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/looker-ticket.png"
+    },
+    "lopunnite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lopunnite.png",
+      "category": "Hold items",
+      "name": "Lopunnite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lopunnite.png"
+    },
+    "love-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/love-ball.png",
+      "category": "Pokeballs",
+      "name": "Love Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/love-ball.png"
+    },
+    "lucarionite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lucarionite.png",
+      "category": "Hold items",
+      "name": "Lucarionite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lucarionite.png"
+    },
+    "luck-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/luck-incense.png",
+      "category": "Hold items",
+      "name": "Luck Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/luck-incense.png"
+    },
+    "lucky-egg": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lucky-egg.png",
+      "category": "Hold items",
+      "name": "Lucky Egg",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lucky-egg.png"
+    },
+    "lucky-punch": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lucky-punch.png",
+      "category": "Hold items",
+      "name": "Lucky Punch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lucky-punch.png"
+    },
+    "lum-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/lum-berry.png",
+      "category": "Berries",
+      "name": "Lum Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lum-berry.png"
+    },
+    "luminous-moss": {
+      "path": "items-icons/pokemondb-sprites/hold-items/luminous-moss.png",
+      "category": "Hold items",
+      "name": "Luminous Moss",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/luminous-moss.png"
+    },
+    "lumiose-galette": {
+      "path": "items-icons/pokemondb-sprites/medicine/lumiose-galette.png",
+      "category": "Medicine",
+      "name": "Lumiose Galette",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lumiose-galette.png"
+    },
+    "lunalium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lunalium-z.png",
+      "category": "Hold items",
+      "name": "Lunalium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lunalium-z.png"
+    },
+    "lure-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/lure-ball.png",
+      "category": "Pokeballs",
+      "name": "Lure Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lure-ball.png"
+    },
+    "lustrous-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lustrous-orb.png",
+      "category": "Hold items",
+      "name": "Lustrous Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lustrous-orb.png"
+    },
+    "luxury-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/luxury-ball.png",
+      "category": "Pokeballs",
+      "name": "Luxury Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/luxury-ball.png"
+    },
+    "lycanium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/lycanium-z.png",
+      "category": "Hold items",
+      "name": "Lycanium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/lycanium-z.png"
+    },
+    "macho-brace": {
+      "path": "items-icons/pokemondb-sprites/hold-items/macho-brace.png",
+      "category": "Hold items",
+      "name": "Macho Brace",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/macho-brace.png"
+    },
+    "magmarizer": {
+      "path": "items-icons/pokemondb-sprites/general-items/magmarizer.png",
+      "category": "General items",
+      "name": "Magmarizer",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/magmarizer.png"
+    },
+    "magnet": {
+      "path": "items-icons/pokemondb-sprites/hold-items/magnet.png",
+      "category": "Hold items",
+      "name": "Magnet",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/magnet.png"
+    },
+    "mago-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/mago-berry.png",
+      "category": "Berries",
+      "name": "Mago Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mago-berry.png"
+    },
+    "magost-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/magost-berry.png",
+      "category": "Berries",
+      "name": "Magost Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/magost-berry.png"
+    },
+    "manectite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/manectite.png",
+      "category": "Hold items",
+      "name": "Manectite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/manectite.png"
+    },
+    "maranga-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/maranga-berry.png",
+      "category": "Berries",
+      "name": "Maranga Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/maranga-berry.png"
+    },
+    "marshadium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/marshadium-z.png",
+      "category": "Hold items",
+      "name": "Marshadium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/marshadium-z.png"
+    },
+    "master-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/master-ball.png",
+      "category": "Pokeballs",
+      "name": "Master Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/master-ball.png"
+    },
+    "mawilite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mawilite.png",
+      "category": "Hold items",
+      "name": "Mawilite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mawilite.png"
+    },
+    "max-elixir": {
+      "path": "items-icons/pokemondb-sprites/medicine/max-elixir.png",
+      "category": "Medicine",
+      "name": "Max Elixir",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/max-elixir.png"
+    },
+    "max-ether": {
+      "path": "items-icons/pokemondb-sprites/medicine/max-ether.png",
+      "category": "Medicine",
+      "name": "Max Ether",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/max-ether.png"
+    },
+    "max-potion": {
+      "path": "items-icons/pokemondb-sprites/medicine/max-potion.png",
+      "category": "Medicine",
+      "name": "Max Potion",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/max-potion.png"
+    },
+    "max-repel": {
+      "path": "items-icons/pokemondb-sprites/general-items/max-repel.png",
+      "category": "General items",
+      "name": "Max Repel",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/max-repel.png"
+    },
+    "max-revive": {
+      "path": "items-icons/pokemondb-sprites/medicine/max-revive.png",
+      "category": "Medicine",
+      "name": "Max Revive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/max-revive.png"
+    },
+    "meadow-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/meadow-plate.png",
+      "category": "Hold items",
+      "name": "Meadow Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/meadow-plate.png"
+    },
+    "medichamite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/medichamite.png",
+      "category": "Hold items",
+      "name": "Medichamite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/medichamite.png"
+    },
+    "mental-herb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mental-herb.png",
+      "category": "Hold items",
+      "name": "Mental Herb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mental-herb.png"
+    },
+    "metagrossite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/metagrossite.png",
+      "category": "Hold items",
+      "name": "Metagrossite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/metagrossite.png"
+    },
+    "metal-coat": {
+      "path": "items-icons/pokemondb-sprites/hold-items/metal-coat.png",
+      "category": "Hold items",
+      "name": "Metal Coat",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/metal-coat.png"
+    },
+    "metal-powder": {
+      "path": "items-icons/pokemondb-sprites/hold-items/metal-powder.png",
+      "category": "Hold items",
+      "name": "Metal Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/metal-powder.png"
+    },
+    "metronome": {
+      "path": "items-icons/pokemondb-sprites/hold-items/metronome.png",
+      "category": "Hold items",
+      "name": "Metronome",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/metronome.png"
+    },
+    "mewnium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mewnium-z.png",
+      "category": "Hold items",
+      "name": "Mewnium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mewnium-z.png"
+    },
+    "mewtwonite-x": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mewtwonite-x.png",
+      "category": "Hold items",
+      "name": "Mewtwonite X",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mewtwonite-x.png"
+    },
+    "mewtwonite-y": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mewtwonite-y.png",
+      "category": "Hold items",
+      "name": "Mewtwonite Y",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mewtwonite-y.png"
+    },
+    "micle-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/micle-berry.png",
+      "category": "Berries",
+      "name": "Micle Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/micle-berry.png"
+    },
+    "mighty-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/mighty-candy.png",
+      "category": "Medicine",
+      "name": "Mighty Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mighty-candy.png"
+    },
+    "mighty-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/mighty-candy-l.png",
+      "category": "Medicine",
+      "name": "Mighty Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mighty-candy-l.png"
+    },
+    "mighty-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/mighty-candy-xl.png",
+      "category": "Medicine",
+      "name": "Mighty Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mighty-candy-xl.png"
+    },
+    "mimikium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mimikium-z.png",
+      "category": "Hold items",
+      "name": "Mimikium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mimikium-z.png"
+    },
+    "mind-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mind-plate.png",
+      "category": "Hold items",
+      "name": "Mind Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mind-plate.png"
+    },
+    "miracle-seed": {
+      "path": "items-icons/pokemondb-sprites/hold-items/miracle-seed.png",
+      "category": "Hold items",
+      "name": "Miracle Seed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/miracle-seed.png"
+    },
+    "misty-seed": {
+      "path": "items-icons/pokemondb-sprites/hold-items/misty-seed.png",
+      "category": "Hold items",
+      "name": "Misty Seed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/misty-seed.png"
+    },
+    "moomoo-milk": {
+      "path": "items-icons/pokemondb-sprites/medicine/moomoo-milk.png",
+      "category": "Medicine",
+      "name": "Moomoo Milk",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/moomoo-milk.png"
+    },
+    "moon-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/moon-ball.png",
+      "category": "Pokeballs",
+      "name": "Moon Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/moon-ball.png"
+    },
+    "moon-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/moon-stone.png",
+      "category": "General items",
+      "name": "Moon Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/moon-stone.png"
+    },
+    "muscle-band": {
+      "path": "items-icons/pokemondb-sprites/hold-items/muscle-band.png",
+      "category": "Hold items",
+      "name": "Muscle Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/muscle-band.png"
+    },
+    "mystic-water": {
+      "path": "items-icons/pokemondb-sprites/hold-items/mystic-water.png",
+      "category": "Hold items",
+      "name": "Mystic Water",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/mystic-water.png"
+    },
+    "muscle-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/muscle-feather.png",
+      "category": "Medicine",
+      "name": "Muscle Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/muscle-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/muscle-wing.png"
+    },
+    "nanab-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/nanab-berry.png",
+      "category": "Berries",
+      "name": "Nanab Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/nanab-berry.png"
+    },
+    "nest-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/nest-ball.png",
+      "category": "Pokeballs",
+      "name": "Nest Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/nest-ball.png"
+    },
+    "net-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/net-ball.png",
+      "category": "Pokeballs",
+      "name": "Net Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/net-ball.png"
+    },
+    "never-melt-ice": {
+      "path": "items-icons/pokemondb-sprites/hold-items/never-melt-ice.png",
+      "category": "Hold items",
+      "name": "Never-Melt Ice",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/never-melt-ice.png"
+    },
+    "nomel-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/nomel-berry.png",
+      "category": "Berries",
+      "name": "Nomel Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/nomel-berry.png"
+    },
+    "normal-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/normal-gem.png",
+      "category": "Hold items",
+      "name": "Normal Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/normal-gem.png"
+    },
+    "normalium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/normalium-z.png",
+      "category": "Hold items",
+      "name": "Normalium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/normalium-z.png"
+    },
+    "nugget": {
+      "path": "items-icons/pokemondb-sprites/general-items/nugget.png",
+      "category": "General items",
+      "name": "Nugget",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/nugget.png"
+    },
+    "occa-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/occa-berry.png",
+      "category": "Berries",
+      "name": "Occa Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/occa-berry.png"
+    },
+    "odd-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/odd-incense.png",
+      "category": "Hold items",
+      "name": "Odd Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/odd-incense.png"
+    },
+    "odd-keystone": {
+      "path": "items-icons/pokemondb-sprites/general-items/odd-keystone.png",
+      "category": "General items",
+      "name": "Odd Keystone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/odd-keystone.png"
+    },
+    "old-amber": {
+      "path": "items-icons/pokemondb-sprites/general-items/old-amber.png",
+      "category": "General items",
+      "name": "Old Amber",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/old-amber.png"
+    },
+    "old-gateau": {
+      "path": "items-icons/pokemondb-sprites/medicine/old-gateau.png",
+      "category": "Medicine",
+      "name": "Old Gateau",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/old-gateau.png"
+    },
+    "oran-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/oran-berry.png",
+      "category": "Berries",
+      "name": "Oran Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/oran-berry.png"
+    },
+    "oval-charm": {
+      "path": "items-icons/pokemondb-sprites/general-items/oval-charm.png",
+      "category": "General items",
+      "name": "Oval Charm",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/oval-charm.png"
+    },
+    "oval-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/oval-stone.png",
+      "category": "General items",
+      "name": "Oval Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/oval-stone.png"
+    },
+    "pamtre-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/pamtre-berry.png",
+      "category": "Berries",
+      "name": "Pamtre Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pamtre-berry.png"
+    },
+    "paralyze-heal": {
+      "path": "items-icons/pokemondb-sprites/medicine/paralyze-heal.png",
+      "category": "Medicine",
+      "name": "Paralyze Heal",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/paralyze-heal.png"
+    },
+    "park-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/park-ball.png",
+      "category": "Pokeballs",
+      "name": "Park Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/park-ball.png"
+    },
+    "pass-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pass-orb.png",
+      "category": "Hold items",
+      "name": "Pass Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pass-orb.png"
+    },
+    "passho-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/passho-berry.png",
+      "category": "Berries",
+      "name": "Passho Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/passho-berry.png"
+    },
+    "payapa-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/payapa-berry.png",
+      "category": "Berries",
+      "name": "Payapa Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/payapa-berry.png"
+    },
+    "pearl": {
+      "path": "items-icons/pokemondb-sprites/general-items/pearl.png",
+      "category": "General items",
+      "name": "Pearl",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pearl.png"
+    },
+    "pearl-string": {
+      "path": "items-icons/pokemondb-sprites/general-items/pearl-string.png",
+      "category": "General items",
+      "name": "Pearl String",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pearl-string.png"
+    },
+    "pecha-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/pecha-berry.png",
+      "category": "Berries",
+      "name": "Pecha Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pecha-berry.png"
+    },
+    "permit": {
+      "path": "items-icons/pokemondb-sprites/general-items/permit.png",
+      "category": "General items",
+      "name": "Permit",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/permit.png"
+    },
+    "persim-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/persim-berry.png",
+      "category": "Berries",
+      "name": "Persim Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/persim-berry.png"
+    },
+    "petaya-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/petaya-berry.png",
+      "category": "Berries",
+      "name": "Petaya Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/petaya-berry.png"
+    },
+    "pidgeotite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pidgeotite.png",
+      "category": "Hold items",
+      "name": "Pidgeotite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pidgeotite.png"
+    },
+    "pikanium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pikanium-z.png",
+      "category": "Hold items",
+      "name": "Pikanium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pikanium-z.png"
+    },
+    "pikashunium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pikashunium-z.png",
+      "category": "Hold items",
+      "name": "Pikashunium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pikashunium-z.png"
+    },
+    "pinap-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/pinap-berry.png",
+      "category": "Berries",
+      "name": "Pinap Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pinap-berry.png"
+    },
+    "pink-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/pink-apricorn.png",
+      "category": "General items",
+      "name": "Pink Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pink-apricorn.png"
+    },
+    "pink-nectar": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pink-nectar.png",
+      "category": "Hold items",
+      "name": "Pink Nectar",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pink-nectar.png"
+    },
+    "pink-scarf": {
+      "path": "items-icons/pokemondb-sprites/general-items/pink-scarf.png",
+      "category": "General items",
+      "name": "Pink Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pink-scarf.png"
+    },
+    "pinsirite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pinsirite.png",
+      "category": "Hold items",
+      "name": "Pinsirite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pinsirite.png"
+    },
+    "pixie-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pixie-plate.png",
+      "category": "Hold items",
+      "name": "Pixie Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pixie-plate.png"
+    },
+    "plasma-card": {
+      "path": "items-icons/pokemondb-sprites/hold-items/plasma-card.png",
+      "category": "Hold items",
+      "name": "Plasma Card",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/plasma-card.png"
+    },
+    "plume-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/plume-fossil.png",
+      "category": "General items",
+      "name": "Plume Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/plume-fossil.png"
+    },
+    "poison-barb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/poison-barb.png",
+      "category": "Hold items",
+      "name": "Poison Barb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poison-barb.png"
+    },
+    "poison-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/poison-gem.png",
+      "category": "Hold items",
+      "name": "Poison Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poison-gem.png"
+    },
+    "poison-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/poison-memory.png",
+      "category": "Hold items",
+      "name": "Poison Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poison-memory.png"
+    },
+    "poisonium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/poisonium-z.png",
+      "category": "Hold items",
+      "name": "Poisonium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poisonium-z.png"
+    },
+    "poke-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/poke-ball.png",
+      "category": "Pokeballs",
+      "name": "Poké Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poke-ball.png"
+    },
+    "poke-doll": {
+      "path": "items-icons/pokemondb-sprites/general-items/poke-doll.png",
+      "category": "General items",
+      "name": "Poké Doll",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poke-doll.png"
+    },
+    "poke-toy": {
+      "path": "items-icons/pokemondb-sprites/general-items/poke-toy.png",
+      "category": "General items",
+      "name": "Poké Toy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/poke-toy.png"
+    },
+    "pomeg-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/pomeg-berry.png",
+      "category": "Berries",
+      "name": "Pomeg Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pomeg-berry.png"
+    },
+    "potion": {
+      "path": "items-icons/pokemondb-sprites/medicine/potion.png",
+      "category": "Medicine",
+      "name": "Potion",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/potion.png"
+    },
+    "power-anklet": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-anklet.png",
+      "category": "Hold items",
+      "name": "Power Anklet",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-anklet.png"
+    },
+    "power-band": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-band.png",
+      "category": "Hold items",
+      "name": "Power Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-band.png"
+    },
+    "power-belt": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-belt.png",
+      "category": "Hold items",
+      "name": "Power Belt",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-belt.png"
+    },
+    "power-bracer": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-bracer.png",
+      "category": "Hold items",
+      "name": "Power Bracer",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-bracer.png"
+    },
+    "power-herb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-herb.png",
+      "category": "Hold items",
+      "name": "Power Herb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-herb.png"
+    },
+    "power-lens": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-lens.png",
+      "category": "Hold items",
+      "name": "Power Lens",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-lens.png"
+    },
+    "power-plant-pass": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-plant-pass.png",
+      "category": "Hold items",
+      "name": "Power Plant Pass",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-plant-pass.png"
+    },
+    "power-weight": {
+      "path": "items-icons/pokemondb-sprites/hold-items/power-weight.png",
+      "category": "Hold items",
+      "name": "Power Weight",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/power-weight.png"
+    },
+    "pp-max": {
+      "path": "items-icons/pokemondb-sprites/medicine/pp-max.png",
+      "category": "Medicine",
+      "name": "PP Max",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pp-max.png"
+    },
+    "pp-up": {
+      "path": "items-icons/pokemondb-sprites/medicine/pp-up.png",
+      "category": "Medicine",
+      "name": "PP Up",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pp-up.png"
+    },
+    "premier-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/premier-ball.png",
+      "category": "Pokeballs",
+      "name": "Premier Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/premier-ball.png"
+    },
+    "pretty-feather": {
+      "path": "items-icons/pokemondb-sprites/general-items/pretty-feather.png",
+      "category": "General items",
+      "name": "Pretty Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pretty-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/pretty-wing.png"
+    },
+    "primarium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/primarium-z.png",
+      "category": "Hold items",
+      "name": "Primarium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/primarium-z.png"
+    },
+    "prism-scale": {
+      "path": "items-icons/pokemondb-sprites/general-items/prism-scale.png",
+      "category": "General items",
+      "name": "Prism Scale",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/prism-scale.png"
+    },
+    "prison-bottle": {
+      "path": "items-icons/pokemondb-sprites/hold-items/prison-bottle.png",
+      "category": "Hold items",
+      "name": "Prison Bottle",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/prison-bottle.png"
+    },
+    "profs-letter": {
+      "path": "items-icons/pokemondb-sprites/hold-items/profs-letter.png",
+      "category": "Hold items",
+      "name": "Prof's Letter",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/profs-letter.png"
+    },
+    "protective-pads": {
+      "path": "items-icons/pokemondb-sprites/hold-items/protective-pads.png",
+      "category": "Hold items",
+      "name": "Protective Pads",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/protective-pads.png"
+    },
+    "protector": {
+      "path": "items-icons/pokemondb-sprites/general-items/protector.png",
+      "category": "General items",
+      "name": "Protector",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/protector.png"
+    },
+    "protein": {
+      "path": "items-icons/pokemondb-sprites/medicine/protein.png",
+      "category": "Medicine",
+      "name": "Protein",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/protein.png"
+    },
+    "psychic-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/psychic-gem.png",
+      "category": "Hold items",
+      "name": "Psychic Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/psychic-gem.png"
+    },
+    "psychic-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/psychic-memory.png",
+      "category": "Hold items",
+      "name": "Psychic Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/psychic-memory.png"
+    },
+    "psychic-seed": {
+      "path": "items-icons/pokemondb-sprites/hold-items/psychic-seed.png",
+      "category": "Hold items",
+      "name": "Psychic Seed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/psychic-seed.png"
+    },
+    "psychium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/psychium-z.png",
+      "category": "Hold items",
+      "name": "Psychium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/psychium-z.png"
+    },
+    "pure-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/pure-incense.png",
+      "category": "Hold items",
+      "name": "Pure Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/pure-incense.png"
+    },
+    "purple-nectar": {
+      "path": "items-icons/pokemondb-sprites/hold-items/purple-nectar.png",
+      "category": "Hold items",
+      "name": "Purple Nectar",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/purple-nectar.png"
+    },
+    "qualot-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/qualot-berry.png",
+      "category": "Berries",
+      "name": "Qualot Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/qualot-berry.png"
+    },
+    "quick-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/quick-ball.png",
+      "category": "Pokeballs",
+      "name": "Quick Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-ball.png"
+    },
+    "quick-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/quick-candy.png",
+      "category": "Medicine",
+      "name": "Quick Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-candy.png"
+    },
+    "quick-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/quick-candy-l.png",
+      "category": "Medicine",
+      "name": "Quick Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-candy-l.png"
+    },
+    "quick-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/quick-candy-xl.png",
+      "category": "Medicine",
+      "name": "Quick Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-candy-xl.png"
+    },
+    "quick-claw": {
+      "path": "items-icons/pokemondb-sprites/hold-items/quick-claw.png",
+      "category": "Hold items",
+      "name": "Quick Claw",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-claw.png"
+    },
+    "quick-powder": {
+      "path": "items-icons/pokemondb-sprites/hold-items/quick-powder.png",
+      "category": "Hold items",
+      "name": "Quick Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/quick-powder.png"
+    },
+    "rabuta-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/rabuta-berry.png",
+      "category": "Berries",
+      "name": "Rabuta Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rabuta-berry.png"
+    },
+    "rage-candy-bar": {
+      "path": "items-icons/pokemondb-sprites/medicine/rage-candy-bar.png",
+      "category": "Medicine",
+      "name": "Rage Candy Bar",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rage-candy-bar.png"
+    },
+    "rare-bone": {
+      "path": "items-icons/pokemondb-sprites/general-items/rare-bone.png",
+      "category": "General items",
+      "name": "Rare Bone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rare-bone.png"
+    },
+    "rare-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/rare-candy.png",
+      "category": "Medicine",
+      "name": "Rare Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rare-candy.png"
+    },
+    "rawst-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/rawst-berry.png",
+      "category": "Berries",
+      "name": "Rawst Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rawst-berry.png"
+    },
+    "razor-claw": {
+      "path": "items-icons/pokemondb-sprites/hold-items/razor-claw.png",
+      "category": "Hold items",
+      "name": "Razor Claw",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/razor-claw.png"
+    },
+    "razor-fang": {
+      "path": "items-icons/pokemondb-sprites/hold-items/razor-fang.png",
+      "category": "Hold items",
+      "name": "Razor Fang",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/razor-fang.png"
+    },
+    "razz-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/razz-berry.png",
+      "category": "Berries",
+      "name": "Razz Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/razz-berry.png"
+    },
+    "reaper-cloth": {
+      "path": "items-icons/pokemondb-sprites/general-items/reaper-cloth.png",
+      "category": "General items",
+      "name": "Reaper Cloth",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/reaper-cloth.png"
+    },
+    "red-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/red-apricorn.png",
+      "category": "General items",
+      "name": "Red Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-apricorn.png"
+    },
+    "red-card": {
+      "path": "items-icons/pokemondb-sprites/hold-items/red-card.png",
+      "category": "Hold items",
+      "name": "Red Card",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-card.png"
+    },
+    "red-flute": {
+      "path": "items-icons/pokemondb-sprites/general-items/red-flute.png",
+      "category": "General items",
+      "name": "Red Flute",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-flute.png"
+    },
+    "red-nectar": {
+      "path": "items-icons/pokemondb-sprites/hold-items/red-nectar.png",
+      "category": "Hold items",
+      "name": "Red Nectar",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-nectar.png"
+    },
+    "red-scarf": {
+      "path": "items-icons/pokemondb-sprites/general-items/red-scarf.png",
+      "category": "General items",
+      "name": "Red Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-scarf.png"
+    },
+    "red-shard": {
+      "path": "items-icons/pokemondb-sprites/general-items/red-shard.png",
+      "category": "General items",
+      "name": "Red Shard",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/red-shard.png"
+    },
+    "relic-band": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-band.png",
+      "category": "General items",
+      "name": "Relic Band",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-band.png"
+    },
+    "relic-copper": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-copper.png",
+      "category": "General items",
+      "name": "Relic Copper",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-copper.png"
+    },
+    "relic-crown": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-crown.png",
+      "category": "General items",
+      "name": "Relic Crown",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-crown.png"
+    },
+    "relic-gold": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-gold.png",
+      "category": "General items",
+      "name": "Relic Gold",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-gold.png"
+    },
+    "relic-silver": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-silver.png",
+      "category": "General items",
+      "name": "Relic Silver",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-silver.png"
+    },
+    "relic-statue": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-statue.png",
+      "category": "General items",
+      "name": "Relic Statue",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-statue.png"
+    },
+    "relic-vase": {
+      "path": "items-icons/pokemondb-sprites/general-items/relic-vase.png",
+      "category": "General items",
+      "name": "Relic Vase",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/relic-vase.png"
+    },
+    "repeat-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/repeat-ball.png",
+      "category": "Pokeballs",
+      "name": "Repeat Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/repeat-ball.png"
+    },
+    "repel": {
+      "path": "items-icons/pokemondb-sprites/general-items/repel.png",
+      "category": "General items",
+      "name": "Repel",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/repel.png"
+    },
+    "reset-urge": {
+      "path": "items-icons/pokemondb-sprites/battle-items/reset-urge.png",
+      "category": "Battle items",
+      "name": "Reset Urge",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/reset-urge.png"
+    },
+    "reveal-glass": {
+      "path": "items-icons/pokemondb-sprites/general-items/reveal-glass.png",
+      "category": "General items",
+      "name": "Reveal Glass",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/reveal-glass.png"
+    },
+    "revival-herb": {
+      "path": "items-icons/pokemondb-sprites/medicine/revival-herb.png",
+      "category": "Medicine",
+      "name": "Revival Herb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/revival-herb.png"
+    },
+    "revive": {
+      "path": "items-icons/pokemondb-sprites/medicine/revive.png",
+      "category": "Medicine",
+      "name": "Revive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/revive.png"
+    },
+    "rindo-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/rindo-berry.png",
+      "category": "Berries",
+      "name": "Rindo Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rindo-berry.png"
+    },
+    "resist-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/resist-feather.png",
+      "category": "Medicine",
+      "name": "Resist Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/resist-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/resist-wing.png"
+    },
+    "ring-target": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ring-target.png",
+      "category": "Hold items",
+      "name": "Ring Target",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ring-target.png"
+    },
+    "rock-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rock-gem.png",
+      "category": "Hold items",
+      "name": "Rock Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rock-gem.png"
+    },
+    "rock-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rock-incense.png",
+      "category": "Hold items",
+      "name": "Rock Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rock-incense.png"
+    },
+    "rock-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rock-memory.png",
+      "category": "Hold items",
+      "name": "Rock Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rock-memory.png"
+    },
+    "rockium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rockium-z.png",
+      "category": "Hold items",
+      "name": "Rockium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rockium-z.png"
+    },
+    "rocky-helmet": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rocky-helmet.png",
+      "category": "Hold items",
+      "name": "Rocky Helmet",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rocky-helmet.png"
+    },
+    "roller-skates": {
+      "path": "items-icons/pokemondb-sprites/general-items/roller-skates.png",
+      "category": "General items",
+      "name": "Roller Skates",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roller-skates.png"
+    },
+    "root-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/root-fossil.png",
+      "category": "General items",
+      "name": "Root Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/root-fossil.png"
+    },
+    "rose-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/rose-incense.png",
+      "category": "Hold items",
+      "name": "Rose Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rose-incense.png"
+    },
+    "roseli-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/roseli-berry.png",
+      "category": "Berries",
+      "name": "Roseli Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roseli-berry.png"
+    },
+    "roto-bargain": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-bargain.png",
+      "category": "Battle items",
+      "name": "Roto Bargain",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-bargain.png"
+    },
+    "roto-boost": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-boost.png",
+      "category": "Battle items",
+      "name": "Roto Boost",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-boost.png"
+    },
+    "roto-catch": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-catch.png",
+      "category": "Battle items",
+      "name": "Roto Catch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-catch.png"
+    },
+    "roto-encounter": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-encounter.png",
+      "category": "Battle items",
+      "name": "Roto Encounter",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-encounter.png"
+    },
+    "roto-exp-points": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-exp-points.png",
+      "category": "Battle items",
+      "name": "Roto Exp. Points",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-exp-points.png"
+    },
+    "roto-friendship": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-friendship.png",
+      "category": "Battle items",
+      "name": "Roto Friendship",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-friendship.png"
+    },
+    "roto-hatch": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-hatch.png",
+      "category": "Battle items",
+      "name": "Roto Hatch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-hatch.png"
+    },
+    "roto-hp-restore": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-hp-restore.png",
+      "category": "Battle items",
+      "name": "Roto HP Restore",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-hp-restore.png"
+    },
+    "roto-pp-restore": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-pp-restore.png",
+      "category": "Battle items",
+      "name": "Roto PP Restore",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-pp-restore.png"
+    },
+    "roto-prize-money": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-prize-money.png",
+      "category": "Battle items",
+      "name": "Roto Prize Money",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-prize-money.png"
+    },
+    "roto-stealth": {
+      "path": "items-icons/pokemondb-sprites/battle-items/roto-stealth.png",
+      "category": "Battle items",
+      "name": "Roto Stealth",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/roto-stealth.png"
+    },
+    "rowap-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/rowap-berry.png",
+      "category": "Berries",
+      "name": "Rowap Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/rowap-berry.png"
+    },
+    "sablenite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sablenite.png",
+      "category": "Hold items",
+      "name": "Sablenite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sablenite.png"
+    },
+    "sachet": {
+      "path": "items-icons/pokemondb-sprites/general-items/sachet.png",
+      "category": "General items",
+      "name": "Sachet",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sachet.png"
+    },
+    "sacred-ash": {
+      "path": "items-icons/pokemondb-sprites/medicine/sacred-ash.png",
+      "category": "Medicine",
+      "name": "Sacred Ash",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sacred-ash.png"
+    },
+    "safari-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/safari-ball.png",
+      "category": "Pokeballs",
+      "name": "Safari Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/safari-ball.png"
+    },
+    "safety-goggles": {
+      "path": "items-icons/pokemondb-sprites/hold-items/safety-goggles.png",
+      "category": "Hold items",
+      "name": "Safety Goggles",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/safety-goggles.png"
+    },
+    "salac-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/salac-berry.png",
+      "category": "Berries",
+      "name": "Salac Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/salac-berry.png"
+    },
+    "salamencite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/salamencite.png",
+      "category": "Hold items",
+      "name": "Salamencite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/salamencite.png"
+    },
+    "sceptilite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sceptilite.png",
+      "category": "Hold items",
+      "name": "Sceptilite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sceptilite.png"
+    },
+    "scizorite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/scizorite.png",
+      "category": "Hold items",
+      "name": "Scizorite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/scizorite.png"
+    },
+    "scope-lens": {
+      "path": "items-icons/pokemondb-sprites/hold-items/scope-lens.png",
+      "category": "Hold items",
+      "name": "Scope Lens",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/scope-lens.png"
+    },
+    "sea-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sea-incense.png",
+      "category": "Hold items",
+      "name": "Sea Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sea-incense.png"
+    },
+    "shalour-sable": {
+      "path": "items-icons/pokemondb-sprites/medicine/shalour-sable.png",
+      "category": "Medicine",
+      "name": "Shalour Sable",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shalour-sable.png"
+    },
+    "sharp-beak": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sharp-beak.png",
+      "category": "Hold items",
+      "name": "Sharp Beak",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sharp-beak.png"
+    },
+    "sharpedonite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sharpedonite.png",
+      "category": "Hold items",
+      "name": "Sharpedonite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sharpedonite.png"
+    },
+    "shed-shell": {
+      "path": "items-icons/pokemondb-sprites/hold-items/shed-shell.png",
+      "category": "Hold items",
+      "name": "Shed Shell",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shed-shell.png"
+    },
+    "shell-bell": {
+      "path": "items-icons/pokemondb-sprites/hold-items/shell-bell.png",
+      "category": "Hold items",
+      "name": "Shell Bell",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shell-bell.png"
+    },
+    "shiny-charm": {
+      "path": "items-icons/pokemondb-sprites/general-items/shiny-charm.png",
+      "category": "General items",
+      "name": "Shiny Charm",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shiny-charm.png"
+    },
+    "shiny-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/shiny-stone.png",
+      "category": "General items",
+      "name": "Shiny Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shiny-stone.png"
+    },
+    "shoal-salt": {
+      "path": "items-icons/pokemondb-sprites/general-items/shoal-salt.png",
+      "category": "General items",
+      "name": "Shoal Salt",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shoal-salt.png"
+    },
+    "shoal-shell": {
+      "path": "items-icons/pokemondb-sprites/general-items/shoal-shell.png",
+      "category": "General items",
+      "name": "Shoal Shell",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shoal-shell.png"
+    },
+    "shock-drive": {
+      "path": "items-icons/pokemondb-sprites/hold-items/shock-drive.png",
+      "category": "Hold items",
+      "name": "Shock Drive",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shock-drive.png"
+    },
+    "shuca-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/shuca-berry.png",
+      "category": "Berries",
+      "name": "Shuca Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/shuca-berry.png"
+    },
+    "silk-scarf": {
+      "path": "items-icons/pokemondb-sprites/hold-items/silk-scarf.png",
+      "category": "Hold items",
+      "name": "Silk Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/silk-scarf.png"
+    },
+    "silver-nanab-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/silver-nanab-berry.png",
+      "category": "Berries",
+      "name": "Silver Nanab Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/silver-nanab-berry.png"
+    },
+    "silver-pinap-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/silver-pinap-berry.png",
+      "category": "Berries",
+      "name": "Silver Pinap Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/silver-pinap-berry.png"
+    },
+    "silver-powder": {
+      "path": "items-icons/pokemondb-sprites/hold-items/silver-powder.png",
+      "category": "Hold items",
+      "name": "Silver Powder",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/silver-powder.png"
+    },
+    "silver-razz-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/silver-razz-berry.png",
+      "category": "Berries",
+      "name": "Silver Razz Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/silver-razz-berry.png"
+    },
+    "sitrus-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/sitrus-berry.png",
+      "category": "Berries",
+      "name": "Sitrus Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sitrus-berry.png"
+    },
+    "skull-fossil": {
+      "path": "items-icons/pokemondb-sprites/general-items/skull-fossil.png",
+      "category": "General items",
+      "name": "Skull Fossil",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/skull-fossil.png"
+    },
+    "sky-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sky-plate.png",
+      "category": "Hold items",
+      "name": "Sky Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sky-plate.png"
+    },
+    "slowbronite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/slowbronite.png",
+      "category": "Hold items",
+      "name": "Slowbronite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/slowbronite.png"
+    },
+    "smart-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/smart-candy.png",
+      "category": "Medicine",
+      "name": "Smart Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/smart-candy.png"
+    },
+    "smart-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/smart-candy-l.png",
+      "category": "Medicine",
+      "name": "Smart Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/smart-candy-l.png"
+    },
+    "smart-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/smart-candy-xl.png",
+      "category": "Medicine",
+      "name": "Smart Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/smart-candy-xl.png"
+    },
+    "smoke-ball": {
+      "path": "items-icons/pokemondb-sprites/hold-items/smoke-ball.png",
+      "category": "Hold items",
+      "name": "Smoke Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/smoke-ball.png"
+    },
+    "smooth-rock": {
+      "path": "items-icons/pokemondb-sprites/hold-items/smooth-rock.png",
+      "category": "Hold items",
+      "name": "Smooth Rock",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/smooth-rock.png"
+    },
+    "snorlium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/snorlium-z.png",
+      "category": "Hold items",
+      "name": "Snorlium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/snorlium-z.png"
+    },
+    "snowball": {
+      "path": "items-icons/pokemondb-sprites/hold-items/snowball.png",
+      "category": "Hold items",
+      "name": "Snowball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/snowball.png"
+    },
+    "soda-pop": {
+      "path": "items-icons/pokemondb-sprites/medicine/soda-pop.png",
+      "category": "Medicine",
+      "name": "Soda Pop",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/soda-pop.png"
+    },
+    "soft-sand": {
+      "path": "items-icons/pokemondb-sprites/hold-items/soft-sand.png",
+      "category": "Hold items",
+      "name": "Soft Sand",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/soft-sand.png"
+    },
+    "solganium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/solganium-z.png",
+      "category": "Hold items",
+      "name": "Solganium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/solganium-z.png"
+    },
+    "soothe-bell": {
+      "path": "items-icons/pokemondb-sprites/hold-items/soothe-bell.png",
+      "category": "Hold items",
+      "name": "Soothe Bell",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/soothe-bell.png"
+    },
+    "soul-dew": {
+      "path": "items-icons/pokemondb-sprites/hold-items/soul-dew.png",
+      "category": "Hold items",
+      "name": "Soul Dew",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/soul-dew.png"
+    },
+    "spell-tag": {
+      "path": "items-icons/pokemondb-sprites/hold-items/spell-tag.png",
+      "category": "Hold items",
+      "name": "Spell Tag",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/spell-tag.png"
+    },
+    "spelon-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/spelon-berry.png",
+      "category": "Berries",
+      "name": "Spelon Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/spelon-berry.png"
+    },
+    "splash-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/splash-plate.png",
+      "category": "Hold items",
+      "name": "Splash Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/splash-plate.png"
+    },
+    "spooky-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/spooky-plate.png",
+      "category": "Hold items",
+      "name": "Spooky Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/spooky-plate.png"
+    },
+    "sport-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/sport-ball.png",
+      "category": "Pokeballs",
+      "name": "Sport Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sport-ball.png"
+    },
+    "sprinklotad": {
+      "path": "items-icons/pokemondb-sprites/general-items/sprinklotad.png",
+      "category": "General items",
+      "name": "Sprinklotad",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sprinklotad.png"
+    },
+    "stable-mulch": {
+      "path": "items-icons/pokemondb-sprites/general-items/stable-mulch.png",
+      "category": "General items",
+      "name": "Stable Mulch",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/stable-mulch.png"
+    },
+    "star-piece": {
+      "path": "items-icons/pokemondb-sprites/general-items/star-piece.png",
+      "category": "General items",
+      "name": "Star Piece",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/star-piece.png"
+    },
+    "stardust": {
+      "path": "items-icons/pokemondb-sprites/general-items/stardust.png",
+      "category": "General items",
+      "name": "Stardust",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/stardust.png"
+    },
+    "starf-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/starf-berry.png",
+      "category": "Berries",
+      "name": "Starf Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/starf-berry.png"
+    },
+    "steel-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/steel-gem.png",
+      "category": "Hold items",
+      "name": "Steel Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/steel-gem.png"
+    },
+    "steel-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/steel-memory.png",
+      "category": "Hold items",
+      "name": "Steel Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/steel-memory.png"
+    },
+    "steelium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/steelium-z.png",
+      "category": "Hold items",
+      "name": "Steelium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/steelium-z.png"
+    },
+    "steelixite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/steelixite.png",
+      "category": "Hold items",
+      "name": "Steelixite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/steelixite.png"
+    },
+    "sticky-barb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/sticky-barb.png",
+      "category": "Hold items",
+      "name": "Sticky Barb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sticky-barb.png"
+    },
+    "stone-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/stone-plate.png",
+      "category": "Hold items",
+      "name": "Stone Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/stone-plate.png"
+    },
+    "strange-souvenir": {
+      "path": "items-icons/pokemondb-sprites/general-items/strange-souvenir.png",
+      "category": "General items",
+      "name": "Strange Souvenir",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/strange-souvenir.png"
+    },
+    "sun-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/sun-stone.png",
+      "category": "General items",
+      "name": "Sun Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sun-stone.png"
+    },
+    "super-potion": {
+      "path": "items-icons/pokemondb-sprites/medicine/super-potion.png",
+      "category": "Medicine",
+      "name": "Super Potion",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/super-potion.png"
+    },
+    "super-repel": {
+      "path": "items-icons/pokemondb-sprites/general-items/super-repel.png",
+      "category": "General items",
+      "name": "Super Repel",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/super-repel.png"
+    },
+    "swampertite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/swampertite.png",
+      "category": "Hold items",
+      "name": "Swampertite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/swampertite.png"
+    },
+    "sweet-heart": {
+      "path": "items-icons/pokemondb-sprites/medicine/sweet-heart.png",
+      "category": "Medicine",
+      "name": "Sweet Heart",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/sweet-heart.png"
+    },
+    "tamato-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/tamato-berry.png",
+      "category": "Berries",
+      "name": "Tamato Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tamato-berry.png"
+    },
+    "tanga-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/tanga-berry.png",
+      "category": "Berries",
+      "name": "Tanga Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tanga-berry.png"
+    },
+    "swift-feather": {
+      "path": "items-icons/pokemondb-sprites/medicine/swift-feather.png",
+      "category": "Medicine",
+      "name": "Swift Feather",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/swift-feather.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/swift-wing.png"
+    },
+    "tapunium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/tapunium-z.png",
+      "category": "Hold items",
+      "name": "Tapunium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tapunium-z.png"
+    },
+    "terrain-extender": {
+      "path": "items-icons/pokemondb-sprites/hold-items/terrain-extender.png",
+      "category": "Hold items",
+      "name": "Terrain Extender",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/terrain-extender.png"
+    },
+    "thick-club": {
+      "path": "items-icons/pokemondb-sprites/hold-items/thick-club.png",
+      "category": "Hold items",
+      "name": "Thick Club",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/thick-club.png"
+    },
+    "thunder-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/thunder-stone.png",
+      "category": "General items",
+      "name": "Thunder Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/thunder-stone.png"
+    },
+    "timer-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/timer-ball.png",
+      "category": "Pokeballs",
+      "name": "Timer Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/timer-ball.png"
+    },
+    "tiny-mushroom": {
+      "path": "items-icons/pokemondb-sprites/general-items/tiny-mushroom.png",
+      "category": "General items",
+      "name": "Tiny Mushroom",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tiny-mushroom.png"
+    },
+    "tm001": {
+      "path": "items-icons/pokemondb-sprites/machines/tm001.png",
+      "category": "Machines",
+      "name": "TM001",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm002": {
+      "path": "items-icons/pokemondb-sprites/machines/tm002.png",
+      "category": "Machines",
+      "name": "TM002",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dragon.png"
+    },
+    "tm003": {
+      "path": "items-icons/pokemondb-sprites/machines/tm003.png",
+      "category": "Machines",
+      "name": "TM003",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm004": {
+      "path": "items-icons/pokemondb-sprites/machines/tm004.png",
+      "category": "Machines",
+      "name": "TM004",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm005": {
+      "path": "items-icons/pokemondb-sprites/machines/tm005.png",
+      "category": "Machines",
+      "name": "TM005",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm006": {
+      "path": "items-icons/pokemondb-sprites/machines/tm006.png",
+      "category": "Machines",
+      "name": "TM006",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png"
+    },
+    "tm007": {
+      "path": "items-icons/pokemondb-sprites/machines/tm007.png",
+      "category": "Machines",
+      "name": "TM007",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png"
+    },
+    "tm008": {
+      "path": "items-icons/pokemondb-sprites/machines/tm008.png",
+      "category": "Machines",
+      "name": "TM008",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png"
+    },
+    "tm009": {
+      "path": "items-icons/pokemondb-sprites/machines/tm009.png",
+      "category": "Machines",
+      "name": "TM009",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png"
+    },
+    "tm010": {
+      "path": "items-icons/pokemondb-sprites/machines/tm010.png",
+      "category": "Machines",
+      "name": "TM010",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm011": {
+      "path": "items-icons/pokemondb-sprites/machines/tm011.png",
+      "category": "Machines",
+      "name": "TM011",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm012": {
+      "path": "items-icons/pokemondb-sprites/machines/tm012.png",
+      "category": "Machines",
+      "name": "TM012",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm013": {
+      "path": "items-icons/pokemondb-sprites/machines/tm013.png",
+      "category": "Machines",
+      "name": "TM013",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png"
+    },
+    "tm014": {
+      "path": "items-icons/pokemondb-sprites/machines/tm014.png",
+      "category": "Machines",
+      "name": "TM014",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png"
+    },
+    "tm015": {
+      "path": "items-icons/pokemondb-sprites/machines/tm015.png",
+      "category": "Machines",
+      "name": "TM015",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm016": {
+      "path": "items-icons/pokemondb-sprites/machines/tm016.png",
+      "category": "Machines",
+      "name": "TM016",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm017": {
+      "path": "items-icons/pokemondb-sprites/machines/tm017.png",
+      "category": "Machines",
+      "name": "TM017",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm018": {
+      "path": "items-icons/pokemondb-sprites/machines/tm018.png",
+      "category": "Machines",
+      "name": "TM018",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "tm019": {
+      "path": "items-icons/pokemondb-sprites/machines/tm019.png",
+      "category": "Machines",
+      "name": "TM019",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "tm020": {
+      "path": "items-icons/pokemondb-sprites/machines/tm020.png",
+      "category": "Machines",
+      "name": "TM020",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm021": {
+      "path": "items-icons/pokemondb-sprites/machines/tm021.png",
+      "category": "Machines",
+      "name": "TM021",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm022": {
+      "path": "items-icons/pokemondb-sprites/machines/tm022.png",
+      "category": "Machines",
+      "name": "TM022",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png"
+    },
+    "tm023": {
+      "path": "items-icons/pokemondb-sprites/machines/tm023.png",
+      "category": "Machines",
+      "name": "TM023",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm024": {
+      "path": "items-icons/pokemondb-sprites/machines/tm024.png",
+      "category": "Machines",
+      "name": "TM024",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm025": {
+      "path": "items-icons/pokemondb-sprites/machines/tm025.png",
+      "category": "Machines",
+      "name": "TM025",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm026": {
+      "path": "items-icons/pokemondb-sprites/machines/tm026.png",
+      "category": "Machines",
+      "name": "TM026",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ground.png"
+    },
+    "tm027": {
+      "path": "items-icons/pokemondb-sprites/machines/tm027.png",
+      "category": "Machines",
+      "name": "TM027",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm028": {
+      "path": "items-icons/pokemondb-sprites/machines/tm028.png",
+      "category": "Machines",
+      "name": "TM028",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png"
+    },
+    "tm029": {
+      "path": "items-icons/pokemondb-sprites/machines/tm029.png",
+      "category": "Machines",
+      "name": "TM029",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm030": {
+      "path": "items-icons/pokemondb-sprites/machines/tm030.png",
+      "category": "Machines",
+      "name": "TM030",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ghost.png"
+    },
+    "tm031": {
+      "path": "items-icons/pokemondb-sprites/machines/tm031.png",
+      "category": "Machines",
+      "name": "TM031",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png"
+    },
+    "tm032": {
+      "path": "items-icons/pokemondb-sprites/machines/tm032.png",
+      "category": "Machines",
+      "name": "TM032",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm033": {
+      "path": "items-icons/pokemondb-sprites/machines/tm033.png",
+      "category": "Machines",
+      "name": "TM033",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm034": {
+      "path": "items-icons/pokemondb-sprites/machines/tm034.png",
+      "category": "Machines",
+      "name": "TM034",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png"
+    },
+    "tm035": {
+      "path": "items-icons/pokemondb-sprites/machines/tm035.png",
+      "category": "Machines",
+      "name": "TM035",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm036": {
+      "path": "items-icons/pokemondb-sprites/machines/tm036.png",
+      "category": "Machines",
+      "name": "TM036",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png"
+    },
+    "tm037": {
+      "path": "items-icons/pokemondb-sprites/machines/tm037.png",
+      "category": "Machines",
+      "name": "TM037",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm038": {
+      "path": "items-icons/pokemondb-sprites/machines/tm038.png",
+      "category": "Machines",
+      "name": "TM038",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm039": {
+      "path": "items-icons/pokemondb-sprites/machines/tm039.png",
+      "category": "Machines",
+      "name": "TM039",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm040": {
+      "path": "items-icons/pokemondb-sprites/machines/tm040.png",
+      "category": "Machines",
+      "name": "TM040",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "tm041": {
+      "path": "items-icons/pokemondb-sprites/machines/tm041.png",
+      "category": "Machines",
+      "name": "TM041",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm042": {
+      "path": "items-icons/pokemondb-sprites/machines/tm042.png",
+      "category": "Machines",
+      "name": "TM042",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm043": {
+      "path": "items-icons/pokemondb-sprites/machines/tm043.png",
+      "category": "Machines",
+      "name": "TM043",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm044": {
+      "path": "items-icons/pokemondb-sprites/machines/tm044.png",
+      "category": "Machines",
+      "name": "TM044",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm045": {
+      "path": "items-icons/pokemondb-sprites/machines/tm045.png",
+      "category": "Machines",
+      "name": "TM045",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm046": {
+      "path": "items-icons/pokemondb-sprites/machines/tm046.png",
+      "category": "Machines",
+      "name": "TM046",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm047": {
+      "path": "items-icons/pokemondb-sprites/machines/tm047.png",
+      "category": "Machines",
+      "name": "TM047",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png"
+    },
+    "tm048": {
+      "path": "items-icons/pokemondb-sprites/machines/tm048.png",
+      "category": "Machines",
+      "name": "TM048",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm049": {
+      "path": "items-icons/pokemondb-sprites/machines/tm049.png",
+      "category": "Machines",
+      "name": "TM049",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm050": {
+      "path": "items-icons/pokemondb-sprites/machines/tm050.png",
+      "category": "Machines",
+      "name": "TM050",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm051": {
+      "path": "items-icons/pokemondb-sprites/machines/tm051.png",
+      "category": "Machines",
+      "name": "TM051",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png"
+    },
+    "tm052": {
+      "path": "items-icons/pokemondb-sprites/machines/tm052.png",
+      "category": "Machines",
+      "name": "TM052",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png"
+    },
+    "tm053": {
+      "path": "items-icons/pokemondb-sprites/machines/tm053.png",
+      "category": "Machines",
+      "name": "TM053",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png"
+    },
+    "tm054": {
+      "path": "items-icons/pokemondb-sprites/machines/tm054.png",
+      "category": "Machines",
+      "name": "TM054",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm055": {
+      "path": "items-icons/pokemondb-sprites/machines/tm055.png",
+      "category": "Machines",
+      "name": "TM055",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "tm056": {
+      "path": "items-icons/pokemondb-sprites/machines/tm056.png",
+      "category": "Machines",
+      "name": "TM056",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm057": {
+      "path": "items-icons/pokemondb-sprites/machines/tm057.png",
+      "category": "Machines",
+      "name": "TM057",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm058": {
+      "path": "items-icons/pokemondb-sprites/machines/tm058.png",
+      "category": "Machines",
+      "name": "TM058",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "tm059": {
+      "path": "items-icons/pokemondb-sprites/machines/tm059.png",
+      "category": "Machines",
+      "name": "TM059",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm060": {
+      "path": "items-icons/pokemondb-sprites/machines/tm060.png",
+      "category": "Machines",
+      "name": "TM060",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm061": {
+      "path": "items-icons/pokemondb-sprites/machines/tm061.png",
+      "category": "Machines",
+      "name": "TM061",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fire.png"
+    },
+    "tm062": {
+      "path": "items-icons/pokemondb-sprites/machines/tm062.png",
+      "category": "Machines",
+      "name": "TM062",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "tm063": {
+      "path": "items-icons/pokemondb-sprites/machines/tm063.png",
+      "category": "Machines",
+      "name": "TM063",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm064": {
+      "path": "items-icons/pokemondb-sprites/machines/tm064.png",
+      "category": "Machines",
+      "name": "TM064",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm065": {
+      "path": "items-icons/pokemondb-sprites/machines/tm065.png",
+      "category": "Machines",
+      "name": "TM065",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ghost.png"
+    },
+    "tm066": {
+      "path": "items-icons/pokemondb-sprites/machines/tm066.png",
+      "category": "Machines",
+      "name": "TM066",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm067": {
+      "path": "items-icons/pokemondb-sprites/machines/tm067.png",
+      "category": "Machines",
+      "name": "TM067",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png"
+    },
+    "tm068": {
+      "path": "items-icons/pokemondb-sprites/machines/tm068.png",
+      "category": "Machines",
+      "name": "TM068",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm069": {
+      "path": "items-icons/pokemondb-sprites/machines/tm069.png",
+      "category": "Machines",
+      "name": "TM069",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm070": {
+      "path": "items-icons/pokemondb-sprites/machines/tm070.png",
+      "category": "Machines",
+      "name": "TM070",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png"
+    },
+    "tm071": {
+      "path": "items-icons/pokemondb-sprites/machines/tm071.png",
+      "category": "Machines",
+      "name": "TM071",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm072": {
+      "path": "items-icons/pokemondb-sprites/machines/tm072.png",
+      "category": "Machines",
+      "name": "TM072",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm073": {
+      "path": "items-icons/pokemondb-sprites/machines/tm073.png",
+      "category": "Machines",
+      "name": "TM073",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm074": {
+      "path": "items-icons/pokemondb-sprites/machines/tm074.png",
+      "category": "Machines",
+      "name": "TM074",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png"
+    },
+    "tm075": {
+      "path": "items-icons/pokemondb-sprites/machines/tm075.png",
+      "category": "Machines",
+      "name": "TM075",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm076": {
+      "path": "items-icons/pokemondb-sprites/machines/tm076.png",
+      "category": "Machines",
+      "name": "TM076",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-flying.png"
+    },
+    "tm077": {
+      "path": "items-icons/pokemondb-sprites/machines/tm077.png",
+      "category": "Machines",
+      "name": "TM077",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm078": {
+      "path": "items-icons/pokemondb-sprites/machines/tm078.png",
+      "category": "Machines",
+      "name": "TM078",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ground.png"
+    },
+    "tm079": {
+      "path": "items-icons/pokemondb-sprites/machines/tm079.png",
+      "category": "Machines",
+      "name": "TM079",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-ice.png"
+    },
+    "tm080": {
+      "path": "items-icons/pokemondb-sprites/machines/tm080.png",
+      "category": "Machines",
+      "name": "TM080",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-rock.png"
+    },
+    "tm081": {
+      "path": "items-icons/pokemondb-sprites/machines/tm081.png",
+      "category": "Machines",
+      "name": "TM081",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png"
+    },
+    "tm082": {
+      "path": "items-icons/pokemondb-sprites/machines/tm082.png",
+      "category": "Machines",
+      "name": "TM082",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dragon.png"
+    },
+    "tm083": {
+      "path": "items-icons/pokemondb-sprites/machines/tm083.png",
+      "category": "Machines",
+      "name": "TM083",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png"
+    },
+    "tm084": {
+      "path": "items-icons/pokemondb-sprites/machines/tm084.png",
+      "category": "Machines",
+      "name": "TM084",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-poison.png"
+    },
+    "tm085": {
+      "path": "items-icons/pokemondb-sprites/machines/tm085.png",
+      "category": "Machines",
+      "name": "TM085",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm086": {
+      "path": "items-icons/pokemondb-sprites/machines/tm086.png",
+      "category": "Machines",
+      "name": "TM086",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-grass.png"
+    },
+    "tm087": {
+      "path": "items-icons/pokemondb-sprites/machines/tm087.png",
+      "category": "Machines",
+      "name": "TM087",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm088": {
+      "path": "items-icons/pokemondb-sprites/machines/tm088.png",
+      "category": "Machines",
+      "name": "TM088",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm089": {
+      "path": "items-icons/pokemondb-sprites/machines/tm089.png",
+      "category": "Machines",
+      "name": "TM089",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-bug.png"
+    },
+    "tm090": {
+      "path": "items-icons/pokemondb-sprites/machines/tm090.png",
+      "category": "Machines",
+      "name": "TM090",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm091": {
+      "path": "items-icons/pokemondb-sprites/machines/tm091.png",
+      "category": "Machines",
+      "name": "TM091",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-steel.png"
+    },
+    "tm092": {
+      "path": "items-icons/pokemondb-sprites/machines/tm092.png",
+      "category": "Machines",
+      "name": "TM092",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-psychic.png"
+    },
+    "tm093": {
+      "path": "items-icons/pokemondb-sprites/machines/tm093.png",
+      "category": "Machines",
+      "name": "TM093",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-electric.png"
+    },
+    "tm094": {
+      "path": "items-icons/pokemondb-sprites/machines/tm094.png",
+      "category": "Machines",
+      "name": "TM094",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fighting.png"
+    },
+    "tm095": {
+      "path": "items-icons/pokemondb-sprites/machines/tm095.png",
+      "category": "Machines",
+      "name": "TM095",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm096": {
+      "path": "items-icons/pokemondb-sprites/machines/tm096.png",
+      "category": "Machines",
+      "name": "TM096",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tm097": {
+      "path": "items-icons/pokemondb-sprites/machines/tm097.png",
+      "category": "Machines",
+      "name": "TM097",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-dark.png"
+    },
+    "tm098": {
+      "path": "items-icons/pokemondb-sprites/machines/tm098.png",
+      "category": "Machines",
+      "name": "TM098",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-water.png"
+    },
+    "tm099": {
+      "path": "items-icons/pokemondb-sprites/machines/tm099.png",
+      "category": "Machines",
+      "name": "TM099",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-fairy.png"
+    },
+    "tm100": {
+      "path": "items-icons/pokemondb-sprites/machines/tm100.png",
+      "category": "Machines",
+      "name": "TM100",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tm-normal.png"
+    },
+    "tmv-pass": {
+      "path": "items-icons/pokemondb-sprites/general-items/tmv-pass.png",
+      "category": "General items",
+      "name": "TMV Pass",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tmv-pass.png"
+    },
+    "tough-candy": {
+      "path": "items-icons/pokemondb-sprites/medicine/tough-candy.png",
+      "category": "Medicine",
+      "name": "Tough Candy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tough-candy.png"
+    },
+    "tough-candy-l": {
+      "path": "items-icons/pokemondb-sprites/medicine/tough-candy-l.png",
+      "category": "Medicine",
+      "name": "Tough Candy L",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tough-candy-l.png"
+    },
+    "tough-candy-xl": {
+      "path": "items-icons/pokemondb-sprites/medicine/tough-candy-xl.png",
+      "category": "Medicine",
+      "name": "Tough Candy XL",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tough-candy-xl.png"
+    },
+    "toxic-orb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/toxic-orb.png",
+      "category": "Hold items",
+      "name": "Toxic Orb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/toxic-orb.png"
+    },
+    "toxic-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/toxic-plate.png",
+      "category": "Hold items",
+      "name": "Toxic Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/toxic-plate.png"
+    },
+    "twisted-spoon": {
+      "path": "items-icons/pokemondb-sprites/hold-items/twisted-spoon.png",
+      "category": "Hold items",
+      "name": "Twisted Spoon",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/twisted-spoon.png"
+    },
+    "tyranitarite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/tyranitarite.png",
+      "category": "Hold items",
+      "name": "Tyranitarite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/tyranitarite.png"
+    },
+    "ultra-ball": {
+      "path": "items-icons/pokemondb-sprites/pokeballs/ultra-ball.png",
+      "category": "Pokeballs",
+      "name": "Ultra Ball",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ultra-ball.png"
+    },
+    "ultranecrozium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/ultranecrozium-z.png",
+      "category": "Hold items",
+      "name": "Ultranecrozium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/ultranecrozium-z.png"
+    },
+    "venusaurite": {
+      "path": "items-icons/pokemondb-sprites/hold-items/venusaurite.png",
+      "category": "Hold items",
+      "name": "Venusaurite",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/venusaurite.png"
+    },
+    "wacan-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/wacan-berry.png",
+      "category": "Berries",
+      "name": "Wacan Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wacan-berry.png"
+    },
+    "water-gem": {
+      "path": "items-icons/pokemondb-sprites/hold-items/water-gem.png",
+      "category": "Hold items",
+      "name": "Water Gem",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/water-gem.png"
+    },
+    "upgrade": {
+      "path": "items-icons/pokemondb-sprites/general-items/upgrade.png",
+      "category": "General items",
+      "name": "Upgrade",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/upgrade.png",
+      "downloadedFrom": "https://img.pokemondb.net/sprites/items/up-grade.png"
+    },
+    "water-memory": {
+      "path": "items-icons/pokemondb-sprites/hold-items/water-memory.png",
+      "category": "Hold items",
+      "name": "Water Memory",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/water-memory.png"
+    },
+    "water-stone": {
+      "path": "items-icons/pokemondb-sprites/general-items/water-stone.png",
+      "category": "General items",
+      "name": "Water Stone",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/water-stone.png"
+    },
+    "waterium-z": {
+      "path": "items-icons/pokemondb-sprites/hold-items/waterium-z.png",
+      "category": "Hold items",
+      "name": "Waterium Z",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/waterium-z.png"
+    },
+    "watmel-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/watmel-berry.png",
+      "category": "Berries",
+      "name": "Watmel Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/watmel-berry.png"
+    },
+    "wave-incense": {
+      "path": "items-icons/pokemondb-sprites/hold-items/wave-incense.png",
+      "category": "Hold items",
+      "name": "Wave Incense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wave-incense.png"
+    },
+    "weakness-policy": {
+      "path": "items-icons/pokemondb-sprites/hold-items/weakness-policy.png",
+      "category": "Hold items",
+      "name": "Weakness Policy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/weakness-policy.png"
+    },
+    "wepear-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/wepear-berry.png",
+      "category": "Berries",
+      "name": "Wepear Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wepear-berry.png"
+    },
+    "whipped-dream": {
+      "path": "items-icons/pokemondb-sprites/general-items/whipped-dream.png",
+      "category": "General items",
+      "name": "Whipped Dream",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/whipped-dream.png"
+    },
+    "white-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/white-apricorn.png",
+      "category": "General items",
+      "name": "White Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/white-apricorn.png"
+    },
+    "white-flute": {
+      "path": "items-icons/pokemondb-sprites/general-items/white-flute.png",
+      "category": "General items",
+      "name": "White Flute",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/white-flute.png"
+    },
+    "white-herb": {
+      "path": "items-icons/pokemondb-sprites/hold-items/white-herb.png",
+      "category": "Hold items",
+      "name": "White Herb",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/white-herb.png"
+    },
+    "wide-lens": {
+      "path": "items-icons/pokemondb-sprites/hold-items/wide-lens.png",
+      "category": "Hold items",
+      "name": "Wide Lens",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wide-lens.png"
+    },
+    "wiki-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/wiki-berry.png",
+      "category": "Berries",
+      "name": "Wiki Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wiki-berry.png"
+    },
+    "wise-glasses": {
+      "path": "items-icons/pokemondb-sprites/hold-items/wise-glasses.png",
+      "category": "Hold items",
+      "name": "Wise Glasses",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/wise-glasses.png"
+    },
+    "x-accuracy": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-accuracy.png",
+      "category": "Battle items",
+      "name": "X Accuracy",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-accuracy.png"
+    },
+    "x-accuracy-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-accuracy-2.png",
+      "category": "Battle items",
+      "name": "X Accuracy 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-2.png"
+    },
+    "x-accuracy-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-accuracy-3.png",
+      "category": "Battle items",
+      "name": "X Accuracy 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-3.png"
+    },
+    "x-accuracy-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-accuracy-6.png",
+      "category": "Battle items",
+      "name": "X Accuracy 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-6.png"
+    },
+    "x-attack": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-attack.png",
+      "category": "Battle items",
+      "name": "X Attack",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-attack.png"
+    },
+    "x-attack-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-attack-2.png",
+      "category": "Battle items",
+      "name": "X Attack 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-attack-2.png"
+    },
+    "x-attack-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-attack-3.png",
+      "category": "Battle items",
+      "name": "X Attack 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-attack-3.png"
+    },
+    "x-attack-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-attack-6.png",
+      "category": "Battle items",
+      "name": "X Attack 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-attack-6.png"
+    },
+    "x-defense": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-defense.png",
+      "category": "Battle items",
+      "name": "X Defense",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-defense.png"
+    },
+    "x-defense-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-defense-2.png",
+      "category": "Battle items",
+      "name": "X Defense 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-defense-2.png"
+    },
+    "x-defense-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-defense-3.png",
+      "category": "Battle items",
+      "name": "X Defense 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-defense-3.png"
+    },
+    "x-defense-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-defense-6.png",
+      "category": "Battle items",
+      "name": "X Defense 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-defense-6.png"
+    },
+    "x-sp-atk": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-atk.png",
+      "category": "Battle items",
+      "name": "X Sp. Atk",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk.png"
+    },
+    "x-sp-atk-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-atk-2.png",
+      "category": "Battle items",
+      "name": "X Sp. Atk 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-2.png"
+    },
+    "x-sp-atk-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-atk-3.png",
+      "category": "Battle items",
+      "name": "X Sp. Atk 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-3.png"
+    },
+    "x-sp-atk-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-atk-6.png",
+      "category": "Battle items",
+      "name": "X Sp. Atk 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-6.png"
+    },
+    "x-sp-def": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-def.png",
+      "category": "Battle items",
+      "name": "X Sp. Def",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-def.png"
+    },
+    "x-sp-def-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-def-2.png",
+      "category": "Battle items",
+      "name": "X Sp. Def 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-2.png"
+    },
+    "x-sp-def-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-def-3.png",
+      "category": "Battle items",
+      "name": "X Sp. Def 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-3.png"
+    },
+    "x-sp-def-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-sp-def-6.png",
+      "category": "Battle items",
+      "name": "X Sp. Def 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-6.png"
+    },
+    "x-speed": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-speed.png",
+      "category": "Battle items",
+      "name": "X Speed",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-speed.png"
+    },
+    "x-speed-2": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-speed-2.png",
+      "category": "Battle items",
+      "name": "X Speed 2",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-speed-2.png"
+    },
+    "x-speed-3": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-speed-3.png",
+      "category": "Battle items",
+      "name": "X Speed 3",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-speed-3.png"
+    },
+    "x-speed-6": {
+      "path": "items-icons/pokemondb-sprites/battle-items/x-speed-6.png",
+      "category": "Battle items",
+      "name": "X Speed 6",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/x-speed-6.png"
+    },
+    "yache-berry": {
+      "path": "items-icons/pokemondb-sprites/berries/yache-berry.png",
+      "category": "Berries",
+      "name": "Yache Berry",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yache-berry.png"
+    },
+    "yellow-apricorn": {
+      "path": "items-icons/pokemondb-sprites/general-items/yellow-apricorn.png",
+      "category": "General items",
+      "name": "Yellow Apricorn",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yellow-apricorn.png"
+    },
+    "yellow-flute": {
+      "path": "items-icons/pokemondb-sprites/general-items/yellow-flute.png",
+      "category": "General items",
+      "name": "Yellow Flute",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yellow-flute.png"
+    },
+    "yellow-nectar": {
+      "path": "items-icons/pokemondb-sprites/hold-items/yellow-nectar.png",
+      "category": "Hold items",
+      "name": "Yellow Nectar",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yellow-nectar.png"
+    },
+    "yellow-scarf": {
+      "path": "items-icons/pokemondb-sprites/general-items/yellow-scarf.png",
+      "category": "General items",
+      "name": "Yellow Scarf",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yellow-scarf.png"
+    },
+    "yellow-shard": {
+      "path": "items-icons/pokemondb-sprites/general-items/yellow-shard.png",
+      "category": "General items",
+      "name": "Yellow Shard",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/yellow-shard.png"
+    },
+    "zap-plate": {
+      "path": "items-icons/pokemondb-sprites/hold-items/zap-plate.png",
+      "category": "Hold items",
+      "name": "Zap Plate",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/zap-plate.png"
+    },
+    "zinc": {
+      "path": "items-icons/pokemondb-sprites/medicine/zinc.png",
+      "category": "Medicine",
+      "name": "Zinc",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/zinc.png"
+    },
+    "zoom-lens": {
+      "path": "items-icons/pokemondb-sprites/hold-items/zoom-lens.png",
+      "category": "Hold items",
+      "name": "Zoom Lens",
+      "sourceUrl": "https://img.pokemondb.net/sprites/items/zoom-lens.png"
+    }
+  }
+}

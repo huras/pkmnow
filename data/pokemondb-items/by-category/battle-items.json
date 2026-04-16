@@ -1,0 +1,346 @@
+[
+  {
+    "name": "Ability Urge",
+    "slug": "ability-urge",
+    "category": "Battle items",
+    "effect": "When used, it activates the Ability of an ally Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ability-urge.png",
+    "itemUrl": "https://pokemondb.net/item/ability-urge"
+  },
+  {
+    "name": "Dire Hit",
+    "slug": "dire-hit",
+    "category": "Battle items",
+    "effect": "Raises critical-hit ratio of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dire-hit.png",
+    "itemUrl": "https://pokemondb.net/item/dire-hit"
+  },
+  {
+    "name": "Dire Hit 2",
+    "slug": "dire-hit-2",
+    "category": "Battle items",
+    "effect": "Raises a Pokémon's critical-hit ratio in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dire-hit-2.png",
+    "itemUrl": "https://pokemondb.net/item/dire-hit-2"
+  },
+  {
+    "name": "Dire Hit 3",
+    "slug": "dire-hit-3",
+    "category": "Battle items",
+    "effect": "Greatly raises a Pokémon's critical-hit ratio in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dire-hit-3.png",
+    "itemUrl": "https://pokemondb.net/item/dire-hit-3"
+  },
+  {
+    "name": "Guard Spec.",
+    "slug": "guard-spec",
+    "category": "Battle items",
+    "effect": "Prevents stat reduction for five turns.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/guard-spec.png",
+    "itemUrl": "https://pokemondb.net/item/guard-spec"
+  },
+  {
+    "name": "Item Drop",
+    "slug": "item-drop",
+    "category": "Battle items",
+    "effect": "When used, it causes an ally Pokémon to drop a held item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/item-drop.png",
+    "itemUrl": "https://pokemondb.net/item/item-drop"
+  },
+  {
+    "name": "Item Urge",
+    "slug": "item-urge",
+    "category": "Battle items",
+    "effect": "When used, it causes an ally Pokémon to use its held item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/item-urge.png",
+    "itemUrl": "https://pokemondb.net/item/item-urge"
+  },
+  {
+    "name": "Reset Urge",
+    "slug": "reset-urge",
+    "category": "Battle items",
+    "effect": "When used, it restores any stat changes of an ally Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/reset-urge.png",
+    "itemUrl": "https://pokemondb.net/item/reset-urge"
+  },
+  {
+    "name": "Roto Bargain",
+    "slug": "roto-bargain",
+    "category": "Battle items",
+    "effect": "Reduces the prices of products at Poké Marts by half.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-bargain.png",
+    "itemUrl": "https://pokemondb.net/item/roto-bargain"
+  },
+  {
+    "name": "Roto Boost",
+    "slug": "roto-boost",
+    "category": "Battle items",
+    "effect": "Raises all stats of your battling Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-boost.png",
+    "itemUrl": "https://pokemondb.net/item/roto-boost"
+  },
+  {
+    "name": "Roto Catch",
+    "slug": "roto-catch",
+    "category": "Battle items",
+    "effect": "Increases the chance to catch Pokémon a lot.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-catch.png",
+    "itemUrl": "https://pokemondb.net/item/roto-catch"
+  },
+  {
+    "name": "Roto Encounter",
+    "slug": "roto-encounter",
+    "category": "Battle items",
+    "effect": "Increases the chance of encountering high-level wild Pokémon a lot for a certain period of time.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-encounter.png",
+    "itemUrl": "https://pokemondb.net/item/roto-encounter"
+  },
+  {
+    "name": "Roto Exp. Points",
+    "slug": "roto-exp-points",
+    "category": "Battle items",
+    "effect": "Increases the Exp. Points your Pokémon receive after battle a little.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-exp-points.png",
+    "itemUrl": "https://pokemondb.net/item/roto-exp-points"
+  },
+  {
+    "name": "Roto Friendship",
+    "slug": "roto-friendship",
+    "category": "Battle items",
+    "effect": "Helps Pokémon in your party grow friendly faster.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-friendship.png",
+    "itemUrl": "https://pokemondb.net/item/roto-friendship"
+  },
+  {
+    "name": "Roto Hatch",
+    "slug": "roto-hatch",
+    "category": "Battle items",
+    "effect": "Helps Eggs hatch faster.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-hatch.png",
+    "itemUrl": "https://pokemondb.net/item/roto-hatch"
+  },
+  {
+    "name": "Roto HP Restore",
+    "slug": "roto-hp-restore",
+    "category": "Battle items",
+    "effect": "Fully restores the HP of your battling Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-hp-restore.png",
+    "itemUrl": "https://pokemondb.net/item/roto-hp-restore"
+  },
+  {
+    "name": "Roto PP Restore",
+    "slug": "roto-pp-restore",
+    "category": "Battle items",
+    "effect": "Fully restores the PP of your battling Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-pp-restore.png",
+    "itemUrl": "https://pokemondb.net/item/roto-pp-restore"
+  },
+  {
+    "name": "Roto Prize Money",
+    "slug": "roto-prize-money",
+    "category": "Battle items",
+    "effect": "Triples the prize money you receive after battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-prize-money.png",
+    "itemUrl": "https://pokemondb.net/item/roto-prize-money"
+  },
+  {
+    "name": "Roto Stealth",
+    "slug": "roto-stealth",
+    "category": "Battle items",
+    "effect": "Prevents you from encountering wild Pokémon for a certain period of time.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roto-stealth.png",
+    "itemUrl": "https://pokemondb.net/item/roto-stealth"
+  },
+  {
+    "name": "X Accuracy",
+    "slug": "x-accuracy",
+    "category": "Battle items",
+    "effect": "Raises Accuracy of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-accuracy.png",
+    "itemUrl": "https://pokemondb.net/item/x-accuracy"
+  },
+  {
+    "name": "X Accuracy 2",
+    "slug": "x-accuracy-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Accuracy of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-accuracy-2"
+  },
+  {
+    "name": "X Accuracy 3",
+    "slug": "x-accuracy-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Accuracy of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-accuracy-3"
+  },
+  {
+    "name": "X Accuracy 6",
+    "slug": "x-accuracy-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Accuracy of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-accuracy-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-accuracy-6"
+  },
+  {
+    "name": "X Attack",
+    "slug": "x-attack",
+    "category": "Battle items",
+    "effect": "Raises Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-attack.png",
+    "itemUrl": "https://pokemondb.net/item/x-attack"
+  },
+  {
+    "name": "X Attack 2",
+    "slug": "x-attack-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-attack-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-attack-2"
+  },
+  {
+    "name": "X Attack 3",
+    "slug": "x-attack-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-attack-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-attack-3"
+  },
+  {
+    "name": "X Attack 6",
+    "slug": "x-attack-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-attack-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-attack-6"
+  },
+  {
+    "name": "X Defense",
+    "slug": "x-defense",
+    "category": "Battle items",
+    "effect": "Raises Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-defense.png",
+    "itemUrl": "https://pokemondb.net/item/x-defense"
+  },
+  {
+    "name": "X Defense 2",
+    "slug": "x-defense-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-defense-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-defense-2"
+  },
+  {
+    "name": "X Defense 3",
+    "slug": "x-defense-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-defense-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-defense-3"
+  },
+  {
+    "name": "X Defense 6",
+    "slug": "x-defense-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-defense-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-defense-6"
+  },
+  {
+    "name": "X Sp. Atk",
+    "slug": "x-sp-atk",
+    "category": "Battle items",
+    "effect": "Raises Special Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-atk"
+  },
+  {
+    "name": "X Sp. Atk 2",
+    "slug": "x-sp-atk-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Special Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-atk-2"
+  },
+  {
+    "name": "X Sp. Atk 3",
+    "slug": "x-sp-atk-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Special Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-atk-3"
+  },
+  {
+    "name": "X Sp. Atk 6",
+    "slug": "x-sp-atk-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Special Attack of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-atk-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-atk-6"
+  },
+  {
+    "name": "X Sp. Def",
+    "slug": "x-sp-def",
+    "category": "Battle items",
+    "effect": "Raises Special Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-def.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-def"
+  },
+  {
+    "name": "X Sp. Def 2",
+    "slug": "x-sp-def-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Special Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-def-2"
+  },
+  {
+    "name": "X Sp. Def 3",
+    "slug": "x-sp-def-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Special Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-def-3"
+  },
+  {
+    "name": "X Sp. Def 6",
+    "slug": "x-sp-def-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Special Defense of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-sp-def-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-sp-def-6"
+  },
+  {
+    "name": "X Speed",
+    "slug": "x-speed",
+    "category": "Battle items",
+    "effect": "Raises Speed of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-speed.png",
+    "itemUrl": "https://pokemondb.net/item/x-speed"
+  },
+  {
+    "name": "X Speed 2",
+    "slug": "x-speed-2",
+    "category": "Battle items",
+    "effect": "Sharply raises Speed of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-speed-2.png",
+    "itemUrl": "https://pokemondb.net/item/x-speed-2"
+  },
+  {
+    "name": "X Speed 3",
+    "slug": "x-speed-3",
+    "category": "Battle items",
+    "effect": "Drastically raises Speed of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-speed-3.png",
+    "itemUrl": "https://pokemondb.net/item/x-speed-3"
+  },
+  {
+    "name": "X Speed 6",
+    "slug": "x-speed-6",
+    "category": "Battle items",
+    "effect": "Immensely raises Speed of a Pokémon in battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/x-speed-6.png",
+    "itemUrl": "https://pokemondb.net/item/x-speed-6"
+  }
+]

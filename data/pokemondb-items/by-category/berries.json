@@ -1,0 +1,586 @@
+[
+  {
+    "name": "Aguav Berry",
+    "slug": "aguav-berry",
+    "category": "Berries",
+    "effect": "Restores HP if it's low, but may cause confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/aguav-berry.png",
+    "itemUrl": "https://pokemondb.net/item/aguav-berry"
+  },
+  {
+    "name": "Apicot Berry",
+    "slug": "apicot-berry",
+    "category": "Berries",
+    "effect": "Raises Special Defense when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/apicot-berry.png",
+    "itemUrl": "https://pokemondb.net/item/apicot-berry"
+  },
+  {
+    "name": "Aspear Berry",
+    "slug": "aspear-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it defrosts it.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/aspear-berry.png",
+    "itemUrl": "https://pokemondb.net/item/aspear-berry"
+  },
+  {
+    "name": "Babiri Berry",
+    "slug": "babiri-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Steel-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/babiri-berry.png",
+    "itemUrl": "https://pokemondb.net/item/babiri-berry"
+  },
+  {
+    "name": "Belue Berry",
+    "slug": "belue-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/belue-berry.png",
+    "itemUrl": "https://pokemondb.net/item/belue-berry"
+  },
+  {
+    "name": "Bluk Berry",
+    "slug": "bluk-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/bluk-berry.png",
+    "itemUrl": "https://pokemondb.net/item/bluk-berry"
+  },
+  {
+    "name": "Charti Berry",
+    "slug": "charti-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Rock-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/charti-berry.png",
+    "itemUrl": "https://pokemondb.net/item/charti-berry"
+  },
+  {
+    "name": "Cheri Berry",
+    "slug": "cheri-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from paralysis.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cheri-berry.png",
+    "itemUrl": "https://pokemondb.net/item/cheri-berry"
+  },
+  {
+    "name": "Chesto Berry",
+    "slug": "chesto-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from sleep.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/chesto-berry.png",
+    "itemUrl": "https://pokemondb.net/item/chesto-berry"
+  },
+  {
+    "name": "Chilan Berry",
+    "slug": "chilan-berry",
+    "category": "Berries",
+    "effect": "Weakens a Normal-type attack against the Pokémon holding this berry.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/chilan-berry.png",
+    "itemUrl": "https://pokemondb.net/item/chilan-berry"
+  },
+  {
+    "name": "Chople Berry",
+    "slug": "chople-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Fighting-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/chople-berry.png",
+    "itemUrl": "https://pokemondb.net/item/chople-berry"
+  },
+  {
+    "name": "Coba Berry",
+    "slug": "coba-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Flying-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/coba-berry.png",
+    "itemUrl": "https://pokemondb.net/item/coba-berry"
+  },
+  {
+    "name": "Colbur Berry",
+    "slug": "colbur-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Dark-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/colbur-berry.png",
+    "itemUrl": "https://pokemondb.net/item/colbur-berry"
+  },
+  {
+    "name": "Cornn Berry",
+    "slug": "cornn-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cornn-berry.png",
+    "itemUrl": "https://pokemondb.net/item/cornn-berry"
+  },
+  {
+    "name": "Custap Berry",
+    "slug": "custap-berry",
+    "category": "Berries",
+    "effect": "Holder can move first when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/custap-berry.png",
+    "itemUrl": "https://pokemondb.net/item/custap-berry"
+  },
+  {
+    "name": "Durin Berry",
+    "slug": "durin-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/durin-berry.png",
+    "itemUrl": "https://pokemondb.net/item/durin-berry"
+  },
+  {
+    "name": "Enigma Berry",
+    "slug": "enigma-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it restores its HP if it is hit by any supereffective attack.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/enigma-berry.png",
+    "itemUrl": "https://pokemondb.net/item/enigma-berry"
+  },
+  {
+    "name": "Figy Berry",
+    "slug": "figy-berry",
+    "category": "Berries",
+    "effect": "Restores HP if it's low, but may cause confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/figy-berry.png",
+    "itemUrl": "https://pokemondb.net/item/figy-berry"
+  },
+  {
+    "name": "Ganlon Berry",
+    "slug": "ganlon-berry",
+    "category": "Berries",
+    "effect": "Raises Defense when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ganlon-berry.png",
+    "itemUrl": "https://pokemondb.net/item/ganlon-berry"
+  },
+  {
+    "name": "Golden Nanab Berry",
+    "slug": "golden-nanab-berry",
+    "category": "Berries",
+    "effect": "Drastically calms a Pokémon in battle, in Let's Go Pikachu/Eevee.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/golden-nanab-berry.png",
+    "itemUrl": "https://pokemondb.net/item/golden-nanab-berry"
+  },
+  {
+    "name": "Golden Pinap Berry",
+    "slug": "golden-pinap-berry",
+    "category": "Berries",
+    "effect": "Drastically increases chance of getting items when a Pokémon is caught, in Pokémon Let's Go.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/golden-pinap-berry.png",
+    "itemUrl": "https://pokemondb.net/item/golden-pinap-berry"
+  },
+  {
+    "name": "Golden Razz Berry",
+    "slug": "golden-razz-berry",
+    "category": "Berries",
+    "effect": "Makes a Pokémon easier to catch in Pokémon Let's Go.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/golden-razz-berry.png",
+    "itemUrl": "https://pokemondb.net/item/golden-razz-berry"
+  },
+  {
+    "name": "Grepa Berry",
+    "slug": "grepa-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers Special Defense EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/grepa-berry.png",
+    "itemUrl": "https://pokemondb.net/item/grepa-berry"
+  },
+  {
+    "name": "Haban Berry",
+    "slug": "haban-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Dragon-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/haban-berry.png",
+    "itemUrl": "https://pokemondb.net/item/haban-berry"
+  },
+  {
+    "name": "Hondew Berry",
+    "slug": "hondew-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers Special Attack EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/hondew-berry.png",
+    "itemUrl": "https://pokemondb.net/item/hondew-berry"
+  },
+  {
+    "name": "Iapapa Berry",
+    "slug": "iapapa-berry",
+    "category": "Berries",
+    "effect": "Restores HP if it's low, but may cause confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/iapapa-berry.png",
+    "itemUrl": "https://pokemondb.net/item/iapapa-berry"
+  },
+  {
+    "name": "Jaboca Berry",
+    "slug": "jaboca-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon and a physical attack lands, the attacker also takes damage.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/jaboca-berry.png",
+    "itemUrl": "https://pokemondb.net/item/jaboca-berry"
+  },
+  {
+    "name": "Kasib Berry",
+    "slug": "kasib-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Ghost-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kasib-berry.png",
+    "itemUrl": "https://pokemondb.net/item/kasib-berry"
+  },
+  {
+    "name": "Kebia Berry",
+    "slug": "kebia-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Poison-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kebia-berry.png",
+    "itemUrl": "https://pokemondb.net/item/kebia-berry"
+  },
+  {
+    "name": "Kee Berry",
+    "slug": "kee-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, this Berry will increase the holder's Defense if it's hit with a physical move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kee-berry.png",
+    "itemUrl": "https://pokemondb.net/item/kee-berry"
+  },
+  {
+    "name": "Kelpsy Berry",
+    "slug": "kelpsy-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers Attack EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/kelpsy-berry.png",
+    "itemUrl": "https://pokemondb.net/item/kelpsy-berry"
+  },
+  {
+    "name": "Lansat Berry",
+    "slug": "lansat-berry",
+    "category": "Berries",
+    "effect": "Increases critical-hit ratio when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lansat-berry.png",
+    "itemUrl": "https://pokemondb.net/item/lansat-berry"
+  },
+  {
+    "name": "Leppa Berry",
+    "slug": "leppa-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it restores a move's PP by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/leppa-berry.png",
+    "itemUrl": "https://pokemondb.net/item/leppa-berry"
+  },
+  {
+    "name": "Liechi Berry",
+    "slug": "liechi-berry",
+    "category": "Berries",
+    "effect": "Raises Attack when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/liechi-berry.png",
+    "itemUrl": "https://pokemondb.net/item/liechi-berry"
+  },
+  {
+    "name": "Lum Berry",
+    "slug": "lum-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from any status problem.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lum-berry.png",
+    "itemUrl": "https://pokemondb.net/item/lum-berry"
+  },
+  {
+    "name": "Mago Berry",
+    "slug": "mago-berry",
+    "category": "Berries",
+    "effect": "Restores HP if it's low, but may cause confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mago-berry.png",
+    "itemUrl": "https://pokemondb.net/item/mago-berry"
+  },
+  {
+    "name": "Magost Berry",
+    "slug": "magost-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/magost-berry.png",
+    "itemUrl": "https://pokemondb.net/item/magost-berry"
+  },
+  {
+    "name": "Maranga Berry",
+    "slug": "maranga-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, this Berry will increase the holder's Sp. Def if it's hit with a special move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/maranga-berry.png",
+    "itemUrl": "https://pokemondb.net/item/maranga-berry"
+  },
+  {
+    "name": "Micle Berry",
+    "slug": "micle-berry",
+    "category": "Berries",
+    "effect": "Increases a move's accuracy when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/micle-berry.png",
+    "itemUrl": "https://pokemondb.net/item/micle-berry"
+  },
+  {
+    "name": "Nanab Berry",
+    "slug": "nanab-berry",
+    "category": "Berries",
+    "effect": "A Berry to be used in cooking. Calms a Pokémon in battle, in Let's Go Pikachu/Eevee.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/nanab-berry.png",
+    "itemUrl": "https://pokemondb.net/item/nanab-berry"
+  },
+  {
+    "name": "Nomel Berry",
+    "slug": "nomel-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/nomel-berry.png",
+    "itemUrl": "https://pokemondb.net/item/nomel-berry"
+  },
+  {
+    "name": "Occa Berry",
+    "slug": "occa-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Fire-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/occa-berry.png",
+    "itemUrl": "https://pokemondb.net/item/occa-berry"
+  },
+  {
+    "name": "Oran Berry",
+    "slug": "oran-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it heals the user by just 10 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/oran-berry.png",
+    "itemUrl": "https://pokemondb.net/item/oran-berry"
+  },
+  {
+    "name": "Pamtre Berry",
+    "slug": "pamtre-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pamtre-berry.png",
+    "itemUrl": "https://pokemondb.net/item/pamtre-berry"
+  },
+  {
+    "name": "Passho Berry",
+    "slug": "passho-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Water-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/passho-berry.png",
+    "itemUrl": "https://pokemondb.net/item/passho-berry"
+  },
+  {
+    "name": "Payapa Berry",
+    "slug": "payapa-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Psychic-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/payapa-berry.png",
+    "itemUrl": "https://pokemondb.net/item/payapa-berry"
+  },
+  {
+    "name": "Pecha Berry",
+    "slug": "pecha-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from poison.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pecha-berry.png",
+    "itemUrl": "https://pokemondb.net/item/pecha-berry"
+  },
+  {
+    "name": "Persim Berry",
+    "slug": "persim-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/persim-berry.png",
+    "itemUrl": "https://pokemondb.net/item/persim-berry"
+  },
+  {
+    "name": "Petaya Berry",
+    "slug": "petaya-berry",
+    "category": "Berries",
+    "effect": "Raises Special Attack when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/petaya-berry.png",
+    "itemUrl": "https://pokemondb.net/item/petaya-berry"
+  },
+  {
+    "name": "Pinap Berry",
+    "slug": "pinap-berry",
+    "category": "Berries",
+    "effect": "A Berry to be used in cooking. Increases chances of getting items when a Pokémon is caught, in Pokémon Let's Go.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pinap-berry.png",
+    "itemUrl": "https://pokemondb.net/item/pinap-berry"
+  },
+  {
+    "name": "Pomeg Berry",
+    "slug": "pomeg-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers HP EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pomeg-berry.png",
+    "itemUrl": "https://pokemondb.net/item/pomeg-berry"
+  },
+  {
+    "name": "Qualot Berry",
+    "slug": "qualot-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers Defense EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/qualot-berry.png",
+    "itemUrl": "https://pokemondb.net/item/qualot-berry"
+  },
+  {
+    "name": "Rabuta Berry",
+    "slug": "rabuta-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rabuta-berry.png",
+    "itemUrl": "https://pokemondb.net/item/rabuta-berry"
+  },
+  {
+    "name": "Rawst Berry",
+    "slug": "rawst-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it recovers from a burn.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rawst-berry.png",
+    "itemUrl": "https://pokemondb.net/item/rawst-berry"
+  },
+  {
+    "name": "Razz Berry",
+    "slug": "razz-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/razz-berry.png",
+    "itemUrl": "https://pokemondb.net/item/razz-berry"
+  },
+  {
+    "name": "Rindo Berry",
+    "slug": "rindo-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Grass-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rindo-berry.png",
+    "itemUrl": "https://pokemondb.net/item/rindo-berry"
+  },
+  {
+    "name": "Roseli Berry",
+    "slug": "roseli-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, this Berry will lessen the damage taken from one supereffective Fairy-type attack.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roseli-berry.png",
+    "itemUrl": "https://pokemondb.net/item/roseli-berry"
+  },
+  {
+    "name": "Rowap Berry",
+    "slug": "rowap-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon and a special attack lands, the attacker also takes damage.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rowap-berry.png",
+    "itemUrl": "https://pokemondb.net/item/rowap-berry"
+  },
+  {
+    "name": "Salac Berry",
+    "slug": "salac-berry",
+    "category": "Berries",
+    "effect": "Raises Speed when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/salac-berry.png",
+    "itemUrl": "https://pokemondb.net/item/salac-berry"
+  },
+  {
+    "name": "Shuca Berry",
+    "slug": "shuca-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Ground-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shuca-berry.png",
+    "itemUrl": "https://pokemondb.net/item/shuca-berry"
+  },
+  {
+    "name": "Silver Nanab Berry",
+    "slug": "silver-nanab-berry",
+    "category": "Berries",
+    "effect": "Greatly calms a Pokémon in battle, in Let's Go Pikachu/Eevee.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/silver-nanab-berry.png",
+    "itemUrl": "https://pokemondb.net/item/silver-nanab-berry"
+  },
+  {
+    "name": "Silver Pinap Berry",
+    "slug": "silver-pinap-berry",
+    "category": "Berries",
+    "effect": "Greatly increases chance of getting items when a Pokémon is caught, in Pokémon Let's Go.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/silver-pinap-berry.png",
+    "itemUrl": "https://pokemondb.net/item/silver-pinap-berry"
+  },
+  {
+    "name": "Silver Razz Berry",
+    "slug": "silver-razz-berry",
+    "category": "Berries",
+    "effect": "Makes a Pokémon easier to catch in Pokémon Let's Go.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/silver-razz-berry.png",
+    "itemUrl": "https://pokemondb.net/item/silver-razz-berry"
+  },
+  {
+    "name": "Sitrus Berry",
+    "slug": "sitrus-berry",
+    "category": "Berries",
+    "effect": "If held by a Pokémon, it heals the user's HP a little.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sitrus-berry.png",
+    "itemUrl": "https://pokemondb.net/item/sitrus-berry"
+  },
+  {
+    "name": "Spelon Berry",
+    "slug": "spelon-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/spelon-berry.png",
+    "itemUrl": "https://pokemondb.net/item/spelon-berry"
+  },
+  {
+    "name": "Starf Berry",
+    "slug": "starf-berry",
+    "category": "Berries",
+    "effect": "Sharply raises a random stat when HP is low.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/starf-berry.png",
+    "itemUrl": "https://pokemondb.net/item/starf-berry"
+  },
+  {
+    "name": "Tamato Berry",
+    "slug": "tamato-berry",
+    "category": "Berries",
+    "effect": "Increases Friendship but lowers Speed EVs.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tamato-berry.png",
+    "itemUrl": "https://pokemondb.net/item/tamato-berry"
+  },
+  {
+    "name": "Tanga Berry",
+    "slug": "tanga-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Bug-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tanga-berry.png",
+    "itemUrl": "https://pokemondb.net/item/tanga-berry"
+  },
+  {
+    "name": "Wacan Berry",
+    "slug": "wacan-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Electric-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wacan-berry.png",
+    "itemUrl": "https://pokemondb.net/item/wacan-berry"
+  },
+  {
+    "name": "Watmel Berry",
+    "slug": "watmel-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/watmel-berry.png",
+    "itemUrl": "https://pokemondb.net/item/watmel-berry"
+  },
+  {
+    "name": "Wepear Berry",
+    "slug": "wepear-berry",
+    "category": "Berries",
+    "effect": "A Berry which is very rare in the Unova region. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wepear-berry.png",
+    "itemUrl": "https://pokemondb.net/item/wepear-berry"
+  },
+  {
+    "name": "Wiki Berry",
+    "slug": "wiki-berry",
+    "category": "Berries",
+    "effect": "Restores HP if it's low, but may cause confusion.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/wiki-berry.png",
+    "itemUrl": "https://pokemondb.net/item/wiki-berry"
+  },
+  {
+    "name": "Yache Berry",
+    "slug": "yache-berry",
+    "category": "Berries",
+    "effect": "Weakens a supereffective Ice-type attack against the holding Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yache-berry.png",
+    "itemUrl": "https://pokemondb.net/item/yache-berry"
+  }
+]

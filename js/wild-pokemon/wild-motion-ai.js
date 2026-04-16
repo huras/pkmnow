@@ -7,12 +7,7 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
-import {
-  canWildPokemonWalkMicroTile,
-  getFoliageOverlayTileId,
-  getLakeLotusFoliageWalkRole,
-  pivotCellHeightTraversalOk
-} from '../walkability.js';
+import { canWildPokemonWalkMicroTile, pivotCellHeightTraversalOk } from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
@@ -28,13 +23,14 @@ import { clamp, entitiesByKey, wildSubdivN } from './wild-core-state.js';
 import { seededHashInt } from '../tessellation-logic.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
+import { advanceWildSpeechBubble, setWildSpeechBubble } from '../social/speech-bubble-state.js';
 import { getEncounters } from '../ecodex.js';
+import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
 
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
 const WANDER_IDLE_MIN = 0.35;
 const WANDER_IDLE_EXTRA = 1.0;
-const MAX_SPEED = 1.65;
 const WILD_GRAVITY = 45.0;
 const WILD_JUMP_IMPULSE = 12.0;
 const WILD_JUMP_BLOCKED_FRAMES_FLEE = 14;
@@ -52,6 +48,9 @@ export function ensureWildPhysicsState(entity) {
   if (entity.jumpSerial == null) entity.jumpSerial = 0;
   if (entity.jumpCooldown == null) entity.jumpCooldown = 0;
   if (entity._blockedMoveFrames == null) entity._blockedMoveFrames = 0;
+  if (entity._wanderLastNx == null) entity._wanderLastNx = 0;
+  if (entity._wanderLastNy == null) entity._wanderLastNy = 1;
+  if (entity._neutralPostAlertCooldown == null) entity._neutralPostAlertCooldown = 0;
 }
 
 export function integrateWildPokemonVertical(entity, dt) {
@@ -262,6 +261,7 @@ export function advanceWildPokemonAnim(entity, dt) {
       entity.emotionPortraitSlug = null;
     }
   }
+  advanceWildSpeechBubble(entity, dt);
 }
 
 export function setEmotion(entity, type, persist = false, portraitSlug) {
@@ -314,20 +314,50 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
         targetAng - Math.PI / 2
       ];
 
+  const desiredNx = Math.cos(targetAng);
+  const desiredNy = Math.sin(targetAng);
+  const curSpd = Math.hypot(entity.vx || 0, entity.vy || 0);
+  let memNx;
+  let memNy;
+  if (curSpd > 0.07) {
+    memNx = (entity.vx || 0) / curSpd;
+    memNy = (entity.vy || 0) / curSpd;
+  } else {
+    memNx = Number(entity._wanderLastNx) || desiredNx;
+    memNy = Number(entity._wanderLastNy) || desiredNy;
+    const mlen = Math.hypot(memNx, memNy) || 1;
+    memNx /= mlen;
+    memNy /= mlen;
+  }
+
+  let bestAng = /** @type {number | null} */ (null);
+  let bestScore = -Infinity;
   for (const ang of angles) {
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
-    if (wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne, true)) {
-      entity.vx = vx;
-      entity.vy = vy;
-      entity.stuckTimer = 0;
-      return;
+    if (!wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne, true)) {
+      continue;
     }
+    const nx = Math.cos(ang);
+    const ny = Math.sin(ang);
+    const alignGoal = nx * desiredNx + ny * desiredNy;
+    const alignMem = nx * memNx + ny * memNy;
+    const score = alignGoal + 0.38 * alignMem - 0.02 * Math.abs(Math.atan2(Math.sin(ang - targetAng), Math.cos(ang - targetAng)));
+    if (score > bestScore) {
+      bestScore = score;
+      bestAng = ang;
+    }
+  }
+
+  if (bestAng != null) {
+    entity.vx = Math.cos(bestAng) * speed;
+    entity.vy = Math.sin(bestAng) * speed;
+    entity.stuckTimer = 0;
+    return;
   }
 
   entity.vx = 0;
   entity.vy = 0;
-  entity.targetX = null;
   entity.stuckTimer = (entity.stuckTimer || 0) + 1.0;
 }
 
@@ -364,6 +394,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
   const beh = getEffectiveWildBehavior(entity);
+  if ((entity._neutralPostAlertCooldown || 0) > 0) {
+    entity._neutralPostAlertCooldown = Math.max(0, entity._neutralPostAlertCooldown - dt);
+  }
   const effectiveAlertRadius = Math.max(
     WILD_VISION_RANGE_MIN_TILES,
     (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT + (entity.wildTempAggressiveSec > 0 ? 1.0 : 0)
@@ -407,7 +440,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.idlePauseTimer = 0;
       entity.targetX = null;
     } else if (beh.archetype === 'neutral') {
-      if (entity.aiState !== 'alert') {
+      // Without a post-alert cooldown, neutral mons flip alert→wander→alert every frame the player
+      // stays in radius, replaying the exclamation bubble forever.
+      if (entity.aiState !== 'alert' && (entity._neutralPostAlertCooldown || 0) <= 0) {
         entity.aiState = 'alert';
         entity.alertTimer = 1.0 + Math.random();
         entity.vx = 0;
@@ -416,6 +451,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     }
   } else if (distP >= effectiveAlertRadius * 1.5 && entity.aiState !== 'sleep') {
     entity.aiState = 'wander';
+    entity._neutralPostAlertCooldown = 0;
   }
 
   if ((entity.spawnPhase ?? 1) < 0.5 || entity.isDespawning) {
@@ -445,6 +481,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity.alertTimer -= dt;
     if (entity.alertTimer <= 0) {
       entity.aiState = 'wander';
+      if (beh.archetype === 'neutral') {
+        entity._neutralPostAlertCooldown = 2.6 + Math.random() * 2.8;
+      }
     }
     const ang = Math.atan2(-dyP, -dxP);
     entity.facing = getFacingFromAngle(ang);
@@ -497,28 +536,64 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.vy = 0;
       entity.animMoving = false;
 
-      if (Math.random() < 0.15 && entity.emotionType === null) {
-        const balloon = Math.random() < 0.5 ? 2 : 3;
-        const happyish = ['Happy', 'Joyous', 'Inspired'];
-        const slug = happyish[Math.floor(Math.random() * happyish.length)];
-        setEmotion(entity, balloon, false, slug);
+      if (Math.random() < 0.18 && entity.emotionType === null && !entity.speechBubble) {
+        if (Math.random() < 0.4) {
+          const lines = [
+            [{ kind: 'text', text: 'Hmm…' }, { kind: 'monsprite' }],
+            [{ kind: 'text', text: 'Oh!' }, { kind: 'monsprite' }],
+            [
+              { kind: 'text', text: 'Need' },
+              { kind: 'item', slug: 'antidote' },
+              { kind: 'text', text: '?' }
+            ],
+            [{ kind: 'text', text: 'Sniff sniff…' }, { kind: 'monsprite' }],
+            [
+              { kind: 'text', text: '…' },
+              { kind: 'monsprite' },
+              { kind: 'text', text: "Wonder what's over there." }
+            ]
+          ];
+          const segs = lines[Math.floor(Math.random() * lines.length)];
+          const think = Math.random() < 0.45;
+          setWildSpeechBubble(entity, segs, {
+            durationSec: 3.2 + Math.random() * 1.4,
+            kind: think ? 'think' : 'say'
+          });
+        } else {
+          const balloon = Math.random() < 0.5 ? 2 : 3;
+          const happyish = ['Happy', 'Joyous', 'Inspired'];
+          const slug = happyish[Math.floor(Math.random() * happyish.length)];
+          setEmotion(entity, balloon, false, slug);
+        }
       }
       return;
     }
 
     const moveAng = Math.atan2(dyT, dxT);
-    steerTowardAngle(entity, moveAng, MAX_SPEED * 0.45, data, wildIsAirborne(entity), false);
+    steerTowardAngle(entity, moveAng, WORLD_MAX_WALK_SPEED_TILES_PER_SEC, data, wildIsAirborne(entity), false);
   }
 
-  const air = wildIsAirborne(entity);
+  let air = wildIsAirborne(entity);
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
+
+  const stepLen = Math.hypot((entity.vx || 0) * dt, (entity.vy || 0) * dt);
+  if (
+    entity.grounded &&
+    !air &&
+    (entity.jumpCooldown || 0) <= 0 &&
+    stepLen > 0.045 &&
+    !wildWalkOk(nx, ny, data, entity.x, entity.y, entity, false, true) &&
+    wildWalkOk(nx, ny, data, entity.x, entity.y, entity, true, true)
+  ) {
+    tryWildPokemonJump(entity);
+    air = wildIsAirborne(entity);
+  }
 
   const moved = tryApplyWildPokemonMove(entity, nx, ny, data, air);
   if (!moved) {
     entity.vx = 0;
     entity.vy = 0;
-    entity.targetX = null;
     entity._blockedMoveFrames = (entity._blockedMoveFrames || 0) + 1;
 
     const needJumpFrames =
@@ -535,8 +610,18 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     ) {
       setEmotion(entity, 6, false);
     }
+
+    if (entity.aiState === 'wander' && entity._blockedMoveFrames >= needJumpFrames * 2) {
+      entity.targetX = null;
+      entity.targetY = null;
+    }
   } else {
     entity._blockedMoveFrames = 0;
+    const spdMove = Math.hypot(entity.vx || 0, entity.vy || 0);
+    if (spdMove > 0.08) {
+      entity._wanderLastNx = (entity.vx || 0) / spdMove;
+      entity._wanderLastNy = (entity.vy || 0) / spdMove;
+    }
   }
 
   applyWildTreeTrunkResolution(entity, data);

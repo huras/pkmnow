@@ -17,6 +17,7 @@ import {
 } from './scatter-item-override.js';
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
 import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
+import { setPlayerSpeechBubbleForDetailPickup } from '../social/speech-bubble-state.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
 import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';
 import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
@@ -1604,6 +1605,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
         collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
         if (isCrystalItemKey(key)) crystalLootCount += stack;
         playItemPickupSfx(player);
+        setPlayerSpeechBubbleForDetailPickup(player, key, stack);
         activeCrystalDrops.splice(i, 1);
       }
       continue;

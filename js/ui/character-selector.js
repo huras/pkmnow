@@ -15,6 +15,7 @@ import {
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
+import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -40,15 +41,13 @@ function lootLabelFromItemKey(itemKey) {
     .trim();
 }
 
-function lootEmojiForItemKey(itemKey) {
+/** @param {string} itemKey */
+function lootSlugForItemKey(itemKey) {
   const k = String(itemKey || '').toLowerCase();
-  if (k.includes('crystal')) return '💎';
-  if (k.includes('shell')) return '🐚';
-  if (k.includes('flower')) return '🌸';
-  if (k.includes('mushroom')) return '🍄';
-  if (k.includes('leaf') || k.includes('grass')) return '🌿';
-  if (k.includes('rock')) return '🪨';
-  return '📦';
+  if (k.includes('crystal')) return 'star-piece';
+  const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
+  if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
+  return null;
 }
 
 export class CharacterSelector {
@@ -87,6 +86,16 @@ export class CharacterSelector {
     const immStored = localStorage.getItem(IMMERSIVE_CHROME_STORAGE_KEY);
     this.playImmersiveChrome =
       immStored === '1' ? true : immStored === '0' ? false : !!opts.defaultPlayImmersiveChrome;
+
+    /** @type {Map<string, string> | null} */
+    this._lootIconPathMap = null;
+    void getPokemondbItemIconPathMap().then((m) => {
+      this._lootIconPathMap = m;
+      const crystalPath = m.get('star-piece');
+      const crystalImg = this.container?.querySelector('#play-item-crystal-icon');
+      if (crystalImg && crystalPath) crystalImg.setAttribute('src', crystalPath);
+      this.updatePlayItemsHud();
+    });
 
     for (let i = 1; i <= 151; i++) {
       this.allSpecies.push({
@@ -210,16 +219,22 @@ export class CharacterSelector {
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
       .slice(0, 4);
+    const m = this._lootIconPathMap;
     listEl.innerHTML = rows
-      .map(
-        (r) => `
+      .map((r) => {
+        const slug = lootSlugForItemKey(r.itemKey);
+        const path = slug && m ? m.get(slug) : null;
+        const icon = path
+          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="20" height="20" decoding="async" />`
+          : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+        return `
           <div class="play-item-hud__row">
-            <span class="play-item-hud__icon" aria-hidden="true">${lootEmojiForItemKey(r.itemKey)}</span>
+            <span class="play-item-hud__icon" aria-hidden="true">${icon}</span>
             <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
             <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
           </div>
-        `
-      )
+        `;
+      })
       .join('');
   }
 
@@ -340,7 +355,9 @@ export class CharacterSelector {
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__title">Items</div>
           <div class="play-item-hud__row">
-            <span class="play-item-hud__icon" aria-hidden="true">💎</span>
+            <span class="play-item-hud__icon" aria-hidden="true">
+              <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="20" height="20" alt="" decoding="async" />
+            </span>
             <span class="play-item-hud__label">Crystal Shards</span>
             <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
           </div>

@@ -1,0 +1,826 @@
+[
+  {
+    "name": "Armor Fossil",
+    "slug": "armor-fossil",
+    "category": "General items",
+    "effect": "A fossil from a prehistoric Pokémon that lived on the land. It appears to be part of a collar.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/armor-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/armor-fossil"
+  },
+  {
+    "name": "Balm Mushroom",
+    "slug": "balm-mushroom",
+    "category": "General items",
+    "effect": "A rare mushroom which gives off a nice fragrance. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/balm-mushroom.png",
+    "itemUrl": "https://pokemondb.net/item/balm-mushroom"
+  },
+  {
+    "name": "Beach Glass",
+    "slug": "beach-glass",
+    "category": "General items",
+    "effect": "A piece of colored glass. Waves have rounded its edges. It's slightly rough to the touch.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/beach-glass.png",
+    "itemUrl": "https://pokemondb.net/item/beach-glass"
+  },
+  {
+    "name": "Big Mushroom",
+    "slug": "big-mushroom",
+    "category": "General items",
+    "effect": "A large and rare mushroom. It is sought after by collectors.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/big-mushroom.png",
+    "itemUrl": "https://pokemondb.net/item/big-mushroom"
+  },
+  {
+    "name": "Big Nugget",
+    "slug": "big-nugget",
+    "category": "General items",
+    "effect": "A big nugget of pure gold that gives off a lustrous gleam. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/big-nugget.png",
+    "itemUrl": "https://pokemondb.net/item/big-nugget"
+  },
+  {
+    "name": "Big Pearl",
+    "slug": "big-pearl",
+    "category": "General items",
+    "effect": "A quite-large pearl that sparkles in a pretty silver color. It can be sold at a high price to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/big-pearl.png",
+    "itemUrl": "https://pokemondb.net/item/big-pearl"
+  },
+  {
+    "name": "Black Apricorn",
+    "slug": "black-apricorn",
+    "category": "General items",
+    "effect": "A black Apricorn It has an indescribable scent.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/black-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/black-apricorn"
+  },
+  {
+    "name": "Black Flute",
+    "slug": "black-flute",
+    "category": "General items",
+    "effect": "A toy flute made from black glass. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/black-flute.png",
+    "itemUrl": "https://pokemondb.net/item/black-flute"
+  },
+  {
+    "name": "Blue Apricorn",
+    "slug": "blue-apricorn",
+    "category": "General items",
+    "effect": "A blue Apricorn. It smells a bit like grass.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blue-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/blue-apricorn"
+  },
+  {
+    "name": "Blue Flute",
+    "slug": "blue-flute",
+    "category": "General items",
+    "effect": "A toy flute made from blue glass. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blue-flute.png",
+    "itemUrl": "https://pokemondb.net/item/blue-flute"
+  },
+  {
+    "name": "Blue Scarf",
+    "slug": "blue-scarf",
+    "category": "General items",
+    "effect": "Raises holder's Beauty aspect in a Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blue-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/blue-scarf"
+  },
+  {
+    "name": "Blue Shard",
+    "slug": "blue-shard",
+    "category": "General items",
+    "effect": "A small blue shard. It appears to be from some sort of implement made long ago.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/blue-shard.png",
+    "itemUrl": "https://pokemondb.net/item/blue-shard"
+  },
+  {
+    "name": "Bottle Cap",
+    "slug": "bottle-cap",
+    "category": "General items",
+    "effect": "Maximizes one IV stat in Hyper Training.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/bottle-cap.png",
+    "itemUrl": "https://pokemondb.net/item/bottle-cap"
+  },
+  {
+    "name": "Chalky Stone",
+    "slug": "chalky-stone",
+    "category": "General items",
+    "effect": "A small whitish stone picked up at the edge of the road.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/chalky-stone.png",
+    "itemUrl": "https://pokemondb.net/item/chalky-stone"
+  },
+  {
+    "name": "Claw Fossil",
+    "slug": "claw-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that lived in the sea. It appears to be part of a claw.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/claw-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/claw-fossil"
+  },
+  {
+    "name": "Comet Shard",
+    "slug": "comet-shard",
+    "category": "General items",
+    "effect": "A shard which fell to the ground when a comet approached. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/comet-shard.png",
+    "itemUrl": "https://pokemondb.net/item/comet-shard"
+  },
+  {
+    "name": "Cover Fossil",
+    "slug": "cover-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that lived in the sea in ancient times. It appears to be part of its back.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cover-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/cover-fossil"
+  },
+  {
+    "name": "Damp Mulch",
+    "slug": "damp-mulch",
+    "category": "General items",
+    "effect": "A fertilizer to be spread on soft soil in regions where Berries are grown. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/damp-mulch.png",
+    "itemUrl": "https://pokemondb.net/item/damp-mulch"
+  },
+  {
+    "name": "Dawn Stone",
+    "slug": "dawn-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dawn-stone.png",
+    "itemUrl": "https://pokemondb.net/item/dawn-stone"
+  },
+  {
+    "name": "Discount Coupon",
+    "slug": "discount-coupon",
+    "category": "General items",
+    "effect": "This special coupon allows you to buy items at a discount when you are shopping at a boutique.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/discount-coupon.png",
+    "itemUrl": "https://pokemondb.net/item/discount-coupon"
+  },
+  {
+    "name": "DNA Splicers",
+    "slug": "dna-splicers",
+    "category": "General items",
+    "effect": "A splicer that fuses Kyurem and a certain Pokémon. They are said to have been one in the beginning.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dna-splicers.png",
+    "itemUrl": "https://pokemondb.net/item/dna-splicers"
+  },
+  {
+    "name": "Dome Fossil",
+    "slug": "dome-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that lived in the sea. It appears to be part of a shell.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dome-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/dome-fossil"
+  },
+  {
+    "name": "Dragon Scale",
+    "slug": "dragon-scale",
+    "category": "General items",
+    "effect": "Evolves Seadra when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dragon-scale.png",
+    "itemUrl": "https://pokemondb.net/item/dragon-scale"
+  },
+  {
+    "name": "Dubious Disc",
+    "slug": "dubious-disc",
+    "category": "General items",
+    "effect": "Evolves Porygon2 when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dubious-disc.png",
+    "itemUrl": "https://pokemondb.net/item/dubious-disc"
+  },
+  {
+    "name": "Dusk Stone",
+    "slug": "dusk-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dusk-stone.png",
+    "itemUrl": "https://pokemondb.net/item/dusk-stone"
+  },
+  {
+    "name": "Electirizer",
+    "slug": "electirizer",
+    "category": "General items",
+    "effect": "Evolves Electabuzz when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/electirizer.png",
+    "itemUrl": "https://pokemondb.net/item/electirizer"
+  },
+  {
+    "name": "Escape Rope",
+    "slug": "escape-rope",
+    "category": "General items",
+    "effect": "A long, durable rope. Use it to escape instantly from a cave or a dungeon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/escape-rope.png",
+    "itemUrl": "https://pokemondb.net/item/escape-rope"
+  },
+  {
+    "name": "Fairy Gem",
+    "slug": "fairy-gem",
+    "category": "General items",
+    "effect": "Increases the power of a Fairy-type move only once.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fairy-gem.png",
+    "itemUrl": "https://pokemondb.net/item/fairy-gem"
+  },
+  {
+    "name": "Festival Ticket",
+    "slug": "festival-ticket",
+    "category": "General items",
+    "effect": "A ticket that allows you to host a mission in Festival Plaza.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/festival-ticket.png",
+    "itemUrl": "https://pokemondb.net/item/festival-ticket"
+  },
+  {
+    "name": "Fire Stone",
+    "slug": "fire-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fire-stone.png",
+    "itemUrl": "https://pokemondb.net/item/fire-stone"
+  },
+  {
+    "name": "Fluffy Tail",
+    "slug": "fluffy-tail",
+    "category": "General items",
+    "effect": "An item that attracts Pokémon. Use it to flee from any battle with a wild Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fluffy-tail.png",
+    "itemUrl": "https://pokemondb.net/item/fluffy-tail"
+  },
+  {
+    "name": "Gold Bottle Cap",
+    "slug": "gold-bottle-cap",
+    "category": "General items",
+    "effect": "Maximizes all of a Pokémon's IV stats in Hyper Training.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/gold-bottle-cap.png",
+    "itemUrl": "https://pokemondb.net/item/gold-bottle-cap"
+  },
+  {
+    "name": "Gooey Mulch",
+    "slug": "gooey-mulch",
+    "category": "General items",
+    "effect": "A fertilizer to be spread on soft soil in regions where Berries are grown. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/gooey-mulch.png",
+    "itemUrl": "https://pokemondb.net/item/gooey-mulch"
+  },
+  {
+    "name": "Green Apricorn",
+    "slug": "green-apricorn",
+    "category": "General items",
+    "effect": "A green Apricorn. It has a mysterious, aromatic scent.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/green-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/green-apricorn"
+  },
+  {
+    "name": "Green Scarf",
+    "slug": "green-scarf",
+    "category": "General items",
+    "effect": "Raises holder's Smart aspect in a Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/green-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/green-scarf"
+  },
+  {
+    "name": "Green Shard",
+    "slug": "green-shard",
+    "category": "General items",
+    "effect": "A small green shard. It appears to be from some sort of implement made long ago.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/green-shard.png",
+    "itemUrl": "https://pokemondb.net/item/green-shard"
+  },
+  {
+    "name": "Growth Mulch",
+    "slug": "growth-mulch",
+    "category": "General items",
+    "effect": "A fertilizer to be spread on soft soil in regions where Berries are grown. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/growth-mulch.png",
+    "itemUrl": "https://pokemondb.net/item/growth-mulch"
+  },
+  {
+    "name": "Heart Scale",
+    "slug": "heart-scale",
+    "category": "General items",
+    "effect": "A pretty, heart-shaped scale that is extremely rare. It glows faintly in the colors of the rainbow.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heart-scale.png",
+    "itemUrl": "https://pokemondb.net/item/heart-scale"
+  },
+  {
+    "name": "Helix Fossil",
+    "slug": "helix-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that lived in the sea. It appears to be part of a seashell.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/helix-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/helix-fossil"
+  },
+  {
+    "name": "Honey",
+    "slug": "honey",
+    "category": "General items",
+    "effect": "A sweet honey with a lush aroma that attracts wild Pokémon when it is used in grass, caves, or on special trees.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/honey.png",
+    "itemUrl": "https://pokemondb.net/item/honey"
+  },
+  {
+    "name": "Ice Stone",
+    "slug": "ice-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ice-stone.png",
+    "itemUrl": "https://pokemondb.net/item/ice-stone"
+  },
+  {
+    "name": "Leaf Stone",
+    "slug": "leaf-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/leaf-stone.png",
+    "itemUrl": "https://pokemondb.net/item/leaf-stone"
+  },
+  {
+    "name": "Magmarizer",
+    "slug": "magmarizer",
+    "category": "General items",
+    "effect": "Evolves Magmar when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/magmarizer.png",
+    "itemUrl": "https://pokemondb.net/item/magmarizer"
+  },
+  {
+    "name": "Max Repel",
+    "slug": "max-repel",
+    "category": "General items",
+    "effect": "An item that prevents weak wild Pokémon from appearing for 250 steps after its use.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/max-repel.png",
+    "itemUrl": "https://pokemondb.net/item/max-repel"
+  },
+  {
+    "name": "Moon Stone",
+    "slug": "moon-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/moon-stone.png",
+    "itemUrl": "https://pokemondb.net/item/moon-stone"
+  },
+  {
+    "name": "Nugget",
+    "slug": "nugget",
+    "category": "General items",
+    "effect": "A nugget of pure gold that gives off a lustrous gleam. It can be sold at a high price to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/nugget.png",
+    "itemUrl": "https://pokemondb.net/item/nugget"
+  },
+  {
+    "name": "Odd Keystone",
+    "slug": "odd-keystone",
+    "category": "General items",
+    "effect": "A vital item that is needed to keep a stone tower from collapsing. Voices can be heard from it occasionally.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/odd-keystone.png",
+    "itemUrl": "https://pokemondb.net/item/odd-keystone"
+  },
+  {
+    "name": "Old Amber",
+    "slug": "old-amber",
+    "category": "General items",
+    "effect": "A piece of amber that contains the genetic material of an ancient Pokémon. It is clear with a reddish tint.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/old-amber.png",
+    "itemUrl": "https://pokemondb.net/item/old-amber"
+  },
+  {
+    "name": "Oval Charm",
+    "slug": "oval-charm",
+    "category": "General items",
+    "effect": "An oval charm said to increase the chance of Pokémon Eggs being found at the Day Care.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/oval-charm.png",
+    "itemUrl": "https://pokemondb.net/item/oval-charm"
+  },
+  {
+    "name": "Oval Stone",
+    "slug": "oval-stone",
+    "category": "General items",
+    "effect": "Evolves Happiny when held.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/oval-stone.png",
+    "itemUrl": "https://pokemondb.net/item/oval-stone"
+  },
+  {
+    "name": "Pearl",
+    "slug": "pearl",
+    "category": "General items",
+    "effect": "A somewhat-small pearl that sparkles in a pretty silver color. It can be sold cheaply to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pearl.png",
+    "itemUrl": "https://pokemondb.net/item/pearl"
+  },
+  {
+    "name": "Pearl String",
+    "slug": "pearl-string",
+    "category": "General items",
+    "effect": "Very large pearls that sparkle in a pretty silver color. A maniac will buy them for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pearl-string.png",
+    "itemUrl": "https://pokemondb.net/item/pearl-string"
+  },
+  {
+    "name": "Permit",
+    "slug": "permit",
+    "category": "General items",
+    "effect": "A permit that is needed to enter the Nature Preserve. Not many know about it.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/permit.png",
+    "itemUrl": "https://pokemondb.net/item/permit"
+  },
+  {
+    "name": "Pink Apricorn",
+    "slug": "pink-apricorn",
+    "category": "General items",
+    "effect": "A pink Apricorn. It has a nice, sweet scent.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pink-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/pink-apricorn"
+  },
+  {
+    "name": "Pink Scarf",
+    "slug": "pink-scarf",
+    "category": "General items",
+    "effect": "Raises holder's Cute aspect in a Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pink-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/pink-scarf"
+  },
+  {
+    "name": "Plume Fossil",
+    "slug": "plume-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that flew in the sky in ancient times. It appears to be part of its wing.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/plume-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/plume-fossil"
+  },
+  {
+    "name": "Poké Doll",
+    "slug": "poke-doll",
+    "category": "General items",
+    "effect": "A doll that attracts Pokémon. Use it to flee from any battle with a wild Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poke-doll.png",
+    "itemUrl": "https://pokemondb.net/item/poke-doll"
+  },
+  {
+    "name": "Poké Toy",
+    "slug": "poke-toy",
+    "category": "General items",
+    "effect": "An item that attracts Pokémon. Use it to flee from any battle with a wild Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poke-toy.png",
+    "itemUrl": "https://pokemondb.net/item/poke-toy"
+  },
+  {
+    "name": "Pretty Feather",
+    "slug": "pretty-feather",
+    "category": "General items",
+    "effect": "Can be sold for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pretty-feather.png",
+    "itemUrl": "https://pokemondb.net/item/pretty-feather"
+  },
+  {
+    "name": "Prism Scale",
+    "slug": "prism-scale",
+    "category": "General items",
+    "effect": "Evolves Feebas when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/prism-scale.png",
+    "itemUrl": "https://pokemondb.net/item/prism-scale"
+  },
+  {
+    "name": "Protector",
+    "slug": "protector",
+    "category": "General items",
+    "effect": "Evolves Rhydon when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/protector.png",
+    "itemUrl": "https://pokemondb.net/item/protector"
+  },
+  {
+    "name": "Rare Bone",
+    "slug": "rare-bone",
+    "category": "General items",
+    "effect": "A bone that is extremely valuable for Pokémon archeology. It can be sold for a high price to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rare-bone.png",
+    "itemUrl": "https://pokemondb.net/item/rare-bone"
+  },
+  {
+    "name": "Reaper Cloth",
+    "slug": "reaper-cloth",
+    "category": "General items",
+    "effect": "Evolves Dusclops when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/reaper-cloth.png",
+    "itemUrl": "https://pokemondb.net/item/reaper-cloth"
+  },
+  {
+    "name": "Red Apricorn",
+    "slug": "red-apricorn",
+    "category": "General items",
+    "effect": "A red Apricorn. It assails your nostrils.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/red-apricorn"
+  },
+  {
+    "name": "Red Flute",
+    "slug": "red-flute",
+    "category": "General items",
+    "effect": "A toy flute made from red glass. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-flute.png",
+    "itemUrl": "https://pokemondb.net/item/red-flute"
+  },
+  {
+    "name": "Red Scarf",
+    "slug": "red-scarf",
+    "category": "General items",
+    "effect": "Raises holder's Cool aspect in a Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/red-scarf"
+  },
+  {
+    "name": "Red Shard",
+    "slug": "red-shard",
+    "category": "General items",
+    "effect": "A small red shard. It appears to be from some sort of implement made long ago.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/red-shard.png",
+    "itemUrl": "https://pokemondb.net/item/red-shard"
+  },
+  {
+    "name": "Relic Band",
+    "slug": "relic-band",
+    "category": "General items",
+    "effect": "A bracelet made in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-band.png",
+    "itemUrl": "https://pokemondb.net/item/relic-band"
+  },
+  {
+    "name": "Relic Copper",
+    "slug": "relic-copper",
+    "category": "General items",
+    "effect": "A copper coin used in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-copper.png",
+    "itemUrl": "https://pokemondb.net/item/relic-copper"
+  },
+  {
+    "name": "Relic Crown",
+    "slug": "relic-crown",
+    "category": "General items",
+    "effect": "A crown made in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-crown.png",
+    "itemUrl": "https://pokemondb.net/item/relic-crown"
+  },
+  {
+    "name": "Relic Gold",
+    "slug": "relic-gold",
+    "category": "General items",
+    "effect": "A gold coin used in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-gold.png",
+    "itemUrl": "https://pokemondb.net/item/relic-gold"
+  },
+  {
+    "name": "Relic Silver",
+    "slug": "relic-silver",
+    "category": "General items",
+    "effect": "A silver coin used in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-silver.png",
+    "itemUrl": "https://pokemondb.net/item/relic-silver"
+  },
+  {
+    "name": "Relic Statue",
+    "slug": "relic-statue",
+    "category": "General items",
+    "effect": "A stone figure made in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-statue.png",
+    "itemUrl": "https://pokemondb.net/item/relic-statue"
+  },
+  {
+    "name": "Relic Vase",
+    "slug": "relic-vase",
+    "category": "General items",
+    "effect": "A vase made in a civilization about 3,000 years ago. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/relic-vase.png",
+    "itemUrl": "https://pokemondb.net/item/relic-vase"
+  },
+  {
+    "name": "Repel",
+    "slug": "repel",
+    "category": "General items",
+    "effect": "An item that prevents weak wild Pokémon from appearing for 100 steps after its use.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/repel.png",
+    "itemUrl": "https://pokemondb.net/item/repel"
+  },
+  {
+    "name": "Reveal Glass",
+    "slug": "reveal-glass",
+    "category": "General items",
+    "effect": "A looking glass that reveals the truth. It's a mysterious glass that returns a Pokémon to its original shape.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/reveal-glass.png",
+    "itemUrl": "https://pokemondb.net/item/reveal-glass"
+  },
+  {
+    "name": "Roller Skates",
+    "slug": "roller-skates",
+    "category": "General items",
+    "effect": "Attaches roller skates to the bottom of your shoes, allowing you to glide quickly around and perform tricks.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/roller-skates.png",
+    "itemUrl": "https://pokemondb.net/item/roller-skates"
+  },
+  {
+    "name": "Root Fossil",
+    "slug": "root-fossil",
+    "category": "General items",
+    "effect": "A fossil of an ancient Pokémon that lived in the sea. It appears to be part of a plant root.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/root-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/root-fossil"
+  },
+  {
+    "name": "Sachet",
+    "slug": "sachet",
+    "category": "General items",
+    "effect": "Evolves Spritzee when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sachet.png",
+    "itemUrl": "https://pokemondb.net/item/sachet"
+  },
+  {
+    "name": "Shiny Charm",
+    "slug": "shiny-charm",
+    "category": "General items",
+    "effect": "A shiny charm said to increase the chance of finding a Shiny Pokémon in the wild.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shiny-charm.png",
+    "itemUrl": "https://pokemondb.net/item/shiny-charm"
+  },
+  {
+    "name": "Shiny Stone",
+    "slug": "shiny-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shiny-stone.png",
+    "itemUrl": "https://pokemondb.net/item/shiny-stone"
+  },
+  {
+    "name": "Shoal Salt",
+    "slug": "shoal-salt",
+    "category": "General items",
+    "effect": "Pure salt that can be discovered deep inside the Shoal Cave. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shoal-salt.png",
+    "itemUrl": "https://pokemondb.net/item/shoal-salt"
+  },
+  {
+    "name": "Shoal Shell",
+    "slug": "shoal-shell",
+    "category": "General items",
+    "effect": "A pretty seashell that can be found deep inside the Shoal Cave. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shoal-shell.png",
+    "itemUrl": "https://pokemondb.net/item/shoal-shell"
+  },
+  {
+    "name": "Skull Fossil",
+    "slug": "skull-fossil",
+    "category": "General items",
+    "effect": "A fossil from a prehistoric Pokémon that lived on the land. It appears to be part of a head.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/skull-fossil.png",
+    "itemUrl": "https://pokemondb.net/item/skull-fossil"
+  },
+  {
+    "name": "Sprinklotad",
+    "slug": "sprinklotad",
+    "category": "General items",
+    "effect": "A watering can shaped like a Lotad. It helps promote the healthy growth of any Berries planted in good, soft soil.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sprinklotad.png",
+    "itemUrl": "https://pokemondb.net/item/sprinklotad"
+  },
+  {
+    "name": "Stable Mulch",
+    "slug": "stable-mulch",
+    "category": "General items",
+    "effect": "A fertilizer to be spread on soft soil in regions where Berries are grown. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/stable-mulch.png",
+    "itemUrl": "https://pokemondb.net/item/stable-mulch"
+  },
+  {
+    "name": "Star Piece",
+    "slug": "star-piece",
+    "category": "General items",
+    "effect": "A shard of a pretty gem that sparkles in a red color. It can be sold at a high price to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/star-piece.png",
+    "itemUrl": "https://pokemondb.net/item/star-piece"
+  },
+  {
+    "name": "Stardust",
+    "slug": "stardust",
+    "category": "General items",
+    "effect": "Lovely, red-colored sand with a loose, silky feel. It can be sold at a high price to shops.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/stardust.png",
+    "itemUrl": "https://pokemondb.net/item/stardust"
+  },
+  {
+    "name": "Strange Souvenir",
+    "slug": "strange-souvenir",
+    "category": "General items",
+    "effect": "An ornament depicting a Pokémon that is venerated as a protector in some region far from Kalos.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/strange-souvenir.png",
+    "itemUrl": "https://pokemondb.net/item/strange-souvenir"
+  },
+  {
+    "name": "Sun Stone",
+    "slug": "sun-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sun-stone.png",
+    "itemUrl": "https://pokemondb.net/item/sun-stone"
+  },
+  {
+    "name": "Super Repel",
+    "slug": "super-repel",
+    "category": "General items",
+    "effect": "An item that prevents weak wild Pokémon from appearing for 200 steps after its use.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/super-repel.png",
+    "itemUrl": "https://pokemondb.net/item/super-repel"
+  },
+  {
+    "name": "Thunder Stone",
+    "slug": "thunder-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/thunder-stone.png",
+    "itemUrl": "https://pokemondb.net/item/thunder-stone"
+  },
+  {
+    "name": "Tiny Mushroom",
+    "slug": "tiny-mushroom",
+    "category": "General items",
+    "effect": "A small and rare mushroom. It is sought after by collectors.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tiny-mushroom.png",
+    "itemUrl": "https://pokemondb.net/item/tiny-mushroom"
+  },
+  {
+    "name": "TMV Pass",
+    "slug": "tmv-pass",
+    "category": "General items",
+    "effect": "A commuter pass that allows the holder to ride the TMV between Lumiose City and Kiloude City at any time.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tmv-pass.png",
+    "itemUrl": "https://pokemondb.net/item/tmv-pass"
+  },
+  {
+    "name": "Upgrade",
+    "slug": "upgrade",
+    "category": "General items",
+    "effect": "Evolves Porygon when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/upgrade.png",
+    "itemUrl": "https://pokemondb.net/item/upgrade"
+  },
+  {
+    "name": "Water Stone",
+    "slug": "water-stone",
+    "category": "General items",
+    "effect": "Evolves certain species of Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/water-stone.png",
+    "itemUrl": "https://pokemondb.net/item/water-stone"
+  },
+  {
+    "name": "Whipped Dream",
+    "slug": "whipped-dream",
+    "category": "General items",
+    "effect": "Evolves Swirlix when traded holding the item.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/whipped-dream.png",
+    "itemUrl": "https://pokemondb.net/item/whipped-dream"
+  },
+  {
+    "name": "White Apricorn",
+    "slug": "white-apricorn",
+    "category": "General items",
+    "effect": "A white Apricorn. It doesn't smell like anything.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/white-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/white-apricorn"
+  },
+  {
+    "name": "White Flute",
+    "slug": "white-flute",
+    "category": "General items",
+    "effect": "A toy flute made from white glass. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/white-flute.png",
+    "itemUrl": "https://pokemondb.net/item/white-flute"
+  },
+  {
+    "name": "Yellow Apricorn",
+    "slug": "yellow-apricorn",
+    "category": "General items",
+    "effect": "A yellow Apricorn. It has an invigorating scent.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yellow-apricorn.png",
+    "itemUrl": "https://pokemondb.net/item/yellow-apricorn"
+  },
+  {
+    "name": "Yellow Flute",
+    "slug": "yellow-flute",
+    "category": "General items",
+    "effect": "A toy flute made from yellow glass. A maniac will buy it for a high price.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yellow-flute.png",
+    "itemUrl": "https://pokemondb.net/item/yellow-flute"
+  },
+  {
+    "name": "Yellow Scarf",
+    "slug": "yellow-scarf",
+    "category": "General items",
+    "effect": "Raises holder's Tough aspect in a Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yellow-scarf.png",
+    "itemUrl": "https://pokemondb.net/item/yellow-scarf"
+  },
+  {
+    "name": "Yellow Shard",
+    "slug": "yellow-shard",
+    "category": "General items",
+    "effect": "A small yellow shard. It appears to be from some sort of implement made long ago.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/yellow-shard.png",
+    "itemUrl": "https://pokemondb.net/item/yellow-shard"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "source": "https://pokemondb.net/item/all",
+  "fetchedAt": "2026-04-16T21:51:02.682Z",
+  "count": 687,
+  "note": "Only rows whose list-page icon URL path includes /sprites/items/ (excludes pokemondb placeholder icons such as /s.png)."
+}

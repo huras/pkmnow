@@ -49,6 +49,7 @@ import {
   drawWildEmotionOverlay,
   drawWildHpBar
 } from './render/render-ui-world.js';
+import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
   updateJumpRings,
   updateRunDustPuffs,
@@ -561,6 +562,12 @@ export function render(canvas, data, options = {}) {
           drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx);
         }
 
+        ctx.restore();
+      } else if (item.type === 'wildSpeechBubble' || item.type === 'playerSpeechBubble') {
+        ctx.save();
+        const spawnYOffset =
+          item.spawnType === 'sky' && item.spawnPhase < 1 ? (1 - item.spawnPhase) * (-4 * tileH) : 0;
+        drawWildSpeechBubbleOverlay(ctx, item, spawnYOffset, imageCache, tileW, tileH, snapPx);
         ctx.restore();
       } else if (item.type === 'wildEmotion' || item.type === 'playerEmotion') {
         ctx.save();

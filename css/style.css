@@ -1258,8 +1258,33 @@ body.play-mode-active {
   font-weight: 700;
 }
 
-.play-social-overlay-emoji {
+.play-social-overlay-figure {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.play-social-overlay-portrait {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.play-social-overlay-emoji-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.9rem;
+}
+
+.play-social-overlay-emoji-fallback.is-hidden {
+  display: none;
 }
 
 .play-social-overlay-label {

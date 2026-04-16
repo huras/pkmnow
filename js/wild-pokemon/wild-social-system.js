@@ -4,6 +4,7 @@ import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { clamp, entitiesByKey } from './wild-core-state.js';
 import { setEmotion } from './wild-motion-ai.js';
+import { setWildSpeechBubble } from '../social/speech-bubble-state.js';
 
 const WILD_SOCIAL_INTERACTION_RADIUS = 9.0;
 const WILD_SOCIAL_RIPPLE_RADIUS = 14.0;
@@ -350,6 +351,28 @@ function applySocialReactionToWild(entity, action, player, influence) {
   }
 
   setEmotion(entity, chooseEmotionByOutcome(action, outcome, memory), outcome !== 'deescalate', action.portraitSlug);
+
+  const emoji = String(action.emoji || '💬');
+  const slugRaw = String(action.portraitSlug || 'Normal').trim() || 'Normal';
+  const portraitSlug = slugRaw.replace(/[^\w.-]/g, '') || 'Normal';
+  const line =
+    outcome === 'deescalate'
+      ? 'Okay…'
+      : outcome === 'flee'
+        ? 'Eek!'
+        : outcome === 'approach'
+          ? 'Hey!'
+          : 'Hmm?';
+  const think = outcome === 'flee' || outcome === 'neutral';
+  setWildSpeechBubble(
+    entity,
+    [
+      { kind: 'portrait', slug: portraitSlug, fallbackEmoji: emoji },
+      { kind: 'text', text: line }
+    ],
+    { durationSec: 2.0 + 0.55 * influence, kind: think ? 'think' : 'say' }
+  );
+
   memory.reactionCooldown = WILD_SOCIAL_REACTION_COOLDOWN_SEC;
   return true;
 }
@@ -400,6 +423,14 @@ export function triggerPlayerSocialAction(actionInput, player, data) {
   if (isTackleSocialAction(action) && primaryDist <= PLAYER_SOCIAL_TACKLE_HIT_RADIUS) {
     if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE);
     setEmotion(primary, 5, false, 'Pain');
+    setWildSpeechBubble(
+      primary,
+      [
+        { kind: 'portrait', slug: 'Pain', fallbackEmoji: '💥' },
+        { kind: 'text', text: 'Oof!' }
+      ],
+      { durationSec: 2.1, kind: 'say' }
+    );
     applyWildKnockbackFromPoint(primary, px, py, PLAYER_SOCIAL_TACKLE_KNOCKBACK);
     pushRecentNearbyEvent(primary, 'player_field_move', 1.1);
     broadcastNearbyPlayerEvent(primary.x, primary.y, 'player_field_move', 0.75, primary);

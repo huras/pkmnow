@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-04-16T22:02:37.493Z",
+  "sourceJson": "data/pokemondb-items/items-with-images.json",
+  "outRoot": "items-icons/pokemondb-sprites",
+  "totalListed": 687,
+  "downloaded": 9,
+  "skippedExisting": 678,
+  "failed": 0,
+  "layout": "items-icons/pokemondb-sprites/<category-slug>/<slug>.<ext>",
+  "note": "Use manifest.bySlug[slug].path as src/href from repo root (same as play.html).",
+  "failures": []
+}
