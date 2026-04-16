@@ -156,7 +156,7 @@
   display: none !important;
 }
 
-.app--play-immersive .map-wrap > :not(#map):not(#minimap-panel):not(#play-fps):not(#play-bgm-toast) {
+.app--play-immersive .map-wrap > :not(#map):not(#minimap-panel):not(#play-fps):not(#play-bgm-toast):not(#play-immersive-hint) {
   display: none !important;
 }
 
