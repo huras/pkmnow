@@ -266,6 +266,7 @@ export function collectRenderItems(options) {
   // 2. Add Wild Pokemon
   const wildList = getWildPokemonEntities();
   for (const w of wildList) {
+    if (w?._strengthCarryHidden) continue;
     if (w.x >= startX - 2 && w.x < endX + 2 && w.y >= startY - 2 && w.y < endY + 2) {
       const wDex = w.dexId || 1;
       const { walk: wWalk, idle: wIdle, hurt: wHurt, sleep: wSleep, faint: wFaint } = getResolvedSheets(imageCache, wDex);

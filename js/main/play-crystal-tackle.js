@@ -21,7 +21,7 @@ import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
 import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';
 import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
 import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
-import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
+import { playRockSmashingSfx, playRockSmashingBreakSfx } from '../audio/rock-smashing-sfx.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -1478,10 +1478,16 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
     const hitX = hit.cx ?? hit.rootOx + 0.5;
     const hitY = hit.cy ?? hit.rootOy + 0.5;
-    if (!isTreeHit) playRockSmashingSfx({ x: hitX, y: hitY });
     const treeDamage =
       isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
     st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
+    if (!isTreeHit) {
+      if (treeDamage > 0 && st.hitsRemaining <= 0) {
+        playRockSmashingBreakSfx({ x: hitX, y: hitY });
+      } else {
+        playRockSmashingSfx({ x: hitX, y: hitY });
+      }
+    }
     if (treeDamage > 0 || !isTreeHit) {
       markDetailHitHpBar(worldKey, hitX, hitY, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
     }

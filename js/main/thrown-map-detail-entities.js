@@ -6,7 +6,11 @@
 
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { strengthRelocateCarriedDetailNear } from './play-crystal-tackle.js';
-import { getWildPokemonEntities, applyPlayerTackleEffectOnWildFromPoint } from '../wild-pokemon/wild-pokemon-manager.js';
+import {
+  getWildPokemonEntities,
+  applyPlayerTackleEffectOnWildFromPoint,
+  restoreCarriedFaintedWildNear
+} from '../wild-pokemon/wild-pokemon-manager.js';
 import {
   getPokemonHurtboxCenterWorldXY,
   getPokemonHurtboxRadiusTiles,
@@ -15,7 +19,7 @@ import {
 import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
 
-/** @typedef {'strengthRock'} ThrownMapDetailKind */
+/** @typedef {'strengthRock' | 'faintedWild'} ThrownMapDetailKind */
 
 /**
  * @typedef {{
@@ -32,6 +36,8 @@ import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
  *   itemKey: string,
  *   cols: number,
  *   rows: number,
+ *   wildEntity: object | null,
+ *   wildDexId: number,
  *   hitsRemaining: number,
  *   hitsMax: number,
  *   age: number,
@@ -56,6 +62,9 @@ const THROW_MAX_AGE_SEC = 3.15;
 const THROW_ROLL_DRAG = 7.4;
 const THROW_ROLL_STOP_SPEED = 0.12;
 const THROW_ROLL_MAX_SEC = 2.05;
+const THROW_ROLL_DRAG_FAINTED_WILD = 4.35;
+const THROW_ROLL_STOP_SPEED_FAINTED_WILD = 0.055;
+const THROW_ROLL_MAX_SEC_FAINTED_WILD = 3.25;
 
 /** @type {ThrownMapDetailEntity[]} */
 const activeThrownMapDetails = [];
@@ -122,6 +131,10 @@ function computeStrengthThrowLaunch(player, aimTx, aimTy) {
  */
 export function sampleStrengthThrowAimArc(player, data, aimTx, aimTy) {
   if (!player || !data) return null;
+  const faintedCarry = player?._strengthCarry?.kind === 'faintedWild';
+  const rollDragK = faintedCarry ? THROW_ROLL_DRAG_FAINTED_WILD : THROW_ROLL_DRAG;
+  const rollStop = faintedCarry ? THROW_ROLL_STOP_SPEED_FAINTED_WILD : THROW_ROLL_STOP_SPEED;
+  const rollMax = faintedCarry ? THROW_ROLL_MAX_SEC_FAINTED_WILD : THROW_ROLL_MAX_SEC;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   const { sx, sy, vx: vx0, vy: vy0, vz: vz0 } = computeStrengthThrowLaunch(player, aimTx, aimTy);
@@ -157,7 +170,7 @@ export function sampleStrengthThrowAimArc(player, data, aimTx, aimTy) {
       }
     } else {
       rollAge += PREVIEW_DT;
-      const rDrag = Math.exp(-THROW_ROLL_DRAG * PREVIEW_DT);
+      const rDrag = Math.exp(-rollDragK * PREVIEW_DT);
       vx *= rDrag;
       vy *= rDrag;
       x += vx * PREVIEW_DT;
@@ -165,7 +178,7 @@ export function sampleStrengthThrowAimArc(player, data, aimTx, aimTy) {
       z = 0;
       points.push({ x, y, z });
       const sp = Math.hypot(vx, vy);
-      if (sp < THROW_ROLL_STOP_SPEED || rollAge > THROW_ROLL_MAX_SEC) break;
+      if (sp < rollStop || rollAge > rollMax) break;
     }
     if (phase === 'air' && (t > THROW_MAX_AGE_SEC || x < -2 || y < -2 || x > microW + 2 || y > microH + 2)) {
       break;
@@ -208,6 +221,10 @@ function finalizeStrengthRockLand(t, data, landX, landY) {
   const microH = data.height * MACRO_TILE_STRIDE;
   const lx = Math.max(0.5, Math.min(microW - 0.5, landX));
   const ly = Math.max(0.5, Math.min(microH - 0.5, landY));
+  if (t.kind === 'faintedWild') {
+    if (t.wildEntity) restoreCarriedFaintedWildNear(t.wildEntity, lx, ly, data, 14);
+    return;
+  }
   if (
     !strengthRelocateCarriedDetailNear(
       t.liftOx,
@@ -269,7 +286,7 @@ export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
   const { sx, sy, vx, vy, vz } = computeStrengthThrowLaunch(player, aimTx, aimTy);
   activeThrownMapDetails.push({
     id: nextThrownMapDetailId++,
-    kind: 'strengthRock',
+    kind: carry.kind === 'faintedWild' ? 'faintedWild' : 'strengthRock',
     x: sx,
     y: sy,
     z: 0.26,
@@ -278,16 +295,18 @@ export function beginStrengthThrowFromPointer(player, data, aimTx, aimTy) {
     vz,
     liftOx: carry.liftOx,
     liftOy: carry.liftOy,
-    itemKey: carry.itemKey,
-    cols: carry.cols,
-    rows: carry.rows,
+    itemKey: carry.itemKey || '',
+    cols: Math.max(1, Number(carry.cols) || 1),
+    rows: Math.max(1, Number(carry.rows) || 1),
+    wildEntity: carry.kind === 'faintedWild' ? (carry.wildEntity || null) : null,
+    wildDexId: Math.max(1, Math.floor(Number(carry.wildDexId) || Number(carry.wildEntity?.dexId) || 1)),
     hitsRemaining: Math.max(1, Math.floor(Number(carry.hitsRemaining) || 1)),
     hitsMax: Math.max(1, Math.floor(Number(carry.hitsMax) || 1)),
     age: 0,
     phase: 'air',
     rollAge: 0
   });
-  if (String(carry.itemKey || '').toLowerCase().includes('crystal')) {
+  if (carry.kind !== 'faintedWild' && String(carry.itemKey || '').toLowerCase().includes('crystal')) {
     playCrystalClinkSfx({ x: sx, y: sy });
   }
   player._strengthCarry = null;
@@ -304,9 +323,12 @@ export function updateThrownMapDetailEntities(dt, data) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   const airDrag = Math.exp(-THROW_H_DRAG * dt);
-  const rollDrag = Math.exp(-THROW_ROLL_DRAG * dt);
   for (let i = activeThrownMapDetails.length - 1; i >= 0; i--) {
     const t = activeThrownMapDetails[i];
+    const isFaintedWild = t.kind === 'faintedWild';
+    const rollDrag = Math.exp(-(isFaintedWild ? THROW_ROLL_DRAG_FAINTED_WILD : THROW_ROLL_DRAG) * dt);
+    const rollStopSpeed = isFaintedWild ? THROW_ROLL_STOP_SPEED_FAINTED_WILD : THROW_ROLL_STOP_SPEED;
+    const rollMaxSec = isFaintedWild ? THROW_ROLL_MAX_SEC_FAINTED_WILD : THROW_ROLL_MAX_SEC;
     t.age += dt;
     const prevX = t.x;
     const prevY = t.y;
@@ -353,11 +375,11 @@ export function updateThrownMapDetailEntities(dt, data) {
 
     if (t.phase === 'roll') {
       const sp = Math.hypot(t.vx, t.vy);
-      if (sp < THROW_ROLL_STOP_SPEED || t.rollAge > THROW_ROLL_MAX_SEC) {
+      if (sp < rollStopSpeed || t.rollAge > rollMaxSec) {
         finalizeStrengthRockLand(t, data, t.x, t.y);
         continue;
       }
-      if (t.age > THROW_MAX_AGE_SEC + THROW_ROLL_MAX_SEC + 0.5 || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
+      if (t.age > THROW_MAX_AGE_SEC + rollMaxSec + 0.5 || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
         finalizeStrengthRockLand(t, data, t.x, t.y);
       }
       continue;
@@ -387,15 +409,29 @@ export function updateThrownMapDetailEntities(dt, data) {
  */
 export function appendStrengthThrowRenderItems(renderItems) {
   for (const t of activeThrownMapDetails) {
-    renderItems.push({
-      type: 'strengthThrowRock',
-      sortY: t.y + 0.5,
-      x: t.x,
-      y: t.y,
-      z: t.z,
-      itemKey: t.itemKey,
-      cols: t.cols,
-      rows: t.rows
-    });
+    if (t.kind === 'faintedWild') {
+      renderItems.push({
+        type: 'strengthThrowFaintedWild',
+        sortY: t.y + 0.5,
+        x: t.x,
+        y: t.y,
+        z: t.z,
+        dexId: t.wildDexId,
+        phase: t.phase,
+        age: t.age,
+        rollAge: t.rollAge
+      });
+    } else {
+      renderItems.push({
+        type: 'strengthThrowRock',
+        sortY: t.y + 0.5,
+        x: t.x,
+        y: t.y,
+        z: t.z,
+        itemKey: t.itemKey,
+        cols: t.cols,
+        rows: t.rows
+      });
+    }
   }
 }

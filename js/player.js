@@ -22,7 +22,11 @@ import {
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
-import { strengthCarryBlocksWalk, onStrengthCarrierDamaged } from './main/play-strength-carry.js';
+import {
+  strengthCarryBlocksWalk,
+  onStrengthCarrierDamaged,
+  getStrengthCarryMoveSpeedMultiplier
+} from './main/play-strength-carry.js';
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
@@ -693,6 +697,7 @@ export function updatePlayer(dt, data) {
     terrainSlowMul *
     flightMul *
     flightHorizontalMoveBoost *
+    getStrengthCarryMoveSpeedMultiplier(player) *
     combatChargeSlowMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {

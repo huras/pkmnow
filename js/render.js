@@ -91,7 +91,8 @@ import {
   drawPsybeamChargeBall,
   drawCrystalShard,
   drawSpawnedSmallCrystal,
-  drawStrengthThrowRock
+  drawStrengthThrowRock,
+  drawStrengthThrowFaintedWild
 } from './render/render-world-entities.js';
 import {
   drawWorldColliderOverlay,
@@ -124,6 +125,11 @@ import { isPlayerIdleOnWaitingFrame } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { imageCache } from './image-cache.js';
+import {
+  resolvePmdFrameSpecForSlice,
+  resolveCanonicalPmdH
+} from './pokemon/pmd-layout-metrics.js';
+import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 
 
 export {
@@ -513,6 +519,43 @@ export function render(canvas, data, options = {}) {
               ctx.restore();
             }
           }
+          if (!objSet && sc.kind === 'faintedWild') {
+            const dex = Math.max(1, Math.floor(Number(sc.wildDexId) || Number(sc?.wildEntity?.dexId) || 1));
+            const { idle: wIdle, walk: wWalk, faint: wFaint } = getResolvedSheets(imageCache, dex);
+            const sheet = wFaint || wIdle || wWalk;
+            if (sheet) {
+              const { sw, sh } = resolvePmdFrameSpecForSlice(sheet, dex, 'faint');
+              const canonicalH = resolveCanonicalPmdH(wIdle || wWalk, wWalk || wIdle, dex);
+              const targetHeightTiles = POKEMON_HEIGHTS[dex] || 1.1;
+              const finalScale = (targetHeightTiles * tileH) / Math.max(1, canonicalH);
+              const dw = sw * finalScale;
+              const dh = sh * finalScale;
+              const tackX = tackleOx * 0.12;
+              const tackY = tackleOy * 0.12;
+              const carryCx = item.cx + tackX;
+              const carryCy = pxT0 - tackY - Math.max(dw, dh) * 0.52;
+              let drawCx = carryCx;
+              let drawCy = carryCy;
+              let rot = Math.PI / 2;
+              if (!item.strengthCarry && item._strengthGrabAction) {
+                const g = item._strengthGrabAction;
+                const dur = Math.max(0.001, Number(g.durationSec) || 0.001);
+                const pRaw = Math.max(0, Math.min(1, (Number(g.elapsedSec) || 0) / dur));
+                const p = 1 - Math.pow(1 - pRaw, 2.35);
+                const fromX = (Number(g.originCx) || 0) * tileW;
+                const fromY = (Number(g.originCy) || 0) * tileH;
+                const arcLift = Math.sin(Math.PI * p) * tileH * 0.55;
+                drawCx = fromX + (carryCx - fromX) * p;
+                drawCy = fromY + (carryCy - fromY) * p - arcLift;
+                rot = (Math.PI / 2) * p;
+              }
+              ctx.save();
+              ctx.translate(snapPx(drawCx), snapPx(drawCy));
+              ctx.rotate(rot);
+              ctx.drawImage(sheet, 0, 0, sw, sh, -dw * 0.5, -dh * PMD_MON_SHEET.pivotYFrac, dw, dh);
+              ctx.restore();
+            }
+          }
         }
         if (item.type === 'player' && item._strengthGrabAction) {
           drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx);
@@ -538,6 +581,8 @@ export function render(canvas, data, options = {}) {
         ctx.save(); drawSpawnedSmallCrystal(ctx, item, { tileW, tileH, snapPx, imageCache, time }); ctx.restore();
       } else if (item.type === 'strengthThrowRock') {
         ctx.save(); drawStrengthThrowRock(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
+      } else if (item.type === 'strengthThrowFaintedWild') {
+        ctx.save(); drawStrengthThrowFaintedWild(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
       } else if (item.type === 'projectile') batchedEffects.push({ kind: 'projectile', proj: item.proj });
       else if (item.type === 'particle') batchedEffects.push({ kind: 'particle', part: item.part });
       else if (item.type === 'digCompanion') { ctx.save(); drawDigCompanion(ctx, item, { snapPx, PMD_MON_SHEET }); ctx.restore(); }

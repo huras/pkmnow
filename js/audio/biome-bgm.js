@@ -210,18 +210,52 @@ function attachEnded(slotIdx, handler) {
  * @param {string} url
  * @returns {Promise<boolean>} whether playback actually started
  */
-async function loadAndPlay(slotIdx, url) {
+function loadAndPlay(slotIdx, url) {
   const slot = slotAt(slotIdx);
   slot.audio.pause();
   slot.audio.src = url;
   slot.audio.currentTime = 0;
-  await resumeSpatialAudioContext();
-  try {
-    await slot.audio.play();
-    return true;
-  } catch {
-    return false;
-  }
+  slot.audio.load();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let canAttemptPlay = false;
+    let playAttempted = false;
+
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      slot.audio.removeEventListener('canplay', onCanPlay);
+      slot.audio.removeEventListener('error', onError);
+      clearTimeout(failSafeTimer);
+      resolve(ok);
+    };
+
+    const tryPlay = () => {
+      if (settled || !canAttemptPlay || playAttempted) return;
+      playAttempted = true;
+      void resumeSpatialAudioContext()
+        .then(() => slot.audio.play())
+        .then(() => finish(true))
+        .catch(() => finish(false));
+    };
+
+    const onCanPlay = () => {
+      canAttemptPlay = true;
+      tryPlay();
+    };
+
+    const onError = () => finish(false);
+
+    const failSafeTimer = setTimeout(() => finish(false), 8000);
+    slot.audio.addEventListener('canplay', onCanPlay, { once: true });
+    slot.audio.addEventListener('error', onError, { once: true });
+
+    if (slot.audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      canAttemptPlay = true;
+      tryPlay();
+    }
+  });
 }
 
 /**
