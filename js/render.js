@@ -129,543 +129,38 @@ import {
   BURN_START_FRAMES
 } from './moves/move-constants.js';
 
+import { drawBatchedProjectile } from './render/render-projectiles.js';
+import { drawBatchedParticle } from './render/render-particles.js';
+import {
+  drawPlayEntityFootAndAirCollider,
+  drawPlayEntityCombatHurtbox
+} from './render/render-debug-overlays.js';
+import {
+  drawDetailHitHpBar,
+  drawDetailHitPulse,
+  drawWildEmotionOverlay,
+  drawWildHpBar
+} from './render/render-ui-world.js';
+import {
+  updateJumpRings,
+  updateRunDustPuffs,
+  trackJumpStartRings,
+  trackRunningDust,
+  drawRunDustPuff,
+  drawJumpRing,
+  getActiveJumpRings,
+  getActiveRunDustPuffs
+} from './render/render-effects-state.js';
+import {
+  resetPlayChunkBakeAutoTuner,
+  getAdaptivePlayChunkBakeBudget,
+  getPlayChunkFrameStats,
+  setLastPlayChunkFrameStats,
+  getPlayChunkBakeBoost
+} from './render/render-chunk-stats.js';
+
 import './render/render-debug-hotkeys.js';
 
-/**
- * @param {CanvasRenderingContext2D} ctx
- * @param {object} p
- */
-function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
-  const px = snapPx(p.x * tileW);
-  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
-  if (p.type === 'ember') {
-    const img = imageCache.get('tilesets/effects/actual-fire.png');
-    const fh = p.sheetFrameH || FIRE_FRAME_H;
-    const fw = p.sheetFrameW || FIRE_FRAME_W;
-    const n = p.sheetFrames || 4;
-    const frame = Math.floor(time * 14) % n;
-    const dw = Math.ceil(tileW * 1.35);
-    const dh = Math.ceil(tileH * 1.35);
-    if (img && img.naturalWidth) {
-      ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
-    } else {
-      ctx.fillStyle = '#ff8800';
-      ctx.beginPath();
-      ctx.arc(px, py, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (p.type === 'waterShot') {
-    ctx.fillStyle = 'rgba(140,210,255,0.9)';
-    ctx.beginPath();
-    const r = Math.max(4, tileW * 0.19);
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'waterGunShot' || p.type === 'bubbleShot' || p.type === 'bubbleBeamShot') {
-    if (p.type === 'bubbleShot') {
-      ctx.fillStyle = 'rgba(235,248,255,0.6)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.lineWidth = 1.5;
-      const r = Math.max(5, tileW * 0.22);
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    } else if (p.type === 'bubbleBeamShot') {
-      const vx = Number(p.vx) || 0;
-      const vy = Number(p.vy) || 0;
-      const speed = Math.hypot(vx, vy);
-      const wiggle = Math.sin(time * 22 + (p.x ?? 0) * 8 + (p.y ?? 0) * 5) * 0.18;
-      const outerR = Math.max(5.6, tileW * 0.23);
-      const innerR = Math.max(2.6, outerR * 0.5);
-      const haloR = outerR * 1.32;
-      ctx.save();
-      ctx.translate(px, py);
-      if (speed > 1e-4) ctx.rotate(Math.atan2(vy, vx));
-      if (speed > 1e-4) ctx.translate(Math.max(0, tileW * 0.03 + wiggle), 0);
-
-      // Soft outer aura for "beam" readability at long range.
-      ctx.beginPath();
-      ctx.arc(0, 0, haloR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(220,240,255,0.22)';
-      ctx.fill();
-
-      // White ring.
-      ctx.beginPath();
-      ctx.arc(0, 0, outerR, 0, Math.PI * 2);
-      ctx.lineWidth = Math.max(2.1, tileW * 0.085);
-      ctx.strokeStyle = 'rgba(252,252,255,0.96)';
-      ctx.stroke();
-
-      // Transparent center (clear "hollow bubble").
-      ctx.save();
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.beginPath();
-      ctx.arc(0, 0, innerR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Small specular glint.
-      ctx.beginPath();
-      ctx.ellipse(-outerR * 0.28, -outerR * 0.34, outerR * 0.18, outerR * 0.12, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.fill();
-      ctx.restore();
-    } else {
-      const vx = Number(p.vx) || 0;
-      const vy = Number(p.vy) || 0;
-      const ang = Math.atan2(vy, vx || 1e-6);
-      const bodyR = Math.max(3.2, tileW * 0.145);
-      const tailLen = Math.max(4.5, tileW * 0.24);
-
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(ang);
-      ctx.beginPath();
-      // Tear drop profile (pointed tip toward travel direction).
-      ctx.moveTo(bodyR + tailLen, 0);
-      ctx.quadraticCurveTo(bodyR * 0.95, bodyR * 1.05, -bodyR * 1.05, bodyR * 0.68);
-      ctx.quadraticCurveTo(-bodyR * 1.5, 0, -bodyR * 1.05, -bodyR * 0.68);
-      ctx.quadraticCurveTo(bodyR * 0.95, -bodyR * 1.05, bodyR + tailLen, 0);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(86,170,255,0.92)';
-      ctx.fill();
-
-      // Inner gloss highlight.
-      ctx.beginPath();
-      ctx.ellipse(-bodyR * 0.15, -bodyR * 0.2, bodyR * 0.45, bodyR * 0.28, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(214,240,255,0.78)';
-      ctx.fill();
-      ctx.restore();
-    }
-  } else if (p.type === 'flamethrowerShot' || p.type === 'incinerateCore' || p.type === 'incinerateShard') {
-    ctx.fillStyle = p.type === 'flamethrowerShot' ? '#ff6a00' : '#ff4500';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(3, tileW * (p.type === 'incinerateShard' ? 0.1 : 0.14)), 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'confusionOrb') {
-    ctx.fillStyle = 'rgba(164,94,255,0.65)';
-    ctx.strokeStyle = 'rgba(222,171,255,0.95)';
-    ctx.lineWidth = 2;
-    const r = Math.max(5, tileW * 0.2);
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  } else if (p.type === 'psybeamBeam') {
-    const x0 = snapPx(p.beamStartX * tileW);
-    const y0 = snapPx(p.beamStartY * tileH - (p.z || 0) * tileH);
-    const x1 = snapPx(p.beamEndX * tileW);
-    const y1 = snapPx(p.beamEndY * tileH - (p.z || 0) * tileH);
-    const maxT = p.beamTtlMax || 0.28;
-    const ttl = Math.max(0, p.timeToLive ?? maxT);
-    const a = Math.max(0.06, Math.min(1, (ttl / maxT) * 0.9 + 0.1));
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = Math.hypot(dx, dy) || 1;
-    const ang = Math.atan2(dy, dx);
-    const th = Math.max(6, tileH * 0.22);
-    const mx = (x0 + x1) * 0.5;
-    const my = (y0 + y1) * 0.5;
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(ang);
-    const halfL = len * 0.5;
-    const grd = ctx.createLinearGradient(-halfL, 0, halfL, 0);
-    grd.addColorStop(0, `rgba(255,105,185,${0.52 * a})`);
-    grd.addColorStop(0.35, `rgba(255,75,170,${0.92 * a})`);
-    grd.addColorStop(0.5, `rgba(255,55,160,${0.98 * a})`);
-    grd.addColorStop(0.65, `rgba(255,80,178,${0.92 * a})`);
-    grd.addColorStop(1, `rgba(230,50,150,${0.48 * a})`);
-    /* Soft outer halo without ctx.shadowBlur (very expensive with `lighter` compositing). */
-    ctx.fillStyle = `rgba(255, 75, 175, ${0.22 * a})`;
-    ctx.fillRect(-halfL, -th * 0.72, len, th * 1.44);
-    ctx.fillStyle = grd;
-    ctx.fillRect(-halfL, -th * 0.5, len, th);
-    /* Narrow “core” read — hot pink / magenta, not white */
-    ctx.fillStyle = `rgba(255, 165, 220, ${0.58 * a})`;
-    ctx.fillRect(-halfL, -th * 0.14, len, th * 0.28);
-    ctx.fillStyle = `rgba(255, 110, 195, ${0.45 * a})`;
-    ctx.fillRect(-halfL, -th * 0.08, len, th * 0.16);
-    ctx.restore();
-  } else if (p.type === 'prismaticShot') {
-    const ang = Math.atan2(p.vy || 0, p.vx || 1);
-    const hueBase = (Number(p.rainbowHue0) || 0) + time * 220;
-    if (p.laserStream) {
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(ang);
-      const len = Math.max(10, tileW * 0.62);
-      const th = Math.max(2.2, tileH * 0.055);
-      const h0 = hueBase % 360;
-      const h1 = (hueBase + 72) % 360;
-      const h2 = (hueBase + 144) % 360;
-      const grd = ctx.createLinearGradient(-len * 0.5, 0, len * 0.5, 0);
-      grd.addColorStop(0, `hsla(${h0}, 100%, 62%, 0.25)`);
-      grd.addColorStop(0.35, `hsla(${h1}, 100%, 56%, 0.92)`);
-      grd.addColorStop(0.65, `hsla(${h2}, 100%, 64%, 0.92)`);
-      grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.22)`);
-      ctx.fillStyle = `hsla(${(h1 + 40) % 360}, 100%, 60%, 0.18)`;
-      ctx.fillRect(-len * 0.5, -th * 0.85, len, th * 1.7);
-      ctx.fillStyle = grd;
-      ctx.fillRect(-len * 0.5, -th * 0.5, len, th);
-      ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.55)`;
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(-len * 0.5, -th * 0.5, len, th);
-      ctx.restore();
-    } else {
-      const colors = ['#ff1744', '#ff9100', '#ffee58', '#40c4ff', '#7c4dff'];
-      const idx = Math.floor(((time * 25 + (p.rainbowHue0 || 0)) % colors.length + colors.length) % colors.length);
-      ctx.fillStyle = colors[idx];
-      ctx.beginPath();
-      ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (p.type === 'poisonPowderShot') {
-    ctx.fillStyle = 'rgba(120,255,140,0.55)';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(4, tileW * 0.16), 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'silkShot') {
-    ctx.fillStyle = 'rgba(245,245,245,0.85)';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'poisonSting') {
-    const ang = p.stingAngle ?? 0;
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(ang);
-    ctx.fillStyle = 'rgba(170,90,230,0.94)';
-    ctx.beginPath();
-    ctx.moveTo(tileW * 0.3, 0);
-    ctx.lineTo(-tileW * 0.2, -tileH * 0.2);
-    ctx.lineTo(-tileW * 0.14, tileH * 0.2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-/**
- * @param {CanvasRenderingContext2D} ctx
- * @param {object} p
- */
-function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
-  const px = snapPx(p.x * tileW);
-  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
-  const a = Math.max(0, p.life / p.maxLife);
-  ctx.globalAlpha = a;
-  if (p.type === 'burst') {
-    const img = imageCache.get('tilesets/effects/burn-start.png');
-    const fi = Math.min(BURN_START_FRAMES - 1, Math.floor((1 - a) * BURN_START_FRAMES));
-    if (img && img.naturalWidth) {
-      const dw = Math.ceil(tileW * 1.05);
-      const dh = Math.ceil(tileH * 1.05);
-      ctx.drawImage(img, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, py - dh * 0.5, dw, dh);
-    } else {
-      ctx.fillStyle = '#ffaa66';
-      ctx.beginPath();
-      ctx.arc(px, py, 7 * a, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (p.type === 'grassFire') {
-    const img = imageCache.get('tilesets/effects/burn-start.png');
-    const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;
-    const fi = (Math.min(BURN_START_FRAMES - 1, Math.floor((1 - a) * BURN_START_FRAMES)) + flick) % BURN_START_FRAMES;
-    if (img && img.naturalWidth) {
-      const dw = Math.ceil(tileW * 1.12);
-      const dh = Math.ceil(tileH * 1.12);
-      ctx.globalAlpha = Math.min(1, a * 1.15);
-      ctx.drawImage(
-        img,
-        0,
-        fi * BURN_START_FRAME,
-        BURN_START_FRAME,
-        BURN_START_FRAME,
-        px - dw * 0.5,
-        py - dh * 0.5,
-        dw,
-        dh
-      );
-    } else {
-      ctx.fillStyle = '#ff7722';
-      ctx.beginPath();
-      ctx.arc(px, py, Math.max(4, tileW * 0.22) * a, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (p.type === 'emberTrail') {
-    ctx.fillStyle = '#ffa200';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.12) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'waterTrail') {
-    ctx.fillStyle = '#b8ecff';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'psyTrail') {
-    ctx.fillStyle = '#d892ff';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'powderTrail') {
-    ctx.fillStyle = '#a7ff9a';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'silkTrail') {
-    ctx.fillStyle = '#f2f2f2';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'laserTrail') {
-    const hue = ((p.x + p.y) * 47 + performance.now() * 0.08) % 360;
-    ctx.fillStyle = `hsla(${hue}, 92%, 68%, ${0.35 + 0.55 * a})`;
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (p.type === 'fieldCutVineArc') {
-    const t = 1 - a;
-    const ease = 1 - (1 - t) * (1 - t);
-    const arcRad = ((Number(p.arcDeg) || 120) * Math.PI) / 180;
-    const half = arcRad * 0.5;
-    const r = Math.max(tileW * 0.55, (Number(p.radiusTiles) || 1.55) * Math.min(tileW, tileH));
-    const heading = Number(p.headingRad) || 0;
-    const swayBase = Math.max(0.02, 0.16 * (1 - ease * 0.58));
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(heading);
-    for (let strand = 0; strand < 3; strand++) {
-      const strandOff = (strand - 1) * tileH * 0.03;
-      const links = 12;
-      ctx.beginPath();
-      for (let i = 0; i < links; i++) {
-        const u = i / (links - 1);
-        const theta = -half + arcRad * u;
-        const pendulum = Math.sin(performance.now() * 0.016 + u * 8.8 + strand * 1.4) * swayBase;
-        const rr = r * (0.33 + 0.67 * u);
-        const x = Math.cos(theta + pendulum) * rr;
-        const y = Math.sin(theta + pendulum) * rr + strandOff;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = `rgba(132, 244, 118, ${0.45 + 0.48 * a})`;
-      ctx.lineWidth = Math.max(1.5, tileW * (0.072 - strand * 0.013));
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    }
-    const outerR = r * (0.94 + ease * 0.16);
-    const innerR = outerR * 0.68;
-    const tipInset = half * 0.2;
-    ctx.beginPath();
-    ctx.arc(0, 0, outerR, -half, half);
-    ctx.arc(0, 0, innerR, half - tipInset, -half + tipInset, true);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(186, 255, 162, ${0.2 + 0.35 * a})`;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(224, 255, 198, ${0.3 + 0.42 * a})`;
-    ctx.lineWidth = Math.max(1.1, tileW * 0.032);
-    ctx.stroke();
-    ctx.restore();
-  } else if (p.type === 'fieldCutPsychicArc' || p.type === 'fieldCutSlashArc') {
-    const psychic = p.type === 'fieldCutPsychicArc';
-    const t = 1 - a;
-    const ease = 1 - (1 - t) * (1 - t);
-    const arcRad = ((Number(p.arcDeg) || (psychic ? 120 : 108)) * Math.PI) / 180;
-    const half = arcRad * 0.5;
-    const r = Math.max(tileW * 0.52, (Number(p.radiusTiles) || (psychic ? 1.62 : 1.46)) * Math.min(tileW, tileH));
-    const heading = Number(p.headingRad) || 0;
-    const outerR = r * (0.9 + 0.2 * ease);
-    const innerR = outerR * (psychic ? 0.62 : 0.7);
-    const tipInset = half * (psychic ? 0.24 : 0.18);
-    const glow = psychic ? [255, 122, 220] : [240, 240, 255];
-    const core = psychic ? [255, 84, 190] : [255, 255, 255];
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(heading);
-    ctx.beginPath();
-    ctx.arc(0, 0, outerR, -half, half);
-    ctx.arc(0, 0, innerR, half - tipInset, -half + tipInset, true);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(${glow[0]}, ${glow[1]}, ${glow[2]}, ${0.24 + 0.36 * a})`;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${core[0]}, ${core[1]}, ${core[2]}, ${0.36 + 0.52 * a})`;
-    ctx.lineWidth = Math.max(1.3, tileW * (psychic ? 0.05 : 0.038));
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-    ctx.restore();
-  } else if (p.type === 'fieldSpinAttack') {
-    const t = 1 - a;
-    const styleId = String(p.styleId || 'slash');
-    const radius = Math.max(tileW * 0.52, (Number(p.radiusTiles) || 2) * Math.min(tileW, tileH));
-    const sweepStart = (Number(p.headingRad) || 0) + t * (Math.PI * 2.2);
-    const sweepSize = Math.PI * (0.95 + 0.1 * Math.sin(t * Math.PI));
-    let ringColor = [245, 245, 255];
-    let coreColor = [255, 255, 255];
-    if (styleId === 'vine') {
-      ringColor = [136, 255, 126];
-      coreColor = [216, 255, 206];
-    } else if (styleId === 'psychic') {
-      ringColor = [255, 116, 216];
-      coreColor = [255, 182, 232];
-    } else if (styleId === 'strength') {
-      ringColor = [255, 196, 124];
-      coreColor = [255, 232, 184];
-    }
-    ctx.save();
-    ctx.translate(px, py);
-    // Full ring: wide 360 body (thicker than before).
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(${ringColor[0]}, ${ringColor[1]}, ${ringColor[2]}, ${0.18 + 0.38 * a})`;
-    ctx.lineWidth = Math.max(3.4, tileW * 0.17);
-    ctx.stroke();
-
-    // Rotating crescent moon slash (filled lune with tapered tips).
-    const sweepEnd = sweepStart + sweepSize;
-    const mid = (sweepStart + sweepEnd) * 0.5;
-    const outerR = radius * 1.02;
-    const innerR = outerR * 0.7;
-    const tipInset = Math.max(0.08, sweepSize * 0.22);
-    const crescentOffset = outerR * 0.2;
-    const offX = Math.cos(mid) * crescentOffset;
-    const offY = Math.sin(mid) * crescentOffset;
-    ctx.beginPath();
-    ctx.arc(0, 0, outerR, sweepStart, sweepEnd);
-    ctx.arc(offX, offY, innerR, sweepEnd - tipInset, sweepStart + tipInset, true);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(${coreColor[0]}, ${coreColor[1]}, ${coreColor[2]}, ${0.3 + 0.5 * a})`;
-    ctx.fill();
-
-    // Bright inner edge to emphasize moon-shape tips.
-    ctx.beginPath();
-    ctx.arc(0, 0, outerR * 0.96, sweepStart + tipInset * 0.18, sweepEnd - tipInset * 0.18);
-    ctx.strokeStyle = `rgba(${coreColor[0]}, ${coreColor[1]}, ${coreColor[2]}, ${0.45 + 0.45 * a})`;
-    ctx.lineCap = 'round';
-    ctx.lineWidth = Math.max(2.2, tileW * 0.09);
-    ctx.stroke();
-    if (styleId === 'vine') {
-      const links = 16;
-      ctx.fillStyle = `rgba(174, 255, 150, ${0.2 + 0.36 * a})`;
-      for (let i = 0; i < links; i++) {
-        const u = i / links;
-        const ang = sweepStart + sweepSize * u;
-        const rr = radius + Math.sin(u * Math.PI * 3.2) * tileW * 0.06;
-        ctx.beginPath();
-        ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, Math.max(1.2, tileW * 0.032), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
-  } else {
-    ctx.fillStyle = '#ffff88';
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, tileW * 0.08) * a, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-/**
- * Play collider overlay: walk feet on the ground plane + optional dashed Z axis + body circle
- * at `item.airZ` tiles high (matches sprite / projectile `z` convention).
- * @param {{ type: string, x: number, y: number, dexId?: number, animMoving?: boolean, airZ?: number, showAirGroundTether?: boolean }} item
- */
-function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache) {
-  const zLift = Math.max(0, Number(item.airZ) || 0);
-  const r = 0.32 * Math.min(tileW, tileH);
-  const dex = item.dexId ?? 94;
-  const ft = worldFeetFromPivotCell(item.x, item.y, imageCache, dex, !!item.animMoving);
-  const fcx = snapPx(ft.x * tileW);
-  const fcyGround = snapPx(ft.y * tileH);
-  const fcyBody = snapPx(ft.y * tileH - zLift * tileH);
-
-  const showAirTether =
-    item.showAirGroundTether !== undefined ? !!item.showAirGroundTether : zLift > 0.02;
-
-  if (zLift > 0.02 && showAirTether) {
-    ctx.strokeStyle = 'rgba(200, 255, 220, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(fcx, fcyGround);
-    ctx.lineTo(fcx, fcyBody);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.strokeStyle = 'rgba(0, 255, 140, 0.3)';
-    ctx.fillStyle = 'rgba(0, 255, 140, 0.05)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(fcx, fcyGround, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = 'rgba(0, 255, 140, 0.58)';
-  ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(fcx, fcyBody, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.fillRect(fcx - 2, fcyBody - 2, 4, 4);
-}
-
-/** Combat hurtbox (damage) — sprite-centered XY, same z lift as body circle; not walk feet. */
-function drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx) {
-  const zLift = Math.max(0, Number(item.airZ) || 0);
-  const dex = item.dexId ?? 94;
-  const { hx, hy } = getPokemonHurtboxCenterWorldXY(item.x, item.y, dex);
-  const hr = getPokemonHurtboxRadiusTiles(dex);
-  const hcx = snapPx(hx * tileW);
-  const hcy = snapPx(hy * tileH - zLift * tileH);
-  const rx = Math.max(2, hr * tileW);
-  const ry = Math.max(2, hr * tileH);
-
-  ctx.strokeStyle = 'rgba(255, 130, 55, 0.92)';
-  ctx.fillStyle = 'rgba(255, 100, 40, 0.07)';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([5, 5]);
-  ctx.beginPath();
-  ctx.ellipse(hcx, hcy, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(255, 200, 140, 0.95)';
-  ctx.fillRect(hcx - 2, hcy - 2, 4, 4);
-}
-
-function drawDetailHitHpBar(ctx, bar, tileW, tileH, snapPx) {
-  const maxHp = Math.max(1, Number(bar.hpMax) || 1);
-  const hpNow = Math.max(0, Math.min(maxHp, Number(bar.hpNow) || 0));
-  const hp01 = hpNow / maxHp;
-  const w = Math.max(16, Math.floor(tileW * 0.95));
-  const h = Math.max(3, Math.floor(tileH * 0.1));
-  const x = snapPx(bar.x * tileW - w * 0.5);
-  const y = snapPx(bar.y * tileH - tileH * 0.72);
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  ctx.fillStyle = hp01 > 0.5 ? '#59e36e' : hp01 > 0.2 ? '#ffd85b' : '#ff6b6b';
-  ctx.fillRect(x, y, Math.max(0, Math.floor(w * hp01)), h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, w, h);
-}
-
-function drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx) {
-  const t = Math.max(0, Math.min(1, pulse.age / Math.max(0.001, pulse.maxAge)));
-  const a = 1 - t;
-  const px = snapPx(pulse.x * tileW);
-  const py = snapPx(pulse.y * tileH);
-  const r = Math.max(6, tileW * (0.18 + 0.36 * t));
-  ctx.strokeStyle = `rgba(255,235,190,${0.75 * a})`;
-  ctx.lineWidth = Math.max(1.4, tileW * 0.045);
-  ctx.beginPath();
-  ctx.arc(px, py, r, 0, Math.PI * 2);
-  ctx.stroke();
-}
 
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -674,224 +169,15 @@ export {
 } from './render/render-constants.js';
 
 export { loadTilesetImages } from './render/load-tileset-images.js';
+export { getPlayChunkFrameStats };
 
 let didWarnTerrainSetRoles = false;
-/** @type {Map<string, number>} */
-const jumpSerialByEntityKey = new Map();
-/** @type {Array<{ x: number, y: number, age: number, maxAge: number, seed: number }>} */
-const activeJumpRings = [];
-let jumpRingLastTimeSec = null;
-/** @type {Array<{ x: number, y: number, vx: number, vy: number, age: number, maxAge: number, seed: number }>} */
-const activeRunDustPuffs = [];
-/** @type {Map<string, number>} */
-const runDustLastSpawnByEntityKey = new Map();
-let runDustLastTimeSec = null;
-let lastPlayChunkFrameStats = {
-  mode: 'idle',
-  totalVisible: 0,
-  drawnVisible: 0,
-  missingVisible: 0,
-  bakedThisFrame: 0,
-  bakeBudget: 0,
-  bakeBoost: 0,
-  queueSize: 0
-};
-let playChunkBakeBoost = 0;
-let playChunkBakeStableFrames = 0;
 
-function resetPlayChunkBakeAutoTuner() {
-  playChunkBakeBoost = 0;
-  playChunkBakeStableFrames = 0;
+export function spawnJumpRingAt(x, y) {
+  // logic handled in render/render-effects-state.js
 }
 
-function getAdaptivePlayChunkBakeBudget({
-  lodDetail,
-  cachedVisibleChunks,
-  missingVisibleChunks,
-  queueSize,
-  totalVisibleChunks
-}) {
-  let budget = lodDetail >= 2 ? 1 : 2;
-  if (cachedVisibleChunks === 0 && missingVisibleChunks > 0) budget = Math.max(budget, 8);
-  else if (missingVisibleChunks >= 10) budget = Math.max(budget, 4);
-  if (queueSize >= 48) budget = Math.max(budget, 3);
 
-  const severeMissing = Math.max(10, Math.floor(totalVisibleChunks * 0.45));
-  const severeQueue = queueSize >= 96;
-  const mediumPressure = missingVisibleChunks >= 6 || queueSize >= 36;
-  const highPressure = missingVisibleChunks >= severeMissing || severeQueue;
-  const coldStart = cachedVisibleChunks === 0 && missingVisibleChunks > 0;
-  const steadyState = missingVisibleChunks === 0 && queueSize === 0;
-
-  if (coldStart) playChunkBakeBoost = Math.max(playChunkBakeBoost, 6);
-  if (highPressure) playChunkBakeBoost = Math.min(8, playChunkBakeBoost + 2);
-  else if (mediumPressure) playChunkBakeBoost = Math.min(8, playChunkBakeBoost + 1);
-
-  if (steadyState) {
-    playChunkBakeStableFrames++;
-    if (playChunkBakeStableFrames >= 10 && playChunkBakeBoost > 0) {
-      playChunkBakeBoost -= 1;
-      playChunkBakeStableFrames = 0;
-    }
-  } else {
-    playChunkBakeStableFrames = 0;
-    if (!mediumPressure && playChunkBakeBoost > 0) {
-      playChunkBakeBoost -= 1;
-    }
-  }
-
-  budget = Math.max(budget, budget + playChunkBakeBoost);
-  return Math.min(12, Math.max(1, budget));
-}
-
-export function getPlayChunkFrameStats() {
-  return lastPlayChunkFrameStats;
-}
-
-function spawnJumpRingAt(x, y) {
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  activeJumpRings.push({
-    x,
-    y,
-    age: 0,
-    maxAge: 0.34,
-    seed: (x * 92821.11 + y * 71933.07) % 1
-  });
-  if (activeJumpRings.length > 72) {
-    activeJumpRings.splice(0, activeJumpRings.length - 72);
-  }
-}
-
-function updateJumpRings(timeSec) {
-  const t = Number(timeSec) || 0;
-  const dt =
-    jumpRingLastTimeSec == null ? 0 : Math.max(0, Math.min(0.08, t - jumpRingLastTimeSec));
-  jumpRingLastTimeSec = t;
-  if (dt <= 0) return;
-  for (let i = activeJumpRings.length - 1; i >= 0; i--) {
-    const fx = activeJumpRings[i];
-    fx.age += dt;
-    if (fx.age >= fx.maxAge) activeJumpRings.splice(i, 1);
-  }
-}
-
-function trackJumpStartRings(renderItems) {
-  const seen = new Set();
-  for (const item of renderItems) {
-    if (item.type !== 'player' && item.type !== 'wild') continue;
-    const key = item.type === 'player' ? 'player' : `wild:${item.entityKey ?? ''}`;
-    if (!key || key === 'wild:') continue;
-    seen.add(key);
-    const serialRaw = Number(item.jumpSerial);
-    const serial = Number.isFinite(serialRaw) ? Math.max(0, Math.floor(serialRaw)) : 0;
-    const prevSerial = jumpSerialByEntityKey.get(key);
-    if (prevSerial != null && serial > prevSerial) {
-      spawnJumpRingAt((item.x ?? 0) + 0.5, (item.y ?? 0) + 0.5);
-    }
-    jumpSerialByEntityKey.set(key, serial);
-  }
-  for (const k of jumpSerialByEntityKey.keys()) {
-    if (!seen.has(k)) jumpSerialByEntityKey.delete(k);
-  }
-}
-
-function spawnRunDustAt(x, y, vx, vy, seed = 0) {
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  activeRunDustPuffs.push({
-    x,
-    y,
-    vx: Number.isFinite(vx) ? vx : 0,
-    vy: Number.isFinite(vy) ? vy : 0,
-    age: 0,
-    maxAge: 0.24,
-    seed
-  });
-  if (activeRunDustPuffs.length > 180) {
-    activeRunDustPuffs.splice(0, activeRunDustPuffs.length - 180);
-  }
-}
-
-function updateRunDustPuffs(timeSec) {
-  const t = Number(timeSec) || 0;
-  const dt =
-    runDustLastTimeSec == null ? 0 : Math.max(0, Math.min(0.08, t - runDustLastTimeSec));
-  runDustLastTimeSec = t;
-  if (dt <= 0) return;
-  for (let i = activeRunDustPuffs.length - 1; i >= 0; i--) {
-    const puff = activeRunDustPuffs[i];
-    puff.age += dt;
-    puff.x += puff.vx * dt * 0.08;
-    puff.y += puff.vy * dt * 0.08;
-    puff.vx *= Math.max(0, 1 - dt * 9);
-    puff.vy *= Math.max(0, 1 - dt * 9);
-    if (puff.age >= puff.maxAge) activeRunDustPuffs.splice(i, 1);
-  }
-}
-
-function trackRunningDust(renderItems, timeSec) {
-  const t = Number(timeSec) || 0;
-  const seen = new Set();
-  for (const item of renderItems) {
-    if (item.type !== 'player' && item.type !== 'wild') continue;
-    const key = item.type === 'player' ? 'player' : `wild:${item.entityKey ?? ''}`;
-    if (!key || key === 'wild:') continue;
-    seen.add(key);
-    if (!item.grounded || !item.animMoving) continue;
-    const vx = Number(item.vx) || 0;
-    const vy = Number(item.vy) || 0;
-    const speed = Math.hypot(vx, vy);
-    if (speed < 0.1) continue;
-    const spawnInterval = item.type === 'player' ? 0.06 : 0.09;
-    const last = runDustLastSpawnByEntityKey.get(key) ?? -1e9;
-    if (t - last < spawnInterval) continue;
-    runDustLastSpawnByEntityKey.set(key, t);
-    const nx = vx / speed;
-    const ny = vy / speed;
-    const jitter =
-      ((Math.sin((item.x ?? 0) * 11.13 + (item.y ?? 0) * 7.91 + t * 31.7) + 1) * 0.5 - 0.5) *
-      0.08;
-    spawnRunDustAt(
-      (item.x ?? 0) + 0.5 - nx * 0.24 + jitter,
-      (item.y ?? 0) + 0.62 - ny * 0.18,
-      -vx * 0.22,
-      -vy * 0.22,
-      ((item.x ?? 0) * 17.17 + (item.y ?? 0) * 29.9 + t) % 1
-    );
-  }
-  for (const k of runDustLastSpawnByEntityKey.keys()) {
-    if (!seen.has(k)) runDustLastSpawnByEntityKey.delete(k);
-  }
-}
-
-function drawRunDustPuff(ctx, puff, tileW, tileH, snapPx) {
-  const t = Math.max(0, Math.min(1, puff.age / Math.max(0.001, puff.maxAge)));
-  const a = 1 - t;
-  const px = snapPx(puff.x * tileW);
-  const py = snapPx(puff.y * tileH);
-  const rx = Math.max(1.5, tileW * (0.05 + 0.085 * t));
-  const ry = Math.max(1, tileH * (0.03 + 0.055 * t));
-  const hue = 40 + Math.floor((puff.seed || 0) * 12);
-  ctx.fillStyle = `hsla(${hue}, 30%, 74%, ${0.32 * a})`;
-  ctx.beginPath();
-  ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawJumpRing(ctx, fx, tileW, tileH, snapPx) {
-  const t = Math.max(0, Math.min(1, fx.age / Math.max(0.001, fx.maxAge)));
-  const a = 1 - t;
-  const px = snapPx(fx.x * tileW);
-  const py = snapPx(fx.y * tileH);
-  const baseR = Math.max(5, Math.min(tileW, tileH) * 0.22);
-  const rx = baseR + Math.min(tileW, tileH) * 0.42 * t;
-  const ry = Math.max(2, rx * 0.46);
-  const hue = 188 + Math.floor((fx.seed || 0) * 20);
-  ctx.strokeStyle = `hsla(${hue}, 95%, 78%, ${0.85 * a})`;
-  ctx.lineWidth = Math.max(1.6, tileW * 0.05);
-  ctx.beginPath();
-  ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI * 2);
-  ctx.stroke();
-}
 
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -913,7 +199,7 @@ export function render(canvas, data, options = {}) {
   const player = options.settings?.player || { x: 0, y: 0 };
   if (appMode !== 'play') {
     resetPlayChunkBakeAutoTuner();
-    lastPlayChunkFrameStats = {
+    setLastPlayChunkFrameStats({
       mode: appMode,
       totalVisible: 0,
       drawnVisible: 0,
@@ -922,7 +208,7 @@ export function render(canvas, data, options = {}) {
       bakeBudget: 0,
       bakeBoost: 0,
       queueSize: 0
-    };
+    });
   }
 
   ctx.save();
@@ -1091,16 +377,16 @@ export function render(canvas, data, options = {}) {
         destH
       );
     }
-    lastPlayChunkFrameStats = {
+    setLastPlayChunkFrameStats({
       mode: 'play',
       totalVisible: visibleChunkCoords.length,
       drawnVisible: drawnVisibleChunks,
       missingVisible: Math.max(0, visibleChunkCoords.length - drawnVisibleChunks),
       bakedThisFrame: bakeRequests.length,
       bakeBudget: chunkBakeBudget,
-      bakeBoost: playChunkBakeBoost,
+      bakeBoost: getPlayChunkBakeBoost(),
       queueSize: getPlayChunkBakeQueueSize()
-    };
+    });
 
     ctx.imageSmoothingEnabled = prevSmoothing;
 
@@ -1908,191 +1194,10 @@ export function render(canvas, data, options = {}) {
     trackJumpStartRings(renderItems);
     trackRunningDust(renderItems, time);
 
-    /**
-     * Wild emotion: classic RPG Maker balloon (anim → hold last frame 1.2s), then portrait panel + tail.
-     * @param {CanvasRenderingContext2D} ctx
-     * @param {{ cx: number, cy: number, pivotY: number, emotion: object, dexId: number }} em
-     * @param {number} spawnYOffset
-     */
-    const drawWildEmotionOverlay = (ctx, em, spawnYOffset) => {
-      if (!em.emotion) return;
-      const spriteTopY = em.cy + spawnYOffset - em.pivotY;
-      const slug = em.emotion.portraitSlug;
-      const dexForFace = em.dexId;
-      const portraitRevealAfterSec = PORTRAIT_REVEAL_AFTER_SEC;
-
-      let pImg =
-        slug && dexForFace != null ? getSpriteCollabPortraitImage(imageCache, dexForFace, slug) : undefined;
-      if (slug && dexForFace != null && (!pImg || !pImg.naturalWidth)) {
-        ensureSpriteCollabPortraitLoaded(imageCache, dexForFace, slug);
-        pImg = getSpriteCollabPortraitImage(imageCache, dexForFace, slug);
-      }
-
-      /**
-       * @param {{ holdLastFrame?: boolean }} [opts]
-       */
-      const drawRpgMakerEmotionBalloon = (opts = {}) => {
-        const { holdLastFrame = false } = opts;
-        const emoImg = imageCache.get('tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png');
-        if (!emoImg || !emoImg.naturalWidth) return;
-        const eCols = 8;
-        const eRows = 10;
-        const eSw = Math.floor(emoImg.naturalWidth / eCols);
-        const eSh = Math.floor(emoImg.naturalHeight / eRows);
-        const progress = Math.min(1.0, em.emotion.age / CLASSIC_BALLOON_FRAME_ANIM_SEC);
-        const fIdx = holdLastFrame
-          ? eCols - 1
-          : Math.min(eCols - 1, Math.floor(progress * eCols));
-        const dW = eSw * 1.25 * (tileW / 32);
-        const dH = eSh * 1.25 * (tileW / 32);
-        const px = snapPx(em.cx - dW * 0.5);
-        const gapAboveHead = tileH * 0.06 + dH * 0.12;
-        const py = snapPx(spriteTopY - dH - gapAboveHead);
-        ctx.drawImage(emoImg, fIdx * eSw, em.emotion.type * eSh, eSw, eSh, px, py, Math.ceil(dW), Math.ceil(dH));
-      };
-
-      if (pImg && pImg.naturalWidth && em.emotion.age < portraitRevealAfterSec) {
-        const holdLast = em.emotion.age >= CLASSIC_BALLOON_FRAME_ANIM_SEC;
-        drawRpgMakerEmotionBalloon({ holdLastFrame: holdLast });
-        return;
-      }
-
-      const roundRectPath = (x, y, w, h, r) => {
-        let rad = r;
-        if (w < 2 * rad) rad = w / 2;
-        if (h < 2 * rad) rad = h / 2;
-        ctx.beginPath();
-        ctx.moveTo(x + rad, y);
-        ctx.arcTo(x + w, y, x + w, y + h, rad);
-        ctx.arcTo(x + w, y + h, x, y + h, rad);
-        ctx.arcTo(x, y + h, x, y, rad);
-        ctx.arcTo(x, y, x + w, y, rad);
-        ctx.closePath();
-      };
-
-      if (pImg && pImg.naturalWidth) {
-        /** Panel size; stack + plate alphas composite over terrain (see fills — not opaque white). */
-        const PORTRAIT_EMOTION_BOX_TILES = 1.14 * 1.25;
-        /** Uniform multiplier so face + chrome all read as “glass” over the map. */
-        const PORTRAIT_EMOTION_STACK_ALPHA = 0.58;
-        const PORTRAIT_PLATE_FILL = 'rgba(252,250,255,0.5)';
-        const PORTRAIT_SHADOW_FILL = 'rgba(6,8,14,0.38)';
-        const PORTRAIT_STROKE_PLATE = 'rgba(255,255,255,0.55)';
-        const PORTRAIT_STROKE_TAIL = 'rgba(255,255,255,0.48)';
-        const side = tileW * PORTRAIT_EMOTION_BOX_TILES;
-        const gap = tileH * 0.07;
-        const bx = snapPx(em.cx - side * 0.5);
-        const by = snapPx(spriteTopY - side - gap);
-        const cr = Math.max(8, side * 0.09);
-        const midX = bx + side * 0.5;
-        const boxBottom = by + side;
-        const tipY = snapPx(spriteTopY - tileH * 0.035);
-        const tailHalfW = side * 0.13;
-
-        ctx.save();
-        ctx.globalAlpha = PORTRAIT_EMOTION_STACK_ALPHA;
-
-        ctx.save();
-        ctx.translate(0, 2);
-        ctx.fillStyle = PORTRAIT_SHADOW_FILL;
-        roundRectPath(bx, by, side, side, cr);
-        ctx.fill();
-        ctx.restore();
-
-        ctx.save();
-        roundRectPath(bx, by, side, side, cr);
-        ctx.fillStyle = PORTRAIT_PLATE_FILL;
-        ctx.fill();
-        roundRectPath(bx, by, side, side, cr);
-        ctx.clip();
-        const iw = pImg.naturalWidth;
-        const ih = pImg.naturalHeight;
-        const scale = Math.max(side / iw, side / ih);
-        const fw = iw * scale;
-        const fh = ih * scale;
-        ctx.drawImage(
-          pImg,
-          0,
-          0,
-          iw,
-          ih,
-          snapPx(bx + (side - fw) * 0.5),
-          snapPx(by + (side - fh) * 0.48),
-          Math.ceil(fw),
-          Math.ceil(fh)
-        );
-        ctx.restore();
-
-        ctx.save();
-        roundRectPath(bx, by, side, side, cr);
-        ctx.strokeStyle = PORTRAIT_STROKE_PLATE;
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(midX - tailHalfW, boxBottom);
-        ctx.lineTo(em.cx, tipY);
-        ctx.lineTo(midX + tailHalfW, boxBottom);
-        ctx.closePath();
-        ctx.fillStyle = PORTRAIT_PLATE_FILL;
-        ctx.fill();
-        ctx.strokeStyle = PORTRAIT_STROKE_TAIL;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.restore();
-        return;
-      }
-
-      drawRpgMakerEmotionBalloon();
-    };
-
     /** Projectiles + particles: single additive pass after Y-sort (see `drawBatchedProjectile`). */
     const batchedEffects = [];
 
     // --- DRAW PASS ---
-    const drawWildHpBar = (item, spawnYOffset) => {
-      if (!Number.isFinite(item.hp) || !Number.isFinite(item.maxHp) || item.maxHp <= 0) return;
-      const hp01 = Math.max(0, Math.min(1, item.hp / item.maxHp));
-      const boss = !!item.isBoss;
-      const barW = Math.max(16, Math.floor(tileW * (boss ? 0.98 : 0.82)));
-      const barH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
-      const x = Math.floor(item.cx - barW * 0.5);
-      const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - (boss ? 8 : 6));
-      if (item.sexHud) {
-        const fontPx = Math.max(9, Math.floor(tileH * 0.14));
-        ctx.save();
-        ctx.font = `${fontPx}px 'JetBrains Mono',ui-monospace,monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.lineWidth = Math.max(2, Math.ceil(fontPx * 0.12));
-        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-        ctx.strokeText(item.sexHud, item.cx, y - 1);
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
-        ctx.fillText(item.sexHud, item.cx, y - 1);
-        ctx.restore();
-      }
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
-      if (boss) {
-        ctx.strokeStyle = 'rgba(255, 210, 120, 0.95)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - 2, y - 2, barW + 4, barH + 4);
-      }
-      ctx.fillStyle =
-        boss && hp01 > 0.5
-          ? '#7ee8ff'
-          : hp01 > 0.5
-            ? '#63e86f'
-            : hp01 > 0.22
-              ? '#ffd54a'
-              : '#ff6363';
-      ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
-    };
-
     for (const item of renderItems) {
       ctx.save();
       
@@ -2172,7 +1277,7 @@ export function render(canvas, data, options = {}) {
         ctx.filter = 'none';
 
         if (item.type === 'wild') {
-          drawWildHpBar(item, spawnYOffset);
+          drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
         }
 
         // Terrain / grass depth cue (LOD 0 only) — omit for player in creative flight
@@ -2203,16 +1308,9 @@ export function render(canvas, data, options = {}) {
           snapPx(item.dw),
           snapPx(item.dh)
         );
-      } else if (item.type === 'wildEmotion' || item.type === 'playerEmotion') {
-        if (lodDetail < 2) {
-          ctx.globalAlpha = item.spawnPhase;
-          let spawnYOffset = 0;
-          if (item.spawnPhase < 1) {
-            if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
-            else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
-            else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
-          }
-          drawWildEmotionOverlay(ctx, item, spawnYOffset);
+        if (item.type === 'playerEmotion' || item.type === 'wildEmotion') {
+          const spawnYOffset = (item.spawnType === 'sky' && item.spawnPhase < 1) ? (1 - item.spawnPhase) * (-4 * tileH) : 0;
+          drawWildEmotionOverlay(ctx, item, spawnYOffset, imageCache, tileW, tileH, snapPx);
         }
       } else if (item.type === 'playerAimIndicator') {
         const collCx = snapPx((item.collMx + 0.5) * tileW);
@@ -2707,17 +1805,19 @@ export function render(canvas, data, options = {}) {
       ctx.restore();
     }
 
-    if (activeJumpRings.length > 0) {
+    const jumpRings = getActiveJumpRings();
+    if (jumpRings.length > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      for (const fx of activeJumpRings) {
+      for (const fx of jumpRings) {
         drawJumpRing(ctx, fx, tileW, tileH, snapPx);
       }
       ctx.restore();
     }
-    if (activeRunDustPuffs.length > 0) {
+    const dustPuffs = getActiveRunDustPuffs();
+    if (dustPuffs.length > 0) {
       ctx.save();
-      for (const puff of activeRunDustPuffs) {
+      for (const puff of dustPuffs) {
         drawRunDustPuff(ctx, puff, tileW, tileH, snapPx);
       }
       ctx.restore();
