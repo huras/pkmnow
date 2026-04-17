@@ -1,5 +1,6 @@
 import { BIOMES } from '../biomes.js';
-import { MACRO_TILE_STRIDE } from '../chunking.js';
+import { MACRO_TILE_STRIDE, foliageDensity } from '../chunking.js';
+import { TREE_NOISE_SCALE } from '../biome-tiles.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import {
@@ -35,6 +36,9 @@ let baseCacheData = null;
 let baseCacheZoom = '';
 let baseCacheW = 0;
 let baseCacheH = 0;
+/** @type {HTMLCanvasElement | null} */
+let closeNoiseDetailCacheCanvas = null;
+let closeNoiseDetailCacheData = null;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
 
@@ -209,6 +213,56 @@ function rebuildBase(w, h, data, zoom) {
 }
 
 /**
+ * Build a colorized detail-noise texture (1px per macro tile) for close zoom.
+ * Channels reflect signals used by detail placement:
+ * - R: scatter/clump noise (rocks/crystals + dense-detail suppression)
+ * - G: foliage density noise (grass/vegetation coverage tendency)
+ * - B: formal-tree blob noise
+ * @param {object} data
+ * @returns {HTMLCanvasElement | null}
+ */
+function rebuildCloseNoiseDetail(data) {
+  const { width: dataW, height: dataH, seed } = data || {};
+  if (!dataW || !dataH || !Number.isFinite(seed)) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = dataW;
+  canvas.height = dataH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  for (let y = 0; y < dataH; y++) {
+    for (let x = 0; x < dataW; x++) {
+      const nScatter = foliageDensity(x, y, seed + 111, 2.5);      // 0..1
+      const nFoliage = foliageDensity(x, y, seed + 9992, 0.08);    // 0..1
+      const nTrees = foliageDensity(x, y, seed + 5555, TREE_NOISE_SCALE); // 0..1
+
+      const r = Math.max(0, Math.min(255, Math.round(nScatter * 255)));
+      const g = Math.max(0, Math.min(255, Math.round(nFoliage * 255)));
+      const b = Math.max(0, Math.min(255, Math.round(nTrees * 255)));
+      const a = 0.55;
+      ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+      ctx.fillRect(x, y, 1, 1);
+
+      // Isolines from vegetation-driving noise (nFoliage):
+      // - thin lines every 0.1
+      // - stronger major lines every 0.2
+      const contour10 = Math.abs(((nFoliage * 10) % 1) - 0.5);
+      const contour5 = Math.abs(((nFoliage * 5) % 1) - 0.5);
+      if (contour5 < 0.04) {
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.fillRect(x, y, 1, 1);
+      } else if (contour10 < 0.03) {
+        ctx.fillStyle = 'rgba(0,0,0,0.24)';
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+
+  return canvas;
+}
+
+/**
  * Draws wild spawn markers with portrait heads on minimap.
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ scale: number, ox: number, oy: number }} tf
@@ -232,6 +286,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
 
   for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
     const m = markers[i];
+    const isDistanceEstimate = !!m.ent._distanceInactivated;
     const sx = (m.mx - tf.ox + 0.5) * tf.scale;
     const sy = (m.my - tf.oy + 0.5) * tf.scale;
     if (sx < -screenPad || sy < -screenPad || sx > canvasSize.w + screenPad || sy > canvasSize.h + screenPad) {
@@ -252,10 +307,10 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(sx, sy, markerR, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(4, 7, 14, 0.9)';
+    ctx.fillStyle = isDistanceEstimate ? 'rgba(2, 4, 9, 0.97)' : 'rgba(4, 7, 14, 0.9)';
     ctx.fill();
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = isDistanceEstimate ? 'rgba(180, 190, 208, 0.7)' : 'rgba(255,255,255,0.85)';
     ctx.stroke();
 
     if (img && img.naturalWidth) {
@@ -270,12 +325,30 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
       const dw = iw * scale;
       const dh = ih * scale;
       ctx.drawImage(img, sx - dw * 0.5, sy - dh * 0.46, dw, dh);
+      if (isDistanceEstimate) {
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        ctx.fillRect(sx - markerR, sy - markerR, markerR * 2, markerR * 2);
+      }
       ctx.restore();
     } else {
-      ctx.fillStyle = 'rgba(140, 205, 255, 0.95)';
+      ctx.fillStyle = isDistanceEstimate ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
       ctx.beginPath();
       ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (isDistanceEstimate) {
+      const qx = sx + markerR * 0.55;
+      const qy = sy + markerR * 0.55;
+      const qSize = Math.max(7, markerR * 1.05);
+      ctx.font = `700 ${qSize}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(1.6, markerR * 0.26);
+      ctx.strokeStyle = 'rgba(0,0,0,0.88)';
+      ctx.fillStyle = 'rgba(255,236,170,0.98)';
+      ctx.strokeText('?', qx, qy);
+      ctx.fillText('?', qx, qy);
     }
 
     if (m.ent.spawnPhase > 0.02) {
@@ -339,6 +412,19 @@ export function renderMinimap(canvas, data, player) {
   ctx.drawImage(baseCacheCanvas, 0, 0, data.width * scale, data.height * scale);
   ctx.restore();
 
+  if (zoom === 'close') {
+    if (closeNoiseDetailCacheData !== data) {
+      closeNoiseDetailCacheCanvas = rebuildCloseNoiseDetail(data);
+      closeNoiseDetailCacheData = data;
+    }
+    if (closeNoiseDetailCacheCanvas) {
+      ctx.save();
+      ctx.translate(-ox * scale, -oy * scale);
+      ctx.drawImage(closeNoiseDetailCacheCanvas, 0, 0, data.width * scale, data.height * scale);
+      ctx.restore();
+    }
+  }
+
   // --- Viewport border pulse for close zoom ---
   if (zoom === 'close') {
     ctx.save();
@@ -396,5 +482,6 @@ export function cycleMinimapZoom(canvas) {
   canvas.dataset.zoom = next;
   // Invalidate base cache (zoom changed)
   baseCacheData = null;
+  closeNoiseDetailCacheData = null;
   return next;
 }

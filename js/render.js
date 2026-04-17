@@ -123,7 +123,7 @@ import {
   getActiveDetailHitPulses
 } from './main/play-crystal-tackle.js';
 import { playInputState } from './main/play-input-state.js';
-import { isPlayerIdleOnWaitingFrame } from './player.js';
+import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { imageCache } from './image-cache.js';
@@ -422,6 +422,35 @@ export function render(canvas, data, options = {}) {
     trackJumpStartRings(renderItems);
     trackRunningDust(renderItems, time);
 
+    const blockedGrassOverlayTiles = new Set();
+    const tileKey = (mx, my) => `${mx},${my}`;
+    const markBlockedTile = (mx, my) => {
+      if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
+      blockedGrassOverlayTiles.add(tileKey(Math.floor(mx), Math.floor(my)));
+    };
+    const markBlockedRect = (ox, oy, cols, rows) => {
+      const bx = Math.floor(ox);
+      const by = Math.floor(oy);
+      const w = Math.max(1, Math.floor(cols || 1));
+      const h = Math.max(1, Math.floor(rows || 1));
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) markBlockedTile(bx + dx, by + dy);
+      }
+    };
+    for (const it of renderItems) {
+      if (it.type === 'tree') {
+        // Formal tree trunk/base spans two ground tiles.
+        markBlockedRect(it.originX, it.originY, 2, 1);
+      } else if (it.type === 'scatter') {
+        markBlockedRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+      } else if (it.type === 'building') {
+        const bCols = it.bData?.cols ?? (it.bData?.type === 'pokecenter' ? 5 : 4);
+        const bRows = it.bData?.rows ?? (it.bData?.type === 'pokecenter' ? 6 : 5);
+        markBlockedRect(it.originX, it.originY, bCols, bRows);
+      }
+    }
+    const isGrassOverlayBlocked = (mx, my) => blockedGrassOverlayTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
+
     const batchedEffects = [];
     for (const item of renderItems) {
       if (item.type === 'wild' || item.type === 'player') {
@@ -469,11 +498,13 @@ export function render(canvas, data, options = {}) {
         if (playLodGrassSpriteOverlay && (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight)) {
           const tx = Math.floor(item.x); const ty = Math.floor(item.y);
           if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-            const t = getCached(tx, ty);
-            const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t?.biomeId] || 'grass'];
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= (t?.heightStep ?? 0);
-            if (t?.heightStep > 0 && (!gateSet || getRoleForCell(ty, tx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) === 'CENTER')) {
-              drawGrass5aForCell(ctx, tx, ty, t, Math.ceil(tileW), Math.ceil(tileH), tx * tileW, ty * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
+            if (!isGrassOverlayBlocked(tx, ty)) {
+              const t = getCached(tx, ty);
+              const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t?.biomeId] || 'grass'];
+              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= (t?.heightStep ?? 0);
+              if (t?.heightStep > 0 && (!gateSet || getRoleForCell(ty, tx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) === 'CENTER')) {
+                drawGrass5aForCell(ctx, tx, ty, t, Math.ceil(tileW), Math.ceil(tileH), tx * tileW, ty * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
+              }
             }
           }
         }
@@ -654,11 +685,17 @@ export function render(canvas, data, options = {}) {
         for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
             const mx = overlayMx + dx; const my = overlayMy + dy;
             if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
+            if (isGrassOverlayBlocked(mx, my)) continue;
             const tile = getCached(mx, my);
             if (!passesPlayerGate(mx, my, tile)) continue;
             drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode: (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0) ? 'playerTopOverlay' : undefined, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
-        if (shouldDrawPlayerOverlay && !preferSouthBottomOverlay && passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy))) {
+        if (
+          shouldDrawPlayerOverlay &&
+          !preferSouthBottomOverlay &&
+          !isGrassOverlayBlocked(overlayMx, overlayMy) &&
+          passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy))
+        ) {
           drawGrass5aForCell(ctx, overlayMx, overlayMy, getCached(overlayMx, overlayMy), Math.ceil(tileW), Math.ceil(tileH), overlayMx * tileW, overlayMy * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
     }
@@ -682,7 +719,24 @@ export function render(canvas, data, options = {}) {
     });
     
     drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
-    drawEnvironmentalEffects(ctx, { cw, ch, tint: options.settings?.dayCycleTint, mistTile: getCached(overlayMx, overlayMy), lodDetail, time });
+    drawEnvironmentalEffects(ctx, {
+      cw,
+      ch,
+      tint: options.settings?.dayCycleTint,
+      mistTile: getCached(overlayMx, overlayMy),
+      lodDetail,
+      time,
+      playerZ: smoothLev,
+      playerFlightMaxZ: PLAYER_FLIGHT_MAX_Z_TILES,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      worldCols: width * MACRO_TILE_STRIDE,
+      worldRows: height * MACRO_TILE_STRIDE
+    });
 
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);

@@ -10,7 +10,6 @@ import {
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from '../main/play-collider-overlay-cache.js';
 import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
-import { imageCache } from '../image-cache.js';
 import {
   drawPlayEntityFootAndAirCollider,
   drawPlayEntityCombatHurtbox
@@ -18,114 +17,154 @@ import {
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 
-const CLOUD_TEXTURE_SRC = 'vfx/ETF_Texture_Glow_01.png';
 const CLOUD_WRAP_PAD_PX = 220;
+const CLOUD_ALPHA_GAIN = 2;
+const CLOUD_SHADOW_ALPHA_RATIO = 0.68;
+const CLOUD_SIZE_GAIN = 2.5;
+const CLOUD_PERIOD_X_TILES = 96;
+const CLOUD_PERIOD_Y_TILES = 72;
+const CLOUD_SHADOW_OFFSET_MULT = 3;
+const CLOUD_SHADOW_OFFSET_BASE_X_TILES = 2.6;
+const CLOUD_SHADOW_OFFSET_BASE_Y_TILES = 3.3;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
-  { seedX: 0.07, yFrac: 0.13, scale: 1.14, speed: 0.020, alpha: 0.20, puffs: [[-0.9, 0.06, 0.84], [-0.15, -0.02, 1.0], [0.72, 0.08, 0.86]] },
-  { seedX: 0.21, yFrac: 0.20, scale: 1.03, speed: 0.024, alpha: 0.23, puffs: [[-0.7, 0.05, 0.74], [0.0, -0.04, 1.03], [0.8, 0.07, 0.78]] },
-  { seedX: 0.34, yFrac: 0.16, scale: 1.22, speed: 0.017, alpha: 0.18, puffs: [[-0.95, 0.04, 0.92], [-0.05, -0.03, 1.08], [0.84, 0.09, 0.86]] },
-  { seedX: 0.48, yFrac: 0.25, scale: 0.96, speed: 0.028, alpha: 0.19, puffs: [[-0.62, 0.05, 0.75], [0.06, -0.05, 0.97], [0.76, 0.05, 0.71]] },
-  { seedX: 0.62, yFrac: 0.18, scale: 1.15, speed: 0.021, alpha: 0.22, puffs: [[-0.84, 0.07, 0.88], [-0.1, -0.04, 1.04], [0.8, 0.08, 0.82]] },
-  { seedX: 0.77, yFrac: 0.23, scale: 1.00, speed: 0.019, alpha: 0.18, puffs: [[-0.7, 0.05, 0.73], [0.02, -0.04, 0.98], [0.78, 0.06, 0.72]] },
-  { seedX: 0.86, yFrac: 0.15, scale: 1.28, speed: 0.015, alpha: 0.17, puffs: [[-0.96, 0.06, 0.9], [0.0, -0.03, 1.1], [0.9, 0.1, 0.84]] },
-  { seedX: 0.95, yFrac: 0.28, scale: 0.9, speed: 0.031, alpha: 0.16, puffs: [[-0.56, 0.04, 0.68], [0.0, -0.05, 0.91], [0.67, 0.06, 0.69]] }
+  { seedX: 0.07, seedY: 0.12, scale: 1.14, speed: 0.020, speedY: 0.010, alpha: 0.26, puffs: [[-0.9, 0.06, 0.84], [-0.15, -0.02, 1.0], [0.72, 0.08, 0.86]] },
+  { seedX: 0.21, seedY: 0.28, scale: 1.03, speed: 0.024, speedY: 0.008, alpha: 0.29, puffs: [[-0.7, 0.05, 0.74], [0.0, -0.04, 1.03], [0.8, 0.07, 0.78]] },
+  { seedX: 0.34, seedY: 0.46, scale: 1.22, speed: 0.017, speedY: 0.007, alpha: 0.24, puffs: [[-0.95, 0.04, 0.92], [-0.05, -0.03, 1.08], [0.84, 0.09, 0.86]] },
+  { seedX: 0.48, seedY: 0.62, scale: 0.96, speed: 0.028, speedY: 0.011, alpha: 0.25, puffs: [[-0.62, 0.05, 0.75], [0.06, -0.05, 0.97], [0.76, 0.05, 0.71]] },
+  { seedX: 0.62, seedY: 0.76, scale: 1.15, speed: 0.021, speedY: 0.009, alpha: 0.28, puffs: [[-0.84, 0.07, 0.88], [-0.1, -0.04, 1.04], [0.8, 0.08, 0.82]] },
+  { seedX: 0.77, seedY: 0.88, scale: 1.00, speed: 0.019, speedY: 0.012, alpha: 0.24, puffs: [[-0.7, 0.05, 0.73], [0.02, -0.04, 0.98], [0.78, 0.06, 0.72]] },
+  { seedX: 0.86, seedY: 0.54, scale: 1.28, speed: 0.015, speedY: 0.006, alpha: 0.23, puffs: [[-0.96, 0.06, 0.9], [0.0, -0.03, 1.1], [0.9, 0.1, 0.84]] },
+  { seedX: 0.95, seedY: 0.36, scale: 0.9, speed: 0.031, speedY: 0.013, alpha: 0.22, puffs: [[-0.56, 0.04, 0.68], [0.0, -0.05, 0.91], [0.67, 0.06, 0.69]] }
 ]);
 
-let snesCloudTextureCache = null;
+let cloudSpriteCache = null;
 
-function buildCloudSpriteMasks(img) {
-  const w = img.naturalWidth || img.width || 0;
-  const h = img.naturalHeight || img.height || 0;
-  if (w <= 0 || h <= 0) return null;
+function makeCloudSpriteFromPuffs(puffs, color) {
+  const W = 320;
+  const H = 220;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d', { alpha: true });
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = color;
 
-  const cloudMask = document.createElement('canvas');
-  cloudMask.width = w;
-  cloudMask.height = h;
-  const cloudCtx = cloudMask.getContext('2d', { alpha: true });
-  cloudCtx.drawImage(img, 0, 0);
+  const drawPuff = (cx, cy, w, h) => {
+    g.beginPath();
+    g.ellipse(cx, cy, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
+    g.fill();
+  };
 
-  const shadowMask = document.createElement('canvas');
-  shadowMask.width = w;
-  shadowMask.height = h;
-  const shadowCtx = shadowMask.getContext('2d', { alpha: true });
+  for (const [ox, oy, scale] of puffs) {
+    const w = 82 * scale;
+    const h = 62 * scale;
+    const cx = W * 0.5 + ox * 62;
+    const cy = H * 0.5 + oy * 52;
+    drawPuff(cx, cy, w, h);
 
-  const src = cloudCtx.getImageData(0, 0, w, h);
-  const dstCloud = cloudCtx.createImageData(w, h);
-  const dstShadow = shadowCtx.createImageData(w, h);
-  const s = src.data;
-  const a = dstCloud.data;
-  const b = dstShadow.data;
-  for (let i = 0; i < s.length; i += 4) {
-    const srcAlpha = s[i + 3] / 255;
-    const lum = Math.max(s[i], s[i + 1], s[i + 2]) / 255;
-    const outAlpha = Math.round(255 * srcAlpha * lum);
-    a[i] = 255;
-    a[i + 1] = 255;
-    a[i + 2] = 255;
-    a[i + 3] = outAlpha;
-    b[i] = 0;
-    b[i + 1] = 0;
-    b[i + 2] = 0;
-    b[i + 3] = Math.round(outAlpha * 0.8);
+    // Add small satellites so each cloud cluster has more "balls" without runtime overhead.
+    const satellites = [
+      [-0.42, -0.16, 0.52],
+      [0.45, -0.12, 0.47],
+      [0.08, 0.21, 0.44]
+    ];
+    for (const [sx, sy, ss] of satellites) {
+      const sw = w * ss;
+      const sh = h * ss;
+      drawPuff(cx + sx * w, cy + sy * h, sw, sh);
+    }
   }
-  cloudCtx.putImageData(dstCloud, 0, 0);
-  shadowCtx.putImageData(dstShadow, 0, 0);
-  return { cloudMask, shadowMask };
+  return c;
 }
 
-function getSnesCloudMasks() {
-  const img = imageCache.get(CLOUD_TEXTURE_SRC);
-  if (!img || !img.complete || !(img.naturalWidth || img.width)) return null;
-  if (snesCloudTextureCache && snesCloudTextureCache.source === img) return snesCloudTextureCache;
-  const masks = buildCloudSpriteMasks(img);
-  if (!masks) return null;
-  snesCloudTextureCache = { ...masks, source: img };
-  return snesCloudTextureCache;
+function getCloudSpritePairForCluster(clusterIdx) {
+  if (!cloudSpriteCache) cloudSpriteCache = new Map();
+  if (cloudSpriteCache.has(clusterIdx)) return cloudSpriteCache.get(clusterIdx);
+  const cluster = SNES_CLOUD_CLUSTERS[clusterIdx];
+  const pair = {
+    cloud: makeCloudSpriteFromPuffs(cluster.puffs, '#ffffff'),
+    shadow: makeCloudSpriteFromPuffs(cluster.puffs, '#000000')
+  };
+  cloudSpriteCache.set(clusterIdx, pair);
+  return pair;
 }
 
-function drawSnesCloudParallax(ctx, cw, ch, lodDetail, timeSec) {
-  const masks = getSnesCloudMasks();
-  if (!masks) return;
-
-  const lodMul = lodDetail >= 2 ? 0.54 : lodDetail >= 1 ? 0.78 : 1;
-  const activeClusters = lodDetail >= 2 ? 3 : lodDetail >= 1 ? 5 : SNES_CLOUD_CLUSTERS.length;
-  const spriteW = Math.max(1, masks.cloudMask.width);
-  const spriteH = Math.max(1, masks.cloudMask.height);
-  const span = cw + CLOUD_WRAP_PAD_PX * 2;
+function drawSnesCloudParallax(ctx, options) {
+  const {
+    ch,
+    timeSec,
+    startX,
+    startY,
+    endX,
+    endY,
+    tileW,
+    tileH,
+    worldCols,
+    worldRows
+  } = options;
+  const lodMul = 1;
+  const activeClusters = SNES_CLOUD_CLUSTERS.length;
   const time = Number.isFinite(timeSec) ? timeSec : 0;
-  const baseScale = Math.max(0.42, Math.min(0.8, cw / 1920));
-  const shadowOffsetX = Math.round(cw * 0.028);
-  const shadowOffsetY = Math.round(ch * 0.036);
+  const baseScale = Math.max(0.7, Math.min(1.25, ch / 900));
+  const shadowOffsetX = Math.round(tileW * CLOUD_SHADOW_OFFSET_BASE_X_TILES * CLOUD_SHADOW_OFFSET_MULT);
+  const shadowOffsetY = Math.round(tileH * CLOUD_SHADOW_OFFSET_BASE_Y_TILES * CLOUD_SHADOW_OFFSET_MULT);
+  const cloudPresence = 1;
+  const cloudScreenYOffset = 0;
+  const paddedStartX = startX - 30;
+  const paddedEndX = endX + 30;
+  const paddedStartY = startY - 24;
+  const paddedEndY = endY + 24;
+  const worldW = Math.max(1, Number(worldCols) || 1);
+  const worldH = Math.max(1, Number(worldRows) || 1);
+  // Fixed world-space periodic grid: avoid re-layout pops when zoom/LOD changes.
+  const periodX = Math.max(24, Math.min(worldW, CLOUD_PERIOD_X_TILES));
+  const periodY = Math.max(18, Math.min(worldH, CLOUD_PERIOD_Y_TILES));
 
-  const drawLayer = (sprite, isShadow) => {
+  const drawLayer = (isShadow) => {
     for (let i = 0; i < activeClusters; i++) {
       const c = SNES_CLOUD_CLUSTERS[i];
-      const travel = ((time * c.speed * cw) + c.seedX * span) % span;
-      const xAnchor = span - travel - CLOUD_WRAP_PAD_PX;
-      const yAnchor = ch * c.yFrac + Math.sin(time * (0.26 + i * 0.03) + c.seedX * 6.2831) * (ch * 0.004);
-      const alphaCluster = c.alpha * (isShadow ? 0.52 : 1) * lodMul;
+      const driftX = time * c.speed * 22;
+      const driftY = time * c.speedY * 12;
+      const baseWorldX = c.seedX * periodX + driftX;
+      const baseWorldY = c.seedY * periodY + driftY;
+      const alphaCluster = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * lodMul;
       const yNudge = isShadow ? shadowOffsetY : 0;
       const xNudge = isShadow ? shadowOffsetX : 0;
+      const spritePair = getCloudSpritePairForCluster(i);
+      const sprite = isShadow ? spritePair.shadow : spritePair.cloud;
+      const h = Math.max(2, Math.round(tileH * 6.4 * CLOUD_SIZE_GAIN * c.scale * baseScale));
+      const w = Math.max(2, Math.round(h * (sprite.width / Math.max(1, sprite.height))));
+      const cloudTileW = w / Math.max(1e-6, tileW);
+      const cloudTileH = h / Math.max(1e-6, tileH);
+      const kxMin = Math.floor((paddedStartX - baseWorldX - cloudTileW) / periodX);
+      const kxMax = Math.ceil((paddedEndX - baseWorldX) / periodX);
+      const kyMin = Math.floor((paddedStartY - baseWorldY - cloudTileH) / periodY);
+      const kyMax = Math.ceil((paddedEndY - baseWorldY) / periodY);
 
-      for (const [ox, oy, scale] of c.puffs) {
-        const size = Math.round(ch * 0.14 * c.scale * scale * baseScale);
-        if (size < 2) continue;
-        const w = Math.max(1, Math.round(size * (spriteW / spriteH)));
-        const h = size;
-        const x = Math.round(xAnchor + ox * w + xNudge);
-        const y = Math.round(yAnchor + oy * h + yNudge);
-        if (x + w < -2 || x > cw + 2 || y + h < -2 || y > ch * 0.62) continue;
-        ctx.globalAlpha = Math.max(0, Math.min(1, alphaCluster));
-        ctx.drawImage(sprite, x, y, w, h);
+      for (let ky = kyMin; ky <= kyMax; ky++) {
+        const worldY = baseWorldY + ky * periodY;
+        const yAnchor = worldY * tileH + Math.sin(time * (0.26 + i * 0.03) + c.seedX * 6.2831) * (tileH * 0.6) + cloudScreenYOffset;
+        for (let kx = kxMin; kx <= kxMax; kx++) {
+          const worldX = baseWorldX + kx * periodX;
+          const x = Math.round(worldX * tileW + xNudge);
+          const y = Math.round(yAnchor + yNudge);
+          const cloudMinX = x / tileW;
+          const cloudMaxX = (x + w) / tileW;
+          const cloudMinY = y / tileH;
+          const cloudMaxY = (y + h) / tileH;
+          if (cloudMaxX < paddedStartX || cloudMinX > paddedEndX || cloudMaxY < paddedStartY || cloudMinY > paddedEndY) continue;
+          ctx.globalAlpha = Math.max(0, Math.min(1, alphaCluster));
+          ctx.drawImage(sprite, x, y, w, h);
+        }
       }
     }
   };
 
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  drawLayer(masks.shadowMask, true);
-  drawLayer(masks.cloudMask, false);
+  // Keep cloud/shadow locked to world coordinates; camera translation is already active in render.js.
+  ctx.imageSmoothingEnabled = false;
+  drawLayer(true);
+  drawLayer(false);
   ctx.restore();
 }
 
@@ -359,7 +398,22 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * Draws screen-space effects like day/night tint and fog.
  */
 export function drawEnvironmentalEffects(ctx, options) {
-  const { cw, ch, tint, mistTile, lodDetail, time } = options;
+  const {
+    cw,
+    ch,
+    tint,
+    mistTile,
+    lodDetail,
+    time,
+    startX,
+    startY,
+    endX,
+    endY,
+    tileW,
+    tileH,
+    worldCols,
+    worldRows
+  } = options;
 
   if (tint && typeof tint.r === 'number') {
     ctx.save();
@@ -371,7 +425,18 @@ export function drawEnvironmentalEffects(ctx, options) {
   }
 
   if (mistTile?.biomeId !== BIOMES.GHOST_WOODS.id) {
-    drawSnesCloudParallax(ctx, cw, ch, lodDetail, time);
+    drawSnesCloudParallax(ctx, {
+      ch,
+      timeSec: time,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      worldCols,
+      worldRows
+    });
   }
 
   if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {

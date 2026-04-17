@@ -70,6 +70,12 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
   for (const [k, e] of entitiesByKey.entries()) {
     if (e?._strengthCarryHidden) continue;
     const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
+    const distanceInactivated =
+      distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
+      e.aiState === 'wander' &&
+      !e.isDespawning &&
+      (e.spawnPhase ?? 1) >= 0.5;
+    e._distanceInactivated = distanceInactivated;
     let mark = performance.now();
     const isCloseEnough = distToPlayer < 24;
     const fullRate = wildNeedsFullRateUpdate(e, distToPlayer);
@@ -80,11 +86,7 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     if (!processThisFrame) continue;
     const stepDt = Math.min(WILD_LOD_DT_CAP, e._lodDtAccum);
     e._lodDtAccum = 0;
-    const skipWanderMotion =
-      distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
-      e.aiState === 'wander' &&
-      !e.isDespawning &&
-      (e.spawnPhase ?? 1) >= 0.5;
+    const skipWanderMotion = distanceInactivated;
 
     wildUpdatePerfLast.miscMs += performance.now() - mark;
     mark = performance.now();
