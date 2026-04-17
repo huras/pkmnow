@@ -541,10 +541,11 @@ function castPlayerCut(player, data, charged = false) {
     tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
       worldHitOnceSet,
       spawnedHitOnceSet,
-      hitSource: 'cut'
+      hitSource: 'cut',
+      pz: player.z ?? 0
     });
   }
-  cutGrassInCircle(centerX, centerY, useRadius, data);
+  cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
 }
 
 function castChargedFieldSpinAttack(player, data, meleeId) {
@@ -588,11 +589,12 @@ function castChargedFieldSpinAttack(player, data, meleeId) {
     tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
       worldHitOnceSet,
       spawnedHitOnceSet,
-      hitSource: spinHitSource
+      hitSource: spinHitSource,
+      pz: player.z ?? 0
     });
   }
   if (meleeId === 'cut') {
-    cutGrassInCircle(centerX, centerY, radius, data);
+    cutGrassInCircle(centerX, centerY, radius, data, player.z ?? 0);
   }
 }
 

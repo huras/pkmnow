@@ -1,0 +1,263 @@
+/* --- Base Group Tuning --- */
+export const WILD_GROUP_RADIUS = 3.6;     // General radius for alignment and cohesion
+export const WILD_GROUP_TOLERANCE = 3.85; // How loosely others are allowed to drift (0.5 = tight, 1.5 = very loose)
+
+/* --- Derived Boids Radii --- */
+export const WILD_BOIDS_SEPARATION_RADIUS = Math.max(0.65, WILD_GROUP_RADIUS * 0.32 * WILD_GROUP_TOLERANCE);
+export const WILD_BOIDS_ALIGNMENT_RADIUS = WILD_GROUP_RADIUS * 1.0;
+export const WILD_BOIDS_COHESION_RADIUS = WILD_GROUP_RADIUS * 1.15 * WILD_GROUP_TOLERANCE;
+
+/* --- Derived Boids Weights --- */
+export const WILD_BOIDS_WEIGHT_SEPARATION = 1.85 / Math.max(0.2, WILD_GROUP_TOLERANCE);
+export const WILD_BOIDS_WEIGHT_ALIGNMENT = 0.65;
+export const WILD_BOIDS_WEIGHT_COHESION = 0.55 * WILD_GROUP_TOLERANCE;
+export const WILD_BOIDS_WEIGHT_LEADER_ALIGN = 0.85;
+
+/* --- Group Follow Tuning --- */
+export const WILD_GROUP_FOLLOW_MAX_DIST = WILD_GROUP_RADIUS * 1.4 * WILD_GROUP_TOLERANCE;
+export const WILD_GROUP_FOLLOW_BASE_TRAIL = WILD_BOIDS_SEPARATION_RADIUS * 1.05;
+export const WILD_GROUP_FOLLOW_TRAIL_STEP = 0.8 * WILD_GROUP_TOLERANCE;
+export const WILD_GROUP_FOLLOW_LATERAL_BASE = 0.65 * WILD_GROUP_TOLERANCE;
+export const WILD_GROUP_FOLLOW_LATERAL_STEP = 0.25 * WILD_GROUP_TOLERANCE;
+export const WILD_GROUP_FOLLOW_STRENGTH = 0.75;
+
+/* --- Cohesion Force Tuning --- */
+export const WILD_GROUP_COHESION_MIN_DIST = WILD_BOIDS_SEPARATION_RADIUS * 1.1;
+export const WILD_GROUP_COHESION_MAX_DIST = WILD_GROUP_RADIUS * 2.0;
+export const WILD_GROUP_COHESION_BLEND = 0.42;
+
+/** @param {number} x @param {number} y */
+export function normalizeVec(x, y) {
+  const len = Math.hypot(x, y) || 1;
+  return { x: x / len, y: y / len, len };
+}
+
+export function ensureGroupBehaviorState(entity) {
+  if (entity.groupCohesionSec == null) entity.groupCohesionSec = 0;
+  if (entity._followerTackleCooldownSec == null) entity._followerTackleCooldownSec = 0;
+}
+
+/** @param {string | null | undefined} facing */
+function unitVecFromFacing(facing) {
+  switch (String(facing || 'down')) {
+    case 'up':
+      return { x: 0, y: -1 };
+    case 'up-right':
+      return { x: 0.7071, y: -0.7071 };
+    case 'right':
+      return { x: 1, y: 0 };
+    case 'down-right':
+      return { x: 0.7071, y: 0.7071 };
+    case 'down':
+      return { x: 0, y: 1 };
+    case 'down-left':
+      return { x: -0.7071, y: 0.7071 };
+    case 'left':
+      return { x: -1, y: 0 };
+    case 'up-left':
+      return { x: -0.7071, y: -0.7071 };
+    default:
+      return { x: 0, y: 1 };
+  }
+}
+
+/**
+ * @param {object} entity
+ * @param {Map<string, any>} entitiesByKey
+ */
+export function resolveGroupFollowTarget(entity, entitiesByKey) {
+  const groupId = String(entity.groupId || '');
+  if (!groupId) return null;
+  const leaderKey = String(entity.groupLeaderKey || '');
+  if (!leaderKey) return null;
+  const leader = entitiesByKey.get(leaderKey);
+  if (!leader || String(leader.groupId || '') !== groupId || leader.isDespawning || leader.deadState) return null;
+  if (String(entity.key || '') === leaderKey) return { isLeader: true, leader };
+
+  const lvx = Number(leader.vx) || 0;
+  const lvy = Number(leader.vy) || 0;
+  const lsp = Math.hypot(lvx, lvy);
+  const heading = lsp > 0.08 ? normalizeVec(lvx, lvy) : unitVecFromFacing(leader.facing);
+  const memberIndex = Math.max(1, Math.floor(Number(entity.groupMemberIndex) || 1));
+  const slotIndex = memberIndex - 1;
+  const row = Math.floor(slotIndex / 2) + 1;
+  const side = slotIndex % 2 === 0 ? -1 : 1;
+  const trailDist = WILD_GROUP_FOLLOW_BASE_TRAIL + (row - 1) * WILD_GROUP_FOLLOW_TRAIL_STEP;
+  const lateral = side * (WILD_GROUP_FOLLOW_LATERAL_BASE + (row - 1) * WILD_GROUP_FOLLOW_LATERAL_STEP);
+  const perpX = -heading.y;
+  const perpY = heading.x;
+  let tx = (Number(leader.x) || 0) - heading.x * trailDist + perpX * lateral;
+  let ty = (Number(leader.y) || 0) - heading.y * trailDist + perpY * lateral;
+
+  const fromLeaderX = tx - (Number(leader.x) || 0);
+  const fromLeaderY = ty - (Number(leader.y) || 0);
+  const dLeader = Math.hypot(fromLeaderX, fromLeaderY);
+  if (dLeader > WILD_GROUP_FOLLOW_MAX_DIST) {
+    const n = normalizeVec(fromLeaderX, fromLeaderY);
+    tx = (Number(leader.x) || 0) + n.x * WILD_GROUP_FOLLOW_MAX_DIST;
+    ty = (Number(leader.y) || 0) + n.y * WILD_GROUP_FOLLOW_MAX_DIST;
+  }
+  return { isLeader: false, leader, targetX: tx, targetY: ty };
+}
+
+/**
+ * @param {object} entity
+ * @param {Map<string, any>} entitiesByKey
+ * @param {(value:number,min:number,max:number)=>number} clamp
+ */
+export function resolveGroupCohesionTarget(entity, entitiesByKey, clamp) {
+  const groupId = String(entity.groupId || '');
+  if (!groupId) return null;
+  const ttl = Number(entity.groupCohesionSec) || 0;
+  if (ttl <= 0) return null;
+  let sumX = 0;
+  let sumY = 0;
+  let count = 0;
+  for (const other of entitiesByKey.values()) {
+    if (other === entity) continue;
+    if (String(other.groupId || '') !== groupId) continue;
+    if ((other.spawnPhase ?? 1) < 0.35 || other.isDespawning || other.deadState) continue;
+    sumX += Number(other.x) || 0;
+    sumY += Number(other.y) || 0;
+    count += 1;
+  }
+  let tx;
+  let ty;
+  if (count > 0) {
+    tx = sumX / count;
+    ty = sumY / count;
+  } else if (Number.isFinite(entity.groupHomeX) && Number.isFinite(entity.groupHomeY)) {
+    tx = Number(entity.groupHomeX);
+    ty = Number(entity.groupHomeY);
+  } else {
+    return null;
+  }
+  const dx = tx - (Number(entity.x) || 0);
+  const dy = ty - (Number(entity.y) || 0);
+  const dist = Math.hypot(dx, dy);
+  if (dist < WILD_GROUP_COHESION_MIN_DIST) return null;
+  const w = clamp((dist - WILD_GROUP_COHESION_MIN_DIST) / (WILD_GROUP_COHESION_MAX_DIST - WILD_GROUP_COHESION_MIN_DIST), 0, 1);
+  return { x: tx, y: ty, weight: w };
+}
+
+/**
+ * @param {object} entity
+ * @param {Map<string, any>} entitiesByKey
+ * @param {(value:number,min:number,max:number)=>number} clamp
+ */
+export function resolveGroupBoidsSteer(entity, entitiesByKey, clamp) {
+  const groupId = String(entity.groupId || '');
+  if (!groupId) return null;
+  if ((Number(entity.groupCohesionSec) || 0) <= 0) return null;
+
+  const leaderKey = String(entity.groupLeaderKey || '');
+  const isFollower = !!leaderKey && leaderKey !== String(entity.key || '');
+
+  let sepX = 0;
+  let sepY = 0;
+  let alignX = 0;
+  let alignY = 0;
+  let alignCount = 0;
+  let cohX = 0;
+  let cohY = 0;
+  let cohCount = 0;
+  let minDist = Infinity;
+
+  const ex = Number(entity.x) || 0;
+  const ey = Number(entity.y) || 0;
+
+  for (const other of entitiesByKey.values()) {
+    if (other === entity) continue;
+    if (String(other.groupId || '') !== groupId) continue;
+    if ((other.spawnPhase ?? 1) < 0.35 || other.isDespawning || other.deadState) continue;
+
+    const ox = Number(other.x) || 0;
+    const oy = Number(other.y) || 0;
+    const dx = ox - ex;
+    const dy = oy - ey;
+    const d = Math.hypot(dx, dy);
+    if (d <= 1e-6) continue;
+    minDist = Math.min(minDist, d);
+
+    // 1. Separation
+    if (d <= WILD_BOIDS_SEPARATION_RADIUS) {
+      const inv = 1 / Math.max(0.05, d * d);
+      sepX -= dx * inv;
+      sepY -= dy * inv;
+    }
+
+    // 2. Alignment
+    if (d <= WILD_BOIDS_ALIGNMENT_RADIUS) {
+      const ovx = Number(other.vx) || 0;
+      const ovy = Number(other.vy) || 0;
+      const sp = Math.hypot(ovx, ovy);
+      if (sp > 0.02) {
+        let weight = 1.0;
+        // Treat leader alignment as higher priority
+        if (String(other.key || '') === leaderKey) {
+          weight = 2.5;
+        }
+        alignX += (ovx / sp) * weight;
+        alignY += (ovy / sp) * weight;
+        alignCount += weight;
+      }
+    }
+
+    // 3. Cohesion
+    if (d <= WILD_BOIDS_COHESION_RADIUS) {
+      cohX += ox;
+      cohY += oy;
+      cohCount += 1;
+    }
+  }
+
+  let steerX = 0;
+  let steerY = 0;
+  let contributors = 0;
+
+  // Separation: very strong at close range
+  if (Math.abs(sepX) + Math.abs(sepY) > 1e-5) {
+    const n = normalizeVec(sepX, sepY);
+    const sepPressure = clamp((WILD_BOIDS_SEPARATION_RADIUS - minDist) / WILD_BOIDS_SEPARATION_RADIUS, 0, 1);
+    const strength = WILD_BOIDS_WEIGHT_SEPARATION * (0.6 + 1.2 * sepPressure);
+    steerX += n.x * strength;
+    steerY += n.y * strength;
+    contributors += 1;
+  }
+
+  // Alignment
+  if (alignCount > 0) {
+    const n = normalizeVec(alignX / alignCount, alignY / alignCount);
+    steerX += n.x * WILD_BOIDS_WEIGHT_ALIGNMENT;
+    steerY += n.y * WILD_BOIDS_WEIGHT_ALIGNMENT;
+    contributors += 1;
+  }
+
+  // Cohesion
+  if (cohCount > 0) {
+    const cx = cohX / cohCount;
+    const cy = cohY / cohCount;
+    const n = normalizeVec(cx - ex, cy - ey);
+    const cohStrength = clamp((n.len - 0.45) / WILD_BOIDS_COHESION_RADIUS, 0, 1);
+    if (cohStrength > 0.001) {
+      steerX += n.x * WILD_BOIDS_WEIGHT_COHESION * cohStrength;
+      steerY += n.y * WILD_BOIDS_WEIGHT_COHESION * cohStrength;
+      contributors += 1;
+    }
+  }
+
+  if (contributors <= 0) return null;
+  const out = normalizeVec(steerX, steerY);
+  if (out.len < 1e-5) return null;
+
+  return {
+    nx: out.x,
+    ny: out.y,
+    strength: clamp(
+      out.len / (WILD_BOIDS_WEIGHT_SEPARATION + WILD_BOIDS_WEIGHT_ALIGNMENT + WILD_BOIDS_WEIGHT_COHESION),
+      0,
+      1
+    ),
+    neighborCount: Math.ceil(cohCount)
+  };
+}

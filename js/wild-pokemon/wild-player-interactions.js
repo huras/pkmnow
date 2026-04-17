@@ -167,10 +167,12 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
   }
   const damage = Math.max(1, Number(opts.damage) || PLAYER_CUT_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_CUT_WILD_KNOCKBACK);
+  const pz = Number(player.z) || 0;
   let hitCount = 0;
   for (const e of entitiesByKey.values()) {
     if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
     const dex = e.dexId ?? 1;
+    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
     const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
     const rr = radius + getPokemonHurtboxRadiusTiles(dex);
     const dx = hx - cx;

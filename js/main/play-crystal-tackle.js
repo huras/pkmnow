@@ -1154,7 +1154,8 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
   const probeReach = Math.max(0.2, reach - TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
-  tryBreakDetailsAlongSegment(px, py, ex, ey, data, { hitSource: 'tackle' });
+  const bz = pz + nz * reach * 0.1; // Slight tilt if we add full 3D segments later
+  tryBreakDetailsAlongSegment(px, py, ex, ey, data, { hitSource: 'tackle', pz });
 }
 
 function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
@@ -1201,6 +1202,10 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  */
 export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!data) return;
+  const pz = Number(opts.pz) || 0;
+  // If we are too high in the air, we can't tackle ground-level trees/rocks.
+  if (Math.abs(pz) > 2.0) return;
+  
   const nowSec = performance.now() * 0.001;
   const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
   /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */

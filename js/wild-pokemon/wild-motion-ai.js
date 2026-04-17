@@ -19,6 +19,7 @@ import {
 import { playWildEmotionCry, playWildDamageHurtCry, preloadPokemonCry } from '../pokemon/pokemon-cries.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { tryCastWildMove } from '../moves/moves-manager.js';
+import { tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
 import { clamp, entitiesByKey, wildSubdivN } from './wild-core-state.js';
 import { seededHashInt } from '../tessellation-logic.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
@@ -26,6 +27,7 @@ import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { advanceWildSpeechBubble, setWildSpeechBubble } from '../social/speech-bubble-state.js';
 import { getEncounters } from '../ecodex.js';
 import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
+import * as groupBehavior from './wild-group-behavior.js';
 
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
@@ -51,6 +53,71 @@ export function ensureWildPhysicsState(entity) {
   if (entity._wanderLastNx == null) entity._wanderLastNx = 0;
   if (entity._wanderLastNy == null) entity._wanderLastNy = 1;
   if (entity._neutralPostAlertCooldown == null) entity._neutralPostAlertCooldown = 0;
+  groupBehavior.ensureGroupBehaviorState(entity);
+}
+
+// Redundant group functions removed. Now using groupBehavior module.
+
+function enforceFollowerLeaderMaxDistance(entity, data) {
+  const follow = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
+  if (!follow || follow.isLeader || !follow.leader) return;
+  const lx = Number(follow.leader.x) || 0;
+  const ly = Number(follow.leader.y) || 0;
+  const dx = (Number(entity.x) || 0) - lx;
+  const dy = (Number(entity.y) || 0) - ly;
+  const d = Math.hypot(dx, dy);
+  if (d <= groupBehavior.WILD_GROUP_FOLLOW_MAX_DIST + 1e-6) return;
+
+  const n = groupBehavior.normalizeVec(dx, dy);
+  const tx = lx + n.x * groupBehavior.WILD_GROUP_FOLLOW_MAX_DIST;
+  const ty = ly + n.y * groupBehavior.WILD_GROUP_FOLLOW_MAX_DIST;
+  const air = wildIsAirborne(entity);
+
+  // Never teleport/snap follower. Keep movement continuous.
+  if (wildWalkOk(tx, ty, data, entity.x, entity.y, entity, air, true)) {
+    entity.targetX = tx;
+    entity.targetY = ty;
+  }
+
+  // Fallback: force a catch-up impulse toward leader if clamped point is blocked.
+  const pull = groupBehavior.normalizeVec(lx - (Number(entity.x) || 0), ly - (Number(entity.y) || 0));
+  const catchupSpeed = WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 1.1;
+  entity.vx = pull.x * catchupSpeed;
+  entity.vy = pull.y * catchupSpeed;
+  entity.targetX = follow.targetX;
+  entity.targetY = follow.targetY;
+}
+
+function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX, targetY) {
+  const angles = [targetAng, targetAng + Math.PI / 10, targetAng - Math.PI / 10];
+  for (const ang of angles) {
+    const vx = Math.cos(ang) * speed;
+    const vy = Math.sin(ang) * speed;
+    if (wildWalkOk(entity.x + vx * 0.35, entity.y + vy * 0.35, data, entity.x, entity.y, entity, isAirborne, true)) {
+      entity.vx = vx;
+      entity.vy = vy;
+      return true;
+    }
+  }
+  entity.vx = 0;
+  entity.vy = 0;
+  if ((entity._followerTackleCooldownSec || 0) <= 0 && Number.isFinite(targetX) && Number.isFinite(targetY)) {
+    const dx = Number(targetX) - (Number(entity.x) || 0);
+    const dy = Number(targetY) - (Number(entity.y) || 0);
+    const d = Math.hypot(dx, dy);
+    if (d > 0.35) {
+      const reach = Math.min(1.35, d);
+      const nx = dx / d;
+      const ny = dy / d;
+      const ax = Number(entity.x) || 0;
+      const ay = Number(entity.y) || 0;
+      const bx = ax + nx * reach;
+      const by = ay + ny * reach;
+      tryBreakDetailsAlongSegment(ax, ay, bx, by, data, { hitSource: 'tackle', pz: entity.z ?? 0 });
+      entity._followerTackleCooldownSec = 0.55;
+    }
+  }
+  return false;
 }
 
 export function integrateWildPokemonVertical(entity, dt) {
@@ -365,6 +432,9 @@ const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
 export function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
+  if ((entity._followerTackleCooldownSec || 0) > 0) {
+    entity._followerTackleCooldownSec = Math.max(0, (entity._followerTackleCooldownSec || 0) - dt);
+  }
   if (entity.deadState) {
     entity.vx = 0;
     entity.vy = 0;
@@ -397,6 +467,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if ((entity._neutralPostAlertCooldown || 0) > 0) {
     entity._neutralPostAlertCooldown = Math.max(0, entity._neutralPostAlertCooldown - dt);
   }
+  if ((entity.groupCohesionSec || 0) > 0) {
+    entity.groupCohesionSec = Math.max(0, (entity.groupCohesionSec || 0) - dt);
+  }
   const effectiveAlertRadius = Math.max(
     WILD_VISION_RANGE_MIN_TILES,
     (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT + (entity.wildTempAggressiveSec > 0 ? 1.0 : 0)
@@ -404,6 +477,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
   const distP = Math.hypot(dxP, dyP);
+  const groupFollowEarly = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
+  const followerTeamMode = !!groupFollowEarly && !groupFollowEarly.isLeader;
 
   const prevState = entity.aiState;
 
@@ -418,7 +493,12 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   if (distP < effectiveAlertRadius) {
-    if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
+    if (followerTeamMode) {
+      // Followers stay in team-follow mode and do not run independent player reaction states.
+      entity.aiState = 'wander';
+      entity.alertTimer = 0;
+      entity._neutralPostAlertCooldown = 0;
+    } else if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
       const angToPlayer = Math.atan2(dyP, dxP);
       const fleeAng = angToPlayer;
@@ -492,6 +572,12 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   if (entity.aiState === 'wander') {
+    const groupFollow = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
+    const followerMode = !!groupFollow && !groupFollow.isLeader;
+    
+    // Followers SCALE cohesion and boids weights but still use them for separation/alignment.
+    const groupCohesion = groupBehavior.resolveGroupCohesionTarget(entity, entitiesByKey, clamp);
+    const groupBoids = groupBehavior.resolveGroupBoidsSteer(entity, entitiesByKey, clamp);
     if ((entity.idlePauseTimer || 0) > 0) {
       entity.idlePauseTimer -= dt;
       entity.vx = 0;
@@ -499,23 +585,60 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       if (entity.idlePauseTimer < 0) entity.idlePauseTimer = 0;
     }
 
-    if ((entity.idlePauseTimer || 0) > 0) {
+    if ((entity.idlePauseTimer || 0) > 0 && !followerMode) {
       entity.animMoving = false;
       return;
     }
 
+    if (followerMode) {
+      entity.idlePauseTimer = 0;
+      entity.targetX = groupFollow.targetX;
+      entity.targetY = groupFollow.targetY;
+    }
+
     if (entity.targetX === null || entity.targetY === null) {
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = Math.random() * WILD_WANDER_RADIUS_TILES;
-        const tx = entity.centerX + Math.cos(ang) * dist;
-        const ty = entity.centerY + Math.sin(ang) * dist;
-        const wanderEntity =
-          isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
-        if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-          entity.targetX = tx;
-          entity.targetY = ty;
-          break;
+      if (followerMode) {
+        entity.targetX = groupFollow.targetX;
+        entity.targetY = groupFollow.targetY;
+      } else {
+        if (groupBoids) {
+          const pull = Math.max(1.25, Math.min(WILD_WANDER_RADIUS_TILES * 0.28, 1.8 + groupBoids.neighborCount * 0.4));
+          const tx = entity.x + groupBoids.nx * pull;
+          const ty = entity.y + groupBoids.ny * pull;
+          const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
+          if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
+            entity.targetX = tx;
+            entity.targetY = ty;
+          }
+        }
+        if (groupCohesion) {
+          const dxG = groupCohesion.x - entity.x;
+          const dyG = groupCohesion.y - entity.y;
+          const distG = Math.hypot(dxG, dyG);
+          if (distG > groupBehavior.WILD_GROUP_COHESION_MIN_DIST) {
+            const pullDist = Math.max(0.85, Math.min(WILD_WANDER_RADIUS_TILES * 0.78, distG * 0.72));
+            const tx = entity.x + (dxG / (distG || 1)) * pullDist;
+            const ty = entity.y + (dyG / (distG || 1)) * pullDist;
+            const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
+            if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
+              entity.targetX = tx;
+              entity.targetY = ty;
+            }
+          }
+        }
+        for (let attempt = 0; attempt < 10; attempt++) {
+          if (followerMode) break;
+          if (entity.targetX != null && entity.targetY != null) break;
+          const ang = Math.random() * Math.PI * 2;
+          const dist = Math.random() * WILD_WANDER_RADIUS_TILES;
+          const tx = entity.centerX + Math.cos(ang) * dist;
+          const ty = entity.centerY + Math.sin(ang) * dist;
+          const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
+          if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
+            entity.targetX = tx;
+            entity.targetY = ty;
+            break;
+          }
         }
       }
       if (entity.targetX === null) {
@@ -529,6 +652,17 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     const distT = Math.hypot(dxT, dyT);
 
     if (distT < 0.2) {
+      if (followerMode) {
+        entity.vx = 0;
+        entity.vy = 0;
+        if (Number.isFinite(entity.targetX) && Number.isFinite(entity.targetY)) {
+          const fx = Number(entity.targetX) - (Number(entity.x) || 0);
+          const fy = Number(entity.targetY) - (Number(entity.y) || 0);
+          if (Math.hypot(fx, fy) > 1e-4) entity.facing = getFacingFromAngle(Math.atan2(fy, fx));
+        }
+        entity.animMoving = false;
+        return;
+      }
       entity.targetX = null;
       entity.targetY = null;
       entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
@@ -569,8 +703,48 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       return;
     }
 
-    const moveAng = Math.atan2(dyT, dxT);
-    steerTowardAngle(entity, moveAng, WORLD_MAX_WALK_SPEED_TILES_PER_SEC, data, wildIsAirborne(entity), false);
+    let moveAng = Math.atan2(dyT, dxT);
+    const nxT = Math.cos(moveAng);
+    const nyT = Math.sin(moveAng);
+    
+    let combinedNx = nxT;
+    let combinedNy = nyT;
+
+    if (groupCohesion) {
+      const dxG = groupCohesion.x - entity.x;
+      const dyG = groupCohesion.y - entity.y;
+      const distG = Math.hypot(dxG, dyG);
+      if (distG > groupBehavior.WILD_GROUP_COHESION_MIN_DIST) {
+        const nxG = dxG / (distG || 1);
+        const nyG = dyG / (distG || 1);
+        const blend = groupBehavior.WILD_GROUP_COHESION_BLEND * groupCohesion.weight * (followerMode ? 0.35 : 1.0);
+        combinedNx = combinedNx * (1 - blend) + nxG * blend;
+        combinedNy = combinedNy * (1 - blend) + nyG * blend;
+      }
+    }
+
+    if (groupBoids) {
+      const boidsBlend = 0.65 * groupBoids.strength;
+      combinedNx = combinedNx * (1 - boidsBlend) + groupBoids.nx * boidsBlend;
+      combinedNy = combinedNy * (1 - boidsBlend) + groupBoids.ny * boidsBlend;
+    }
+
+    moveAng = Math.atan2(combinedNy, combinedNx);
+
+    if (followerMode) {
+      // Followers always use the simple sweep to stay agile
+      steerFollowerSimple(
+        entity,
+        moveAng,
+        WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+        data,
+        wildIsAirborne(entity),
+        entity.targetX,
+        entity.targetY
+      );
+    } else {
+      steerTowardAngle(entity, moveAng, WORLD_MAX_WALK_SPEED_TILES_PER_SEC, data, wildIsAirborne(entity), false);
+    }
   }
 
   let air = wildIsAirborne(entity);
@@ -625,26 +799,29 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   applyWildTreeTrunkResolution(entity, data);
+  enforceFollowerLeaderMaxDistance(entity, data);
 
-  const dx = entity.x - entity.centerX;
-  const dy = entity.y - entity.centerY;
-  const dist = Math.hypot(dx, dy);
-  if (dist > WILD_WANDER_RADIUS_TILES && dist > 1e-6) {
-    const nxc = dx / dist;
-    const nyc = dy / dist;
-    const clampedX = entity.centerX + nxc * WILD_WANDER_RADIUS_TILES;
-    const clampedY = entity.centerY + nyc * WILD_WANDER_RADIUS_TILES;
+  if (!followerTeamMode) {
+    const dx = entity.x - entity.centerX;
+    const dy = entity.y - entity.centerY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > WILD_WANDER_RADIUS_TILES && dist > 1e-6) {
+      const nxc = dx / dist;
+      const nyc = dy / dist;
+      const clampedX = entity.centerX + nxc * WILD_WANDER_RADIUS_TILES;
+      const clampedY = entity.centerY + nyc * WILD_WANDER_RADIUS_TILES;
 
-    if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity), true)) {
-      entity.x = clampedX;
-      entity.y = clampedY;
-    }
+      if (wildWalkOk(clampedX, clampedY, data, entity.x, entity.y, entity, wildIsAirborne(entity), true)) {
+        entity.x = clampedX;
+        entity.y = clampedY;
+      }
 
-    entity.targetX = null;
-    const dot = entity.vx * nxc + entity.vy * nyc;
-    if (dot > 0) {
-      entity.vx -= nxc * dot * 1.75;
-      entity.vy -= nyc * dot * 1.75;
+      entity.targetX = null;
+      const dot = entity.vx * nxc + entity.vy * nyc;
+      if (dot > 0) {
+        entity.vx -= nxc * dot * 1.75;
+        entity.vy -= nyc * dot * 1.75;
+      }
     }
   }
 

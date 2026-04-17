@@ -55,15 +55,19 @@ export function grassCutSuppressesAnimatedGrassAt(mx, my) {
 /**
  * Temporarily suppresses animated grass in a circle.
  * @param {number} worldX
- * @param {number} worldY
+ * @param {number} centerX
+ * @param {number} centerY
  * @param {number} radiusTiles
  * @param {object | null | undefined} data
+ * @param {number} [pz] altitude
  * @returns {number} number of tiles cut
  */
-export function cutGrassInCircle(worldX, worldY, radiusTiles, data) {
+export function cutGrassInCircle(centerX, centerY, radiusTiles, data, pz = 0) {
   if (!data) return 0;
-  const cx = Number(worldX);
-  const cy = Number(worldY);
+  // If we are too high in the air, we can't cut grass on the ground.
+  if (Math.abs(Number(pz) || 0) > 1.2) return 0;
+  const cx = Number(centerX);
+  const cy = Number(centerY);
   const radius = Math.max(0.2, Number(radiusTiles) || 0);
   if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(radius)) return 0;
   const nowMs = performance.now();
