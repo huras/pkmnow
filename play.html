@@ -151,19 +151,33 @@
           <div id="play-bgm-toast-track" class="play-bgm-toast-track"></div>
           <div id="play-bgm-toast-status" class="play-bgm-toast-status"></div>
         </div>
-        <div id="play-world-time" class="play-world-time" aria-label="World time of day (test)">
-          <div class="play-world-time-title">World time</div>
-          <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
-          <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
-          <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
-          <div class="play-world-time-presets">
-            <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
-            <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
+        <div id="play-world-time" class="play-world-time" aria-label="World time and weather (test)">
+          <div class="play-world-time__section">
+            <div class="play-world-time-title">World time</div>
+            <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
+            <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
+            <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
+            <div class="play-world-time-presets">
+              <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
+              <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
+              <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
+              <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
+            </div>
+            <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
+            <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
           </div>
-          <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
-          <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
+          <div id="play-weather" class="play-world-time__section play-weather" aria-label="Weather controls (test)">
+            <div class="play-weather-title">Weather</div>
+            <div id="play-weather-current" class="play-weather-current">Clear</div>
+            <div class="play-weather-presets">
+              <button type="button" class="play-weather-preset is-active" data-weather="clear">Clear</button>
+              <button type="button" class="play-weather-preset" data-weather="cloudy">Cloudy</button>
+              <button type="button" class="play-weather-preset" data-weather="rain">Rain</button>
+            </div>
+            <label class="play-weather-row">Intensity
+              <input type="range" id="play-weather-intensity" min="0" max="100" step="1" value="100" />
+            </label>
+          </div>
         </div>
       </div>
     </div>

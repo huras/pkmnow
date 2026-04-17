@@ -170,6 +170,9 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
+const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playWeatherCurrentEl = document.getElementById('play-weather-current');
+const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 let playSocialOverlay = {
   flashAction: () => {},
   clearActive: () => {},
@@ -185,6 +188,14 @@ let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
 let worldTimeRunning = true;
+/** @type {'clear' | 'cloudy' | 'rain'} */
+let currentWeatherPreset = 'clear';
+/** 0..1 intensity scalar (UI slider target). */
+let currentWeatherIntensity = 1;
+/** Currently-displayed weather params (smoothly eased toward the target preset+intensity). */
+let activeWeatherParams = null;
+/** Time constant (seconds) for exponential smoothing of weather transitions. */
+const WEATHER_SMOOTH_TAU_SEC = 1.2;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -474,9 +485,9 @@ function getSettings() {
   }
   const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
   const dayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
-  const weatherCloudPresence = 1;
   const weatherCloudNoiseSeed =
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
+  const weather = getActiveWeatherParams();
   return {
     viewType,
     overlayPaths,
@@ -492,9 +503,129 @@ function getSettings() {
     dayPhase,
     worldHours: wrapHours(worldHours),
     dayCycleTint,
-    weatherCloudPresence,
+    weatherPreset: currentWeatherPreset,
+    weatherIntensity: currentWeatherIntensity,
+    weatherCloudPresence: weather.cloudPresence,
+    weatherCloudThreshold: weather.cloudThreshold,
+    weatherCloudMinMul: weather.cloudMinMul,
+    weatherCloudMaxMul: weather.cloudMaxMul,
+    weatherCloudAlphaMul: weather.cloudAlphaMul,
+    weatherRainIntensity: weather.rainIntensity,
+    weatherScreenTint: weather.screenTint,
     weatherCloudNoiseSeed
   };
+}
+
+function cloneWeatherParams(src) {
+  return {
+    cloudPresence: src.cloudPresence,
+    cloudThreshold: src.cloudThreshold,
+    cloudMinMul: src.cloudMinMul,
+    cloudMaxMul: src.cloudMaxMul,
+    cloudAlphaMul: src.cloudAlphaMul,
+    rainIntensity: src.rainIntensity,
+    screenTint: src.screenTint ? { ...src.screenTint } : null
+  };
+}
+
+function getActiveWeatherParams() {
+  if (!activeWeatherParams) {
+    activeWeatherParams = cloneWeatherParams(
+      resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity)
+    );
+  }
+  return activeWeatherParams;
+}
+
+/**
+ * Exponentially eases the currently displayed weather params toward the target preset.
+ * Called from the game loop's per-tick hook with `dt` in seconds.
+ */
+function tickWeatherSmoothing(dt) {
+  if (!Number.isFinite(dt) || dt <= 0) return;
+  const target = resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity);
+  const active = getActiveWeatherParams();
+  const k = 1 - Math.exp(-dt / Math.max(0.05, WEATHER_SMOOTH_TAU_SEC));
+  const lerpN = (a, b) => a + (b - a) * k;
+
+  active.cloudPresence = lerpN(active.cloudPresence, target.cloudPresence);
+  active.cloudThreshold = lerpN(active.cloudThreshold, target.cloudThreshold);
+  active.cloudMinMul = lerpN(active.cloudMinMul, target.cloudMinMul);
+  active.cloudMaxMul = lerpN(active.cloudMaxMul, target.cloudMaxMul);
+  active.cloudAlphaMul = lerpN(active.cloudAlphaMul, target.cloudAlphaMul);
+  active.rainIntensity = lerpN(active.rainIntensity, target.rainIntensity);
+
+  // Tint blends via alpha so `null` targets smoothly fade out instead of popping.
+  const curT = active.screenTint;
+  const tgtT = target.screenTint;
+  if (!curT && !tgtT) {
+    active.screenTint = null;
+  } else {
+    const cur = curT || { r: tgtT.r, g: tgtT.g, b: tgtT.b, a: 0 };
+    const tgt = tgtT || { r: cur.r, g: cur.g, b: cur.b, a: 0 };
+    const blended = {
+      r: lerpN(cur.r, tgt.r),
+      g: lerpN(cur.g, tgt.g),
+      b: lerpN(cur.b, tgt.b),
+      a: lerpN(cur.a, tgt.a)
+    };
+    active.screenTint = blended.a > 0.002 ? blended : null;
+  }
+}
+
+/**
+ * Maps a weather preset + 0..1 intensity to cloud/rain render params.
+ * Kept in main.js so both UI sync and `getSettings` share the same contract.
+ */
+function resolveWeatherParams(preset, intensity01) {
+  const t = Math.max(0, Math.min(1, Number(intensity01) || 0));
+  const lerp = (a, b) => a + (b - a) * t;
+  switch (preset) {
+    case 'rain':
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.02),
+        cloudMinMul: lerp(0.45, 0.7),
+        cloudMaxMul: lerp(1.55, 1.95),
+        cloudAlphaMul: lerp(1, 1.25),
+        rainIntensity: t,
+        screenTint: t > 0 ? { r: 110, g: 120, b: 145, a: lerp(0, 0.28) } : null
+      };
+    case 'cloudy':
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.22),
+        cloudMinMul: 0.45,
+        cloudMaxMul: lerp(1.55, 1.7),
+        cloudAlphaMul: 1,
+        rainIntensity: 0,
+        screenTint: null
+      };
+    case 'clear':
+    default:
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.78),
+        cloudMinMul: 0.4,
+        cloudMaxMul: lerp(1.55, 1.1),
+        cloudAlphaMul: lerp(1, 0.75),
+        rainIntensity: 0,
+        screenTint: null
+      };
+  }
+}
+
+function syncWeatherUi() {
+  for (const btn of playWeatherPresetBtns) {
+    btn.classList.toggle('is-active', btn.dataset.weather === currentWeatherPreset);
+  }
+  if (playWeatherCurrentEl) {
+    const label = { clear: 'Clear', cloudy: 'Cloudy', rain: 'Rain' }[currentWeatherPreset] || '—';
+    playWeatherCurrentEl.textContent = label;
+  }
+  if (playWeatherIntensityEl) {
+    playWeatherIntensityEl.value = String(Math.round(currentWeatherIntensity * 100));
+  }
 }
 
 function updateView() {
@@ -517,6 +648,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
+    tickWeatherSmoothing(dt);
   },
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
@@ -967,6 +1099,20 @@ wireWorldTimePreset('play-world-preset-dawn', PRESET_HOUR.dawn);
 wireWorldTimePreset('play-world-preset-day', PRESET_HOUR.day);
 wireWorldTimePreset('play-world-preset-afternoon', PRESET_HOUR.afternoon);
 wireWorldTimePreset('play-world-preset-night', PRESET_HOUR.night);
+
+for (const btn of playWeatherPresetBtns) {
+  btn.addEventListener('click', () => {
+    const next = btn.dataset.weather;
+    if (next !== 'clear' && next !== 'cloudy' && next !== 'rain') return;
+    currentWeatherPreset = next;
+    syncWeatherUi();
+  });
+}
+playWeatherIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherIntensityEl.value);
+  currentWeatherIntensity = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 100) / 100));
+});
+syncWeatherUi();
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
 document.getElementById('chkPlayColliders')?.addEventListener('change', () => {

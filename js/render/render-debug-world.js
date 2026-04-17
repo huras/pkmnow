@@ -18,10 +18,10 @@ import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
-const CLOUD_ALPHA_GAIN = 2;
-const CLOUD_SHADOW_ALPHA_RATIO = 0.68;
+const CLOUD_ALPHA_GAIN = 2.75;
+const CLOUD_SHADOW_ALPHA_RATIO = 0.48;
 const CLOUD_SIZE_GAIN = 1.5;
-const CLOUD_SHADOW_OFFSET_MULT = 1.5;
+const CLOUD_SHADOW_OFFSET_MULT = 2.5;
 const CLOUD_SHADOW_OFFSET_BASE_X_TILES = 2.6;
 const CLOUD_SHADOW_OFFSET_BASE_Y_TILES = 3.3;
 /** Side length (power of two) of the precomputed cloud-size noise field. Small = cheap to regenerate, tile-wraps in world space. */
@@ -39,7 +39,7 @@ const CLOUD_SIZE_MAX_MUL = 1.55;
 const CLOUD_WIND_VX_TILES_PER_SEC = 0.32;
 const CLOUD_WIND_VY_TILES_PER_SEC = 0.09;
 /** Per-slot position jitter (as a fraction of slot step) so the grid doesn't read as a grid. */
-const CLOUD_SLOT_JITTER_FRAC = 0.55;
+const CLOUD_SLOT_JITTER_FRAC = 1.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
   { seedX: 0.07, seedY: 0.12, scale: 1.14, speed: 0.020, speedY: 0.010, alpha: 0.26, puffs: [[-0.9, 0.06, 0.84], [-0.15, -0.02, 1.0], [0.72, 0.08, 0.86]] },
   { seedX: 0.21, seedY: 0.28, scale: 1.03, speed: 0.024, speedY: 0.008, alpha: 0.29, puffs: [[-0.7, 0.05, 0.74], [0.0, -0.04, 1.03], [0.8, 0.07, 0.78]] },
@@ -221,11 +221,26 @@ function drawSnesCloudParallax(ctx, options) {
     tileW,
     tileH,
     cloudPresence: cloudPresenceRaw = 1,
-    cloudNoiseSeed = 0
+    cloudNoiseSeed = 0,
+    cloudThreshold: cloudThresholdOpt,
+    cloudMinMul: cloudMinMulOpt,
+    cloudMaxMul: cloudMaxMulOpt,
+    cloudAlphaMul: cloudAlphaMulOpt
   } = options;
   const cloudPresence = Math.max(0, Math.min(1, Number(cloudPresenceRaw) || 0));
   const noiseSeed = (cloudNoiseSeed | 0) >>> 0;
   const variantCount = SNES_CLOUD_CLUSTERS.length;
+  // DevTools override (window.__cloudDebug) > per-call option > constant default.
+  const dbg = typeof window !== 'undefined' ? window.__cloudDebug : null;
+  const pickNum = (dbgVal, optVal, fallback) => {
+    if (dbg && Number.isFinite(dbgVal)) return dbgVal;
+    if (Number.isFinite(optVal)) return optVal;
+    return fallback;
+  };
+  const threshold = pickNum(dbg?.threshold, cloudThresholdOpt, CLOUD_SIZE_SKIP_THRESHOLD);
+  const minMul = pickNum(dbg?.minMul, cloudMinMulOpt, CLOUD_SIZE_MIN_MUL);
+  const maxMul = pickNum(dbg?.maxMul, cloudMaxMulOpt, CLOUD_SIZE_MAX_MUL);
+  const alphaMul = pickNum(dbg?.alphaMul, cloudAlphaMulOpt, 1);
   const time = Number.isFinite(timeSec) ? timeSec : 0;
   const baseScale = Math.max(0.7, Math.min(1.25, ch / 900));
   const shadowOffsetX = Math.round(tileW * CLOUD_SHADOW_OFFSET_BASE_X_TILES * CLOUD_SHADOW_OFFSET_MULT);
@@ -242,7 +257,7 @@ function drawSnesCloudParallax(ctx, options) {
 
   // Visible slot range (add a margin big enough for the max-size cloud so none pop at edges).
   const maxClusterScale = 1.28;
-  const maxHeightPx = tileH * 6.4 * CLOUD_SIZE_GAIN * maxClusterScale * baseScale * CLOUD_SIZE_MAX_MUL;
+  const maxHeightPx = tileH * 6.4 * CLOUD_SIZE_GAIN * maxClusterScale * baseScale * maxMul;
   const maxHalfTileH = maxHeightPx / Math.max(1e-6, tileH) * 0.5;
   // Sprite is ~320x220 so width ≈ height * 1.45; take generous margin.
   const maxHalfTileW = maxHalfTileH * 1.6;
@@ -261,15 +276,15 @@ function drawSnesCloudParallax(ctx, options) {
         const identityX = sx * step;
         const identityY = sy * step;
         const sizeNoise = sampleCloudSizeField01(identityX, identityY, noiseSeed);
-        if (sizeNoise < CLOUD_SIZE_SKIP_THRESHOLD) continue;
+        if (sizeNoise < threshold) continue;
 
         const variantIdx = Math.floor(hash01Cell(sx, sy, noiseSeed ^ 0x9e3779b1) * variantCount) % variantCount;
         const c = SNES_CLOUD_CLUSTERS[variantIdx];
         const spritePair = getCloudSpritePairForCluster(variantIdx);
         const sprite = isShadow ? spritePair.shadow : spritePair.cloud;
 
-        const t01 = (sizeNoise - CLOUD_SIZE_SKIP_THRESHOLD) / (1 - CLOUD_SIZE_SKIP_THRESHOLD);
-        const sizeMul = CLOUD_SIZE_MIN_MUL + t01 * (CLOUD_SIZE_MAX_MUL - CLOUD_SIZE_MIN_MUL);
+        const t01 = (sizeNoise - threshold) / Math.max(1e-6, 1 - threshold);
+        const sizeMul = minMul + t01 * (maxMul - minMul);
         const h = Math.max(2, Math.round(tileH * 6.4 * CLOUD_SIZE_GAIN * c.scale * baseScale * sizeMul));
         const w = Math.max(2, Math.round(h * (sprite.width / Math.max(1, sprite.height))));
 
@@ -291,7 +306,7 @@ function drawSnesCloudParallax(ctx, options) {
           continue;
         }
 
-        const alpha = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1);
+        const alpha = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * alphaMul * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1);
         ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
         ctx.drawImage(sprite, x, y, w, h);
       }
@@ -612,6 +627,13 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * Draws screen-space effects like day/night tint and fog.
  * @param {number} [options.cloudPresence=1] — 0..1 global cloud opacity scale.
  * @param {number} [options.cloudNoiseSeed=0] — integer; shifts the precomputed cloud-size noise field per map.
+ * @param {number} [options.cloudThreshold] — 0..1 density floor (below = no cloud).
+ * @param {number} [options.cloudMinMul] / @param {number} [options.cloudMaxMul] — cloud size range.
+ * @param {number} [options.cloudAlphaMul] — extra cloud alpha multiplier.
+ * @param {number} [options.rainIntensity=0] — 0..1 rain VFX intensity.
+ * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
+ * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
+ *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
  */
 export function drawEnvironmentalEffects(ctx, options) {
   const {
@@ -628,7 +650,14 @@ export function drawEnvironmentalEffects(ctx, options) {
     tileW,
     tileH,
     cloudPresence = 1,
-    cloudNoiseSeed = 0
+    cloudNoiseSeed = 0,
+    cloudThreshold,
+    cloudMinMul,
+    cloudMaxMul,
+    cloudAlphaMul,
+    rainIntensity = 0,
+    screenTint,
+    splashTargets
   } = options;
 
   if (tint && typeof tint.r === 'number') {
@@ -650,12 +679,170 @@ export function drawEnvironmentalEffects(ctx, options) {
     tileW,
     tileH,
     cloudPresence,
-    cloudNoiseSeed
+    cloudNoiseSeed,
+    cloudThreshold,
+    cloudMinMul,
+    cloudMaxMul,
+    cloudAlphaMul
   });
 
   if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {
     drawGhostMistShaderLike(ctx, cw, ch, lodDetail, time);
   }
+
+  const rainI = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
+  if (rainI > 0.001) {
+    // World-space splashes on entities (ctx transform = camera world pixels).
+    tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
+    // Screen-space streaks; wind direction mirrors the cloud wind so rain and clouds move together.
+    drawRainStreaks(ctx, cw, ch, time, rainI, tileW);
+  } else {
+    rainSplashes.length = 0;
+    rainSplashSpawnDebt = 0;
+    rainLastTimeSec = -1;
+  }
+
+  if (screenTint && typeof screenTint.r === 'number' && (screenTint.a ?? 1) > 0.001) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = Math.max(0, Math.min(1, screenTint.a ?? 1));
+    ctx.fillStyle = `rgb(${screenTint.r | 0},${screenTint.g | 0},${screenTint.b | 0})`;
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.restore();
+  }
+}
+
+/**
+ * Cheap screen-space rain.
+ * - Direction follows the cloud wind (px/sec) so rain and clouds visibly share a wind.
+ * - Per-streak hash scatter + per-streak speed/length variation → no visible grid.
+ * Path draw is a single `stroke()` call, so cost is roughly count × (moveTo+lineTo).
+ */
+function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const area = cw * ch;
+  const baseCount = Math.round((area / 5200) * intensity);
+  const count = Math.max(40, Math.min(baseCount, 900));
+  const tw = Math.max(1, Number(tileW) || 32);
+
+  // Fall velocity (px/sec): vertical gravity + horizontal wind (same as clouds).
+  const gravityPxSec = 850 + 520 * intensity;
+  const windPxSec = CLOUD_WIND_VX_TILES_PER_SEC * tw * 38; // amplify tiny cloud drift into a visible rain slant
+  const vecMag = Math.sqrt(gravityPxSec * gravityPxSec + windPxSec * windPxSec);
+  const dx = windPxSec / vecMag;
+  const dy = gravityPxSec / vecMag;
+
+  const baseLen = 12 + 7 * intensity;
+  const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(windPxSec) * 0.05;
+  const spanW = cw + horizontalBleed * 2 + 30;
+  const spanH = ch + baseLen * 2 + 30;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 0.22 + 0.35 * intensity;
+  ctx.strokeStyle = '#c8d7ec';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  for (let i = 0; i < count; i++) {
+    // Hash scatter; three independent hashes for X/Y anchors and per-streak speed.
+    const hx = hash01Cell(i, 7919, 1);
+    const hy = hash01Cell(i, 104729, 2);
+    const hs = hash01Cell(i, 31337, 3);
+    const hl = hash01Cell(i, 15485863, 4);
+
+    const streakSpeed = vecMag * (0.72 + hs * 0.56); // 0.72x..1.28x
+    const phase = time * streakSpeed;
+
+    // Anchor + drift along velocity; wrap each axis independently.
+    const rawX = hx * spanW + dx * phase;
+    const rawY = hy * spanH + dy * phase;
+    const px = ((rawX % spanW) + spanW) % spanW - horizontalBleed - 15;
+    const py = ((rawY % spanH) + spanH) % spanH - baseLen - 15;
+
+    const len = baseLen * (0.8 + hl * 0.45);
+    ctx.moveTo(px, py);
+    ctx.lineTo(px - dx * len, py - dy * len);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ====================================================================
+// Rain splash particles — cheap entity-bound droplet hits.
+// Kept as a small pooled array (≤ RAIN_SPLASH_MAX) so memory is flat.
+// ====================================================================
+/** @type {Array<{x:number,y:number,t0:number,life:number,variant:number}>} */
+const rainSplashes = [];
+const RAIN_SPLASH_MAX = 72;
+const RAIN_SPLASH_LIFE_SEC = 0.34;
+let rainSplashSpawnDebt = 0;
+let rainLastTimeSec = -1;
+
+function tickAndDrawRainSplashes(ctx, timeSec, intensity, splashTargets) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  let dt = rainLastTimeSec >= 0 ? time - rainLastTimeSec : 0;
+  if (!Number.isFinite(dt) || dt < 0 || dt > 0.25) dt = 0; // pause/seek guard
+  rainLastTimeSec = time;
+
+  // Age out expired splashes (swap-remove).
+  for (let i = rainSplashes.length - 1; i >= 0; i--) {
+    if (time - rainSplashes[i].t0 >= rainSplashes[i].life) {
+      rainSplashes[i] = rainSplashes[rainSplashes.length - 1];
+      rainSplashes.pop();
+    }
+  }
+
+  // Spawn new splashes proportional to rain × entities × dt.
+  const targets = Array.isArray(splashTargets) ? splashTargets : null;
+  if (dt > 0 && targets && targets.length > 0) {
+    // Per-entity rate grows with intensity; cap total so crowded scenes don't explode.
+    const ratePerSec = Math.min(42, 2.2 * intensity * targets.length);
+    rainSplashSpawnDebt += ratePerSec * dt;
+    while (rainSplashSpawnDebt >= 1 && rainSplashes.length < RAIN_SPLASH_MAX) {
+      rainSplashSpawnDebt -= 1;
+      const tgt = targets[(Math.random() * targets.length) | 0];
+      if (!tgt) continue;
+      const offX = (Math.random() - 0.5) * (tgt.w || 16) * 0.85;
+      const offY = (Math.random() * 0.35 - 0.05) * (tgt.h || 24);
+      rainSplashes.push({
+        x: (tgt.x || 0) + offX,
+        y: (tgt.yTop || 0) + offY,
+        t0: time,
+        life: RAIN_SPLASH_LIFE_SEC * (0.75 + Math.random() * 0.5),
+        variant: (Math.random() * 3) | 0
+      });
+    }
+  } else {
+    rainSplashSpawnDebt = 0;
+  }
+
+  if (rainSplashes.length === 0) return;
+
+  // Draw in world-pixel space (ctx transform comes from render.js camera).
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#eaf0ff';
+  ctx.fillStyle = '#eaf0ff';
+  for (const s of rainSplashes) {
+    const t01 = Math.max(0, Math.min(1, (time - s.t0) / Math.max(1e-4, s.life)));
+    if (t01 >= 1) continue;
+    const r = 1 + t01 * 4.2;
+    const a = (1 - t01) * 0.85;
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, Math.PI, Math.PI * 2, false); // upward-opening crown
+    ctx.stroke();
+    if (s.variant !== 2) {
+      ctx.fillRect(Math.round(s.x - r - 0.5), Math.round(s.y - 0.5), 1, 1);
+      ctx.fillRect(Math.round(s.x + r - 0.5), Math.round(s.y - 0.5), 1, 1);
+      if (s.variant === 1 && r > 2.5) {
+        ctx.fillRect(Math.round(s.x - 0.5), Math.round(s.y - r - 0.5), 1, 1);
+      }
+    }
+  }
+  ctx.restore();
 }
 
 /**

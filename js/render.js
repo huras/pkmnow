@@ -756,6 +756,19 @@ export function render(canvas, data, options = {}) {
     });
     
     drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
+    const rainI = Number(options.settings?.weatherRainIntensity) || 0;
+    const splashTargets = [];
+    if (rainI > 0.02) {
+      for (const it of renderItems) {
+        if (it.type !== 'player' && it.type !== 'wild') continue;
+        const cx = it.cx;
+        const cy = it.cy;
+        const dh = it.dh;
+        const dw = it.dw;
+        if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(dh) || !Number.isFinite(dw)) continue;
+        splashTargets.push({ x: cx, yTop: cy - dh * 0.88, w: dw, h: dh });
+      }
+    }
     drawEnvironmentalEffects(ctx, {
       cw,
       ch,
@@ -774,7 +787,14 @@ export function render(canvas, data, options = {}) {
       worldCols: width * MACRO_TILE_STRIDE,
       worldRows: height * MACRO_TILE_STRIDE,
       cloudPresence: options.settings?.weatherCloudPresence,
-      cloudNoiseSeed: options.settings?.weatherCloudNoiseSeed
+      cloudNoiseSeed: options.settings?.weatherCloudNoiseSeed,
+      cloudThreshold: options.settings?.weatherCloudThreshold,
+      cloudMinMul: options.settings?.weatherCloudMinMul,
+      cloudMaxMul: options.settings?.weatherCloudMaxMul,
+      cloudAlphaMul: options.settings?.weatherCloudAlphaMul,
+      rainIntensity: rainI,
+      screenTint: options.settings?.weatherScreenTint,
+      splashTargets
     });
 
     const minimapCanvas = document.getElementById('minimap');
