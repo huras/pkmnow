@@ -20,6 +20,7 @@ import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
+import { rollNature } from './wild-natures.js';
 import { WILD_MACRO_SUBDIVISION, WILD_MAX_SIMULTANEOUS_SLOTS } from './wild-pokemon-constants.js';
 import { bindStandardWildTakeDamage } from './wild-entity-factory.js';
 import {
@@ -242,6 +243,7 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     vx: 0,
     vy: 0,
     dexId: dex,
+    nature: rollNature(key, data.seed),
     sex,
     provoked01: 0,
     wildTempAggressiveSec: 0,
@@ -517,6 +519,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       vx: 0,
       vy: 0,
       dexId: dex,
+      nature: rollNature(slot.key, data.seed),
       sex,
       provoked01: 0,
       wildTempAggressiveSec: 0,

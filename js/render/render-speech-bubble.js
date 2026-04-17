@@ -54,9 +54,9 @@ export function drawWildSpeechBubbleOverlay(ctx, em, spawnYOffset, imageCache, t
   const kind = b.kind === 'think' ? 'think' : 'say';
   const age = Math.max(0, Number(b.ageSec) || 0);
   const dur = Math.max(0.5, Number(b.durationSec) || 4);
-  const fadeIn = Math.min(1, age / 0.18);
-  const fadeOut = Math.min(1, Math.max(0, (dur - age) / 0.32));
-  const alpha = 0.12 + 0.88 * fadeIn * fadeOut;
+  const fadeIn = Math.min(1, age / 0.1);
+  const fadeOut = Math.min(1, Math.max(0, (dur - age) / 0.15));
+  const alpha = 0.65 + 0.35 * fadeIn * fadeOut;
 
   ctx.save();
   ctx.globalAlpha = alpha;

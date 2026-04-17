@@ -7,7 +7,7 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
-import { canWildPokemonWalkMicroTile, pivotCellHeightTraversalOk } from '../walkability.js';
+import { canWildPokemonWalkMicroTile, isCliffDrop, pivotCellHeightTraversalOk } from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
@@ -28,6 +28,8 @@ import { advanceWildSpeechBubble, setWildSpeechBubble } from '../social/speech-b
 import { getEncounters } from '../ecodex.js';
 import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
 import * as groupBehavior from './wild-group-behavior.js';
+import { scenarioOrchestrator } from './wild-scenario-orchestrator.js';
+import { WILD_SOCIAL_SCENARIOS } from './wild-scenario-data.js';
 
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
@@ -365,6 +367,10 @@ export function wildIsAirborne(entity) {
 }
 
 export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSweep = false) {
+  const config = getPokemonConfig(entity.dexId ?? 1);
+  const isNaturalFlyer = config?.types?.includes('flying');
+  const ignoreLedgePenalty = isAirborne || isNaturalFlyer;
+
   const angles = narrowSweep
     ? [
         targetAng,
@@ -409,7 +415,17 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
     const ny = Math.sin(ang);
     const alignGoal = nx * desiredNx + ny * desiredNy;
     const alignMem = nx * memNx + ny * memNy;
-    const score = alignGoal + 0.38 * alignMem - 0.02 * Math.abs(Math.atan2(Math.sin(ang - targetAng), Math.cos(ang - targetAng)));
+
+    let penalty = 0;
+    if (!ignoreLedgePenalty) {
+      const tx = entity.x + vx * 0.45;
+      const ty = entity.y + vy * 0.45;
+      if (isCliffDrop(entity.x, entity.y, tx, ty, data)) {
+        penalty = 0.85; // Strong penalty for walking off cliffs while roaming
+      }
+    }
+
+    const score = alignGoal + 0.38 * alignMem - penalty - 0.02 * Math.abs(Math.atan2(Math.sin(ang - targetAng), Math.cos(ang - targetAng)));
     if (score > bestScore) {
       bestScore = score;
       bestAng = ang;
@@ -432,6 +448,8 @@ const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
 export function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
+  scenarioOrchestrator.update(dt);
+  
   if ((entity._followerTackleCooldownSec || 0) > 0) {
     entity._followerTackleCooldownSec = Math.max(0, (entity._followerTackleCooldownSec || 0) - dt);
   }
@@ -479,6 +497,13 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   const distP = Math.hypot(dxP, dyP);
   const groupFollowEarly = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
   const followerTeamMode = !!groupFollowEarly && !groupFollowEarly.isLeader;
+
+  if (entity.aiState === 'scenic') {
+    entity.vx = 0;
+    entity.vy = 0;
+    entity.animMoving = false;
+    return;
+  }
 
   const prevState = entity.aiState;
 
@@ -574,6 +599,47 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (entity.aiState === 'wander') {
     const groupFollow = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
     const followerMode = !!groupFollow && !groupFollow.isLeader;
+
+    // ── Phase Lifecycle & Organic Discovery ──
+    if (entity.groupId && !followerMode) {
+      // Leader manages the phase timers for the whole group
+      entity.groupPhaseTimer = (entity.groupPhaseTimer || 0) - dt;
+      
+      if (entity.groupPhase === 'ROAM' && entity.groupPhaseTimer <= 0) {
+        entity.groupPhase = 'EXPLORE';
+        entity.groupPhaseTimer = groupBehavior.PHASE_EXPLORE_MIN_SEC + Math.random() * (groupBehavior.PHASE_EXPLORE_MAX_SEC - groupBehavior.PHASE_EXPLORE_MIN_SEC);
+      } else if (entity.groupPhase === 'EXPLORE' && entity.groupPhaseTimer <= 0) {
+        entity.groupPhase = 'ROAM';
+        entity.groupPhaseTimer = groupBehavior.PHASE_ROAM_MIN_SEC + Math.random() * (groupBehavior.PHASE_ROAM_MAX_SEC - groupBehavior.PHASE_ROAM_MIN_SEC);
+      }
+    }
+
+    // Organic Discovery Check (Any member can find while in EXPLORE)
+    if (entity.groupId && entity.groupPhase === 'EXPLORE' && (entity.discoveryCooldown || 0) <= 0) {
+        // Chance per second (clamped)
+        const chance = groupBehavior.DISCOVERY_CHANCE_TICK * dt;
+        if (Math.random() < chance && distP > 10.0) {
+            const pool = WILD_SOCIAL_SCENARIOS.filter(s => s.minMembers <= (entity.groupSize || 1));
+            if (pool.length > 0) {
+                const scenario = pool[Math.floor(Math.random() * pool.length)];
+                const groupMembers = [...entitiesByKey.values()]
+                    .filter(e => e.groupId === entity.groupId)
+                    .sort((a, b) => (a.groupMemberIndex || 0) - (b.groupMemberIndex || 0));
+                
+                if (groupMembers.length >= scenario.minMembers) {
+                    scenarioOrchestrator.startScenario(entity.groupId, scenario.id, groupMembers, entity.key);
+                    
+                    // Mark entire group as Scenic
+                    for(const m of groupMembers) {
+                      m.groupPhase = 'SCENIC';
+                      m.discoveryCooldown = 60 + Math.random() * 40; // Global cooldown for group
+                    }
+                }
+            }
+        }
+    }
+    
+    if ((entity.discoveryCooldown || 0) > 0) entity.discoveryCooldown -= dt;
     
     // Followers SCALE cohesion and boids weights but still use them for separation/alignment.
     const groupCohesion = groupBehavior.resolveGroupCohesionTarget(entity, entitiesByKey, clamp);
@@ -635,9 +701,14 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
           const ty = entity.centerY + Math.sin(ang) * dist;
           const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
           if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-            entity.targetX = tx;
-            entity.targetY = ty;
-            break;
+            // Avoid choosing a wander target that is itself a cliff edge drop from current pos
+            const config = getPokemonConfig(entity.dexId ?? 1);
+            const isNaturalFlyer = config?.types?.includes('flying');
+            if (isNaturalFlyer || !isCliffDrop(entity.x, entity.y, tx, ty, data)) {
+              entity.targetX = tx;
+              entity.targetY = ty;
+              break;
+            }
           }
         }
       }
@@ -744,6 +815,14 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       );
     } else {
       steerTowardAngle(entity, moveAng, WORLD_MAX_WALK_SPEED_TILES_PER_SEC, data, wildIsAirborne(entity), false);
+    }
+
+    // Leader logic for triggering Scenic Scenarios
+    // End of Scenic phase is handled by scenarioOrchestrator ending, 
+    // which resets aiState. We need to ensure groupPhase resets too.
+    if (!followerTeamMode && entity.groupId && entity.groupPhase === 'SCENIC' && entity.aiState !== 'scenic') {
+        entity.groupPhase = 'ROAM';
+        entity.groupPhaseTimer = groupBehavior.PHASE_ROAM_MIN_SEC + Math.random() * (groupBehavior.PHASE_ROAM_MAX_SEC - groupBehavior.PHASE_ROAM_MIN_SEC);
     }
   }
 

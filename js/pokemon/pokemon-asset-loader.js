@@ -102,19 +102,22 @@ async function probeSpriteCollabTumblePath(dexId) {
   if (tumblePathByDex.has(d)) return tumblePathByDex.get(d) || null;
   const existing = tumbleProbeInflight.get(d);
   if (existing) return existing;
+
   const p = (async () => {
     const candidates = tumbleBaseCandidates();
-    for (const base of candidates) {
-      const src = `${base}/${d4}/Tumble-Anim.png`;
-      if (await probeImageUrl(src)) {
-        tumblePathByDex.set(d, src);
-        tumbleProbeInflight.delete(d);
-        return src;
-      }
-    }
-    tumblePathByDex.set(d, null);
+    // Probe all candidates concurrently to avoid sequential HTTP waits
+    const results = await Promise.all(
+      candidates.map(async (base) => {
+        const src = `${base}/${d4}/Tumble-Anim.png`;
+        const ok = await probeImageUrl(src);
+        return ok ? src : null;
+      })
+    );
+    // Find the first successful source
+    const found = results.find((r) => r !== null) || null;
+    tumblePathByDex.set(d, found);
     tumbleProbeInflight.delete(d);
-    return null;
+    return found;
   })();
   tumbleProbeInflight.set(d, p);
   return p;

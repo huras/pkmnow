@@ -26,6 +26,13 @@ export const WILD_GROUP_COHESION_MIN_DIST = WILD_BOIDS_SEPARATION_RADIUS * 1.1;
 export const WILD_GROUP_COHESION_MAX_DIST = WILD_GROUP_RADIUS * 2.0;
 export const WILD_GROUP_COHESION_BLEND = 0.42;
 
+/* --- Phase Lifecycle Tuning --- */
+export const PHASE_ROAM_MIN_SEC = 45;
+export const PHASE_ROAM_MAX_SEC = 75;
+export const PHASE_EXPLORE_MIN_SEC = 30;
+export const PHASE_EXPLORE_MAX_SEC = 50;
+export const DISCOVERY_CHANCE_TICK = 0.08; // Chance per second during explore phase
+
 /** @param {number} x @param {number} y */
 export function normalizeVec(x, y) {
   const len = Math.hypot(x, y) || 1;
@@ -35,6 +42,12 @@ export function normalizeVec(x, y) {
 export function ensureGroupBehaviorState(entity) {
   if (entity.groupCohesionSec == null) entity.groupCohesionSec = 0;
   if (entity._followerTackleCooldownSec == null) entity._followerTackleCooldownSec = 0;
+  if (entity.groupPhase == null) entity.groupPhase = 'ROAM';
+  if (entity.groupPhaseTimer == null) {
+    entity.groupPhaseTimer = PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
+  }
+  if (entity.discoveryCooldown == null) entity.discoveryCooldown = 10; // Extra buffer before first discovery possible
+  if (entity.scenicCooldown == null) entity.scenicCooldown = 15.0 + Math.random() * 20.0;
 }
 
 /** @param {string | null | undefined} facing */

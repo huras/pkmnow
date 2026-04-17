@@ -154,6 +154,22 @@ export function pivotCellHeightStepDelta(pivotX, pivotY, srcPivotX, srcPivotY, m
   return pt.heightStep - st.heightStep;
 }
 
+/**
+ * True if moving from src to dest involves a drop that lacks a ramp/stair connector.
+ */
+export function isCliffDrop(srcX, srcY, destX, destY, data) {
+  const smx = Math.floor(srcX);
+  const smy = Math.floor(srcY);
+  const dmx = Math.floor(destX);
+  const dmy = Math.floor(destY);
+  if (smx === dmx && smy === dmy) return false;
+  const st = getMicroTile(smx, smy, data);
+  const dt = getMicroTile(dmx, dmy, data);
+  if (!st || !dt) return false;
+  if (dt.heightStep >= st.heightStep) return false; // Not a drop
+  return !okHeightStepTransition(st, dt);
+}
+
 export const WALL_ROLES = new Set([
   'EDGE_S', 'EDGE_W', 'EDGE_E', 
   'IN_NW', 'IN_NE', 'IN_SW', 'IN_SE',
