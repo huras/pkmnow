@@ -2,9 +2,12 @@
  * Web Audio spatialization for short media (cries): horizontal pan + distance via PannerNode,
  * vertical separation reinforced with a gentle low-pass (cheap “height” cue).
  */
+import { isAudioMuted } from './play-audio-mix-settings.js';
 
 /** @type {AudioContext | null} */
 let sharedCtx = null;
+/** @type {GainNode | null} */
+let spatialMasterGain = null;
 
 /** Last listener pose in world space (for vertical filter vs cry source). */
 let lastLx = 0;
@@ -18,8 +21,30 @@ export function getSpatialAudioContext() {
   if (!sharedCtx) {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     sharedCtx = new Ctx();
+    spatialMasterGain = sharedCtx.createGain();
+    spatialMasterGain.connect(sharedCtx.destination);
+    applySpatialAudioMuteFromStorage();
   }
   return sharedCtx;
+}
+
+/**
+ * Applies global mute toggle to the shared spatial graph (SFX/cries).
+ */
+export function applySpatialAudioMuteFromStorage() {
+  const ctx = getSpatialAudioContext();
+  const gainNode = spatialMasterGain || ctx.createGain();
+  if (!spatialMasterGain) {
+    spatialMasterGain = gainNode;
+    gainNode.connect(ctx.destination);
+  }
+  const t = ctx.currentTime;
+  const g = isAudioMuted() ? 0 : 1;
+  try {
+    gainNode.gain.setValueAtTime(g, t);
+  } catch {
+    gainNode.gain.value = g;
+  }
 }
 
 /**
@@ -91,7 +116,7 @@ export function wireSpatialMediaElement(audio) {
 
   source.connect(filter);
   filter.connect(panner);
-  panner.connect(ctx.destination);
+  panner.connect(spatialMasterGain || ctx.destination);
 
   const g = { panner, filter };
   mediaGraphs.set(audio, g);

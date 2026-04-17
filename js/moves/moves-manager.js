@@ -50,6 +50,7 @@ import {
 } from '../wild-pokemon/wild-effective-behavior.js';
 import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
 import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
+import { emitWorldReactionFromProjectile } from '../simulation/world-reactions.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -330,6 +331,13 @@ function isProjectileBlockedByTree(proj, data) {
   const z = Number(proj.z) || 0;
   if (Math.abs(z) > 1.35) return false;
   return formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data) || scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data);
+}
+
+function emitProjectileWorldReactionOnce(proj, data, x, y) {
+  if (!proj || !data) return;
+  if (proj._worldReactionEmitted) return;
+  emitWorldReactionFromProjectile(proj, data, x, y);
+  proj._worldReactionEmitted = true;
 }
 
 /**
@@ -1065,6 +1073,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       }
 
       if (proj.timeToLive <= 0) {
+        emitProjectileWorldReactionOnce(proj, data, (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5);
         activeProjectiles.splice(i, 1);
       }
       continue;
@@ -1078,6 +1087,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
     proj.timeToLive -= dt;
     if (proj.timeToLive <= 0) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       if (proj.type === 'incinerateCore') {
         spawnHitParticles(proj.x, proj.y, 0);
           applySplashToWild(proj, wildList, 0, wildSpatial);
@@ -1168,6 +1178,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     if (!runCollisionChecks) continue;
 
     if (data && isProjectileBlockedByTree(proj, data)) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       const impactZ = Math.max(0, Number(proj.z) || 0);
       spawnHitParticles(proj.x, proj.y, impactZ);
       tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
@@ -1224,6 +1235,9 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       );
     }
 
-    if (hit) activeProjectiles.splice(i, 1);
+    if (hit) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
+      activeProjectiles.splice(i, 1);
+    }
   }
 }

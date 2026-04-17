@@ -1,5 +1,6 @@
 import { entitiesByKey } from './wild-core-state.js';
 import { decaySocialMemory, trackPlayerProximitySignals } from './wild-social-system.js';
+import { updateWorldReactions } from '../simulation/world-reactions.js';
 import {
   advanceWildPokemonAnim,
   integrateWildPokemonVertical,
@@ -57,6 +58,7 @@ export function resetWildUpdateFrameCounter() {
 
 export function updateWildPokemon(dt, data, playerX, playerY) {
   if (!data) return;
+  updateWorldReactions(dt, data, playerX, playerY);
   wildUpdatePerfLast.miscMs = 0;
   wildUpdatePerfLast.verticalMs = 0;
   wildUpdatePerfLast.socialMs = 0;

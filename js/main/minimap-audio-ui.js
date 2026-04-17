@@ -9,6 +9,7 @@ import {
   setBgmTrackChangeToastSuppressed
 } from '../audio/play-audio-mix-settings.js';
 import { getBiomeBgmUiState, applyBgmUserMixFromStorage } from '../audio/biome-bgm.js';
+import { applySpatialAudioMuteFromStorage } from '../audio/spatial-audio.js';
 import { BIOMES } from '../biomes.js';
 
 /** @param {ReturnType<typeof getBiomeBgmUiState>} st */
@@ -85,6 +86,7 @@ export function installMinimapAudioUi() {
     if (mutating) return;
     setAudioMuted(!!muteChk.checked);
     applyBgmUserMixFromStorage();
+    applySpatialAudioMuteFromStorage();
   });
 
   toastSuppressChk?.addEventListener('change', () => {

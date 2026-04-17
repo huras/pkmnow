@@ -30,6 +30,7 @@ import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.
 import * as groupBehavior from './wild-group-behavior.js';
 import { scenarioOrchestrator } from './wild-scenario-orchestrator.js';
 import { WILD_SOCIAL_SCENARIOS } from './wild-scenario-data.js';
+import { sampleWorldDangerEscapeAngle, sampleWorldDangerScore } from '../simulation/world-reactions.js';
 
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
@@ -497,6 +498,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   const distP = Math.hypot(dxP, dyP);
   const groupFollowEarly = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
   const followerTeamMode = !!groupFollowEarly && !groupFollowEarly.isLeader;
+  const envDanger = sampleWorldDangerScore(entity.x, entity.y, data);
+  const envEscapeAng = envDanger > 0.35 ? sampleWorldDangerEscapeAngle(entity.x, entity.y, data) : null;
 
   if (entity.aiState === 'scenic') {
     entity.vx = 0;
@@ -517,16 +520,26 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
 
-  if (distP < effectiveAlertRadius) {
+  const playerThreatInRange = distP < effectiveAlertRadius;
+  const environmentalThreatInRange = !followerTeamMode && envDanger > 0.62;
+
+  if (playerThreatInRange || environmentalThreatInRange) {
     if (followerTeamMode) {
       // Followers stay in team-follow mode and do not run independent player reaction states.
       entity.aiState = 'wander';
       entity.alertTimer = 0;
       entity._neutralPostAlertCooldown = 0;
+    } else if (!playerThreatInRange && environmentalThreatInRange) {
+      entity.aiState = 'flee';
+      const hazardFleeAng = envEscapeAng ?? Math.atan2(dyP, dxP);
+      const hazardFleeSpeed = Math.max(beh.fleeSpeed || 0, WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.92);
+      steerTowardAngle(entity, hazardFleeAng, hazardFleeSpeed, data, wildIsAirborne(entity), true);
+      entity.wanderTimer = 0;
+      entity.idlePauseTimer = 0;
+      entity.targetX = null;
     } else if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
-      const angToPlayer = Math.atan2(dyP, dxP);
-      const fleeAng = angToPlayer;
+      const fleeAng = playerThreatInRange ? Math.atan2(dyP, dxP) : envEscapeAng ?? Math.atan2(dyP, dxP);
       steerTowardAngle(entity, fleeAng, beh.fleeSpeed, data, wildIsAirborne(entity), true);
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
@@ -554,7 +567,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vy = 0;
       }
     }
-  } else if (distP >= effectiveAlertRadius * 1.5 && entity.aiState !== 'sleep') {
+  } else if (distP >= effectiveAlertRadius * 1.5 && envDanger < 0.28 && entity.aiState !== 'sleep') {
     entity.aiState = 'wander';
     entity._neutralPostAlertCooldown = 0;
   }

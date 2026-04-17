@@ -97,6 +97,7 @@ import {
 } from './render/render-world-entities.js';
 import {
   drawWorldColliderOverlay,
+  drawWorldReactionsOverlay,
   drawEnvironmentalEffects,
   drawDigChargeBar
 } from './render/render-debug-world.js';
@@ -666,6 +667,18 @@ export function render(canvas, data, options = {}) {
       showFullColliderOverlay: options.settings?.showPlayColliders || window.debugColliders, 
       detailColliderDbg: options.settings?.detailColliderDbg, 
       data, startX, startY, endX, endY, tileW, tileH, snapPx, imageCache, renderItems, player, isPlayerWalkingAnim, getCached, settings: options.settings 
+    });
+    drawWorldReactionsOverlay(ctx, {
+      showWorldReactionsOverlay:
+        !!options.settings?.showWorldReactionsOverlay || !!window.debugWorldReactionsOverlay,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      cw,
+      ch
     });
     
     drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });

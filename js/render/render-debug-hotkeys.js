@@ -12,3 +12,18 @@ window.addEventListener('keydown', (e) => {
     console.log('[Debug] Colliders:', window.debugColliders);
   }
 });
+
+/** Toggles world reactions overlay (heat/wet/shock/danger). */
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() !== 'v') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  const chk = document.getElementById('chkWorldReactionsOverlay');
+  if (chk) {
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event('change', { bubbles: true }));
+  } else {
+    window.debugWorldReactionsOverlay = !window.debugWorldReactionsOverlay;
+    console.log('[Debug] World reactions overlay:', window.debugWorldReactionsOverlay);
+  }
+});

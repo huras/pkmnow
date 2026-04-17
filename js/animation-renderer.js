@@ -10,14 +10,14 @@ export const AnimationRenderer = {
     cache: new Map(),
 
     // Configurações de balanço (Sutil)
-    // Usamos 3 frames para o balanço clássico sutil
-    WIND_ANGLES: [-0.05, 0, 0.05],
+    // 5 frames deixam o vento mais fluido sem exagerar a rotação.
+    WIND_ANGLES: [-0.06, -0.045, -0.03, 0, 0.03, 0.045, 0.06],
 
     /**
      * Retorna um frame pré-renderizado (Canvas) para o balanço de vento.
      * @param {HTMLImageElement} img O Tileset original
      * @param {number} tileId O ID do tile no tileset
-     * @param {number} frameIndex O índice do frame (0, 1, 2)
+     * @param {number} frameIndex O índice do frame (0 a WIND_ANGLES.length - 1)
      * @param {number} cols Número de colunas no tileset
      */
     getWindFrame(img, tileId, frameIndex, cols) {
@@ -64,9 +64,10 @@ export const AnimationRenderer = {
         const phase = getWindPhaseOffset(mx, my);
         const wave = Math.sin(time * 2.0 + phase);
         
-        // Mapeia Seno (-1 a 1) para índice (0, 1, 2)
-        if (wave < -0.33) return 0; // Esquerda
-        if (wave > 0.33) return 2;  // Direita
-        return 1;                   // Centro
+        const frameCount = this.WIND_ANGLES.length || 1;
+        // Mapeia Seno (-1 a 1) para índice de frame (0 a frameCount - 1)
+        const normalized = (wave + 1) * 0.5;
+        const idx = Math.floor(normalized * frameCount);
+        return Math.max(0, Math.min(frameCount - 1, idx));
     }
 };

@@ -15,7 +15,8 @@ export async function loadTilesetImages() {
     'tilesets/PokemonCenter.png',
     'tilesets/gengar_walk.png',
     'tilesets/gengar_idle.png',
-    'tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png'
+    'tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png',
+    'vfx/ETF_Texture_Glow_01.png'
   ];
 
   const promises = sources.map((src) => {

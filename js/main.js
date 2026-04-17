@@ -123,7 +123,7 @@ const ZOOM_LABELS = { far: '🗺 Far', mid: '🔍 Mid', close: '🔍+ Close' };
 
 function syncMinimapZoomBadge() {
   if (!minimap || !minimapPanel) return;
-  const zoom = minimap.dataset.zoom || 'mid';
+  const zoom = minimap.dataset.zoom || 'close';
   minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
 }
 
@@ -465,6 +465,7 @@ function getSettings() {
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
   const overlayContours = document.getElementById('chkCurvas')?.checked ?? false;
   const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
+  const showWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay')?.checked ?? false;
   const collidersOn = showPlayColliders || window.debugColliders;
   if (appMode === 'play' && currentData && collidersOn) {
     ensurePlayColliderOverlayCache(currentData, player, imageCache, collidersOn);
@@ -479,6 +480,7 @@ function getSettings() {
     overlayGraph,
     overlayContours,
     showPlayColliders,
+    showWorldReactionsOverlay,
     playColliderOverlayCache: collidersOn ? getPlayColliderOverlayCache() : null,
     playDetailColliderHighlight,
     appMode,
@@ -973,6 +975,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   }
   updateView();
 });
+document.getElementById('chkWorldReactionsOverlay')?.addEventListener('change', updateView);
 
 function syncForceLod0FromUi() {
   setPlayForceLod0Always(!!document.getElementById('chkForceLod0')?.checked);

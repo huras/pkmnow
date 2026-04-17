@@ -1,14 +1,26 @@
 import { BIOMES } from '../biomes.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
+import { imageCache } from '../image-cache.js';
+import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
+import {
+  defaultPortraitSlugForBalloon,
+  ensureSpriteCollabPortraitLoaded,
+  getSpriteCollabPortraitImage
+} from '../pokemon/spritecollab-portraits.js';
 
 // ---------------------------------------------------------------------------
 // Zoom level definitions
 // ---------------------------------------------------------------------------
 /** @type {Record<string, number>} half-radius in macro tiles; 0 = show whole map */
+const SAFE_MACRO_STRIDE = Math.max(1, Number(MACRO_TILE_STRIDE) || 1);
+const MICRO_RADIUS = {
+  mid: 320, // Keep a medium tactical view in micro tiles
+  close: Math.round(80 / 1.5) // +50% zoom-in versus previous close level
+};
 const ZOOM_RADIUS = {
   far: 0,   // whole-map overview, no panning
-  mid: 20,  // ~40-tile window centred on player (default)
-  close: 10 // ~20-tile window — fine detail
+  mid: Math.max(2, Math.round(MICRO_RADIUS.mid / SAFE_MACRO_STRIDE)),
+  close: Math.max(1, Math.round(MICRO_RADIUS.close / SAFE_MACRO_STRIDE))
 };
 
 const ZOOM_ORDER = ['far', 'mid', 'close'];
@@ -23,13 +35,15 @@ let baseCacheData = null;
 let baseCacheZoom = '';
 let baseCacheW = 0;
 let baseCacheH = 0;
+/** @type {Set<string>} */
+const minimapPortraitRequests = new Set();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function getZoom(canvas) {
   const z = canvas.dataset.zoom;
-  return ZOOM_RADIUS.hasOwnProperty(z) ? z : 'mid';
+  return ZOOM_RADIUS.hasOwnProperty(z) ? z : 'close';
 }
 
 /**
@@ -194,6 +208,88 @@ function rebuildBase(w, h, data, zoom) {
   return canvas;
 }
 
+/**
+ * Draws wild spawn markers with portrait heads on minimap.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ scale: number, ox: number, oy: number }} tf
+ * @param {{ x: number, y: number }} playerMacro
+ * @param {{ w: number, h: number }} canvasSize
+ */
+function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
+  const markers = [];
+  for (const ent of entitiesByKey.values()) {
+    if (!ent || ent.isDespawning || ent.deadState) continue;
+    if (!Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(ent.dexId)) continue;
+    const mx = ent.x / MACRO_TILE_STRIDE;
+    const my = ent.y / MACRO_TILE_STRIDE;
+    const distSq = (mx - playerMacro.x) ** 2 + (my - playerMacro.y) ** 2;
+    markers.push({ ent, mx, my, distSq });
+  }
+  markers.sort((a, b) => a.distSq - b.distSq);
+  const visibleMax = 24;
+  const markerR = Math.max(4, Math.min(8, tf.scale * 0.52));
+  const screenPad = markerR + 2;
+
+  for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
+    const m = markers[i];
+    const sx = (m.mx - tf.ox + 0.5) * tf.scale;
+    const sy = (m.my - tf.oy + 0.5) * tf.scale;
+    if (sx < -screenPad || sy < -screenPad || sx > canvasSize.w + screenPad || sy > canvasSize.h + screenPad) {
+      continue;
+    }
+
+    const dexId = Math.floor(Number(m.ent.dexId) || 0);
+    const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
+    const img = getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
+    if (!img || !img.naturalWidth) {
+      const reqKey = `${dexId}:${portraitSlug}`;
+      if (!minimapPortraitRequests.has(reqKey)) {
+        minimapPortraitRequests.add(reqKey);
+        ensureSpriteCollabPortraitLoaded(imageCache, dexId, portraitSlug).catch(() => {});
+      }
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sx, sy, markerR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(4, 7, 14, 0.9)';
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.stroke();
+
+    if (img && img.naturalWidth) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sx, sy, markerR - 1.1, 0, Math.PI * 2);
+      ctx.clip();
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const side = (markerR - 1.1) * 2;
+      const scale = Math.max(side / iw, side / ih);
+      const dw = iw * scale;
+      const dh = ih * scale;
+      ctx.drawImage(img, sx - dw * 0.5, sy - dh * 0.46, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = 'rgba(140, 205, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (m.ent.spawnPhase > 0.02) {
+      ctx.globalAlpha = Math.max(0.2, Math.min(0.8, m.ent.spawnPhase));
+      ctx.strokeStyle = 'rgba(115, 231, 255, 0.9)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, markerR + 2.2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API — same signature as before
 // ---------------------------------------------------------------------------
@@ -273,6 +369,13 @@ export function renderMinimap(canvas, data, player) {
 
   // Direction tick (small white line in movement direction — optional, skipped if speed unknown)
   // (kept simple for now — just the dot)
+
+  drawWildSpawnPortraitMarkers(
+    ctx,
+    { scale, ox, oy },
+    { x: playerMacroX, y: playerMacroY },
+    { w, h }
+  );
 
   // --- City labels for mid/close (re-render on top so they survive clipping) ---
   // Already in the base cache; visible automatically once tileW is large enough.
