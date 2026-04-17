@@ -1,5 +1,5 @@
 const LS_BGM = 'pkmn_mix_bgm_01';
-/** Persisted 0–1 mix for minimap “SFX” slider (wild cries + item pickup, etc.). */
+/** Persisted 0–1 mix for minimap “SFX” slider (all spatial short SFX + cries). */
 const LS_CRIES = 'pkmn_mix_cries_01';
 const LS_AUDIO_MUTE = 'pkmn_mix_mute_01';
 const LS_BGM_TRACK_TOAST_SUPPRESS = 'pkmn_bgm_track_toast_suppress';

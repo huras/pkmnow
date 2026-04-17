@@ -80,6 +80,7 @@ export function installMinimapAudioUi() {
   sfxRange.addEventListener('input', () => {
     if (mutating) return;
     setCriesMix01(Number(sfxRange.value) / 100);
+    applySpatialAudioMuteFromStorage();
   });
 
   muteChk?.addEventListener('change', () => {

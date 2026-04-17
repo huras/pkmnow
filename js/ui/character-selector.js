@@ -470,6 +470,17 @@ export class CharacterSelector {
     fill2.style.width = `${Math.round(p2 * 100)}%`;
     fill3.style.width = `${Math.round(p3 * 100)}%`;
     label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
+
+    const FULL = 0.994;
+    const setBarFullGlow = (fill, easedPn) => {
+      const on = shouldShow && easedPn >= FULL;
+      fill.classList.toggle('player-field-charge__fill--full', on);
+      const seg = fill.parentElement;
+      if (seg) seg.classList.toggle('player-field-charge__segment--full', on);
+    };
+    setBarFullGlow(fill1, p1);
+    setBarFullGlow(fill2, p2);
+    setBarFullGlow(fill3, p3);
   }
 
   syncPlayPointerModeRadios() {

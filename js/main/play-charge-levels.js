@@ -14,6 +14,18 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, Number(v) || 0));
 }
 
+/** t in [0,1] — fast start, slow finish (first charge bar). */
+function easeOutCubic(t) {
+  const u = clamp01(t);
+  return 1 - (1 - u) ** 3;
+}
+
+/** t in [0,1] — mild ease-in for bars 2–3 (softer than cubic). */
+function easeInQuad(t) {
+  const u = clamp01(t);
+  return u * u;
+}
+
 /**
  * True when the first bar is full — unlocks the full "charged" variant (e.g. Cut spin, full tackle scaling).
  * @param {number} charge01
@@ -37,30 +49,32 @@ export function getWeakPartialChargeT(charge01, minRelease01 = CHARGE_FIELD_RELE
 }
 
 /**
- * Charge progress for each of the 3 bars, in order.
- * bar 1: [0..1/3], bar 2: (1/3..2/3], bar 3: (2/3..1].
+ * Charge progress for each of the 3 bars, in order (0..1 per bar for HUD / scaling).
+ * `charge01` is still linear in hold time; bar fills use easing: bar 1 ease-out, bars 2–3 ease-in.
  * @param {number} charge01
  * @returns {[number, number, number]}
  */
 export function getChargeBarProgresses(charge01) {
   const p = clamp01(charge01);
-  const p1 = clamp01(p / CHARGE_LEVEL_SEGMENT_SIZE);
-  const p2 = clamp01((p - CHARGE_LEVEL_SEGMENT_SIZE) / CHARGE_LEVEL_SEGMENT_SIZE);
-  const p3 = clamp01((p - CHARGE_LEVEL_SEGMENT_SIZE * 2) / CHARGE_LEVEL_SEGMENT_SIZE);
-  return [p1, p2, p3];
+  const seg = CHARGE_LEVEL_SEGMENT_SIZE;
+  const raw1 = clamp01(p / seg);
+  const raw2 = p <= seg ? 0 : clamp01((p - seg) / seg);
+  const raw3 = p <= seg * 2 ? 0 : clamp01((p - seg * 2) / seg);
+  return [easeOutCubic(raw1), easeInQuad(raw2), easeInQuad(raw3)];
 }
 
 /**
- * Integer level [0..3] based on how many bars have started filling.
+ * Integer level [0..3] from linear `charge01` segment (eased bar fills would delay L2/L3 otherwise).
  * @param {number} charge01
  * @returns {0 | 1 | 2 | 3}
  */
 export function getChargeLevel(charge01) {
-  const [p1, p2, p3] = getChargeBarProgresses(charge01);
-  if (p3 > 0.001) return 3;
-  if (p2 > 0.001) return 2;
-  if (p1 > 0.001) return 1;
-  return 0;
+  const p = clamp01(charge01);
+  const seg = CHARGE_LEVEL_SEGMENT_SIZE;
+  if (p <= 0.0005) return 0;
+  if (p < seg) return 1;
+  if (p < seg * 2) return 2;
+  return 3;
 }
 
 /**

@@ -117,7 +117,6 @@ function drawSnesCloudParallax(ctx, options) {
   const paddedEndY = endY + 24;
   const worldW = Math.max(1, Number(worldCols) || 1);
   const worldH = Math.max(1, Number(worldRows) || 1);
-  // Fixed world-space periodic grid: avoid re-layout pops when zoom/LOD changes.
   const periodX = Math.max(24, Math.min(worldW, CLOUD_PERIOD_X_TILES));
   const periodY = Math.max(18, Math.min(worldH, CLOUD_PERIOD_Y_TILES));
 
@@ -128,7 +127,8 @@ function drawSnesCloudParallax(ctx, options) {
       const driftY = time * c.speedY * 12;
       const baseWorldX = c.seedX * periodX + driftX;
       const baseWorldY = c.seedY * periodY + driftY;
-      const alphaCluster = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * lodMul;
+      const alphaCluster =
+        c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * lodMul;
       const yNudge = isShadow ? shadowOffsetY : 0;
       const xNudge = isShadow ? shadowOffsetX : 0;
       const spritePair = getCloudSpritePairForCluster(i);
@@ -144,7 +144,8 @@ function drawSnesCloudParallax(ctx, options) {
 
       for (let ky = kyMin; ky <= kyMax; ky++) {
         const worldY = baseWorldY + ky * periodY;
-        const yAnchor = worldY * tileH + Math.sin(time * (0.26 + i * 0.03) + c.seedX * 6.2831) * (tileH * 0.6) + cloudScreenYOffset;
+        const yAnchor =
+          worldY * tileH + Math.sin(time * (0.26 + i * 0.03) + c.seedX * 6.2831) * (tileH * 0.6) + cloudScreenYOffset;
         for (let kx = kxMin; kx <= kxMax; kx++) {
           const worldX = baseWorldX + kx * periodX;
           const x = Math.round(worldX * tileW + xNudge);
@@ -153,7 +154,9 @@ function drawSnesCloudParallax(ctx, options) {
           const cloudMaxX = (x + w) / tileW;
           const cloudMinY = y / tileH;
           const cloudMaxY = (y + h) / tileH;
-          if (cloudMaxX < paddedStartX || cloudMinX > paddedEndX || cloudMaxY < paddedStartY || cloudMinY > paddedEndY) continue;
+          if (cloudMaxX < paddedStartX || cloudMinX > paddedEndX || cloudMaxY < paddedStartY || cloudMinY > paddedEndY) {
+            continue;
+          }
           ctx.globalAlpha = Math.max(0, Math.min(1, alphaCluster));
           ctx.drawImage(sprite, x, y, w, h);
         }

@@ -4,8 +4,6 @@ import {
   setSpatialSourceWorldPosition,
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
-import { getEffectiveCriesMix01 } from './play-audio-mix-settings.js';
-
 const ITEM_PICKUP_WAV_URL = new URL('../../audio/sfx/A-Drip.wav', import.meta.url).href;
 
 const POOL_SIZE = 4;
@@ -47,8 +45,7 @@ export function playItemPickupSfx(source) {
   } catch {
     /* ignore */
   }
-  const mix = getEffectiveCriesMix01();
-  a.volume = Math.max(0, Math.min(1, ITEM_PICKUP_VOL * ITEM_PICKUP_LOUD_FILE_TRIM * mix));
+  a.volume = Math.max(0, Math.min(1, ITEM_PICKUP_VOL * ITEM_PICKUP_LOUD_FILE_TRIM));
   a.playbackRate = 1;
 
   void resumeSpatialAudioContext();

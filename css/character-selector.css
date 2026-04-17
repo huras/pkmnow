@@ -497,28 +497,106 @@ body.play-mode-active .character-selector.character-selector--minimal .play-poin
   background: rgba(255, 255, 255, 0.08);
 }
 
+.player-field-charge__segment.player-field-charge__segment--full {
+  overflow: visible;
+  z-index: 2;
+}
+
 .player-field-charge__fill {
   width: 0%;
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(120, 210, 255, 0.95), rgba(255, 239, 155, 0.95));
   box-shadow: 0 0 8px rgba(130, 210, 255, 0.5);
-  transition: width 0.05s linear;
 }
 
+/* Easing matches play-charge-levels.js (bar 1 ease-out, bars 2–3 ease-in). */
 .player-field-charge__fill--1 {
   background: linear-gradient(90deg, rgba(120, 210, 255, 0.95), rgba(160, 230, 255, 0.95));
   box-shadow: 0 0 8px rgba(130, 210, 255, 0.5);
+  transition: width 0.08s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .player-field-charge__fill--2 {
   background: linear-gradient(90deg, rgba(255, 197, 116, 0.96), rgba(255, 225, 146, 0.96));
   box-shadow: 0 0 8px rgba(255, 203, 112, 0.48);
+  transition: width 0.08s cubic-bezier(0.45, 0, 0.75, 1);
 }
 
 .player-field-charge__fill--3 {
   background: linear-gradient(90deg, rgba(255, 116, 116, 0.96), rgba(255, 165, 126, 0.96));
   box-shadow: 0 0 8px rgba(255, 120, 120, 0.5);
+  transition: width 0.08s cubic-bezier(0.45, 0, 0.75, 1);
+}
+
+/* Completed segment: pulse + gleam until charge is released (HUD hidden). */
+@keyframes player-field-charge-shine-1 {
+  0%,
+  100% {
+    filter: brightness(1.06);
+    box-shadow:
+      0 0 6px rgba(160, 230, 255, 0.85),
+      0 0 16px rgba(100, 190, 255, 0.55),
+      0 0 26px rgba(80, 170, 255, 0.35);
+  }
+  50% {
+    filter: brightness(1.28);
+    box-shadow:
+      0 0 10px rgba(220, 248, 255, 0.95),
+      0 0 22px rgba(130, 210, 255, 0.72),
+      0 0 36px rgba(90, 180, 255, 0.45);
+  }
+}
+
+@keyframes player-field-charge-shine-2 {
+  0%,
+  100% {
+    filter: brightness(1.05);
+    box-shadow:
+      0 0 6px rgba(255, 215, 140, 0.82),
+      0 0 14px rgba(255, 180, 90, 0.48);
+  }
+  50% {
+    filter: brightness(1.26);
+    box-shadow:
+      0 0 10px rgba(255, 236, 190, 0.95),
+      0 0 22px rgba(255, 200, 110, 0.62);
+  }
+}
+
+@keyframes player-field-charge-shine-3 {
+  0%,
+  100% {
+    filter: brightness(1.05);
+    box-shadow:
+      0 0 6px rgba(255, 150, 130, 0.82),
+      0 0 14px rgba(255, 100, 100, 0.45);
+  }
+  50% {
+    filter: brightness(1.26);
+    box-shadow:
+      0 0 10px rgba(255, 200, 180, 0.92),
+      0 0 22px rgba(255, 120, 110, 0.58);
+  }
+}
+
+.player-field-charge__fill--1.player-field-charge__fill--full {
+  animation: player-field-charge-shine-1 1.15s ease-in-out infinite;
+}
+
+.player-field-charge__fill--2.player-field-charge__fill--full {
+  animation: player-field-charge-shine-2 1.15s ease-in-out infinite;
+}
+
+.player-field-charge__fill--3.player-field-charge__fill--full {
+  animation: player-field-charge-shine-3 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-field-charge__fill.player-field-charge__fill--full {
+    animation: none;
+    filter: brightness(1.12);
+  }
 }
 
 .player-field-charge__label {

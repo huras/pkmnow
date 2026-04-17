@@ -2,7 +2,7 @@
  * Web Audio spatialization for short media (cries): horizontal pan + distance via PannerNode,
  * vertical separation reinforced with a gentle low-pass (cheap “height” cue).
  */
-import { isAudioMuted } from './play-audio-mix-settings.js';
+import { getEffectiveCriesMix01 } from './play-audio-mix-settings.js';
 
 /** @type {AudioContext | null} */
 let sharedCtx = null;
@@ -29,7 +29,7 @@ export function getSpatialAudioContext() {
 }
 
 /**
- * Applies global mute toggle to the shared spatial graph (SFX/cries).
+ * Applies minimap mute + SFX mix slider to the shared spatial graph (all short spatial SFX + cries).
  */
 export function applySpatialAudioMuteFromStorage() {
   const ctx = getSpatialAudioContext();
@@ -39,7 +39,7 @@ export function applySpatialAudioMuteFromStorage() {
     gainNode.connect(ctx.destination);
   }
   const t = ctx.currentTime;
-  const g = isAudioMuted() ? 0 : 1;
+  const g = getEffectiveCriesMix01();
   try {
     gainNode.gain.setValueAtTime(g, t);
   } catch {
