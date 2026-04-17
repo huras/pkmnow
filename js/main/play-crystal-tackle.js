@@ -72,6 +72,10 @@ const harvestedBurnedFormalTreeRoots = new Set();
 const scatterTreeBurnMeterByOrigin = new Map();
 /** @type {Map<string, number>} key `ox,oy` -> burning visuals end (sec) before charred stump appears */
 const burningScatterTreeEndsAtSecByOrigin = new Map();
+/** Formal tree root `rootX,my` -> fade-in start (sec) after regen; chunk base omitted until fade ends. */
+const formalTreeRegrowFadeStartSecByRoot = new Map();
+/** Scatter tree origin `ox,oy` -> fade-in start + footprint (invalidate after fade). */
+const scatterTreeRegrowFadeByOrigin = new Map();
 /** Scatter tree roots burned to charcoal stumps (still present until regen or harvested). */
 const burnedScatterTreeOrigins = new Set();
 /** Burned scatter stump already tackled and converted into charcoal pickup. */
@@ -93,6 +97,8 @@ let detailBreakSweepIter = null;
 let detailBreakSweepCooldownSec = 0;
 const DETAIL_REGEN_AFTER_BREAK_SEC = 80;
 const FORMAL_TREE_REGEN_AFTER_BREAK_SEC = 80;
+/** Formal + scatter tree trunk/canopy and grass regrow use the same short alpha ramp (cheap quad easing in callers). */
+export const VEG_REGROW_FADE_IN_SEC = 0.48;
 const FORMAL_TREE_BURN_METER_MAX = 100;
 const FORMAL_TREE_BURN_METER_DECAY_PER_SEC = 4.5;
 const FORMAL_TREE_BURN_GROUND_Z_MAX = 0.55;
@@ -182,6 +188,32 @@ export function isPlayFormalTreeRootDestroyed(rootX, my) {
   return destroyedFormalTreeRoots.has(`${rootX},${my}`);
 }
 
+/**
+ * Multiplies formal tree draw alpha during post-regen fade-in (1 when inactive).
+ * @param {number} rootX
+ * @param {number} my
+ * @param {number} [nowSec]
+ */
+export function getFormalTreeRegrowVisualAlpha01(rootX, my, nowSec = performance.now() * 0.001) {
+  const start = formalTreeRegrowFadeStartSecByRoot.get(`${rootX},${my}`);
+  if (start == null || !Number.isFinite(start)) return 1;
+  const u = Math.max(0, Math.min(1, (nowSec - start) / VEG_REGROW_FADE_IN_SEC));
+  return u * u;
+}
+
+/**
+ * Multiplies scatter tree draw alpha during post-regen fade-in (1 when inactive).
+ * @param {number} ox
+ * @param {number} oy
+ * @param {number} [nowSec]
+ */
+export function getScatterTreeRegrowVisualAlpha01(ox, oy, nowSec = performance.now() * 0.001) {
+  const rec = scatterTreeRegrowFadeByOrigin.get(`${ox},${oy}`);
+  if (!rec || !Number.isFinite(rec.startSec)) return 1;
+  const u = Math.max(0, Math.min(1, (nowSec - rec.startSec) / VEG_REGROW_FADE_IN_SEC));
+  return u * u;
+}
+
 export function isPlayFormalTreeRootCharred(rootX, my) {
   const key = `${rootX},${my}`;
   return destroyedFormalTreeCauseByRoot.get(key) === 'burned' && !harvestedBurnedFormalTreeRoots.has(key);
@@ -231,6 +263,8 @@ export function clearPlayCrystalTackleState() {
   burningScatterTreeEndsAtSecByOrigin.clear();
   burnedScatterTreeOrigins.clear();
   harvestedBurnedScatterTreeOrigins.clear();
+  formalTreeRegrowFadeStartSecByRoot.clear();
+  scatterTreeRegrowFadeByOrigin.clear();
   detailBreakStateByOrigin.clear();
   detailBreakSweepIter = null;
   detailBreakSweepCooldownSec = 0;
@@ -865,7 +899,17 @@ function sweepDetailBreakState(data, nowSec) {
       if (nowSec >= st.regenAtSec) {
         setScatterItemKeyOverride(st.ox, st.oy, null);
         unregisterDestroyedDetailOrigin(st.ox, st.oy);
-        invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        if (scatterItemKeyIsTree(st.itemKey)) {
+          scatterTreeRegrowFadeByOrigin.set(key, {
+            startSec: nowSec,
+            ox: st.ox,
+            oy: st.oy,
+            cols: st.cols,
+            rows: st.rows
+          });
+        } else {
+          invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        }
         detailBreakStateByOrigin.delete(key);
         burnedScatterTreeOrigins.delete(key);
         harvestedBurnedScatterTreeOrigins.delete(key);
@@ -1429,10 +1473,25 @@ export function updateBreakableDetailRegeneration(dt, data) {
       burningFormalTreeEndsAtSecByRoot.delete(key);
       harvestedBurnedFormalTreeRoots.delete(key);
       if (Number.isFinite(rootX) && Number.isFinite(my)) {
-        queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-        queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+        formalTreeRegrowFadeStartSecByRoot.set(key, nowSec);
       }
     }
+  }
+  for (const [key, startSec] of [...formalTreeRegrowFadeStartSecByRoot.entries()]) {
+    if (!Number.isFinite(startSec) || nowSec < startSec + VEG_REGROW_FADE_IN_SEC) continue;
+    formalTreeRegrowFadeStartSecByRoot.delete(key);
+    const [sx, sy] = key.split(',');
+    const rootX = Number(sx);
+    const my = Number(sy);
+    if (Number.isFinite(rootX) && Number.isFinite(my)) {
+      queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+      queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+    }
+  }
+  for (const [key, rec] of [...scatterTreeRegrowFadeByOrigin.entries()]) {
+    if (!rec || !Number.isFinite(rec.startSec) || nowSec < rec.startSec + VEG_REGROW_FADE_IN_SEC) continue;
+    scatterTreeRegrowFadeByOrigin.delete(key);
+    invalidateChunksOverlappingFootprint(rec.ox, rec.oy, rec.cols, rec.rows);
   }
   endChunkRebakeBatch();
 }

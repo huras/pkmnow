@@ -638,9 +638,15 @@ export function render(canvas, data, options = {}) {
         drawWildEmotionOverlay(ctx, item, spawnYOffset, imageCache, tileW, tileH, snapPx);
         ctx.restore();
       } else if (item.type === 'scatter') {
-        ctx.save(); drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached }); ctx.restore();
+        ctx.save();
+        ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached });
+        ctx.restore();
       } else if (item.type === 'tree') {
-        ctx.save(); drawTree(ctx, item, { tileW, tileH, snapPx, time, canopyAnimTime, natureImg, imageCache }); ctx.restore();
+        ctx.save();
+        ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        drawTree(ctx, item, { tileW, tileH, snapPx, time, canopyAnimTime, natureImg, imageCache });
+        ctx.restore();
       } else if (item.type === 'building') {
         ctx.save(); drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
       } else if (item.type === 'crystalDrop') {

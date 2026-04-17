@@ -10,7 +10,7 @@ import {
   scatterHasWindSway
 } from '../biome-tiles.js';
 import { MACRO_TILE_STRIDE, foliageDensity, foliageType } from '../chunking.js';
-import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
+import { validScatterOriginMicro, scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { getWildPokemonEntities } from '../wild-pokemon/index.js';
 import { activeProjectiles, activeParticles } from '../moves/moves-manager.js';
 import {
@@ -25,6 +25,8 @@ import {
   isPlayDetailScatterOriginDestroyed,
   isPlayFormalTreeRootCharred,
   isPlayFormalTreeRootDestroyed,
+  getFormalTreeRegrowVisualAlpha01,
+  getScatterTreeRegrowVisualAlpha01,
   appendTreeTopFallRenderItems
 } from '../main/play-crystal-tackle.js';
 import {
@@ -409,7 +411,8 @@ export function collectRenderItems(options) {
             biomeId: t.biomeId,
             isDestroyed: isPlayFormalTreeRootDestroyed(mxScan, myScan),
             isCharred: isPlayFormalTreeRootCharred(mxScan, myScan),
-            isBurning: isPlayFormalTreeRootBurning(mxScan, myScan)
+            isBurning: isPlayFormalTreeRootBurning(mxScan, myScan),
+            regrowFade01: getFormalTreeRegrowVisualAlpha01(mxScan, myScan)
           });
         }
       }
@@ -439,7 +442,10 @@ export function collectRenderItems(options) {
               isSortable: true,
               isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
               isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
-              windSway: scatterHasWindSway(sItem)
+              windSway: scatterHasWindSway(sItem),
+              regrowFade01: scatterItemKeyIsTree(sItem)
+                ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
+                : 1
             });
           }
         }

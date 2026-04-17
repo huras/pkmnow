@@ -5,10 +5,13 @@ import { playChunkMap } from './render/play-chunk-cache.js';
 const CUT_GRASS_REGROW_SEC = 12;
 /** Seconds: animated grass alpha 1 → 0 after Cut (then stays off until regrow). */
 const CUT_GRASS_FADE_OUT_SEC = 0.48;
+/** Seconds: alpha 0 → 1 after regrow timer (matches tree regrow fade). */
+const CUT_GRASS_FADE_IN_SEC = 0.48;
 /** Below this fade factor, treat tile as cut for rustle / foot grass checks. */
 const CUT_GRASS_FADE_GONE_EPS = 0.04;
 
 const CUT_GRASS_FADE_MS = CUT_GRASS_FADE_OUT_SEC * 1000;
+const CUT_GRASS_FADE_IN_MS = CUT_GRASS_FADE_IN_SEC * 1000;
 
 /** @type {Map<string, { cutAtMs: number, regrowAtMs: number }>} */
 const cutTileStates = new Map();
@@ -22,14 +25,18 @@ function tileHasPendingGrassCut(mx, my, nowMs) {
   const rec = cutTileStates.get(tileKey(mx, my));
   if (!rec) return false;
   const reg = typeof rec === 'number' ? rec : rec.regrowAtMs;
-  return Number.isFinite(reg) && reg > nowMs;
+  return Number.isFinite(reg) && fadeInEndMs(reg) > nowMs;
+}
+
+function fadeInEndMs(regrowAtMs) {
+  return regrowAtMs + CUT_GRASS_FADE_IN_MS;
 }
 
 function cleanupExpired(nowMs) {
   if (cutTileStates.size === 0) return;
   for (const [k, rec] of cutTileStates.entries()) {
     const reg = typeof rec === 'number' ? rec : rec?.regrowAtMs;
-    if (!Number.isFinite(reg) || reg <= nowMs) {
+    if (!Number.isFinite(reg) || fadeInEndMs(reg) <= nowMs) {
       cutTileStates.delete(k);
     }
   }
@@ -48,9 +55,19 @@ export function getGrassCutFadeoutAlpha01(mx, my, nowMs = performance.now()) {
   if (!rec) return 1;
   const regrowAtMs = typeof rec === 'number' ? rec : rec.regrowAtMs;
   const cutAtMs = typeof rec === 'number' ? regrowAtMs - CUT_GRASS_REGROW_SEC * 1000 : rec.cutAtMs;
-  if (!Number.isFinite(regrowAtMs) || regrowAtMs <= nowMs) {
+  if (!Number.isFinite(regrowAtMs)) {
     cutTileStates.delete(k);
     return 1;
+  }
+  const inEnd = fadeInEndMs(regrowAtMs);
+  if (nowMs >= inEnd) {
+    cutTileStates.delete(k);
+    return 1;
+  }
+  if (nowMs >= regrowAtMs) {
+    const u = Math.max(0, Math.min(1, (nowMs - regrowAtMs) / CUT_GRASS_FADE_IN_MS));
+    // Ease-in (cheap quad): 0 → 1
+    return u * u;
   }
   const elapsed = nowMs - cutAtMs;
   if (elapsed >= CUT_GRASS_FADE_MS) return 0;

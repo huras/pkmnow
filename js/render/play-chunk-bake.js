@@ -20,7 +20,11 @@ import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
 import { PLAY_CHUNK_SIZE, VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
-import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from '../main/play-crystal-tackle.js';
+import {
+  isPlayDetailScatterOriginDestroyed,
+  isPlayFormalTreeRootDestroyed,
+  getFormalTreeRegrowVisualAlpha01
+} from '../main/play-crystal-tackle.js';
 import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 
 const BIOME_COLOR_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
@@ -440,6 +444,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       // 1. Formal Trees (2x1)
       if (isFormalRoot(mxScan, myScan)) {
         if (isPlayFormalTreeRootDestroyed(mxScan, myScan)) continue;
+        if (getFormalTreeRegrowVisualAlpha01(mxScan, myScan) < 0.999) continue;
         // STRICT HEIGHT CHECK: Formal trees only start on flat ground
         const setRoot = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
         const roleOrig = setRoot ? getRoleAtOrAboveHeight(mxScan, myScan, tile.heightStep, setRoot.type) : 'CENTER';
