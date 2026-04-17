@@ -897,6 +897,47 @@ button.btn-secondary:hover {
   margin-bottom: 0;
 }
 
+.play-help-wiki__h3 {
+  margin: 18px 0 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffe4a1;
+}
+
+.play-help-wiki__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+}
+
+.play-help-wiki__table th,
+.play-help-wiki__table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.play-help-wiki__table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff4c8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.play-help-wiki__table td kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #fffbe6;
+}
+
 body.play-help-wiki-open {
   overflow: hidden;
 }

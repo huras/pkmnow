@@ -120,22 +120,27 @@ export function grassFireTryExtinguishAt(worldX, worldY, projZ, projType, data) 
  * @param {object | null} _data unused; reserved for future biome rules
  */
 export function updateGrassFire(dt, _data, _playerX, _playerY) {
+  const now = performance.now();
+  const isRaining = isRainExtinguishing();
+
+  // Rain snuffing runs every frame so dousing feels responsive (not gated by the 120ms throttle).
+  if (isRaining && tileStates.size > 0) {
+    const graceMs = FIRE_RAIN_EXTINGUISH_GRACE_SEC * 1000;
+    for (const [k, st] of tileStates) {
+      if (st.phase !== 'burning') continue;
+      if (now - st.startedAtMs < graceMs) continue;
+      tileStates.set(k, { phase: 'charred', startedAtMs: now });
+    }
+  }
+
   throttleAccSec += dt;
   if (throttleAccSec < UPDATE_INTERVAL_SEC) return;
   throttleAccSec = 0;
 
-  const now = performance.now();
   const charredTotalSec = GRASS_FIRE_CHARRED_SOLID_SEC + GRASS_FIRE_REGROW_BLEND_SEC;
-  const graceMs = FIRE_RAIN_EXTINGUISH_GRACE_SEC * 1000;
-  const isRaining = isRainExtinguishing();
   const entries = [...tileStates.entries()];
   for (const [k, st] of entries) {
     if (st.phase === 'burning') {
-      // Rain snuffs fires older than the grace period by fast-forwarding to charred.
-      if (isRaining && now - st.startedAtMs >= graceMs) {
-        tileStates.set(k, { phase: 'charred', startedAtMs: now });
-        continue;
-      }
       if (now < st.phaseEndAt) continue;
       tileStates.set(k, { phase: 'charred', startedAtMs: now });
       continue;
