@@ -3,6 +3,14 @@ import { parseShape } from '../tessellation-logic.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
+import { playRockSmashingCarryDropSfx } from '../audio/rock-smashing-sfx.js';
+import { playGrabbingSfx } from '../audio/grabbing-sfx.js';
+import {
+  findCarryableFaintedWildNear,
+  getWildPokemonEntityByKey,
+  detachFaintedWildEntityByKey,
+  restoreCarriedFaintedWildNear
+} from '../wild-pokemon/index.js';
 import {
   isPlayScatterTreeOriginBurning,
   isPlayScatterTreeOriginCharred,
@@ -69,6 +77,35 @@ export function strengthCarryBlocksWalk(player) {
   return c.weightTier > maxWalkableCarryTierForDex(dex);
 }
 
+/**
+ * Carry mobility tier for HUD/gameplay feedback.
+ * - blocked: cannot move while carrying this weight
+ * - heavy: movement still allowed but slowed
+ */
+export function getStrengthCarryMobilityInfo(player) {
+  const c = player?._strengthCarry;
+  if (!c) return null;
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  const maxTier = maxWalkableCarryTierForDex(dex);
+  if (c.weightTier > maxTier) {
+    return { kind: 'blocked', message: 'Too heavy...' };
+  }
+  if (c.weightTier >= maxTier && c.weightTier >= 2) {
+    return { kind: 'heavy', message: "It's heavy..." };
+  }
+  return null;
+}
+
+/**
+ * Multiplicative speed cap while carrying.
+ */
+export function getStrengthCarryMoveSpeedMultiplier(player) {
+  const m = getStrengthCarryMobilityInfo(player);
+  if (!m) return 1;
+  if (m.kind === 'blocked') return 0;
+  return 0.78;
+}
+
 function findBestStrengthGrabOrigin(player, data, requireLiftable = true) {
   if (!player || !data) return null;
   const px = Number(player.x) || 0;
@@ -84,7 +121,8 @@ function findBestStrengthGrabOrigin(player, data, requireLiftable = true) {
   const originMemo = new Map();
   let bestOx = null;
   let bestOy = null;
-  let bestScore = -Infinity;
+  let bestDist2 = Infinity;
+  let bestToward = -Infinity;
   for (let oy = iy - R; oy <= iy + R; oy++) {
     for (let ox = ix - R; ox <= ix + R; ox++) {
       if (isPlayScatterTreeOriginCharred(ox, oy) || isPlayScatterTreeOriginBurning(ox, oy)) continue;
@@ -98,25 +136,88 @@ function findBestStrengthGrabOrigin(player, data, requireLiftable = true) {
       const dist2 = ddx * ddx + ddy * ddy;
       if (dist2 > 2.85 * 2.85) continue;
       const toward = ddx * fx + ddy * fy;
-      const score = toward - dist2 * 0.045;
-      if (score > bestScore) {
-        bestScore = score;
+      if (dist2 < bestDist2 - 1e-6 || (Math.abs(dist2 - bestDist2) <= 1e-6 && toward > bestToward)) {
+        bestDist2 = dist2;
+        bestToward = toward;
         bestOx = ox;
         bestOy = oy;
       }
     }
   }
   if (bestOx == null || bestOy == null) return null;
-  return { ox: bestOx, oy: bestOy };
+  return { ox: bestOx, oy: bestOy, dist2: bestDist2 };
+}
+
+function findNearestStrengthGrabCandidate(player, data, requireLiftable = true) {
+  if (!player || !data) return null;
+  const px = Number(player.x) || 0;
+  const py = Number(player.y) || 0;
+  const nx = Number(player.tackleDirNx) || 0;
+  const ny = Number(player.tackleDirNy) || 1;
+  const rock = findBestStrengthGrabOrigin(player, data, requireLiftable);
+  let rockDist2 = Infinity;
+  if (rock) {
+    rockDist2 = Number(rock.dist2);
+    if (!Number.isFinite(rockDist2)) {
+      const p = scatterPhysicsCircleAtOrigin(rock.ox, rock.oy, data);
+      if (p) {
+        const dx = (Number(p.cx) || 0) - (px + 0.5);
+        const dy = (Number(p.cy) || 0) - (py + 0.5);
+        rockDist2 = dx * dx + dy * dy;
+      }
+    }
+  }
+  const fainted = findCarryableFaintedWildNear(px + 0.5, py + 0.5, nx, ny, 2.95);
+  let faintedDist2 = Infinity;
+  if (fainted) {
+    const dx = (Number(fainted.x) || 0) - (px + 0.5);
+    const dy = (Number(fainted.y) || 0) - (py + 0.5);
+    faintedDist2 = dx * dx + dy * dy;
+  }
+  if (rockDist2 <= faintedDist2) {
+    return rock ? { kind: 'rock', rock } : (fainted ? { kind: 'faintedWild', fainted } : null);
+  }
+  return fainted ? { kind: 'faintedWild', fainted } : (rock ? { kind: 'rock', rock } : null);
 }
 
 function tryStrengthGrab(player, data, nowSec) {
-  const cand = findBestStrengthGrabOrigin(player, data, true);
-  if (!cand) {
+  const nearest = findNearestStrengthGrabCandidate(player, data, true);
+  if (!nearest) {
     const blocked = findBestStrengthGrabOrigin(player, data, false);
     if (blocked) showBreakableDetailHpAtOrigin(blocked.ox, blocked.oy, data);
     return false;
   }
+  if (nearest.kind === 'faintedWild') {
+    const fainted = nearest.fainted;
+      const dex = Math.floor(Number(player?.dexId) || 0);
+      const targetDex = Math.floor(Number(fainted.dexId) || 1);
+      const targetCfg = getPokemonConfig(targetDex);
+      const rows = Math.max(1, Math.round((Number(targetCfg?.heightTiles) || 1.1) / 1.8));
+      const cols = 1;
+      const weightTier = Math.max(1, Math.min(3, rows));
+      const durationSec = computeStrengthGrabDurationSec(dex, 3 + rows, weightTier);
+      player._strengthGrabAction = {
+        kind: 'faintedWild',
+        wildKey: String(fainted.key || ''),
+        wildDexId: targetDex,
+        displayName: `Fainted ${String(targetCfg?.name || `#${targetDex}`)}`,
+        ox: Math.floor(Number(fainted.x) || 0),
+        oy: Math.floor(Number(fainted.y) || 0),
+        itemKey: '',
+        cols,
+        rows,
+        weightTier,
+        durationSec,
+        elapsedSec: 0,
+        startX: Number(player.x) || 0,
+        startY: Number(player.y) || 0,
+        originCx: Number(fainted.x) || 0,
+        originCy: Number(fainted.y) || 0,
+        startedAtSec: nowSec
+      };
+      return true;
+  }
+  const cand = nearest.rock;
   const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
   if (!p) return false;
   const itemKey = String(p.itemKey);
@@ -146,6 +247,27 @@ function tryStrengthGrab(player, data, nowSec) {
 
 function finalizeStrengthGrab(player, data, nowSec, action) {
   if (!action || !data) return false;
+  if (action.kind === 'faintedWild') {
+    const detached = detachFaintedWildEntityByKey(action.wildKey);
+    if (!detached) return false;
+    player._strengthCarry = {
+      kind: 'faintedWild',
+      wildEntity: detached,
+      wildDexId: Math.floor(Number(detached.dexId) || Math.floor(Number(action.wildDexId) || 1)),
+      displayName: String(action.displayName || `Fainted #${Math.floor(Number(action.wildDexId) || 1)}`),
+      liftOx: Math.floor(Number(detached.x) || 0),
+      liftOy: Math.floor(Number(detached.y) || 0),
+      itemKey: '',
+      cols: 1,
+      rows: Math.max(1, Math.floor(Number(action.rows) || 1)),
+      weightTier: Math.max(1, Math.floor(Number(action.weightTier) || 1)),
+      hitsRemaining: 1,
+      hitsMax: 1
+    };
+    player._strengthCarryHitStreak = 0;
+    playGrabbingSfx(player);
+    return true;
+  }
   const liftState = tryStrengthLiftSolidScatterAt(action.ox, action.oy, data, nowSec);
   if (!liftState) return false;
   player._strengthCarry = {
@@ -159,12 +281,39 @@ function finalizeStrengthGrab(player, data, nowSec, action) {
     hitsMax: Math.max(1, Math.floor(Number(liftState.hitsMax) || 1))
   };
   player._strengthCarryHitStreak = 0;
+  playGrabbingSfx(player);
   return true;
 }
 
 function tryStrengthPlaceOrDrop(player, data, nowSec, charged) {
   const carry = player._strengthCarry;
   if (!carry) return false;
+  if (carry.kind === 'faintedWild') {
+    const nx = Number(player.tackleDirNx) || 0;
+    const ny = Number(player.tackleDirNy) || 1;
+    const nLen = Math.hypot(nx, ny);
+    const fx = nLen > 1e-4 ? nx / nLen : 0;
+    const fy = nLen > 1e-4 ? ny / nLen : 1;
+    const px = Number(player.x) || 0;
+    const py = Number(player.y) || 0;
+    const mul = charged ? 1.45 : 1;
+    const dists = [1.05 * mul, 1.55 * mul, 2.05 * mul, 2.55 * mul];
+    for (const d of dists) {
+      const tx = px + fx * d;
+      const ty = py + fy * d;
+      if (restoreCarriedFaintedWildNear(carry.wildEntity, tx, ty, data, 10)) {
+        player._strengthCarry = null;
+        player._strengthCarryHitStreak = 0;
+        return true;
+      }
+    }
+    if (restoreCarriedFaintedWildNear(carry.wildEntity, px + 0.5, py + 0.5, data, 16)) {
+      player._strengthCarry = null;
+      player._strengthCarryHitStreak = 0;
+      return true;
+    }
+    return false;
+  }
   const nx = Number(player.tackleDirNx) || 0;
   const ny = Number(player.tackleDirNy) || 1;
   const nLen = Math.hypot(nx, ny);
@@ -284,11 +433,21 @@ export function updateStrengthCarryInteraction(dt, player, data) {
     return;
   }
   const p = scatterPhysicsCircleAtOrigin(action.ox, action.oy, data);
-  if (!p || String(p.itemKey) !== String(action.itemKey)) {
+  if (action.kind === 'faintedWild') {
+    const k = String(action.wildKey || '');
+    const e = getWildPokemonEntityByKey(k);
+    const stillThere = !!(e && e.deadState && (e.spawnPhase ?? 1) >= 0.5);
+    if (!stillThere) {
+      player._strengthGrabAction = null;
+      return;
+    }
+    action.originCx = Number(e.x) || action.originCx;
+    action.originCy = Number(e.y) || action.originCy;
+  } else if (!p || String(p.itemKey) !== String(action.itemKey)) {
     player._strengthGrabAction = null;
     return;
   }
-  if (!isScatterDetailLiftableRockAt(action.ox, action.oy, action.itemKey)) {
+  if (action.kind !== 'faintedWild' && !isScatterDetailLiftableRockAt(action.ox, action.oy, action.itemKey)) {
     showBreakableDetailHpAtOrigin(action.ox, action.oy, data);
     player._strengthGrabAction = null;
     return;
@@ -307,13 +466,24 @@ export function updateStrengthCarryInteraction(dt, player, data) {
 export function getStrengthGrabPromptInfo(player, data) {
   if (!player || !data) return null;
   if (player._strengthCarry || player._strengthGrabAction) return null;
-  const cand = findBestStrengthGrabOrigin(player, data, true);
-  if (!cand) return null;
-  const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
-  if (!p) return null;
-  const itemKey = String(p.itemKey || '');
-  if (!itemKey) return null;
-  return { itemKey };
+  const nearest = findNearestStrengthGrabCandidate(player, data, true);
+  if (!nearest) return null;
+  if (nearest.kind === 'rock') {
+    const cand = nearest.rock;
+    const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
+    if (p) {
+      const itemKey = String(p.itemKey || '');
+      if (itemKey) return { itemKey, displayName: null };
+    }
+    return null;
+  }
+  const fainted = nearest.fainted;
+  const dex = Math.floor(Number(fainted.dexId) || 1);
+  const cfg = getPokemonConfig(dex);
+  return {
+    itemKey: '',
+    displayName: `Fainted ${String(cfg?.name || `#${dex}`)}`
+  };
 }
 
 /**
@@ -336,22 +506,9 @@ export function onStrengthCarrierDamaged(player, data) {
   const nowSec = performance.now() * 0.001;
   const px = (Number(player.x) || 0) + 0.5;
   const py = (Number(player.y) || 0) + 0.5;
-  let placed = strengthRelocateCarriedDetailNear(
-    carry.liftOx,
-    carry.liftOy,
-    px,
-    py,
-    carry.itemKey,
-    carry.cols,
-    carry.rows,
-    data,
-    nowSec,
-    12,
-    carry.hitsRemaining,
-    carry.hitsMax
-  );
-  if (!placed) {
-    placed = strengthRelocateCarriedDetailNear(
+  let placed = carry.kind === 'faintedWild'
+    ? restoreCarriedFaintedWildNear(carry.wildEntity, px, py, data, 12)
+    : strengthRelocateCarriedDetailNear(
       carry.liftOx,
       carry.liftOy,
       px,
@@ -361,28 +518,50 @@ export function onStrengthCarrierDamaged(player, data) {
       carry.rows,
       data,
       nowSec,
-      28,
+      12,
       carry.hitsRemaining,
       carry.hitsMax
     );
+  if (!placed) {
+    placed = carry.kind === 'faintedWild'
+      ? restoreCarriedFaintedWildNear(carry.wildEntity, px, py, data, 28)
+      : strengthRelocateCarriedDetailNear(
+        carry.liftOx,
+        carry.liftOy,
+        px,
+        py,
+        carry.itemKey,
+        carry.cols,
+        carry.rows,
+        data,
+        nowSec,
+        28,
+        carry.hitsRemaining,
+        carry.hitsMax
+      );
   }
   if (!placed) {
-    strengthRelocateCarriedDetailNear(
-      carry.liftOx,
-      carry.liftOy,
-      px,
-      py,
-      carry.itemKey,
-      carry.cols,
-      carry.rows,
-      data,
-      nowSec,
-      52,
-      carry.hitsRemaining,
-      carry.hitsMax
-    );
+    if (carry.kind === 'faintedWild') {
+      restoreCarriedFaintedWildNear(carry.wildEntity, px, py, data, 52);
+    } else {
+      strengthRelocateCarriedDetailNear(
+        carry.liftOx,
+        carry.liftOy,
+        px,
+        py,
+        carry.itemKey,
+        carry.cols,
+        carry.rows,
+        data,
+        nowSec,
+        52,
+        carry.hitsRemaining,
+        carry.hitsMax
+      );
+    }
   }
   player._strengthCarry = null;
   player._strengthCarryHitStreak = 0;
+  playRockSmashingCarryDropSfx({ x: px, y: py, z: 0 });
   return 7;
 }

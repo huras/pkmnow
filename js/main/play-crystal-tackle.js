@@ -4,7 +4,6 @@ import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape, seededHash } from '../tessellation-logic.js';
-import { TessellationEngine } from '../tessellation-engine.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
@@ -16,12 +15,45 @@ import {
   SCATTER_ITEM_KEY_OVERRIDE_EMPTY
 } from './scatter-item-override.js';
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
-import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
+import { isRainExtinguishing, FIRE_RAIN_EXTINGUISH_GRACE_SEC } from './weather-state.js';
+import {
+  pushVegetationDissolveFromSt,
+  pushFormalTreeTopFall,
+  pruneTreeTopFalls,
+  clearTreeTopFallState
+} from './play-tree-top-fall.js';
+import {
+  activeCrystalShards,
+  activeSpawnedSmallCrystals,
+  activeCrystalDrops,
+  clearCrystalDropPickupState,
+  isCrystalItemKey,
+  countSpritesInObjectSet,
+  spawnPickableCrystalDropAt,
+  spawnCrystalShards,
+  spawnSmallCrystalChunksFromLarge,
+  updateCrystalShardParticles,
+  updateCrystalDropsAndPickup,
+  getCrystalLootCount,
+  getCollectedDetailInventorySnapshot
+} from './play-crystal-drops.js';
+export {
+  activeCrystalShards,
+  activeSpawnedSmallCrystals,
+  activeCrystalDrops,
+  updateCrystalShardParticles,
+  updateCrystalDropsAndPickup,
+  spawnPickableCrystalDropAt,
+  getCrystalLootCount,
+  getCollectedDetailInventorySnapshot
+} from './play-crystal-drops.js';
+export { appendTreeTopFallRenderItems } from './play-tree-top-fall.js';
 import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';
 import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
 import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
-import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
+import { playRockSmashingSfx, playRockSmashingBreakSfx } from '../audio/rock-smashing-sfx.js';
+import { getChargeLevel } from './play-charge-levels.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -41,6 +73,10 @@ const harvestedBurnedFormalTreeRoots = new Set();
 const scatterTreeBurnMeterByOrigin = new Map();
 /** @type {Map<string, number>} key `ox,oy` -> burning visuals end (sec) before charred stump appears */
 const burningScatterTreeEndsAtSecByOrigin = new Map();
+/** Formal tree root `rootX,my` -> fade-in start (sec) after regen; chunk base omitted until fade ends. */
+const formalTreeRegrowFadeStartSecByRoot = new Map();
+/** Scatter tree origin `ox,oy` -> fade-in start + footprint (invalidate after fade). */
+const scatterTreeRegrowFadeByOrigin = new Map();
 /** Scatter tree roots burned to charcoal stumps (still present until regen or harvested). */
 const burnedScatterTreeOrigins = new Set();
 /** Burned scatter stump already tackled and converted into charcoal pickup. */
@@ -62,6 +98,8 @@ let detailBreakSweepIter = null;
 let detailBreakSweepCooldownSec = 0;
 const DETAIL_REGEN_AFTER_BREAK_SEC = 80;
 const FORMAL_TREE_REGEN_AFTER_BREAK_SEC = 80;
+/** Formal + scatter tree trunk/canopy and grass regrow use the same short alpha ramp (cheap quad easing in callers). */
+export const VEG_REGROW_FADE_IN_SEC = 0.48;
 const FORMAL_TREE_BURN_METER_MAX = 100;
 const FORMAL_TREE_BURN_METER_DECAY_PER_SEC = 4.5;
 const FORMAL_TREE_BURN_GROUND_Z_MAX = 0.55;
@@ -81,127 +119,37 @@ const DETAIL_HIT_BAR_ANIM_SEC = 0.16;
 const DETAIL_HIT_BAR_LINGER_SEC = 1.05;
 const DETAIL_HIT_SHAKE_SEC = 0.18;
 
-/** Short canopy/top “fall + fade” after trees are cut (wall-clock seconds, cheap drawImage only). */
-const TREE_TOP_FALL_SEC = 0.58;
-const MAX_TREE_TOP_FALLS = 56;
+const chunkRebakeBatchKeys = new Set();
+let chunkRebakeBatchDepth = 0;
 
-/**
- * @type {Array<
- *   | { kind: 'formal'; rootX: number; my: number; treeType: string; startWallSec: number }
- *   | { kind: 'scatterCanopy'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
- *   | { kind: 'scatterFade'; ox: number; oy: number; itemKey: string; cols: number; rows: number; startWallSec: number }
- * >}
- */
-const activeTreeTopFalls = [];
-
-function easeOutQuadTreeFall(u) {
-  const x = Math.max(0, Math.min(1, u));
-  return 1 - (1 - x) * (1 - x);
+function beginChunkRebakeBatch() {
+  chunkRebakeBatchDepth++;
 }
 
-function pruneTreeTopFalls(wallSec) {
-  for (let i = activeTreeTopFalls.length - 1; i >= 0; i--) {
-    const e = activeTreeTopFalls[i];
-    if (wallSec - e.startWallSec > TREE_TOP_FALL_SEC + 0.08) activeTreeTopFalls.splice(i, 1);
+function endChunkRebakeBatch() {
+  if (chunkRebakeBatchDepth <= 0) return;
+  chunkRebakeBatchDepth--;
+  if (chunkRebakeBatchDepth > 0) return;
+  if (chunkRebakeBatchKeys.size === 0) return;
+  for (const key of chunkRebakeBatchKeys) {
+    const [sx, sy] = key.split(',');
+    const cx = Number(sx);
+    const cy = Number(sy);
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+    enqueuePlayChunkBake(cx, cy, true);
   }
+  chunkRebakeBatchKeys.clear();
 }
 
-function isCrystalBreakItemKey(itemKey) {
-  return String(itemKey || '').toLowerCase().includes('crystal');
-}
-
-/** Fall + fade for tree canopy, or ground fade for other vegetation (grass, tree-without-top, etc.). Crystals skipped (shard FX). */
-function pushVegetationDissolveFromSt(st, startWallSec) {
-  if (!st?.itemKey) return;
-  if (isCrystalBreakItemKey(st.itemKey)) return;
-  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
-  if (scatterItemKeyIsTree(st.itemKey)) {
-    const objSet = OBJECT_SETS[st.itemKey];
-    const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
-    if (topPart?.ids?.length) {
-      activeTreeTopFalls.push({
-        kind: 'scatterCanopy',
-        ox: st.ox,
-        oy: st.oy,
-        itemKey: st.itemKey,
-        cols: st.cols,
-        rows: st.rows,
-        startWallSec
-      });
-      return;
-    }
+function queuePlayChunkRebake(cx, cy, forceRebake = true) {
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+  if (chunkRebakeBatchDepth > 0) {
+    chunkRebakeBatchKeys.add(`${Math.floor(cx)},${Math.floor(cy)}`);
+    return;
   }
-  activeTreeTopFalls.push({
-    kind: 'scatterFade',
-    ox: st.ox,
-    oy: st.oy,
-    itemKey: st.itemKey,
-    cols: st.cols,
-    rows: st.rows,
-    startWallSec
-  });
+  enqueuePlayChunkBake(Math.floor(cx), Math.floor(cy), forceRebake);
 }
 
-function pushFormalTreeTopFall(rootX, my, treeType, startWallSec) {
-  const ids = TREE_TILES[treeType];
-  if (!ids?.top?.length) return;
-  if (activeTreeTopFalls.length >= MAX_TREE_TOP_FALLS) activeTreeTopFalls.shift();
-  activeTreeTopFalls.push({ kind: 'formal', rootX, my, treeType, startWallSec });
-}
-
-/** Enqueues sorted `renderItems` for canopy fall + fade (trees) or in-place fade (ground vegetation). */
-export function appendTreeTopFallRenderItems(renderItems, wallNowSec, tileW, tileH) {
-  void tileW;
-  void tileH;
-  pruneTreeTopFalls(wallNowSec);
-  for (const e of activeTreeTopFalls) {
-    const u = Math.max(0, Math.min(1, (wallNowSec - e.startWallSec) / TREE_TOP_FALL_SEC));
-    if (u >= 1) continue;
-    const dropYTiles = e.kind === 'scatterFade' ? 0 : easeOutQuadTreeFall(u) * 0.9;
-    const alpha = Math.max(0, Math.min(1, 1 - Math.pow(Math.max(0, u - 0.08) / 0.92, 1.22)));
-    if (alpha < 0.02) continue;
-    if (e.kind === 'formal') {
-      renderItems.push({
-        type: 'formalTreeCanopyFall',
-        originX: e.rootX,
-        originY: e.my,
-        treeType: e.treeType,
-        dropYTiles,
-        alpha,
-        sortY: e.my + 1 + dropYTiles * 0.36
-      });
-    } else if (e.kind === 'scatterCanopy') {
-      renderItems.push({
-        type: 'scatterTreeCanopyFall',
-        originX: e.ox,
-        originY: e.oy,
-        itemKey: e.itemKey,
-        cols: e.cols,
-        rows: e.rows,
-        dropYTiles,
-        alpha,
-        sortY: e.oy + e.rows - 0.1 + dropYTiles * 0.36
-      });
-    } else {
-      renderItems.push({
-        type: 'scatterVegetationFadeOut',
-        originX: e.ox,
-        originY: e.oy,
-        itemKey: e.itemKey,
-        cols: e.cols,
-        rows: e.rows,
-        dropYTiles: 0,
-        alpha,
-        sortY: e.oy + e.rows - 0.1
-      });
-    }
-  }
-}
-
-/** @typedef {{ x: number, y: number, vx: number, vy: number, tileId: number, cols: number, imgPath: string | null, age: number, maxAge: number }} CrystalShard */
-
-/** @type {CrystalShard[]} */
-export const activeCrystalShards = [];
 /** Hit probe is slightly inside the peak lunge to avoid edge jitter exactly on tile borders. */
 const TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
 /** Player tackle uses a capsule-like sweep (segment + this radius), not per-tile checks. */
@@ -210,19 +158,6 @@ const TACKLE_SWEEP_RADIUS_TILES = 0.32;
 const TACKLE_DETAIL_HURTBOX_RADIUS_MULT = 2;
 /** Sampling only drives candidate origin lookup window; collision is exact segment-vs-circle. */
 const TACKLE_ORIGIN_SCAN_STEP_TILES = 0.2;
-/** Ground pickup radius for dropped crystal items (tiles). */
-const CRYSTAL_DROP_PICK_RADIUS_TILES = 1.35;
-const CRYSTAL_DROP_SUCTION_SPEED_TILES = 11.5;
-const CRYSTAL_DROP_SUCTION_ACCEL = 26;
-const CRYSTAL_DROP_SUCTION_FINISH_RADIUS = 0.18;
-/** Spawned "small crystal" chunks that remain on ground after a large crystal breaks. */
-export const activeSpawnedSmallCrystals = [];
-/** Pickable drops created after breaking a small crystal chunk. */
-export const activeCrystalDrops = [];
-let crystalLootCount = 0;
-let crystalDynIdSeq = 1;
-/** @type {Map<string, number>} */
-const collectedDetailInventory = new Map();
 /** @type {Map<string, {
  *   x: number,
  *   y: number,
@@ -252,6 +187,32 @@ export function isPlayDetailScatterOriginDestroyed(ox, oy) {
 
 export function isPlayFormalTreeRootDestroyed(rootX, my) {
   return destroyedFormalTreeRoots.has(`${rootX},${my}`);
+}
+
+/**
+ * Multiplies formal tree draw alpha during post-regen fade-in (1 when inactive).
+ * @param {number} rootX
+ * @param {number} my
+ * @param {number} [nowSec]
+ */
+export function getFormalTreeRegrowVisualAlpha01(rootX, my, nowSec = performance.now() * 0.001) {
+  const start = formalTreeRegrowFadeStartSecByRoot.get(`${rootX},${my}`);
+  if (start == null || !Number.isFinite(start)) return 1;
+  const u = Math.max(0, Math.min(1, (nowSec - start) / VEG_REGROW_FADE_IN_SEC));
+  return u * u;
+}
+
+/**
+ * Multiplies scatter tree draw alpha during post-regen fade-in (1 when inactive).
+ * @param {number} ox
+ * @param {number} oy
+ * @param {number} [nowSec]
+ */
+export function getScatterTreeRegrowVisualAlpha01(ox, oy, nowSec = performance.now() * 0.001) {
+  const rec = scatterTreeRegrowFadeByOrigin.get(`${ox},${oy}`);
+  if (!rec || !Number.isFinite(rec.startSec)) return 1;
+  const u = Math.max(0, Math.min(1, (nowSec - rec.startSec) / VEG_REGROW_FADE_IN_SEC));
+  return u * u;
 }
 
 export function isPlayFormalTreeRootCharred(rootX, my) {
@@ -303,23 +264,16 @@ export function clearPlayCrystalTackleState() {
   burningScatterTreeEndsAtSecByOrigin.clear();
   burnedScatterTreeOrigins.clear();
   harvestedBurnedScatterTreeOrigins.clear();
+  formalTreeRegrowFadeStartSecByRoot.clear();
+  scatterTreeRegrowFadeByOrigin.clear();
   detailBreakStateByOrigin.clear();
   detailBreakSweepIter = null;
   detailBreakSweepCooldownSec = 0;
   detailHitHpBars.clear();
   detailHitShakeAtSec.clear();
   activeDetailHitPulses.length = 0;
-  activeCrystalShards.length = 0;
-  activeSpawnedSmallCrystals.length = 0;
-  activeCrystalDrops.length = 0;
-  collectedDetailInventory.clear();
-  crystalLootCount = 0;
-  crystalDynIdSeq = 1;
-  activeTreeTopFalls.length = 0;
-}
-
-function isCrystalItemKey(itemKey) {
-  return String(itemKey || '').toLowerCase().includes('crystal');
+  clearCrystalDropPickupState();
+  clearTreeTopFallState();
 }
 
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
@@ -339,8 +293,8 @@ function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut', data 
     const treeType = t ? getTreeType(t.biomeId, rootX, my, data.seed) : null;
     if (treeType) pushFormalTreeTopFall(rootX, my, treeType, nowSec);
   }
-  enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-  enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
 }
 
 function formalTreeStumpCircleAtRoot(rootX, my) {
@@ -379,7 +333,7 @@ function queueChunkRebakeOverlappingFootprint(rootOx, rootOy, cols, rows) {
     const cx = Number(sx);
     const cy = Number(sy);
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
-    enqueuePlayChunkBake(cx, cy, true);
+    queuePlayChunkRebake(cx, cy, true);
   }
 }
 
@@ -479,6 +433,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
   if (!data) return false;
   if (!Object.prototype.hasOwnProperty.call(FORMAL_TREE_BURN_ADD_BY_PROJECTILE, projType)) return false;
   if (Math.abs(Number(projZ) || 0) > FORMAL_TREE_BURN_GROUND_Z_MAX) return false;
+  beginChunkRebakeBatch();
   const ix = Math.floor(worldX);
   const iy = Math.floor(worldY);
   const nowSec = performance.now() * 0.001;
@@ -509,6 +464,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
       anyApplied = true;
     }
   }
+  endChunkRebakeBatch();
   return anyApplied;
 }
 
@@ -520,8 +476,8 @@ function tryHarvestCharredFormalTreeAtRoot(rootX, my) {
   const stump = formalTreeStumpCircleAtRoot(rootX, my);
   spawnPickableCrystalDropAt(stump.cx, stump.cy, 'charcoal', 1);
   harvestedBurnedFormalTreeRoots.add(key);
-  enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-  enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
   return true;
 }
 
@@ -633,13 +589,6 @@ export function showBreakableDetailHpAtOrigin(ox, oy, data) {
   return true;
 }
 
-function countSpritesInObjectSet(objSet) {
-  if (!objSet?.parts?.length) return 1;
-  let n = 0;
-  for (const part of objSet.parts) n += Array.isArray(part.ids) ? part.ids.length : 0;
-  return Math.max(1, n);
-}
-
 function hitsForDetailBySpriteCount(objSet) {
   const spriteCount = countSpritesInObjectSet(objSet);
   return Math.max(1, Math.ceil(Math.sqrt(spriteCount)) * 2);
@@ -711,7 +660,7 @@ function invalidateChunksOverlappingFootprint(rootOx, rootOy, cols, rows) {
     const cy = Number(sy);
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
     // Keep stale chunk visible until fresh bake completes (prevents black gaps).
-    enqueuePlayChunkBake(cx, cy, true);
+    queuePlayChunkRebake(cx, cy, true);
   }
 }
 
@@ -915,132 +864,6 @@ function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
   return null;
 }
 
-function crystalColorTokenFromKey(itemKey) {
-  const k = String(itemKey || '').toLowerCase();
-  const tokens = ['light-blue', 'blue', 'yellow', 'red', 'green', 'purple', 'pink'];
-  for (const t of tokens) {
-    if (k.includes(`${t}-crystal`) || k.includes(`${t} crystal`) || k.includes(t)) return t;
-  }
-  return 'blue';
-}
-
-function smallCrystalKeyForColor(colorToken) {
-  const key = `small-${colorToken}-crystal [1x1]`;
-  return OBJECT_SETS[key] ? key : 'small-blue-crystal [1x1]';
-}
-
-function crystalVisualFromItemKey(itemKey) {
-  const objSet = OBJECT_SETS[itemKey];
-  if (!objSet) return null;
-  const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return null;
-  const path = TessellationEngine.getImagePath(objSet.file);
-  const cols = path && path.includes('caves') ? 50 : 57;
-  return {
-    itemKey,
-    tileId: base.ids[0],
-    cols,
-    imgPath: path || null
-  };
-}
-
-function crystalDropVisualFromItemKey(itemKey) {
-  const objSet = OBJECT_SETS[itemKey];
-  if (!objSet) return null;
-  const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return null;
-  const shape = parseShape(objSet.shape);
-  const shapeCols = Math.max(1, shape.cols);
-  const shapeRows = Math.max(1, shape.rows);
-  const shapeCells = shapeCols * shapeRows;
-  const allPartIds = [];
-  let shapeMatchedPartIds = null;
-  if (Array.isArray(objSet.parts)) {
-    for (const part of objSet.parts) {
-      if (!Array.isArray(part?.ids) || part.ids.length === 0) continue;
-      if (!shapeMatchedPartIds && part.ids.length === shapeCells) {
-        shapeMatchedPartIds = [...part.ids];
-      }
-      for (const id of part.ids) allPartIds.push(id);
-    }
-  }
-  const crystalOnly = isCrystalItemKey(itemKey);
-  const dropTileIds = crystalOnly
-    ? (shapeMatchedPartIds ||
-      (allPartIds.length === shapeCells ? allPartIds : [...base.ids]))
-    : (allPartIds.length ? allPartIds : [...base.ids]);
-  const dropShapeRows = crystalOnly
-    ? shapeRows
-    : Math.max(shapeRows, Math.ceil(dropTileIds.length / shapeCols));
-  const path = TessellationEngine.getImagePath(objSet.file);
-  const cols = path && path.includes('caves') ? 50 : 57;
-  return {
-    itemKey,
-    tileId: dropTileIds[0] ?? base.ids[0],
-    tileIds: dropTileIds,
-    shapeCols,
-    shapeRows: dropShapeRows,
-    cols,
-    imgPath: path || null
-  };
-}
-
-function spawnSmallCrystalChunksFromLarge(rootOx, rootOy, itemKey) {
-  const color = crystalColorTokenFromKey(itemKey);
-  const smallKey = smallCrystalKeyForColor(color);
-  const visual = crystalVisualFromItemKey(smallKey);
-  const largeObj = OBJECT_SETS[itemKey];
-  const shape = largeObj ? parseShape(largeObj.shape) : { rows: 2, cols: 2 };
-  if (!visual) return;
-  const cx = rootOx + shape.cols * 0.5;
-  const cy = rootOy + shape.rows * 0.5;
-  const offs = [
-    [-0.38, -0.28],
-    [0.38, -0.25],
-    [-0.35, 0.3],
-    [0.36, 0.33]
-  ];
-  for (const [ox, oy] of offs) {
-    activeSpawnedSmallCrystals.push({
-      id: crystalDynIdSeq++,
-      x: cx + ox,
-      y: cy + oy,
-      radius: 0.3,
-      ...visual
-    });
-  }
-}
-
-export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
-  const resolvedItemKey = String(itemKey || 'unknown');
-  const visual =
-    crystalDropVisualFromItemKey(resolvedItemKey) ||
-    crystalDropVisualFromItemKey('small-blue-crystal [1x1]') ||
-    crystalVisualFromItemKey('small-blue-crystal [1x1]');
-  if (!visual) return;
-  const objSet = OBJECT_SETS[resolvedItemKey];
-  const resolvedStackCount =
-    stackCount == null
-      ? countSpritesInObjectSet(objSet)
-      : Math.max(1, Number(stackCount) || 1);
-  activeCrystalDrops.push({
-    id: crystalDynIdSeq++,
-    x,
-    y,
-    vx: 0,
-    vy: 0,
-    pickRadius: CRYSTAL_DROP_PICK_RADIUS_TILES,
-    stackCount: resolvedStackCount,
-    age: 0,
-    bobSeed: seededHash(Math.floor(x * 10), Math.floor(y * 10), 13291),
-    maxAge: 90,
-    collecting: false,
-    collectShrink: 0,
-    ...visual,
-    itemKey: resolvedItemKey
-  });
-}
-
 function markDestroyedDetailAndScheduleRegen(st, nowSec, opts = {}) {
   if (!st || st.destroyed) return;
   setScatterItemKeyOverride(st.ox, st.oy, null);
@@ -1077,7 +900,17 @@ function sweepDetailBreakState(data, nowSec) {
       if (nowSec >= st.regenAtSec) {
         setScatterItemKeyOverride(st.ox, st.oy, null);
         unregisterDestroyedDetailOrigin(st.ox, st.oy);
-        invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        if (scatterItemKeyIsTree(st.itemKey)) {
+          scatterTreeRegrowFadeByOrigin.set(key, {
+            startSec: nowSec,
+            ox: st.ox,
+            oy: st.oy,
+            cols: st.cols,
+            rows: st.rows
+          });
+        } else {
+          invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+        }
         detailBreakStateByOrigin.delete(key);
         burnedScatterTreeOrigins.delete(key);
         harvestedBurnedScatterTreeOrigins.delete(key);
@@ -1098,44 +931,26 @@ function sweepDetailBreakState(data, nowSec) {
   }
 }
 
-function spawnCrystalShards(rootOx, rootOy, itemKey, data) {
-  const objSet = OBJECT_SETS[itemKey];
-  if (!objSet) return;
-  const base = objSet.parts.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return;
-  const { rows, cols } = parseShape(objSet.shape);
-  const path = TessellationEngine.getImagePath(objSet.file);
-  const imgPath = path || null;
-  const atlasCols = path && path.includes('caves') ? 50 : 57;
-  const tid = base.ids[0];
-  const cx = rootOx + cols * 0.5;
-  const cy = rootOy + rows * 0.5;
-  const seed = data.seed ?? 0;
-  for (let i = 0; i < 4; i++) {
-    const h1 = seededHash(rootOx + i * 3, rootOy, seed + 91011);
-    const h2 = seededHash(rootOx, rootOy + i * 5, seed + 91019);
-    const ang = i * (Math.PI * 0.5) + (h1 - 0.5) * 0.55;
-    const sp = 1.35 + h2 * 1.85;
-    activeCrystalShards.push({
-      x: cx + (h1 - 0.5) * 0.08,
-      y: cy + (h2 - 0.5) * 0.08,
-      vx: Math.cos(ang) * sp,
-      vy: Math.sin(ang) * sp - 0.55,
-      tileId: tid,
-      cols: atlasCols,
-      imgPath,
-      age: 0,
-      maxAge: 1.15 + h2 * 0.45
-    });
-  }
+/**
+ * Extra break ticks from held melee charge (bars 2–3): +0 / +1 / +2 vs map details.
+ * @param {'tackle' | 'cut' | 'other'} hitSource
+ * @param {number | null | undefined} detailCharge01
+ */
+function detailChargeBonusHits(hitSource, detailCharge01) {
+  if (hitSource !== 'cut' && hitSource !== 'tackle') return 0;
+  if (detailCharge01 == null || !Number.isFinite(detailCharge01)) return 0;
+  const p = Math.max(0, Math.min(1, detailCharge01));
+  if (p < 0.16) return 0;
+  return Math.max(0, getChargeLevel(p) - 1);
 }
 
 /**
  * If the tackled cell holds a crystal scatter, remove it and spawn shard particles.
  * @param {import('../player.js').player} player
  * @param {object | null | undefined} data
+ * @param {number | null | undefined} [detailCharge01] when set (charged release), scales detail break damage
  */
-export function tryBreakCrystalOnPlayerTackle(player, data) {
+export function tryBreakCrystalOnPlayerTackle(player, data, detailCharge01 = null) {
   if (!player || !data) return;
   let nx = Number(player.tackleDirNx);
   let ny = Number(player.tackleDirNy);
@@ -1149,11 +964,20 @@ export function tryBreakCrystalOnPlayerTackle(player, data) {
   ny /= len;
   const px = player.x ?? 0;
   const py = player.y ?? 0;
+  const pz = Number(player.z ?? 0);
   const reach = Math.max(0.2, Number(player._tackleReachTiles) || 2);
   const probeReach = Math.max(0.2, reach - TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
-  tryBreakDetailsAlongSegment(px, py, ex, ey, data, { hitSource: 'tackle' });
+  const dc =
+    detailCharge01 != null && Number.isFinite(detailCharge01)
+      ? Math.max(0, Math.min(1, detailCharge01))
+      : null;
+  tryBreakDetailsAlongSegment(px, py, ex, ey, data, {
+    hitSource: 'tackle',
+    pz,
+    ...(dc != null ? { detailCharge01: dc } : {})
+  });
 }
 
 function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
@@ -1166,7 +990,7 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
       const pick = pool[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77133) * pool.length)];
       const dex = encounterNameToDex(pick);
       if (dex != null) {
-        void import('../wild-pokemon/wild-pokemon-manager.js').then((m) => {
+        void import('../wild-pokemon/index.js').then((m) => {
           if (m?.summonDebugWildPokemon) m.summonDebugWildPokemon(dex, data, cx, cy);
         });
       }
@@ -1195,13 +1019,22 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  * @param {{
  *   worldHitOnceSet?: Set<string>,
  *   spawnedHitOnceSet?: Set<number>,
- *   hitSource?: 'tackle' | 'cut' | 'other'
+ *   hitSource?: 'tackle' | 'cut' | 'other',
+ *   detailCharge01?: number | null
  * }} [opts]
  */
 export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!data) return;
+  const pz = Number(opts.pz) || 0;
+  // If we are too high in the air, we can't tackle ground-level trees/rocks.
+  if (Math.abs(pz) > 2.0) return;
+  
   const nowSec = performance.now() * 0.001;
   const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
+  const bonusHits = detailChargeBonusHits(
+    hitSource,
+    opts.detailCharge01 != null && Number.isFinite(opts.detailCharge01) ? opts.detailCharge01 : null
+  );
   /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */
   const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
   const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
@@ -1213,6 +1046,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
   const segLen = Math.hypot(ex - px, ey - py);
   if (!Number.isFinite(segLen) || segLen <= 1e-6) return;
+  beginChunkRebakeBatch();
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   /** @type {Array<any>} */
@@ -1344,7 +1178,10 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       }
     }
   }
-  if (hits.length === 0) return;
+  if (hits.length === 0) {
+    endChunkRebakeBatch();
+    return;
+  }
   hits.sort((a, b) => a.t - b.t);
   const consumedSpawned = new Set();
   const consumedWorld = new Set();
@@ -1407,7 +1244,8 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, `formal:${treeType}`, null, nowSec, hitsMax);
       
       const hpBefore = st.hitsRemaining;
-      const amount = (hitSource === 'cut' || hitSource === 'tackle') ? 1 : 0; // Only cut/tackle deals damage here for now
+      const baseAmt = hitSource === 'cut' || hitSource === 'tackle' ? 1 : 0;
+      const amount = baseAmt > 0 ? baseAmt + bonusHits : 0;
       if (amount > 0) {
         st.hitsRemaining = Math.max(0, st.hitsRemaining - amount);
         markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
@@ -1478,10 +1316,17 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
     const hitX = hit.cx ?? hit.rootOx + 0.5;
     const hitY = hit.cy ?? hit.rootOy + 0.5;
-    if (!isTreeHit) playRockSmashingSfx({ x: hitX, y: hitY });
-    const treeDamage =
+    const baseTreeDmg =
       isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
+    const treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
     st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
+    if (!isTreeHit) {
+      if (treeDamage > 0 && st.hitsRemaining <= 0) {
+        playRockSmashingBreakSfx({ x: hitX, y: hitY });
+      } else {
+        playRockSmashingSfx({ x: hitX, y: hitY });
+      }
+    }
     if (treeDamage > 0 || !isTreeHit) {
       markDetailHitHpBar(worldKey, hitX, hitY, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
     }
@@ -1537,83 +1382,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
     }
   }
-}
-
-/**
- * @param {number} dt
- */
-export function updateCrystalShardParticles(dt) {
-  if (activeCrystalShards.length === 0) return;
-  const g = 9.2;
-  const drag = 2.15;
-  for (let i = activeCrystalShards.length - 1; i >= 0; i--) {
-    const s = activeCrystalShards[i];
-    s.age += dt;
-    if (s.age >= s.maxAge) {
-      activeCrystalShards.splice(i, 1);
-      continue;
-    }
-    s.x += s.vx * dt;
-    s.y += s.vy * dt;
-    s.vy += g * dt;
-    const damp = Math.exp(-drag * dt);
-    s.vx *= damp;
-    s.vy *= damp;
-  }
-}
-
-/**
- * Pick-up update for drops created from broken small crystals.
- * @param {number} dt
- * @param {{ x?: number, y?: number } | null | undefined} player
- */
-export function updateCrystalDropsAndPickup(dt, player) {
-  const px = Number(player?.x);
-  const py = Number(player?.y);
-  for (let i = activeCrystalDrops.length - 1; i >= 0; i--) {
-    const d = activeCrystalDrops[i];
-    d.age = (d.age || 0) + dt;
-    if (d.maxAge && d.age >= d.maxAge) {
-      activeCrystalDrops.splice(i, 1);
-      continue;
-    }
-    if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
-    const dx = px - d.x;
-    const dy = py - d.y;
-    if (d.collecting) {
-      const dist = Math.hypot(dx, dy);
-      const nx = dist > 1e-4 ? dx / dist : 0;
-      const ny = dist > 1e-4 ? dy / dist : 0;
-      const targetSp = Math.min(CRYSTAL_DROP_SUCTION_SPEED_TILES, 3.8 + dist * 7.5);
-      const curVx = Number(d.vx) || 0;
-      const curVy = Number(d.vy) || 0;
-      d.vx = curVx + (nx * targetSp - curVx) * Math.min(1, dt * CRYSTAL_DROP_SUCTION_ACCEL);
-      d.vy = curVy + (ny * targetSp - curVy) * Math.min(1, dt * CRYSTAL_DROP_SUCTION_ACCEL);
-      d.x += d.vx * dt;
-      d.y += d.vy * dt;
-      d.collectShrink = Math.min(1, (d.collectShrink || 0) + dt * 5.5);
-      if (dist <= CRYSTAL_DROP_SUCTION_FINISH_RADIUS) {
-        const stack = Math.max(1, Number(d.stackCount) || 1);
-        const key = String(d.itemKey || 'unknown');
-        collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
-        if (isCrystalItemKey(key)) crystalLootCount += stack;
-        playItemPickupSfx(player);
-        activeCrystalDrops.splice(i, 1);
-      }
-      continue;
-    }
-    if (dx * dx + dy * dy <= (d.pickRadius || 1.1) * (d.pickRadius || 1.1)) {
-      d.collecting = true;
-      d.vx = Number(d.vx) || 0;
-      d.vy = Number(d.vy) || 0;
-      d.collectShrink = 0;
-      continue;
-    }
-    if (Number(d.vx) || Number(d.vy)) {
-      d.vx = (Number(d.vx) || 0) * Math.max(0, 1 - dt * 8);
-      d.vy = (Number(d.vy) || 0) * Math.max(0, 1 - dt * 8);
-    }
-  }
+  endChunkRebakeBatch();
 }
 
 /**
@@ -1624,11 +1393,27 @@ export function updateCrystalDropsAndPickup(dt, player) {
  */
 export function updateBreakableDetailRegeneration(dt, data) {
   if (!data) return;
+  beginChunkRebakeBatch();
   pruneTreeTopFalls(performance.now() * 0.001);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
+    const rainSnuffing = isRainExtinguishing();
     for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot.entries()) {
-      if (!Number.isFinite(burnEnd) || nowSec < burnEnd) continue;
+      if (!Number.isFinite(burnEnd)) {
+        burningFormalTreeEndsAtSecByRoot.delete(key);
+        continue;
+      }
+      // Rain puts out trees that have been on fire for at least the grace period,
+      // sparing them from becoming burned stumps.
+      if (rainSnuffing) {
+        const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
+        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+          burningFormalTreeEndsAtSecByRoot.delete(key);
+          formalTreeBurnMeterByRoot.delete(key);
+          continue;
+        }
+      }
+      if (nowSec < burnEnd) continue;
       const [sx, sy] = key.split(',');
       const rootX = Number(sx);
       const my = Number(sy);
@@ -1652,8 +1437,21 @@ export function updateBreakableDetailRegeneration(dt, data) {
   }
   if (burningScatterTreeEndsAtSecByOrigin.size > 0) {
     const nowSec = performance.now() * 0.001;
+    const rainSnuffing = isRainExtinguishing();
     for (const [key, burnEnd] of burningScatterTreeEndsAtSecByOrigin.entries()) {
-      if (!Number.isFinite(burnEnd) || nowSec < burnEnd) continue;
+      if (!Number.isFinite(burnEnd)) {
+        burningScatterTreeEndsAtSecByOrigin.delete(key);
+        continue;
+      }
+      if (rainSnuffing) {
+        const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
+        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+          burningScatterTreeEndsAtSecByOrigin.delete(key);
+          scatterTreeBurnMeterByOrigin.delete(key);
+          continue;
+        }
+      }
+      if (nowSec < burnEnd) continue;
       const [sx, sy] = key.split(',');
       const ox = Number(sx);
       const oy = Number(sy);
@@ -1704,26 +1502,25 @@ export function updateBreakableDetailRegeneration(dt, data) {
       burningFormalTreeEndsAtSecByRoot.delete(key);
       harvestedBurnedFormalTreeRoots.delete(key);
       if (Number.isFinite(rootX) && Number.isFinite(my)) {
-        enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-        enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+        formalTreeRegrowFadeStartSecByRoot.set(key, nowSec);
       }
     }
   }
-}
-
-export function getCrystalLootCount() {
-  return crystalLootCount;
-}
-
-/**
- * Collected pickup totals in current play session.
- * @returns {Array<{ itemKey: string, count: number }>}
- */
-export function getCollectedDetailInventorySnapshot() {
-  const out = [];
-  for (const [itemKey, count] of collectedDetailInventory.entries()) {
-    out.push({ itemKey, count: Math.max(0, count | 0) });
+  for (const [key, startSec] of [...formalTreeRegrowFadeStartSecByRoot.entries()]) {
+    if (!Number.isFinite(startSec) || nowSec < startSec + VEG_REGROW_FADE_IN_SEC) continue;
+    formalTreeRegrowFadeStartSecByRoot.delete(key);
+    const [sx, sy] = key.split(',');
+    const rootX = Number(sx);
+    const my = Number(sy);
+    if (Number.isFinite(rootX) && Number.isFinite(my)) {
+      queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+      queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+    }
   }
-  out.sort((a, b) => b.count - a.count || a.itemKey.localeCompare(b.itemKey));
-  return out;
+  for (const [key, rec] of [...scatterTreeRegrowFadeByOrigin.entries()]) {
+    if (!rec || !Number.isFinite(rec.startSec) || nowSec < rec.startSec + VEG_REGROW_FADE_IN_SEC) continue;
+    scatterTreeRegrowFadeByOrigin.delete(key);
+    invalidateChunksOverlappingFootprint(rec.ox, rec.oy, rec.cols, rec.rows);
+  }
+  endChunkRebakeBatch();
 }

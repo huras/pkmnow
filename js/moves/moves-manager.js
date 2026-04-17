@@ -33,6 +33,7 @@ import {
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
+import { isChargeStrongAttackEligible, getWeakPartialChargeT } from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
@@ -49,7 +50,20 @@ import {
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
 import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
-import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
+import {
+  buildWildSpatialIndex,
+  queryWildSpatialIndexInAabb,
+  applyWildKnockbackFromProjectile,
+  checkDamageHitCircle,
+  distPointToSegmentTiles,
+  broadPhaseOk,
+  isProjectileBlockedByTree,
+  emitProjectileWorldReactionOnce,
+  checkPlayerHit,
+  spawnIncinerateShards,
+  applySplashToWild
+} from './moves-projectile-collision.js';
+import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -86,23 +100,36 @@ let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
-const FLAMETHROWER_STREAM_INTERVAL = 0.072;
+const FLAMETHROWER_STREAM_INTERVAL = 0.104;
+/** Adaptive upper cadence under heavy projectile/particle load. */
+const FLAMETHROWER_STREAM_INTERVAL_MAX = 0.176;
+/** Collision cadence for flamethrower stream shots (render stays at full FPS). */
+const FLAMETHROWER_STREAM_HIT_TICK_SEC = 1 / 30;
 /** Water-gun stream cadence (hold-to-spray, like flamethrower). */
 const WATER_GUN_STREAM_INTERVAL = 0.074;
 /** Bubble-beam stream cadence (hold-to-spray, long-range water ring stream). */
 const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
-const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
 const PRISMATIC_STREAM_INTERVAL = 0.076;
 
+function computeFlamethrowerStreamPressure01() {
+  const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
+  const partPressure = Math.max(0, activeParticles.length) / Math.max(1, MAX_PARTICLES);
+  // Projectiles are much more expensive than particles (collision checks per frame),
+  // so they get the larger weight in the pressure estimate.
+  return Math.max(0, Math.min(1, projPressure * 0.72 + partPressure * 0.28));
+}
+
 function pushProjectile(p) {
-  while (activeProjectiles.length >= MAX_PROJECTILES) activeProjectiles.shift();
+  // Drop new projectile when saturated: avoids O(n) `shift()` churn under stream spam.
+  if (activeProjectiles.length >= MAX_PROJECTILES) return;
   activeProjectiles.push(p);
 }
 
 function pushParticle(p) {
-  while (activeParticles.length >= MAX_PARTICLES) activeParticles.shift();
+  // Same policy as projectiles to prevent reindex storms at particle cap.
+  if (activeParticles.length >= MAX_PARTICLES) return;
   activeParticles.push(p);
 }
 
@@ -156,6 +183,7 @@ export function spawnFieldSpinAttackFx(centerX, centerY, headingRad, opts = {}) 
   pushParticle({
     type: 'fieldSpinAttack',
     styleId: String(opts.styleId || 'slash'),
+    windTex: !!opts.windTex,
     x: Number(centerX) || 0,
     y: Number(centerY) || 0,
     z: Math.max(0, Number(opts.z) || 0.08),
@@ -211,128 +239,6 @@ function spawnTrailParticle(px, py, trailType, baseZ = 0) {
     life: 0.42,
     maxLife: 0.42
   });
-}
-
-/** XY overlap for damage: projectile circle vs target hurt radius (tiles), not walk collider. */
-function checkDamageHitCircle(px, py, projRadius, targetX, targetY, targetHurtRadiusTiles) {
-  const dist = Math.hypot(targetX - px, targetY - py);
-  return dist < projRadius + targetHurtRadiusTiles;
-}
-
-function applyWildKnockbackFromProjectile(wild, proj) {
-  if (!wild || !proj) return;
-  const kb = Math.max(0.2, Number(proj.tackleKnockback) || 3.1);
-  const kbLock = Math.max(0.08, Number(proj.tackleKnockbackLockSec) || 0.3);
-  const sx =
-    Number.isFinite(proj?.sourceEntity?.x)
-      ? Number(proj.sourceEntity.x)
-      : (Number(proj.x) || 0) - (Number(proj.vx) || 0) * 0.07;
-  const sy =
-    Number.isFinite(proj?.sourceEntity?.y)
-      ? Number(proj.sourceEntity.y)
-      : (Number(proj.y) || 0) - (Number(proj.vy) || 0) * 0.07;
-  const dx = (wild.x ?? 0) - sx;
-  const dy = (wild.y ?? 0) - sy;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = dx / len;
-  const ny = dy / len;
-  const blend = 0.05;
-  wild.vx = (wild.vx || 0) * blend + nx * kb;
-  wild.vy = (wild.vy || 0) * blend + ny * kb;
-  wild.knockbackLockSec = Math.max(wild.knockbackLockSec || 0, kbLock);
-  if (wild.aiState !== 'sleep') {
-    wild.aiState = 'alert';
-    wild.alertTimer = Math.max(wild.alertTimer || 0, kbLock * 0.9);
-  }
-  wild.targetX = null;
-  wild.targetY = null;
-  wild.wanderTimer = 0;
-  wild.idlePauseTimer = 0;
-}
-
-/** Shortest distance from point P to segment A–B (tile XY plane). */
-function distPointToSegmentTiles(px, py, ax, ay, bx, by) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len2 = dx * dx + dy * dy;
-  if (len2 < 1e-12) return Math.hypot(px - ax, py - ay);
-  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-  const qx = ax + t * dx;
-  const qy = ay + t * dy;
-  return Math.hypot(px - qx, py - qy);
-}
-
-function broadPhaseOk(px, py, tx, ty) {
-  return Math.hypot(tx - px, ty - py) <= COLLISION_BROAD_PHASE_TILES;
-}
-
-function isProjectileBlockedByTree(proj, data) {
-  if (!proj || !data) return false;
-  if (!TREE_BLOCKING_FIRE_PROJECTILE_TYPES.has(proj.type)) return false;
-  const z = Number(proj.z) || 0;
-  if (Math.abs(z) > 1.35) return false;
-  return formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data) || scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data);
-}
-
-/**
- * @param {import('../player.js').player} player
- */
-function checkPlayerHit(proj, player) {
-  if (!proj.hitsPlayer) return false;
-  const px = player.visualX ?? player.x;
-  const py = player.visualY ?? player.y;
-  const dex = player.dexId ?? 1;
-  const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
-  if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return false;
-  if (!projectileZInPokemonHurtbox(proj.z, dex, player.z ?? 0)) return false;
-  const hurtR = getPokemonHurtboxRadiusTiles(dex);
-  return checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR);
-}
-
-/** @param {number | null | undefined} effectZ — impact height; default `proj.z` (spawn altitude). */
-function spawnIncinerateShards(proj, pushProjectileRef, effectZ) {
-  const z0 = effectZ !== undefined && effectZ !== null ? Number(effectZ) || 0 : proj.z || 0;
-  const count = 10;
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * Math.PI * 2;
-    const speed = 8.8 + Math.random() * 1.8;
-    pushProjectileRef({
-      type: 'incinerateShard',
-      x: proj.x,
-      y: proj.y,
-      vx: Math.cos(a) * speed,
-      vy: Math.sin(a) * speed,
-      z: z0,
-      radius: 0.2,
-      timeToLive: 0.42 + Math.random() * 0.18,
-      damage: (proj.splashDamage || 2) * 0.8,
-      sourceEntity: proj.sourceEntity,
-      fromWild: proj.fromWild,
-      hitsWild: proj.hitsWild,
-      hitsPlayer: proj.hitsPlayer,
-      trailAcc: EMBER_TRAIL_INTERVAL * (i / count)
-    });
-  }
-}
-
-/** @param {number | undefined} splashZ — world height for splash (e.g. `0` on ground TTL); default `proj.z`. */
-function applySplashToWild(proj, wildList, splashZ) {
-  const r = proj.splashRadius || 0;
-  const d = proj.splashDamage || 0;
-  if (r <= 0 || d <= 0) return;
-  const sz = splashZ !== undefined ? Number(splashZ) || 0 : proj.z || 0;
-  for (const wild of wildList) {
-    if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
-    const splashDex = wild.dexId ?? 1;
-    const { hx: shx, hy: shy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, splashDex);
-    if (
-      Math.hypot(shx - proj.x, shy - proj.y) <= r &&
-      projectileZInPokemonHurtbox(sz, splashDex, wild.z ?? 0)
-    ) {
-      if (wild.takeDamage) wild.takeDamage(d);
-    }
-  }
 }
 
 /**
@@ -466,12 +372,20 @@ export function castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity
  */
 export function tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerFlamethrowerCooldown > 0) return false;
-  playerFlamethrowerCooldown = FLAMETHROWER_STREAM_INTERVAL;
+  const pressure01 = computeFlamethrowerStreamPressure01();
+  const streamCadence =
+    FLAMETHROWER_STREAM_INTERVAL +
+    (FLAMETHROWER_STREAM_INTERVAL_MAX - FLAMETHROWER_STREAM_INTERVAL) * pressure01;
+  const streamQuality = 1 - pressure01 * 0.5;
+  const streamTrailMul = 1 + pressure01 * 1.05;
+  playerFlamethrowerCooldown = streamCadence;
   bumpPlayerMoveCastVisual(sourceEntity);
   castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
-    streamPuff: true
+    streamPuff: true,
+    streamQuality,
+    streamTrailMul
   });
   return true;
 }
@@ -616,10 +530,13 @@ export function castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntit
   playerEmberCooldown = 0.48;
   bumpPlayerMoveCastVisual(sourceEntity);
   const cp = Math.max(0, Math.min(1, charge01 || 0));
+  const chargePower = isChargeStrongAttackEligible(cp)
+    ? Math.max(0.12, cp)
+    : Math.max(0.14, 0.18 + 0.48 * getWeakPartialChargeT(cp, 0));
   castEmberVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
-    chargePower: Math.max(0.12, cp)
+    chargePower
   });
   return true;
 }
@@ -629,10 +546,13 @@ export function castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntit
   playerWaterCooldown = 0.58;
   bumpPlayerMoveCastVisual(sourceEntity);
   const cp = Math.max(0, Math.min(1, charge01 || 0));
+  const chargePower = isChargeStrongAttackEligible(cp)
+    ? Math.max(0.1, cp)
+    : Math.max(0.12, 0.17 + 0.5 * getWeakPartialChargeT(cp, 0));
   castWaterBurstVolley(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
-    chargePower: Math.max(0.1, cp)
+    chargePower
   });
   return true;
 }
@@ -889,6 +809,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
+  const wildSpatial = buildWildSpatialIndex(wildList);
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];
@@ -909,11 +830,16 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     ) {
       continue;
     }
+    const pzPrev = p.z;
+    const vzParticle = p.vz;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
     p.vz -= 30.0 * dt;
     if (p.z <= 0) {
+      if (pzPrev > 0.03 && vzParticle < -0.22) {
+        playFloorHit2Sfx({ x: p.x, y: p.y, z: 0 });
+      }
       p.z = 0;
       p.vz = 0;
       p.vx *= 0.82;
@@ -970,33 +896,27 @@ export function updateMoves(dt, wildPokemonList, data, player) {
         const maxX = Math.max(sx0, sx1) + pad;
         const minY = Math.min(sy0, sy1) - pad;
         const maxY = Math.max(sy0, sy1) + pad;
-        for (const wild of wildList) {
-          if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
-          if (set.has(wild)) continue;
-          const qx = wild.x + 0.5;
-          const qy = wild.y + 0.5;
-          if (qx < minX || qx > maxX || qy < minY || qy > maxY) continue;
-          const wDex = wild.dexId ?? 1;
-          const wz = wild.z ?? 0;
-          const { hx, hy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, wDex);
-          if (!projectileZInPokemonHurtbox(zBeam, wDex, wz)) continue;
-          const hurtR = getPokemonHurtboxRadiusTiles(wDex);
-          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
-            if (wild.takeDamage) wild.takeDamage(proj.damage);
-            if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
-            spawnHitParticles(hx, hy, wz);
-            set.add(wild);
-          }
-        }
+        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+          if (wild === proj.sourceEntity) return;
+          if (set.has(wild)) return;
+          if (!projectileZInPokemonHurtbox(zBeam, dex, z)) return;
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
+          if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
+          spawnHitParticles(hx, hy, z);
+          set.add(wild);
+        });
       }
 
       if (proj.hasTackleTrait && data) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
-        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle' });
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle', pz: zBeam });
       }
 
       if (proj.timeToLive <= 0) {
+        emitProjectileWorldReactionOnce(proj, data, (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5);
         activeProjectiles.splice(i, 1);
       }
       continue;
@@ -1005,18 +925,25 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     proj.x += proj.vx * dt;
     proj.y += proj.vy * dt;
     if (Number.isFinite(proj.vz)) {
+      const zPrev = Number(proj.z) || 0;
       proj.z += proj.vz * dt;
+      if (zPrev > 0.006 && proj.z <= 0) {
+        playFloorHit2Sfx({ x: proj.x, y: proj.y, z: 0 });
+        proj.z = 0;
+        proj.vz = 0;
+      }
     }
 
     proj.timeToLive -= dt;
     if (proj.timeToLive <= 0) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       if (proj.type === 'incinerateCore') {
         spawnHitParticles(proj.x, proj.y, 0);
-        applySplashToWild(proj, wildList, 0);
+          applySplashToWild(proj, wildList, 0, wildSpatial);
         spawnIncinerateShards(proj, pushProjectile, 0);
       } else if (proj.type === 'confusionOrb') {
         spawnHitParticles(proj.x, proj.y, 0);
-        applySplashToWild(proj, wildList, 0);
+          applySplashToWild(proj, wildList, 0, wildSpatial);
       }
       if (data) {
         const zz = Math.max(0, Number(proj.z) || 0);
@@ -1070,18 +997,42 @@ export function updateMoves(dt, wildPokemonList, data, player) {
                 : trailType === 'laserTrail'
                   ? LASER_TRAIL_INTERVAL
                   : EMBER_TRAIL_INTERVAL;
-      while (proj.trailAcc >= interval) {
-        proj.trailAcc -= interval;
+      const effectiveInterval =
+        trailType === 'emberTrail' && Number.isFinite(proj.trailIntervalMul)
+          ? interval * Math.max(1, Number(proj.trailIntervalMul))
+          : interval;
+      let trailBudget = 2;
+      while (proj.trailAcc >= effectiveInterval && trailBudget-- > 0) {
+        proj.trailAcc -= effectiveInterval;
         spawnTrailParticle(proj.x, proj.y, trailType, proj.z);
+      }
+      if (trailBudget <= 0 && proj.trailAcc > effectiveInterval * 3) {
+        // Prevent runaway catch-up after frame spikes.
+        proj.trailAcc = effectiveInterval * 3;
       }
     }
 
+    let runCollisionChecks = true;
+    if (proj.type === 'flamethrowerShot' && proj.streamShot) {
+      proj.hitTickAcc = (Number(proj.hitTickAcc) || 0) + dt;
+      if (proj.hitTickAcc < FLAMETHROWER_STREAM_HIT_TICK_SEC) {
+        runCollisionChecks = false;
+      } else {
+        proj.hitTickAcc = Math.min(
+          proj.hitTickAcc - FLAMETHROWER_STREAM_HIT_TICK_SEC,
+          FLAMETHROWER_STREAM_HIT_TICK_SEC
+        );
+      }
+    }
+    if (!runCollisionChecks) continue;
+
     if (data && isProjectileBlockedByTree(proj, data)) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       const impactZ = Math.max(0, Number(proj.z) || 0);
       spawnHitParticles(proj.x, proj.y, impactZ);
       tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
       if (proj.type === 'incinerateCore') {
-        applySplashToWild(proj, wildList, impactZ);
+        applySplashToWild(proj, wildList, impactZ, wildSpatial);
         spawnIncinerateShards(proj, pushProjectile, impactZ);
       }
       activeProjectiles.splice(i, 1);
@@ -1105,32 +1056,37 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     }
 
     if (!hit && proj.hitsWild) {
-      for (const wild of wildList) {
-        if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) {
-          continue;
-        }
-        const wz = wild.z ?? 0;
-        const wDex = wild.dexId ?? 1;
-        const { hx, hy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, wDex);
-        if (!broadPhaseOk(proj.x, proj.y, hx, hy)) continue;
-        if (!projectileZInPokemonHurtbox(proj.z, wDex, wz)) continue;
-        const hurtR = getPokemonHurtboxRadiusTiles(wDex);
-        if (checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) {
+      const pad = COLLISION_BROAD_PHASE_TILES;
+      queryWildSpatialIndexInAabb(
+        wildSpatial,
+        proj.x - pad,
+        proj.y - pad,
+        proj.x + pad,
+        proj.y + pad,
+        ({ wild, hx, hy, dex, z }) => {
+          if (hit) return;
+          if (wild === proj.sourceEntity) return;
+          if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return;
+          if (!projectileZInPokemonHurtbox(proj.z, dex, z)) return;
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          if (!checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) return;
           if (wild.takeDamage) wild.takeDamage(proj.damage);
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
-          spawnHitParticles(proj.x, proj.y, wz);
+          spawnHitParticles(proj.x, proj.y, z);
           if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
-            applySplashToWild(proj, wildList);
+            applySplashToWild(proj, wildList, undefined, wildSpatial);
           }
           if (proj.type === 'incinerateCore') {
-            spawnIncinerateShards(proj, pushProjectile, wz);
+            spawnIncinerateShards(proj, pushProjectile, z);
           }
           hit = true;
-          break;
         }
-      }
+      );
     }
 
-    if (hit) activeProjectiles.splice(i, 1);
+    if (hit) {
+      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
+      activeProjectiles.splice(i, 1);
+    }
   }
 }

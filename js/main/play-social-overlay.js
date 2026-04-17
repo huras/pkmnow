@@ -1,14 +1,18 @@
 import { SOCIAL_ACTIONS } from '../social/social-actions.js';
+import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
+
+const stub = () => ({
+  flashAction: () => {},
+  clearActive: () => {},
+  refreshPortraits: () => Promise.resolve()
+});
 
 /**
  * @param {HTMLElement | null} rootEl
  */
 export function createPlaySocialOverlay(rootEl) {
   if (!rootEl) {
-    return {
-      flashAction: () => {},
-      clearActive: () => {}
-    };
+    return stub();
   }
 
   rootEl.innerHTML = `
@@ -29,7 +33,10 @@ export function createPlaySocialOverlay(rootEl) {
     item.dataset.actionId = action.id;
     item.innerHTML = `
       <span class="play-social-overlay-key">${action.slot}</span>
-      <span class="play-social-overlay-emoji">${action.emoji}</span>
+      <span class="play-social-overlay-figure" aria-hidden="true">
+        <img class="play-social-overlay-portrait" width="26" height="26" alt="" decoding="async" />
+        <span class="play-social-overlay-emoji-fallback">${action.emoji}</span>
+      </span>
       <span class="play-social-overlay-label">${action.label}</span>
     `;
     gridEl?.appendChild(item);
@@ -53,6 +60,42 @@ export function createPlaySocialOverlay(rootEl) {
   }
 
   /**
+   * @param {number} dexId
+   */
+  async function refreshPortraits(dexId) {
+    const d = Math.floor(Number(dexId) || 0);
+    const prefix = d >= 1 && d <= 9999 ? await probeSpriteCollabPortraitPrefix(d) : null;
+    for (const action of SOCIAL_ACTIONS) {
+      const row = itemByActionId.get(action.id);
+      const wrap = row?.querySelector('.play-social-overlay-figure');
+      const img = /** @type {HTMLImageElement | null} */ (wrap?.querySelector('.play-social-overlay-portrait') ?? null);
+      const fb = wrap?.querySelector('.play-social-overlay-emoji-fallback');
+      if (!img || !fb) continue;
+      const slug = String(action.portraitSlug || 'Normal').replace(/[^\w.-]/g, '') || 'Normal';
+      fb.classList.remove('is-hidden');
+      img.onload = () => {
+        fb.classList.add('is-hidden');
+      };
+      if (prefix) {
+        let triedNormal = false;
+        img.onerror = () => {
+          if (!triedNormal && slug !== 'Normal') {
+            triedNormal = true;
+            img.src = `${prefix}Normal.png`;
+          } else {
+            img.removeAttribute('src');
+            fb.classList.remove('is-hidden');
+          }
+        };
+        img.src = `${prefix}${slug}.png`;
+        if (img.complete && img.naturalWidth) fb.classList.add('is-hidden');
+      } else {
+        img.removeAttribute('src');
+      }
+    }
+  }
+
+  /**
    * @param {string} actionId
    */
   function flashAction(actionId) {
@@ -62,7 +105,7 @@ export function createPlaySocialOverlay(rootEl) {
     rootEl.classList.add('is-active');
     const activeItem = itemByActionId.get(action.id);
     activeItem?.classList.add('is-active');
-    if (lastEl) lastEl.textContent = `Sent ${action.emoji} ${action.label}`;
+    if (lastEl) lastEl.textContent = `Sent ${action.label}`;
 
     activeTimer = window.setTimeout(() => {
       activeItem?.classList.remove('is-active');
@@ -74,5 +117,5 @@ export function createPlaySocialOverlay(rootEl) {
     }, 1500);
   }
 
-  return { flashAction, clearActive };
+  return { flashAction, clearActive, refreshPortraits };
 }

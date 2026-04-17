@@ -13,6 +13,64 @@ import {
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { getDetailHitShake01 } from '../main/play-crystal-tackle.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
+import { PMD_MON_SHEET } from '../pokemon/pmd-default-timing.js';
+import { getDexAnimSlice } from '../pokemon/pmd-anim-metadata.js';
+import {
+  resolvePmdFrameSpecForSlice,
+  resolveCanonicalPmdH
+} from '../pokemon/pmd-layout-metrics.js';
+import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
+import { POKEMON_HEIGHTS } from '../pokemon/pokemon-config.js';
+
+const DROP_GLOW_TEXTURE_PATH = 'vfx/ETF_Texture_Sparkle_02.png';
+const DROP_GLOW_PERIOD_SEC = 3;
+const DROP_GLOW_DURATION_SEC = 0.5;
+let dropGlowTextureInflight = null;
+
+function queueDropGlowTextureLoad(imageCache) {
+  if (imageCache.has(DROP_GLOW_TEXTURE_PATH) || dropGlowTextureInflight) return;
+  dropGlowTextureInflight = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(DROP_GLOW_TEXTURE_PATH, img);
+      dropGlowTextureInflight = null;
+      resolve();
+    };
+    img.onerror = () => {
+      dropGlowTextureInflight = null;
+      resolve();
+    };
+    img.src = DROP_GLOW_TEXTURE_PATH;
+  });
+}
+
+function dropGlowPulse01(drop) {
+  const ageSec = Number(drop?.age) || 0;
+  const seed = Number(drop?.bobSeed) || 0;
+  const phaseSec = (ageSec + seed * 0.37) % DROP_GLOW_PERIOD_SEC;
+  if (phaseSec >= DROP_GLOW_DURATION_SEC) return 0;
+  const t = phaseSec / DROP_GLOW_DURATION_SEC;
+  return Math.sin(Math.PI * t);
+}
+
+function drawDropGlow(ctx, drop, imageCache, px, py, targetW, targetH) {
+  const glow = dropGlowPulse01(drop);
+  if (glow <= 0.001) return;
+  const glowImg = imageCache.get(DROP_GLOW_TEXTURE_PATH);
+  if (!glowImg?.naturalWidth) {
+    queueDropGlowTextureLoad(imageCache);
+    return;
+  }
+  const suctionT = Math.max(0, Math.min(1, Number(drop?.collectShrink) || 0));
+  const scaleBoost = 1 + glow * 0.48;
+  const dw = Math.max(16, targetW * 1.9 * scaleBoost);
+  const dh = Math.max(16, targetH * 1.9 * scaleBoost);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = (0.28 + glow * 0.5) * (1 - suctionT * 0.62);
+  ctx.drawImage(glowImg, px - dw * 0.5, py - dh * 0.5, dw, dh);
+  ctx.restore();
+}
 
 /**
  * Handles drawing of a scatter object (bushes, rocks, etc.).
@@ -216,6 +274,7 @@ export function drawCrystalDrop(ctx, item, options) {
     ctx.arc(px - rr * 0.25, py - rr * 0.25, Math.max(1, rr * 0.35), 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    drawDropGlow(ctx, d, imageCache, px, py, rr * 2.7, rr * 2.7);
   } else {
     const path = d.imgPath;
     const img = path ? imageCache.get(path) : null;
@@ -250,6 +309,7 @@ export function drawCrystalDrop(ctx, item, options) {
         ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileDw, tileDh);
       }
       ctx.restore();
+      drawDropGlow(ctx, d, imageCache, px, py, footW, footH);
     }
   }
 }
@@ -335,6 +395,72 @@ export function drawStrengthThrowRock(ctx, item, options) {
       ctx.drawImage(img, sx0, sy0, srcW, srcH, tx, ty, dw, dh);
     }
   }
+}
+
+function pickAnimFrame(seq, tickInLoop) {
+  let acc = 0;
+  for (let i = 0; i < seq.length; i++) {
+    acc += seq[i];
+    if (tickInLoop <= acc) return i;
+  }
+  return 0;
+}
+
+/**
+ * Handles drawing of a thrown fainted wild Pokémon.
+ * During ground roll, uses the species walk cycle as rolling animation.
+ */
+export function drawStrengthThrowFaintedWild(ctx, item, options) {
+  const { tileW, tileH, snapPx, imageCache } = options;
+  const dex = Math.max(1, Math.floor(Number(item.dexId) || 1));
+  const { walk: wWalk, idle: wIdle, faint: wFaint, tumble: wTumble } = getResolvedSheets(imageCache, dex);
+  if (!wIdle && !wWalk) return;
+  const isRolling = item.phase === 'roll';
+  const animSlice = isRolling ? 'walk' : 'faint';
+  const sheet = isRolling ? (wTumble || wWalk || wIdle) : (wFaint || wIdle || wWalk);
+  if (!sheet) return;
+  let sw;
+  let sh;
+  let animCols;
+  if (isRolling && wTumble && sheet === wTumble) {
+    const walkMeta = getDexAnimSlice(dex, 'walk');
+    const frameW = Math.max(1, Number(walkMeta?.frameWidth) || 32);
+    animCols = Math.max(1, Math.floor((sheet.naturalWidth || frameW) / frameW));
+    sw = Math.max(1, Math.floor((sheet.naturalWidth || frameW * animCols) / animCols));
+    sh = Math.max(1, Number(sheet.naturalHeight) || Number(walkMeta?.frameHeight) || 40);
+  } else {
+    ({ sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, animSlice));
+  }
+  const canonicalH = resolveCanonicalPmdH(wIdle || wWalk, wWalk || wIdle, dex);
+  const targetHeightTiles = POKEMON_HEIGHTS[dex] || 1.1;
+  const targetHeightPx = targetHeightTiles * tileH;
+  const finalScale = targetHeightPx / Math.max(1, canonicalH);
+  const dw = sw * finalScale;
+  const dh = sh * finalScale;
+  let frame = 0;
+  if (isRolling) {
+    if (wTumble && sheet === wTumble) {
+      frame = Math.floor((Number(item.rollAge) || 0) * 18) % Math.max(1, animCols);
+    } else {
+      const seq = getDexAnimSlice(dex, 'walk')?.durations || [8, 10, 8, 10];
+      const total = seq.reduce((a, b) => a + b, 0);
+      const tick = ((Number(item.rollAge) || 0) * 60 * 1.9) % Math.max(1, total);
+      frame = pickAnimFrame(seq, tick);
+    }
+  } else {
+    const seq = getDexAnimSlice(dex, 'faint')?.durations || getDexAnimSlice(dex, 'idle')?.durations || [40];
+    const total = seq.reduce((a, b) => a + b, 0);
+    const tick = Math.min(total, (Number(item.age) || 0) * 60);
+    frame = pickAnimFrame(seq, tick);
+  }
+  const sx = (frame % animCols) * sw;
+  const sy = 0;
+  const z = Number(item.z) || 0;
+  const cx = snapPx(Number(item.x) * tileW);
+  const cy = snapPx(Number(item.y) * tileH - z * tileH);
+  const pX = snapPx(cx - dw * 0.5);
+  const pY = snapPx(cy - dh * PMD_MON_SHEET.pivotYFrac);
+  ctx.drawImage(sheet, sx, sy, sw, sh, pX, pY, snapPx(dw), snapPx(dh));
 }
 
 /**
@@ -583,14 +709,16 @@ export function drawPsybeamChargeBall(ctx, item, options) {
 }
 
 /**
- * In-place fade for broken scatter (grass, flowers, tree-without-top, rocks, etc.) — no vertical drop.
+ * Fall + fade for broken scatter vegetation details (grass, flowers, tree-without-top, rocks, etc.).
  */
 export function drawScatterVegetationFadeOut(ctx, item, options) {
-  const { originX, originY, itemKey, cols, rows, alpha } = item;
+  const { tileH } = options;
+  const { originX, originY, itemKey, cols, rows, dropYTiles = 0, alpha } = item;
   const objSet = OBJECT_SETS[itemKey];
   if (!objSet || alpha < 0.02) return;
   ctx.save();
   ctx.globalAlpha = ctx.globalAlpha * alpha;
+  if (dropYTiles > 0) ctx.translate(0, dropYTiles * tileH);
   drawScatter(
     ctx,
     {

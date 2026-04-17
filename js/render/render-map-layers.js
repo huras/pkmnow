@@ -12,7 +12,7 @@ import { getGrassVariant, GRASS_TILES } from '../biome-tiles.js';
 import { foliageType } from '../chunking.js';
 import { getPlayAnimatedGrassLayers } from '../play-grass-eligibility.js';
 import { grassFireVisualPhaseAt, grassFireCharredRegrowth01 } from '../play-grass-fire.js';
-import { grassCutSuppressesAnimatedGrassAt } from '../play-grass-cut.js';
+import { getGrassCutFadeoutAlpha01 } from '../play-grass-cut.js';
 import { TCOLS_NATURE } from './render-utils-internal.js';
 
 /**
@@ -140,16 +140,23 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
     ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
   };
 
+  const cutFade = getGrassCutFadeoutAlpha01(mx, my);
+  if (cutFade <= 0.01) {
+    return;
+  }
+
+  let needAlphaRestore = false;
   if (playerTopOverlay) {
     ctx.save();
-    ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA;
+    ctx.globalAlpha = PLAYER_TILE_GRASS_OVERLAY_ALPHA * cutFade;
+    needAlphaRestore = true;
+  } else if (cutFade < 0.999) {
+    ctx.save();
+    ctx.globalAlpha = cutFade;
+    needAlphaRestore = true;
   }
 
   const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
-  if (grassCutSuppressesAnimatedGrassAt(mx, my)) {
-    if (playerTopOverlay) ctx.restore();
-    return;
-  }
 
   const firePhase = grassFireVisualPhaseAt(mx, my);
   const charredRegrowU = firePhase === 'charred' ? (grassFireCharredRegrowth01(mx, my) ?? 0) : 0;
@@ -246,5 +253,5 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
     }
   }
 
-  if (playerTopOverlay) ctx.restore();
+  if (needAlphaRestore) ctx.restore();
 }

@@ -13,6 +13,12 @@ import {
 } from './biome-tiles.js';
 import { PLAY_CHUNK_SIZE } from './render/render-constants.js';
 
+const toLocalSuppressionKey = (mx, my) => {
+  const localX = ((mx % PLAY_CHUNK_SIZE) + PLAY_CHUNK_SIZE) % PLAY_CHUNK_SIZE;
+  const localY = ((my % PLAY_CHUNK_SIZE) + PLAY_CHUNK_SIZE) % PLAY_CHUNK_SIZE;
+  return (localY << 8) | localX;
+};
+
 /**
  * Same surface gate as PASS 5a `forEachAbovePlayerTile` in render.js (height + CENTER cliff role).
  * @param {(col: number, row: number) => object | null | undefined} getTile
@@ -33,7 +39,7 @@ export function playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile) {
 /**
  * Which animated grass layers would draw at LOD0 (union used for flammability; render still gates top by lodDetail).
  * @param {(col: number, row: number) => object | null | undefined} getTile
- * @param {Map<string, { canvas: HTMLCanvasElement, suppressedSet: Set<string> }>} playChunkMap
+ * @param {Map<string, { canvas: HTMLCanvasElement, suppressedSet: Set<number> }>} playChunkMap
  * @returns {{ base: boolean, top: boolean }}
  */
 export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) {
@@ -77,7 +83,7 @@ export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) 
       const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
       const cy = Math.floor(my / PLAY_CHUNK_SIZE);
       const chunk = playChunkMap.get(`${cx},${cy}`);
-      const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
+      const isOccupiedByObject = chunk ? chunk.suppressedSet.has(toLocalSuppressionKey(mx, my)) : false;
 
       if (!isFT && !isFN && !isOccupiedByObject) {
         let baseId = gTiles.original;
@@ -109,7 +115,7 @@ export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) 
       const cx = Math.floor(mx / PLAY_CHUNK_SIZE);
       const cy = Math.floor(my / PLAY_CHUNK_SIZE);
       const chunk = playChunkMap.get(`${cx},${cy}`);
-      const isOccupiedByObject = chunk ? chunk.suppressedSet.has(`${mx % PLAY_CHUNK_SIZE},${my % PLAY_CHUNK_SIZE}`) : false;
+      const isOccupiedByObject = chunk ? chunk.suppressedSet.has(toLocalSuppressionKey(mx, my)) : false;
 
       if (!isFT && !isFN && !isOccupiedByObject) out.top = true;
     }

@@ -154,6 +154,22 @@ export function pivotCellHeightStepDelta(pivotX, pivotY, srcPivotX, srcPivotY, m
   return pt.heightStep - st.heightStep;
 }
 
+/**
+ * True if moving from src to dest involves a drop that lacks a ramp/stair connector.
+ */
+export function isCliffDrop(srcX, srcY, destX, destY, data) {
+  const smx = Math.floor(srcX);
+  const smy = Math.floor(srcY);
+  const dmx = Math.floor(destX);
+  const dmy = Math.floor(destY);
+  if (smx === dmx && smy === dmy) return false;
+  const st = getMicroTile(smx, smy, data);
+  const dt = getMicroTile(dmx, dmy, data);
+  if (!st || !dt) return false;
+  if (dt.heightStep >= st.heightStep) return false; // Not a drop
+  return !okHeightStepTransition(st, dt);
+}
+
 export const WALL_ROLES = new Set([
   'EDGE_S', 'EDGE_W', 'EDGE_E', 
   'IN_NW', 'IN_NE', 'IN_SW', 'IN_SE',
@@ -216,6 +232,17 @@ export function getBaseTerrainSpriteId(mx, my, data) {
 export function isBaseTerrainSpriteWalkable(spriteId) {
   if (spriteId == null) return false;
   return WALKABLE_SURFACE_TERRAIN_TILE_IDS.has(spriteId);
+}
+
+/** @param {number | null | undefined} spriteId @param {string} setName */
+function isSpriteInTerrainSet(spriteId, setName) {
+  const set = TERRAIN_SETS[setName];
+  if (!set || spriteId == null) return false;
+  if (set.centerId === spriteId) return true;
+  for (const id of Object.values(set.roles || {})) {
+    if (id === spriteId) return true;
+  }
+  return false;
 }
 
 /**
@@ -853,7 +880,8 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
 
 /**
  * Specialty walkability for Wild Pokémon: allows swimming (oceano / lago raso), bloqueia penhascos,
- * paredes de autotile, lava/pools bloqueantes, lago roxo e props — alinhado a `canWalkMicroTile` com exceção de água.
+ * paredes de autotile; **lago/lava** (overlay + poça roxa + base lava-lake) são tratados como “fluido” caminhável.
+ * Props e troncos permanecem como no jogador.
  * `x,y` devem ser mundo contínuo (ex.: `worldFeetFromPivotCell`), como no jogador.
  * @param {boolean} [isAirborne=false] — durante salto, ignora degraus de altura, paredes EDGE e base/overlay “solo”.
  * @param {boolean} [ignoreTreeTrunks=false]
@@ -893,20 +921,14 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
   if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
   if (!isAirborne && setName.startsWith('altura ')) return false;
 
-  const overlayId = getFoliageOverlayTileId(mx, my, data);
-  if (!isAirborne && overlayId != null && FOLIAGE_POOL_OVERLAY_UNWALKABLE_TILE_IDS.has(overlayId)) {
-    return false;
-  }
-
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
-  if (!isAirborne && lakeWalkRole != null && isPurpleLakePoolWalkBlockingRole(lakeWalkRole)) {
-    return false;
-  }
 
   if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) {
+    const lavaSprite = isSpriteInTerrainSet(sid, 'lava-lake-dirt');
     const swimOk =
       targetTile.biomeId === BIOMES.OCEAN.id ||
-      (lakeWalkRole != null && !isPurpleLakePoolWalkBlockingRole(lakeWalkRole));
+      lakeWalkRole != null ||
+      lavaSprite;
     if (!swimOk) return false;
   }
 

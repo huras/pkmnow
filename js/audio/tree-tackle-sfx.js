@@ -5,10 +5,8 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const TREE_TACKLE_WAV_URL = new URL(
-  '../../audio/sfx/Game Boy Advance - Pokemon Emerald - Miscellaneous - Sound Effects/emerald_000C.wav',
-  import.meta.url
-).href;
+const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
+const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
 
 const POOL_SIZE = 4;
 const TREE_TACKLE_VOL = 0.62;

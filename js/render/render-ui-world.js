@@ -110,11 +110,11 @@ export function drawWildEmotionOverlay(ctx, em, spawnYOffset, imageCache, tileW,
     /** Panel size; stack + plate alphas composite over terrain (see fills — not opaque white). */
     const PORTRAIT_EMOTION_BOX_TILES = 1.14 * 1.25;
     /** Uniform multiplier so face + chrome all read as “glass” over the map. */
-    const PORTRAIT_EMOTION_STACK_ALPHA = 0.58;
-    const PORTRAIT_PLATE_FILL = 'rgba(252,250,255,0.5)';
-    const PORTRAIT_SHADOW_FILL = 'rgba(6,8,14,0.38)';
-    const PORTRAIT_STROKE_PLATE = 'rgba(255,255,255,0.55)';
-    const PORTRAIT_STROKE_TAIL = 'rgba(255,255,255,0.48)';
+    const PORTRAIT_EMOTION_STACK_ALPHA = 0.98;
+    const PORTRAIT_PLATE_FILL = 'rgba(252,250,255,0.92)';
+    const PORTRAIT_SHADOW_FILL = 'rgba(6,8,14,0.45)';
+    const PORTRAIT_STROKE_PLATE = 'rgba(255,255,255,0.96)';
+    const PORTRAIT_STROKE_TAIL = 'rgba(255,255,255,0.85)';
     const side = tileW * PORTRAIT_EMOTION_BOX_TILES;
     const gap = tileH * 0.07;
     const bx = snapPx(em.cx - side * 0.5);

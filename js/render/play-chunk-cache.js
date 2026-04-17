@@ -2,6 +2,14 @@ export const playChunkMap = new Map();
 const playChunkBakeQueue = [];
 const playChunkBakeQueuedByKey = new Map();
 let playChunkBakeQueueHead = 0;
+const playChunkLastUsedTickByKey = new Map();
+let playChunkUseTick = 1;
+let playChunkCacheRevision = 1;
+
+/** Soft safety cap to avoid unbounded memory growth in long sessions. */
+export const PLAY_CHUNK_CACHE_MAX_ENTRIES = 384;
+/** Keep a warm ring around current player chunk to reduce rebake thrash. */
+export const PLAY_CHUNK_CACHE_KEEP_RING_RADIUS = 10;
 
 let lastDataForCache = null;
 let lastTileWForCache = 0;
@@ -19,6 +27,101 @@ function compactPlayChunkBakeQueueIfNeeded() {
   playChunkBakeQueueHead = 0;
 }
 
+function touchPlayChunkKey(key) {
+  playChunkLastUsedTickByKey.set(key, playChunkUseTick++);
+}
+
+function bumpPlayChunkCacheRevision() {
+  playChunkCacheRevision++;
+}
+
+function dropPlayChunkByKey(key) {
+  playChunkMap.delete(key);
+  playChunkLastUsedTickByKey.delete(key);
+  bumpPlayChunkCacheRevision();
+}
+
+/** @param {string} key */
+export function hasPlayChunk(key) {
+  const hit = playChunkMap.has(key);
+  if (hit) touchPlayChunkKey(key);
+  return hit;
+}
+
+/** @param {string} key */
+export function getPlayChunk(key) {
+  const v = playChunkMap.get(key);
+  if (v) touchPlayChunkKey(key);
+  return v;
+}
+
+/**
+ * @param {string} key
+ * @param {{ canvas: HTMLCanvasElement, suppressedSet: Set<number> }} chunk
+ */
+export function setPlayChunk(key, chunk) {
+  playChunkMap.set(key, chunk);
+  touchPlayChunkKey(key);
+  bumpPlayChunkCacheRevision();
+}
+
+export function clearPlayChunkCache() {
+  playChunkMap.clear();
+  playChunkLastUsedTickByKey.clear();
+  bumpPlayChunkCacheRevision();
+}
+
+export function getPlayChunkCacheRevision() {
+  return playChunkCacheRevision;
+}
+
+/**
+ * Evicts old/far chunks to keep memory bounded.
+ * @param {{
+ *   maxEntries?: number,
+ *   keepKeys?: Iterable<string>,
+ *   centerCx?: number,
+ *   centerCy?: number,
+ *   keepRingRadius?: number
+ * }} opts
+ * @returns {number} removed entries count
+ */
+export function prunePlayChunkCache(opts = {}) {
+  const maxEntries = Math.max(1, Math.floor(opts.maxEntries ?? PLAY_CHUNK_CACHE_MAX_ENTRIES));
+  if (playChunkMap.size <= maxEntries) return 0;
+
+  const keepSet = new Set(opts.keepKeys || []);
+  const centerCx = Number.isFinite(opts.centerCx) ? Number(opts.centerCx) : null;
+  const centerCy = Number.isFinite(opts.centerCy) ? Number(opts.centerCy) : null;
+  const keepRingRadius = Math.max(0, Math.floor(opts.keepRingRadius ?? PLAY_CHUNK_CACHE_KEEP_RING_RADIUS));
+
+  const candidates = [];
+  for (const key of playChunkMap.keys()) {
+    if (keepSet.has(key)) continue;
+    const [cxRaw, cyRaw] = key.split(',');
+    const cx = Number(cxRaw);
+    const cy = Number(cyRaw);
+    const hasCenter = centerCx != null && centerCy != null && Number.isFinite(cx) && Number.isFinite(cy);
+    const dist = hasCenter ? Math.abs(cx - centerCx) + Math.abs(cy - centerCy) : -1;
+    if (hasCenter && dist <= keepRingRadius) continue;
+    const lastUsed = playChunkLastUsedTickByKey.get(key) ?? -1;
+    candidates.push({ key, dist, lastUsed });
+  }
+
+  candidates.sort((a, b) => {
+    if (a.dist !== b.dist) return b.dist - a.dist; // farthest first
+    return a.lastUsed - b.lastUsed; // oldest first
+  });
+
+  let removed = 0;
+  for (const c of candidates) {
+    if (playChunkMap.size <= maxEntries) break;
+    dropPlayChunkByKey(c.key);
+    removed++;
+  }
+  return removed;
+}
+
 /**
  * Enfileira um chunk para bake em orçamento futuro de frame.
  * @returns {boolean} true se foi enfileirado agora.
@@ -33,7 +136,7 @@ export function enqueuePlayChunkBake(cx, cy, forceRebake = false) {
     }
     return false;
   }
-  if (!forceRebake && playChunkMap.has(key)) return false;
+  if (!forceRebake && hasPlayChunk(key)) return false;
   if (forceRebake) {
     playChunkBakeQueue.splice(playChunkBakeQueueHead, 0, key);
   } else {
@@ -75,7 +178,7 @@ export function getPlayChunkBakeQueueSize() {
  */
 export function syncPlayChunkCache(data, tileW, appMode) {
   if (appMode !== 'play' || data !== lastDataForCache || tileW !== lastTileWForCache) {
-    playChunkMap.clear();
+    clearPlayChunkCache();
     resetPlayChunkBakeQueue();
     lastDataForCache = data;
     lastTileWForCache = tileW;

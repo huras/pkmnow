@@ -1,5 +1,5 @@
 import { player, setPlayerSpecies } from '../player.js';
-import { summonDebugWildPokemon } from '../wild-pokemon/wild-pokemon-manager.js';
+import { summonDebugWildPokemon } from '../wild-pokemon/index.js';
 import { getGen1SpeciesName, padDex3 } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
@@ -15,6 +15,8 @@ import {
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
+import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
+import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
@@ -40,15 +42,13 @@ function lootLabelFromItemKey(itemKey) {
     .trim();
 }
 
-function lootEmojiForItemKey(itemKey) {
+/** @param {string} itemKey */
+function lootSlugForItemKey(itemKey) {
   const k = String(itemKey || '').toLowerCase();
-  if (k.includes('crystal')) return '💎';
-  if (k.includes('shell')) return '🐚';
-  if (k.includes('flower')) return '🌸';
-  if (k.includes('mushroom')) return '🍄';
-  if (k.includes('leaf') || k.includes('grass')) return '🌿';
-  if (k.includes('rock')) return '🪨';
-  return '📦';
+  if (k.includes('crystal')) return 'star-piece';
+  const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
+  if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
+  return null;
 }
 
 export class CharacterSelector {
@@ -87,6 +87,16 @@ export class CharacterSelector {
     const immStored = localStorage.getItem(IMMERSIVE_CHROME_STORAGE_KEY);
     this.playImmersiveChrome =
       immStored === '1' ? true : immStored === '0' ? false : !!opts.defaultPlayImmersiveChrome;
+
+    /** @type {Map<string, string> | null} */
+    this._lootIconPathMap = null;
+    void getPokemondbItemIconPathMap().then((m) => {
+      this._lootIconPathMap = m;
+      const crystalPath = m.get('star-piece');
+      const crystalImg = this.container?.querySelector('#play-item-crystal-icon');
+      if (crystalImg && crystalPath) crystalImg.setAttribute('src', crystalPath);
+      this.updatePlayItemsHud();
+    });
 
     for (let i = 1; i <= 151; i++) {
       this.allSpecies.push({
@@ -147,8 +157,8 @@ export class CharacterSelector {
         minimal ? 'Show full character panel' : 'Use minimal character panel'
       );
       btn.title = minimal
-        ? 'Show search, move hints, and right-click mode'
-        : 'Hide search, move hints, and right-click mode';
+        ? 'Show search and right-click mode bar'
+        : 'Hide search and right-click mode bar';
       btn.textContent = minimal ? 'Full' : 'Min';
     }
   }
@@ -210,16 +220,22 @@ export class CharacterSelector {
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
       .slice(0, 4);
+    const m = this._lootIconPathMap;
     listEl.innerHTML = rows
-      .map(
-        (r) => `
+      .map((r) => {
+        const slug = lootSlugForItemKey(r.itemKey);
+        const path = slug && m ? m.get(slug) : null;
+        const icon = path
+          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="20" height="20" decoding="async" />`
+          : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+        return `
           <div class="play-item-hud__row">
-            <span class="play-item-hud__icon" aria-hidden="true">${lootEmojiForItemKey(r.itemKey)}</span>
+            <span class="play-item-hud__icon" aria-hidden="true">${icon}</span>
             <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
             <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
           </div>
-        `
-      )
+        `;
+      })
       .join('');
   }
 
@@ -266,7 +282,7 @@ export class CharacterSelector {
               id="character-selector-layout-toggle"
               aria-pressed="false"
               aria-label="Use minimal character panel"
-              title="Hide search, move hints, and right-click mode"
+              title="Hide search and right-click mode bar"
             >Min</button>
             <button
               type="button"
@@ -317,11 +333,20 @@ export class CharacterSelector {
             LMB: <span id="player-field-skill-label">Tackle</span>
           </div>
           <div class="player-field-charge hidden" id="player-field-charge" aria-label="Field move charge">
-            <div class="player-field-charge__bar"><div class="player-field-charge__fill" id="player-field-charge-fill"></div></div>
+            <div class="player-field-charge__bar">
+              <div class="player-field-charge__segment player-field-charge__segment--1">
+                <div class="player-field-charge__fill player-field-charge__fill--1" id="player-field-charge-fill-1"></div>
+              </div>
+              <div class="player-field-charge__segment player-field-charge__segment--2">
+                <div class="player-field-charge__fill player-field-charge__fill--2" id="player-field-charge-fill-2"></div>
+              </div>
+              <div class="player-field-charge__segment player-field-charge__segment--3">
+                <div class="player-field-charge__fill player-field-charge__fill--3" id="player-field-charge-fill-3"></div>
+              </div>
+            </div>
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
-          <div class="player-moves-help">LMB = field move (hold 1: tackle/cut; hold+release LMB = charge; Cut = 3-hit combo) · E = pegar/soltar pedra · com pedra: soltar LMB = arremessar · RMB = 2º slot · LCtrl+click = 3º/4º · MMB = Ultimate · golpes: teclas 2–0 e -</div>
         </div>
 
         <div
@@ -333,8 +358,6 @@ export class CharacterSelector {
         <div class="search-container">
           <span class="search-icon">🔍</span>
           <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
-          <p class="selector-summon-hint" style="margin:0.35rem 0 0;font-size:0.72rem;opacity:0.82">Click: play as · Ctrl+click (⌘ on Mac): summon wild nearby</p>
-          
           <div class="results-list" id="search-results">
             <!-- Results injected here -->
           </div>
@@ -343,7 +366,9 @@ export class CharacterSelector {
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__title">Items</div>
           <div class="play-item-hud__row">
-            <span class="play-item-hud__icon" aria-hidden="true">💎</span>
+            <span class="play-item-hud__icon" aria-hidden="true">
+              <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="20" height="20" alt="" decoding="async" />
+            </span>
             <span class="play-item-hud__label">Crystal Shards</span>
             <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
           </div>
@@ -422,15 +447,40 @@ export class CharacterSelector {
 
   updatePlayFieldMoveChargeHud() {
     const wrap = this.container?.querySelector('#player-field-charge');
-    const fill = this.container?.querySelector('#player-field-charge-fill');
+    const fill1 = this.container?.querySelector('#player-field-charge-fill-1');
+    const fill2 = this.container?.querySelector('#player-field-charge-fill-2');
+    const fill3 = this.container?.querySelector('#player-field-charge-fill-3');
     const label = this.container?.querySelector('#player-field-charge-label');
-    if (!(wrap instanceof HTMLElement) || !(fill instanceof HTMLElement) || !(label instanceof HTMLElement)) return;
+    if (
+      !(wrap instanceof HTMLElement) ||
+      !(fill1 instanceof HTMLElement) ||
+      !(fill2 instanceof HTMLElement) ||
+      !(fill3 instanceof HTMLElement) ||
+      !(label instanceof HTMLElement)
+    ) return;
     const skillId = getPlayerInputBindings(player.dexId).lmb;
     const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-    const shouldShow = skillId === 'tackle' && p > 0.005;
+    const [p1, p2, p3] = getChargeBarProgresses(p);
+    const lvl = getChargeLevel(p);
+    const canChargeFieldSkill = skillId === 'tackle' || skillId === 'cut';
+    const shouldShow = canChargeFieldSkill && p > 0.005;
+    const moveLabel = skillId === 'cut' ? 'Cut' : 'Tackle';
     wrap.classList.toggle('hidden', !shouldShow);
-    fill.style.width = `${Math.round(p * 100)}%`;
-    label.textContent = `Tackle Charge ${Math.round(p * 100)}%`;
+    fill1.style.width = `${Math.round(p1 * 100)}%`;
+    fill2.style.width = `${Math.round(p2 * 100)}%`;
+    fill3.style.width = `${Math.round(p3 * 100)}%`;
+    label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
+
+    const FULL = 0.994;
+    const setBarFullGlow = (fill, easedPn) => {
+      const on = shouldShow && easedPn >= FULL;
+      fill.classList.toggle('player-field-charge__fill--full', on);
+      const seg = fill.parentElement;
+      if (seg) seg.classList.toggle('player-field-charge__segment--full', on);
+    };
+    setBarFullGlow(fill1, p1);
+    setBarFullGlow(fill2, p2);
+    setBarFullGlow(fill3, p3);
   }
 
   syncPlayPointerModeRadios() {

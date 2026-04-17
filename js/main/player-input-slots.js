@@ -50,9 +50,12 @@ function defaultBindingsForDex(dexId) {
     const cand = moves[idx];
     return cand && PLAYER_BINDABLE_MOVE_IDS.includes(cand) ? cand : fallback;
   };
+  const isCharmander = dex === 4;
+  const defaultLmb = isCharmander ? 'cut' : 'tackle';
+  const defaultRmb = isCharmander ? 'flamethrower' : pick(0, 'ember');
   return {
-    lmb: 'tackle',
-    rmb: normalizeBindableMoveId(pick(0, 'ember')),
+    lmb: normalizeBindableMoveId(defaultLmb),
+    rmb: normalizeBindableMoveId(defaultRmb),
     mmb: 'ultimate',
     wheelUp: normalizeBindableMoveId(pick(1, 'confusion')),
     wheelDown: normalizeBindableMoveId(pick(2, 'bubble'))

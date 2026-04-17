@@ -1,0 +1,218 @@
+[
+  {
+    "name": "Beast Ball",
+    "slug": "beast-ball",
+    "category": "Pokeballs",
+    "effect": "A special Poké Ball designed to catch Ultra Beasts. It has a low success rate for catching others.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/beast-ball.png",
+    "itemUrl": "https://pokemondb.net/item/beast-ball"
+  },
+  {
+    "name": "Cherish Ball",
+    "slug": "cherish-ball",
+    "category": "Pokeballs",
+    "effect": "Rre Poké Ball used for event Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/cherish-ball.png",
+    "itemUrl": "https://pokemondb.net/item/cherish-ball"
+  },
+  {
+    "name": "Dive Ball",
+    "slug": "dive-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Pokémon that live in water with 3.5x the rate of a standard Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dive-ball.png",
+    "itemUrl": "https://pokemondb.net/item/dive-ball"
+  },
+  {
+    "name": "Dream Ball",
+    "slug": "dream-ball",
+    "category": "Pokeballs",
+    "effect": "A special Poké Ball that appears out of nowhere in a bag at the Entree Forest. It can catch any Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dream-ball.png",
+    "itemUrl": "https://pokemondb.net/item/dream-ball"
+  },
+  {
+    "name": "Dusk Ball",
+    "slug": "dusk-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Pokémon at night or in caves with 3x the rate of a standard Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/dusk-ball.png",
+    "itemUrl": "https://pokemondb.net/item/dusk-ball"
+  },
+  {
+    "name": "Fast Ball",
+    "slug": "fast-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball that makes it easier to catch Pokémon which are quick to run away.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fast-ball.png",
+    "itemUrl": "https://pokemondb.net/item/fast-ball"
+  },
+  {
+    "name": "Friend Ball",
+    "slug": "friend-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball that makes caught Pokémon more friendly.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/friend-ball.png",
+    "itemUrl": "https://pokemondb.net/item/friend-ball"
+  },
+  {
+    "name": "Great Ball",
+    "slug": "great-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon with 1.5x the rate of a Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/great-ball.png",
+    "itemUrl": "https://pokemondb.net/item/great-ball"
+  },
+  {
+    "name": "Heal Ball",
+    "slug": "heal-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon and fully heals them.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heal-ball.png",
+    "itemUrl": "https://pokemondb.net/item/heal-ball"
+  },
+  {
+    "name": "Heavy Ball",
+    "slug": "heavy-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball for catching very heavy Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heavy-ball.png",
+    "itemUrl": "https://pokemondb.net/item/heavy-ball"
+  },
+  {
+    "name": "Level Ball",
+    "slug": "level-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball for catching Pokémon that are a lower level than your own.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/level-ball.png",
+    "itemUrl": "https://pokemondb.net/item/level-ball"
+  },
+  {
+    "name": "Love Ball",
+    "slug": "love-ball",
+    "category": "Pokeballs",
+    "effect": "Poké Ball for catching Pokémon that are the opposite gender of your Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/love-ball.png",
+    "itemUrl": "https://pokemondb.net/item/love-ball"
+  },
+  {
+    "name": "Lure Ball",
+    "slug": "lure-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball for catching Pokémon hooked by a Rod when fishing.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lure-ball.png",
+    "itemUrl": "https://pokemondb.net/item/lure-ball"
+  },
+  {
+    "name": "Luxury Ball",
+    "slug": "luxury-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon and increases their friendship more quickly.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/luxury-ball.png",
+    "itemUrl": "https://pokemondb.net/item/luxury-ball"
+  },
+  {
+    "name": "Master Ball",
+    "slug": "master-ball",
+    "category": "Pokeballs",
+    "effect": "Catches any wild Pokémon without fail.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/master-ball.png",
+    "itemUrl": "https://pokemondb.net/item/master-ball"
+  },
+  {
+    "name": "Moon Ball",
+    "slug": "moon-ball",
+    "category": "Pokeballs",
+    "effect": "A Poké Ball for catching Pokémon that evolve using the Moon Stone.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/moon-ball.png",
+    "itemUrl": "https://pokemondb.net/item/moon-ball"
+  },
+  {
+    "name": "Nest Ball",
+    "slug": "nest-ball",
+    "category": "Pokeballs",
+    "effect": "Catches lower level wild Pokémon with a higher rate (up to 4x for level 1).",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/nest-ball.png",
+    "itemUrl": "https://pokemondb.net/item/nest-ball"
+  },
+  {
+    "name": "Net Ball",
+    "slug": "net-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Water- and Bug-type Pokémon with 3.5x the rate of a standard Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/net-ball.png",
+    "itemUrl": "https://pokemondb.net/item/net-ball"
+  },
+  {
+    "name": "Park Ball",
+    "slug": "park-ball",
+    "category": "Pokeballs",
+    "effect": "A special Poké Ball for the Pal Park.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/park-ball.png",
+    "itemUrl": "https://pokemondb.net/item/park-ball"
+  },
+  {
+    "name": "Poké Ball",
+    "slug": "poke-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/poke-ball.png",
+    "itemUrl": "https://pokemondb.net/item/poke-ball"
+  },
+  {
+    "name": "Premier Ball",
+    "slug": "premier-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon; received after buying 10 Poké Balls.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/premier-ball.png",
+    "itemUrl": "https://pokemondb.net/item/premier-ball"
+  },
+  {
+    "name": "Quick Ball",
+    "slug": "quick-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon with a higher rate (5x) on the first turn of a battle.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-ball.png",
+    "itemUrl": "https://pokemondb.net/item/quick-ball"
+  },
+  {
+    "name": "Repeat Ball",
+    "slug": "repeat-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Pokémon already registered in the Pokédex with 3.5x the rate of a standard Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/repeat-ball.png",
+    "itemUrl": "https://pokemondb.net/item/repeat-ball"
+  },
+  {
+    "name": "Safari Ball",
+    "slug": "safari-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Pokémon in the Safari Zone or Great Marsh.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/safari-ball.png",
+    "itemUrl": "https://pokemondb.net/item/safari-ball"
+  },
+  {
+    "name": "Sport Ball",
+    "slug": "sport-ball",
+    "category": "Pokeballs",
+    "effect": "A special Poké Ball for the Bug-Catching Contest.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sport-ball.png",
+    "itemUrl": "https://pokemondb.net/item/sport-ball"
+  },
+  {
+    "name": "Timer Ball",
+    "slug": "timer-ball",
+    "category": "Pokeballs",
+    "effect": "Catches Pokémon with a higher rate the more turns have occurred (up to 4x).",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/timer-ball.png",
+    "itemUrl": "https://pokemondb.net/item/timer-ball"
+  },
+  {
+    "name": "Ultra Ball",
+    "slug": "ultra-ball",
+    "category": "Pokeballs",
+    "effect": "Catches wild Pokémon with 2x the rate of a Poké Ball.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ultra-ball.png",
+    "itemUrl": "https://pokemondb.net/item/ultra-ball"
+  }
+]

@@ -13,13 +13,13 @@ const DEX_OVERRIDE = new Map([
   [7, 'waterBurst'],
   [8, 'waterBurst'],
   [9, 'waterBurst'],
-  [37, 'ember'],
-  [38, 'ember'],
-  [58, 'ember'],
-  [59, 'ember'],
-  [77, 'ember'],
-  [78, 'ember'],
-  [126, 'incinerate'],
+  [37, 'flamethrower'],
+  [38, 'flamethrower'],
+  [58, 'flamethrower'],
+  [59, 'flamethrower'],
+  [77, 'flamethrower'],
+  [78, 'flamethrower'],
+  [126, 'flamethrower'],
   [65, 'psybeam'],
   [64, 'confusion'],
   [63, 'confusion'],
@@ -69,7 +69,7 @@ export function resolveWildMoveIdForDex(dexId) {
   if (o) return o;
   const cfg = POKEMON_CONFIG[dexId];
   const types = cfg?.types ?? [];
-  if (types.includes('fire')) return 'ember';
+  if (types.includes('fire')) return 'flamethrower';
   if (types.includes('water')) return 'waterBurst';
   if (types.includes('psychic')) return 'confusion';
   if (types.includes('poison') || types.includes('bug')) return 'poisonSting';

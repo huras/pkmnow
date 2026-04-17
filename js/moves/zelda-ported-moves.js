@@ -21,18 +21,32 @@ function pushLinearProjectile(pushProjectile, spec) {
  * Every cast is adapted to this project's tile-based projectile format.
  */
 /**
- * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ * @param {{
+ *   fromWild?: boolean,
+ *   pushProjectile: (p: object) => void,
+ *   streamPuff?: boolean,
+ *   streamQuality?: number,
+ *   streamTrailMul?: number
+ * }} opts
  * — `streamPuff`: short burst for held-stream cadence (player); false = wider volley (e.g. wild).
  */
 export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
+  const {
+    fromWild = false,
+    pushProjectile,
+    streamPuff = false,
+    streamQuality = 1,
+    streamTrailMul = 1
+  } = opts;
   const maxR = fromWild ? 8.5 : 10;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
   const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
   const baseA = Math.atan2(base.aimY - sourceY, base.aimX - sourceX);
-  const count = streamPuff ? 4 : 11;
+  const quality01 = Math.max(0.35, Math.min(1, Number(streamQuality) || 1));
+  const count = streamPuff ? Math.max(1, Math.round(2 * quality01)) : 11;
   const spreadMag = streamPuff ? 0.16 : 0.26;
-  const dmg = streamPuff ? (fromWild ? 2 : 2.5) : fromWild ? 3 : 4;
+  const dmg = streamPuff ? (fromWild ? 3 : 6.2) : fromWild ? 3 : 4;
+  const trailMul = Math.max(1, Number(streamTrailMul) || 1);
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * spreadMag;
     const a = baseA + spread;
@@ -40,7 +54,10 @@ export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntit
     const rawTx = sourceX + Math.cos(a) * dist;
     const rawTy = sourceY + Math.sin(a) * dist;
     const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
-    const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
+    const maxHorizForTtl = Math.max(
+      0.12,
+      Math.min(maxR, streamPuff ? dist0 * (0.76 + 0.2 * quality01) : dist0)
+    );
     const speed = 16 + Math.random() * 2;
     const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.35);
     const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
@@ -70,7 +87,10 @@ export function castFlamethrower(sourceX, sourceY, targetX, targetY, sourceEntit
       fromWild,
       hitsWild: !fromWild,
       hitsPlayer: !!fromWild,
-      trailAcc: EMBER_TRAIL_INTERVAL * (i / count)
+      trailAcc: EMBER_TRAIL_INTERVAL * (i / count),
+      trailIntervalMul: trailMul,
+      streamShot: !!streamPuff,
+      hitTickAcc: streamPuff ? (i / Math.max(1, count)) * (1 / 30) : 0
     });
   }
 }

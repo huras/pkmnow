@@ -1,4 +1,5 @@
 const LS_BGM = 'pkmn_mix_bgm_01';
+/** Persisted 0–1 mix for minimap “SFX” slider (all spatial short SFX + cries). */
 const LS_CRIES = 'pkmn_mix_cries_01';
 const LS_AUDIO_MUTE = 'pkmn_mix_mute_01';
 const LS_BGM_TRACK_TOAST_SUPPRESS = 'pkmn_bgm_track_toast_suppress';
@@ -19,7 +20,7 @@ export function setBgmMix01(v) {
   localStorage.setItem(LS_BGM, String(clamp01(v)));
 }
 
-/** @returns {number} linear 0–1 */
+/** @returns {number} linear 0–1 (minimap SFX slider) */
 export function getCriesMix01() {
   return clamp01(localStorage.getItem(LS_CRIES) ?? '1');
 }
@@ -44,7 +45,7 @@ export function getEffectiveBgmMix01() {
   return isAudioMuted() ? 0 : getBgmMix01();
 }
 
-/** @returns {number} effective cries gain after mute */
+/** @returns {number} effective SFX / cries mix after mute */
 export function getEffectiveCriesMix01() {
   return isAudioMuted() ? 0 : getCriesMix01();
 }

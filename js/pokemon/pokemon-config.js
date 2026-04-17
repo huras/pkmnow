@@ -103,7 +103,7 @@ export const POKEMON_CONFIG = {
   82: { name: 'Magneton', types: ['electric'], heightTiles: 3.1, baseSpeed: 70 },
   83: { name: 'Farfetch\'d', types: ['normal', 'flying'], heightTiles: 2.1, baseSpeed: 60 },
   84: { name: 'Doduo', types: ['normal', 'flying'], heightTiles: 2.5, baseSpeed: 75 },
-  85: { name: 'Dodrio', types: ['normal', 'flying'], heightTiles: 4.2, baseSpeed: 110 },
+  85: { name: 'Dodrio', types: ['normal', 'flying'], heightTiles: 3.6, baseSpeed: 110 },
   86: { name: 'Seel', types: ['water'], heightTiles: 2, baseSpeed: 45 },
   87: { name: 'Dewgong', types: ['water', 'ice'], heightTiles: 3.1, baseSpeed: 70 },
   88: { name: 'Grimer', types: ['poison'], heightTiles: 2.5, baseSpeed: 25 },

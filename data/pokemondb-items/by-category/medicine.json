@@ -1,0 +1,546 @@
+[
+  {
+    "name": "Antidote",
+    "slug": "antidote",
+    "category": "Medicine",
+    "effect": "Cures a Pokémon of poisoning.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/antidote.png",
+    "itemUrl": "https://pokemondb.net/item/antidote"
+  },
+  {
+    "name": "Awakening",
+    "slug": "awakening",
+    "category": "Medicine",
+    "effect": "Wakes up a sleeping Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/awakening.png",
+    "itemUrl": "https://pokemondb.net/item/awakening"
+  },
+  {
+    "name": "Berry Juice",
+    "slug": "berry-juice",
+    "category": "Medicine",
+    "effect": "Restores 20 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/berry-juice.png",
+    "itemUrl": "https://pokemondb.net/item/berry-juice"
+  },
+  {
+    "name": "Big Malasada",
+    "slug": "big-malasada",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/big-malasada.png",
+    "itemUrl": "https://pokemondb.net/item/big-malasada"
+  },
+  {
+    "name": "Burn Heal",
+    "slug": "burn-heal",
+    "category": "Medicine",
+    "effect": "Cures a Pokémon of a burn.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/burn-heal.png",
+    "itemUrl": "https://pokemondb.net/item/burn-heal"
+  },
+  {
+    "name": "Calcium",
+    "slug": "calcium",
+    "category": "Medicine",
+    "effect": "Increases Special Attack EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/calcium.png",
+    "itemUrl": "https://pokemondb.net/item/calcium"
+  },
+  {
+    "name": "Carbos",
+    "slug": "carbos",
+    "category": "Medicine",
+    "effect": "Increases Speed EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/carbos.png",
+    "itemUrl": "https://pokemondb.net/item/carbos"
+  },
+  {
+    "name": "Casteliacone",
+    "slug": "casteliacone",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/casteliacone.png",
+    "itemUrl": "https://pokemondb.net/item/casteliacone"
+  },
+  {
+    "name": "Clever Feather",
+    "slug": "clever-feather",
+    "category": "Medicine",
+    "effect": "Increases Special Defense EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/clever-feather.png",
+    "itemUrl": "https://pokemondb.net/item/clever-feather"
+  },
+  {
+    "name": "Courage Candy",
+    "slug": "courage-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Defense stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/courage-candy.png",
+    "itemUrl": "https://pokemondb.net/item/courage-candy"
+  },
+  {
+    "name": "Courage Candy L",
+    "slug": "courage-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Defense stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/courage-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/courage-candy-l"
+  },
+  {
+    "name": "Courage Candy XL",
+    "slug": "courage-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Defense stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/courage-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/courage-candy-xl"
+  },
+  {
+    "name": "Elixir",
+    "slug": "elixir",
+    "category": "Medicine",
+    "effect": "Restores 10 PP to all moves of a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/elixir.png",
+    "itemUrl": "https://pokemondb.net/item/elixir"
+  },
+  {
+    "name": "Energy Powder",
+    "slug": "energy-powder",
+    "category": "Medicine",
+    "effect": "Restores 60 HP but lowers Friendship.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/energy-powder.png",
+    "itemUrl": "https://pokemondb.net/item/energy-powder"
+  },
+  {
+    "name": "Energy Root",
+    "slug": "energy-root",
+    "category": "Medicine",
+    "effect": "Restores 120 HP but lowers Friendship.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/energy-root.png",
+    "itemUrl": "https://pokemondb.net/item/energy-root"
+  },
+  {
+    "name": "Ether",
+    "slug": "ether",
+    "category": "Medicine",
+    "effect": "Restores 10 PP to one move of a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ether.png",
+    "itemUrl": "https://pokemondb.net/item/ether"
+  },
+  {
+    "name": "Fresh Water",
+    "slug": "fresh-water",
+    "category": "Medicine",
+    "effect": "Restores 30 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/fresh-water.png",
+    "itemUrl": "https://pokemondb.net/item/fresh-water"
+  },
+  {
+    "name": "Full Heal",
+    "slug": "full-heal",
+    "category": "Medicine",
+    "effect": "Cures a Pokémon of any status condition.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/full-heal.png",
+    "itemUrl": "https://pokemondb.net/item/full-heal"
+  },
+  {
+    "name": "Full Restore",
+    "slug": "full-restore",
+    "category": "Medicine",
+    "effect": "Fully restores HP and cures any status condition of a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/full-restore.png",
+    "itemUrl": "https://pokemondb.net/item/full-restore"
+  },
+  {
+    "name": "Genius Feather",
+    "slug": "genius-feather",
+    "category": "Medicine",
+    "effect": "Increases Special Attack EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/genius-feather.png",
+    "itemUrl": "https://pokemondb.net/item/genius-feather"
+  },
+  {
+    "name": "Heal Powder",
+    "slug": "heal-powder",
+    "category": "Medicine",
+    "effect": "Heals all status problems, but lowers Friendship.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/heal-powder.png",
+    "itemUrl": "https://pokemondb.net/item/heal-powder"
+  },
+  {
+    "name": "Health Candy",
+    "slug": "health-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's HP stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/health-candy.png",
+    "itemUrl": "https://pokemondb.net/item/health-candy"
+  },
+  {
+    "name": "Health Candy L",
+    "slug": "health-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's HP stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/health-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/health-candy-l"
+  },
+  {
+    "name": "Health Candy XL",
+    "slug": "health-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's HP stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/health-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/health-candy-xl"
+  },
+  {
+    "name": "Health Feather",
+    "slug": "health-feather",
+    "category": "Medicine",
+    "effect": "Increases HP EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/health-feather.png",
+    "itemUrl": "https://pokemondb.net/item/health-feather"
+  },
+  {
+    "name": "HP Up",
+    "slug": "hp-up",
+    "category": "Medicine",
+    "effect": "Increases HP EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/hp-up.png",
+    "itemUrl": "https://pokemondb.net/item/hp-up"
+  },
+  {
+    "name": "Hyper Potion",
+    "slug": "hyper-potion",
+    "category": "Medicine",
+    "effect": "Restores 120 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/hyper-potion.png",
+    "itemUrl": "https://pokemondb.net/item/hyper-potion"
+  },
+  {
+    "name": "Ice Heal",
+    "slug": "ice-heal",
+    "category": "Medicine",
+    "effect": "Cures a Pokémon of freezing.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/ice-heal.png",
+    "itemUrl": "https://pokemondb.net/item/ice-heal"
+  },
+  {
+    "name": "Iron",
+    "slug": "iron",
+    "category": "Medicine",
+    "effect": "Increases Defense EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/iron.png",
+    "itemUrl": "https://pokemondb.net/item/iron"
+  },
+  {
+    "name": "Lava Cookie",
+    "slug": "lava-cookie",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lava-cookie.png",
+    "itemUrl": "https://pokemondb.net/item/lava-cookie"
+  },
+  {
+    "name": "Lemonade",
+    "slug": "lemonade",
+    "category": "Medicine",
+    "effect": "Restores 70 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lemonade.png",
+    "itemUrl": "https://pokemondb.net/item/lemonade"
+  },
+  {
+    "name": "Lumiose Galette",
+    "slug": "lumiose-galette",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/lumiose-galette.png",
+    "itemUrl": "https://pokemondb.net/item/lumiose-galette"
+  },
+  {
+    "name": "Max Elixir",
+    "slug": "max-elixir",
+    "category": "Medicine",
+    "effect": "Fully restores PP to all moves of a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/max-elixir.png",
+    "itemUrl": "https://pokemondb.net/item/max-elixir"
+  },
+  {
+    "name": "Max Ether",
+    "slug": "max-ether",
+    "category": "Medicine",
+    "effect": "Fully restores PP to one move of a Pokémon.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/max-ether.png",
+    "itemUrl": "https://pokemondb.net/item/max-ether"
+  },
+  {
+    "name": "Max Potion",
+    "slug": "max-potion",
+    "category": "Medicine",
+    "effect": "Fully restores HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/max-potion.png",
+    "itemUrl": "https://pokemondb.net/item/max-potion"
+  },
+  {
+    "name": "Max Revive",
+    "slug": "max-revive",
+    "category": "Medicine",
+    "effect": "Revives a fainted Pokémon, fully restoring its HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/max-revive.png",
+    "itemUrl": "https://pokemondb.net/item/max-revive"
+  },
+  {
+    "name": "Mighty Candy",
+    "slug": "mighty-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Attack stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mighty-candy.png",
+    "itemUrl": "https://pokemondb.net/item/mighty-candy"
+  },
+  {
+    "name": "Mighty Candy L",
+    "slug": "mighty-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Attack stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mighty-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/mighty-candy-l"
+  },
+  {
+    "name": "Mighty Candy XL",
+    "slug": "mighty-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Attack stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/mighty-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/mighty-candy-xl"
+  },
+  {
+    "name": "Moomoo Milk",
+    "slug": "moomoo-milk",
+    "category": "Medicine",
+    "effect": "Restores 100 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/moomoo-milk.png",
+    "itemUrl": "https://pokemondb.net/item/moomoo-milk"
+  },
+  {
+    "name": "Muscle Feather",
+    "slug": "muscle-feather",
+    "category": "Medicine",
+    "effect": "Increases Attack EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/muscle-feather.png",
+    "itemUrl": "https://pokemondb.net/item/muscle-feather"
+  },
+  {
+    "name": "Old Gateau",
+    "slug": "old-gateau",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/old-gateau.png",
+    "itemUrl": "https://pokemondb.net/item/old-gateau"
+  },
+  {
+    "name": "Paralyze Heal",
+    "slug": "paralyze-heal",
+    "category": "Medicine",
+    "effect": "Cures a Pokémon of paralysis.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/paralyze-heal.png",
+    "itemUrl": "https://pokemondb.net/item/paralyze-heal"
+  },
+  {
+    "name": "Potion",
+    "slug": "potion",
+    "category": "Medicine",
+    "effect": "Restores 20 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/potion.png",
+    "itemUrl": "https://pokemondb.net/item/potion"
+  },
+  {
+    "name": "PP Max",
+    "slug": "pp-max",
+    "category": "Medicine",
+    "effect": "Raises the maximum PP of a move to its maximum.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pp-max.png",
+    "itemUrl": "https://pokemondb.net/item/pp-max"
+  },
+  {
+    "name": "PP Up",
+    "slug": "pp-up",
+    "category": "Medicine",
+    "effect": "Raises the maximum PP of a move.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/pp-up.png",
+    "itemUrl": "https://pokemondb.net/item/pp-up"
+  },
+  {
+    "name": "Protein",
+    "slug": "protein",
+    "category": "Medicine",
+    "effect": "Increases Attack EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/protein.png",
+    "itemUrl": "https://pokemondb.net/item/protein"
+  },
+  {
+    "name": "Quick Candy",
+    "slug": "quick-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Speed stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-candy.png",
+    "itemUrl": "https://pokemondb.net/item/quick-candy"
+  },
+  {
+    "name": "Quick Candy L",
+    "slug": "quick-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/quick-candy-l"
+  },
+  {
+    "name": "Quick Candy XL",
+    "slug": "quick-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Speed stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/quick-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/quick-candy-xl"
+  },
+  {
+    "name": "Rage Candy Bar",
+    "slug": "rage-candy-bar",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rage-candy-bar.png",
+    "itemUrl": "https://pokemondb.net/item/rage-candy-bar"
+  },
+  {
+    "name": "Rare Candy",
+    "slug": "rare-candy",
+    "category": "Medicine",
+    "effect": "Raises a Pokémon's level by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/rare-candy.png",
+    "itemUrl": "https://pokemondb.net/item/rare-candy"
+  },
+  {
+    "name": "Resist Feather",
+    "slug": "resist-feather",
+    "category": "Medicine",
+    "effect": "Increases Defense EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/resist-feather.png",
+    "itemUrl": "https://pokemondb.net/item/resist-feather"
+  },
+  {
+    "name": "Revival Herb",
+    "slug": "revival-herb",
+    "category": "Medicine",
+    "effect": "Revives a Pokémon to max HP, but lowers Friendship.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/revival-herb.png",
+    "itemUrl": "https://pokemondb.net/item/revival-herb"
+  },
+  {
+    "name": "Revive",
+    "slug": "revive",
+    "category": "Medicine",
+    "effect": "Revives a fainted Pokémon, restoring half its HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/revive.png",
+    "itemUrl": "https://pokemondb.net/item/revive"
+  },
+  {
+    "name": "Sacred Ash",
+    "slug": "sacred-ash",
+    "category": "Medicine",
+    "effect": "Revives all fainted Pokémon and fully restores their HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sacred-ash.png",
+    "itemUrl": "https://pokemondb.net/item/sacred-ash"
+  },
+  {
+    "name": "Shalour Sable",
+    "slug": "shalour-sable",
+    "category": "Medicine",
+    "effect": "Heals all major status conditions.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/shalour-sable.png",
+    "itemUrl": "https://pokemondb.net/item/shalour-sable"
+  },
+  {
+    "name": "Smart Candy",
+    "slug": "smart-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Attack stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/smart-candy.png",
+    "itemUrl": "https://pokemondb.net/item/smart-candy"
+  },
+  {
+    "name": "Smart Candy L",
+    "slug": "smart-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Attack stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/smart-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/smart-candy-l"
+  },
+  {
+    "name": "Smart Candy XL",
+    "slug": "smart-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Special Attack stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/smart-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/smart-candy-xl"
+  },
+  {
+    "name": "Soda Pop",
+    "slug": "soda-pop",
+    "category": "Medicine",
+    "effect": "Restores 50 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/soda-pop.png",
+    "itemUrl": "https://pokemondb.net/item/soda-pop"
+  },
+  {
+    "name": "Super Potion",
+    "slug": "super-potion",
+    "category": "Medicine",
+    "effect": "Restores 60 HP.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/super-potion.png",
+    "itemUrl": "https://pokemondb.net/item/super-potion"
+  },
+  {
+    "name": "Sweet Heart",
+    "slug": "sweet-heart",
+    "category": "Medicine",
+    "effect": "Very sweet chocolate. It restores the HP of one Pokémon by only 20 points.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/sweet-heart.png",
+    "itemUrl": "https://pokemondb.net/item/sweet-heart"
+  },
+  {
+    "name": "Swift Feather",
+    "slug": "swift-feather",
+    "category": "Medicine",
+    "effect": "Increases Speed EVs by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/swift-feather.png",
+    "itemUrl": "https://pokemondb.net/item/swift-feather"
+  },
+  {
+    "name": "Tough Candy",
+    "slug": "tough-candy",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Defense stat by 1.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tough-candy.png",
+    "itemUrl": "https://pokemondb.net/item/tough-candy"
+  },
+  {
+    "name": "Tough Candy L",
+    "slug": "tough-candy-l",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Defense stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tough-candy-l.png",
+    "itemUrl": "https://pokemondb.net/item/tough-candy-l"
+  },
+  {
+    "name": "Tough Candy XL",
+    "slug": "tough-candy-xl",
+    "category": "Medicine",
+    "effect": "Increases a Pokémon's Defense stat.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/tough-candy-xl.png",
+    "itemUrl": "https://pokemondb.net/item/tough-candy-xl"
+  },
+  {
+    "name": "Zinc",
+    "slug": "zinc",
+    "category": "Medicine",
+    "effect": "Increases Special Defense EVs by 10.",
+    "imageUrl": "https://img.pokemondb.net/sprites/items/zinc.png",
+    "itemUrl": "https://pokemondb.net/item/zinc"
+  }
+]

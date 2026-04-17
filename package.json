@@ -4,9 +4,12 @@
   "type": "module",
   "scripts": {
     "build:palettes": "node scripts/bake-terrain-palettes.mjs",
-    "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git pull'"
+    "crawl:pokemondb-items": "node scripts/crawl-pokemondb-items.mjs",
+    "download:pokemondb-item-images": "node scripts/download-pokemondb-item-images.mjs",
+    "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git fetch ; git checkout dev ; git pull'"
   },
   "devDependencies": {
+    "cheerio": "^1.2.0",
     "pngjs": "^7.0.0"
   }
 }

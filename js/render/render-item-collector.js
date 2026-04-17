@@ -10,8 +10,8 @@ import {
   scatterHasWindSway
 } from '../biome-tiles.js';
 import { MACRO_TILE_STRIDE, foliageDensity, foliageType } from '../chunking.js';
-import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
-import { getWildPokemonEntities } from '../wild-pokemon/wild-pokemon-manager.js';
+import { validScatterOriginMicro, scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
+import { getWildPokemonEntities } from '../wild-pokemon/index.js';
 import { activeProjectiles, activeParticles } from '../moves/moves-manager.js';
 import {
   activeCrystalDrops,
@@ -25,6 +25,8 @@ import {
   isPlayDetailScatterOriginDestroyed,
   isPlayFormalTreeRootCharred,
   isPlayFormalTreeRootDestroyed,
+  getFormalTreeRegrowVisualAlpha01,
+  getScatterTreeRegrowVisualAlpha01,
   appendTreeTopFallRenderItems
 } from '../main/play-crystal-tackle.js';
 import {
@@ -124,9 +126,33 @@ export function collectRenderItems(options) {
     }
   }
 
+  // --- Player speech bubble (Sims-style) ---
+  if (player.speechBubble?.segments?.length && lodDetail < 2) {
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+    const targetHeightTiles = 1.1;
+    const targetHeightPx = targetHeightTiles * tileH;
+    const pmdPivotY = targetHeightPx * PMD_MON_SHEET.pivotYFrac;
+    renderItems.push({
+      type: 'playerSpeechBubble',
+      sortY: finalVY + 0.505,
+      x: finalVX,
+      y: finalVY,
+      cx: snapPx((finalVX + 0.5) * tileW),
+      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+      pivotY: pmdPivotY,
+      spawnPhase: 1,
+      spawnType: null,
+      dexId: playerDex,
+      speechBubble: player.speechBubble
+    });
+  }
+
   // --- Player Emotion ---
   const playerEmotionPayload =
-    player.socialEmotionType !== null && typeof player.socialEmotionType === 'number'
+    !player.speechBubble &&
+    player.socialEmotionType !== null &&
+    typeof player.socialEmotionType === 'number'
       ? {
           type: player.socialEmotionType,
           age: player.socialEmotionAge || 0,
@@ -266,6 +292,7 @@ export function collectRenderItems(options) {
   // 2. Add Wild Pokemon
   const wildList = getWildPokemonEntities();
   for (const w of wildList) {
+    if (w?._strengthCarryHidden) continue;
     if (w.x >= startX - 2 && w.x < endX + 2 && w.y >= startY - 2 && w.y < endY + 2) {
       const wDex = w.dexId || 1;
       const { walk: wWalk, idle: wIdle, hurt: wHurt, sleep: wSleep, faint: wFaint } = getResolvedSheets(imageCache, wDex);
@@ -308,9 +335,28 @@ export function collectRenderItems(options) {
           sexHud: wildSexHudLabel(w.sex)
         });
 
-        // 2b. Wild Emotion
+        // 2b. Sims-style speech bubble (rich segments) — takes priority over classic emotion overlay.
+        if (w.speechBubble?.segments?.length && lodDetail < 2) {
+          renderItems.push({
+            type: 'wildSpeechBubble',
+            sortY: (w.visualY ?? w.y) + 0.52,
+            x: w.x,
+            y: w.y,
+            cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
+            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - (w.z || 0) * tileH),
+            pivotY: pmdPivotY,
+            spawnPhase: w.spawnPhase ?? 1,
+            spawnType: w.spawnType,
+            dexId: wDex,
+            speechBubble: w.speechBubble
+          });
+        }
+
+        // 2c. Wild Emotion (RPG Maker / portrait) — hidden while a speech bubble is active.
         const emotionPayload =
-          w.emotionType !== null && typeof w.emotionType === 'number'
+          !w.speechBubble &&
+          w.emotionType !== null &&
+          typeof w.emotionType === 'number'
             ? {
                 type: w.emotionType,
                 age: w.emotionAge || 0,
@@ -365,7 +411,8 @@ export function collectRenderItems(options) {
             biomeId: t.biomeId,
             isDestroyed: isPlayFormalTreeRootDestroyed(mxScan, myScan),
             isCharred: isPlayFormalTreeRootCharred(mxScan, myScan),
-            isBurning: isPlayFormalTreeRootBurning(mxScan, myScan)
+            isBurning: isPlayFormalTreeRootBurning(mxScan, myScan),
+            regrowFade01: getFormalTreeRegrowVisualAlpha01(mxScan, myScan)
           });
         }
       }
@@ -395,7 +442,10 @@ export function collectRenderItems(options) {
               isSortable: true,
               isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
               isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
-              windSway: scatterHasWindSway(sItem)
+              windSway: scatterHasWindSway(sItem),
+              regrowFade01: scatterItemKeyIsTree(sItem)
+                ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
+                : 1
             });
           }
         }

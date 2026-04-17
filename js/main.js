@@ -5,7 +5,7 @@ import { render, loadTilesetImages } from './render.js';
 import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
-} from './wild-pokemon/wild-pokemon-manager.js';
+} from './wild-pokemon/index.js';
 import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
 import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
@@ -29,9 +29,10 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { setWeatherRenderState } from './main/weather-state.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
-import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
+import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { createPlaySocialOverlay } from './main/play-social-overlay.js';
 import { clearScatterSolidBlockCache } from './scatter-pass2-debug.js';
@@ -53,6 +54,7 @@ import { TessellationEngine } from './tessellation-engine.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
+import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { cycleMinimapZoom } from './render/render-minimap.js';
 import {
   advanceWorldHours,
@@ -122,7 +124,7 @@ const ZOOM_LABELS = { far: '🗺 Far', mid: '🔍 Mid', close: '🔍+ Close' };
 
 function syncMinimapZoomBadge() {
   if (!minimap || !minimapPanel) return;
-  const zoom = minimap.dataset.zoom || 'mid';
+  const zoom = minimap.dataset.zoom || 'close';
   minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
 }
 
@@ -164,13 +166,18 @@ const playBgmNowPlayingStatusEl = document.getElementById('play-bgm-now-playing-
 const playBgmToastEl = document.getElementById('play-bgm-toast');
 const playBgmToastTrackEl = document.getElementById('play-bgm-toast-track');
 const playBgmToastStatusEl = document.getElementById('play-bgm-toast-status');
+const playImmersiveHintEl = document.getElementById('play-immersive-hint');
 const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
+const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playWeatherCurrentEl = document.getElementById('play-weather-current');
+const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 let playSocialOverlay = {
   flashAction: () => {},
-  clearActive: () => {}
+  clearActive: () => {},
+  refreshPortraits: () => Promise.resolve()
 };
 
 let currentData = null;
@@ -182,6 +189,14 @@ let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
 let worldTimeRunning = true;
+/** @type {'clear' | 'cloudy' | 'rain'} */
+let currentWeatherPreset = 'cloudy';
+/** 0..1 intensity scalar (UI slider target). */
+let currentWeatherIntensity = 0.75;
+/** Currently-displayed weather params (smoothly eased toward the target preset+intensity). */
+let activeWeatherParams = null;
+/** Time constant (seconds) for exponential smoothing of weather transitions. */
+const WEATHER_SMOOTH_TAU_SEC = 1.2;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -259,6 +274,9 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
+installPlayHelpWikiModal({
+  forceCloseMinimapAudioPopover: minimapAudioUi.forceCloseMinimapAudioPopover
+});
 
 let lastHudTileKey = '';
 let lastHudMs = 0;
@@ -291,6 +309,26 @@ function detailPreviewHtmlForInfoBar(itemKey) {
     })
     .join('');
   return `<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
+}
+
+function detailPreviewHtmlForImmersiveHint(itemKey) {
+  const objSet = OBJECT_SETS[String(itemKey || '')];
+  if (!objSet) return '';
+  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+  if (!base?.ids?.length) return '';
+  const { cols } = parseShape(objSet.shape || '[1x1]');
+  const imgPath = TessellationEngine.getImagePath(objSet.file);
+  if (!imgPath) return '';
+  const atlasCols = imgPath.includes('caves') ? 50 : 57;
+  const gridCols = Math.max(1, cols | 0);
+  const tiles = base.ids
+    .map((id) => {
+      const sx = (id % atlasCols) * 16;
+      const sy = Math.floor(id / atlasCols) * 16;
+      return `<span style="display:inline-block;width:15px;height:15px;background-image:url('${imgPath}');background-repeat:no-repeat;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.16) inset"></span>`;
+    })
+    .join('');
+  return `<span class="play-immersive-hint__sprite" aria-hidden="true" style="display:grid;grid-template-columns:repeat(${gridCols},15px);gap:2px">${tiles}</span>`;
 }
 
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
@@ -335,12 +373,48 @@ function refreshPlayModeInfoBar(force = false) {
       ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
       : '';
   const ifr = (player.projIFrameSec ?? 0) > 0 ? ` · i-frames ${(player.projIFrameSec ?? 0).toFixed(2)}s` : '';
+  const carryPrompt = player._strengthCarry
+    ? {
+      itemKey: String(player._strengthCarry.itemKey || ''),
+      displayName: String(player._strengthCarry.displayName || '')
+    }
+    : null;
+  const carryMobility = getStrengthCarryMobilityInfo(player);
   const grabPrompt = getStrengthGrabPromptInfo(player, currentData);
+  const immersive = isPlayImmersiveMinimalUi();
+  if (playImmersiveHintEl) {
+    if (immersive && (carryPrompt || grabPrompt)) {
+      const ctxPrompt = carryPrompt || grabPrompt;
+      const label = String(ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || 'Detail');
+      const actionHtml = carryPrompt
+        ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Place</span><span class="play-immersive-hint__key">E</span></div>` +
+          `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Throw</span><span class="play-immersive-hint__key">LMB</span></div>` +
+          `${carryMobility ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__warn">${carryMobility.message}</span></div>` : ''}`
+        : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
+      playImmersiveHintEl.innerHTML =
+        `<div class="play-immersive-hint__row">` +
+        `${detailPreviewHtmlForImmersiveHint(ctxPrompt.itemKey)}` +
+        `<span>(${label})</span>` +
+        `${actionHtml}` +
+        `</div>`;
+      playImmersiveHintEl.classList.add('play-immersive-hint--visible');
+    } else {
+      playImmersiveHintEl.innerHTML = '';
+      playImmersiveHintEl.classList.remove('play-immersive-hint--visible');
+    }
+  }
+  if (immersive) return;
+  const carryHint = carryPrompt
+    ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${detailPreviewHtmlForInfoBar(carryPrompt.itemKey)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
+      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Place [E]</span>` +
+      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
+      `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
+    : '';
   const grabHint = grabPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${detailPreviewHtmlForInfoBar(grabPrompt.itemKey)}(${detailLabelFromItemKey(grabPrompt.itemKey)}) Grab [E]</span>`
+    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${detailPreviewHtmlForInfoBar(grabPrompt.itemKey)}(${String(grabPrompt.displayName || detailLabelFromItemKey(grabPrompt.itemKey) || 'Detail')}) Grab [E]</span>`
     : '';
   const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
-  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${grabHint}${telem}`;
+  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${grabHint}${telem}`;
 }
 
 function readWorldHoursPerRealSec() {
@@ -403,6 +477,7 @@ function getSettings() {
   const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
   const overlayContours = document.getElementById('chkCurvas')?.checked ?? false;
   const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
+  const showWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay')?.checked ?? false;
   const collidersOn = showPlayColliders || window.debugColliders;
   if (appMode === 'play' && currentData && collidersOn) {
     ensurePlayColliderOverlayCache(currentData, player, imageCache, collidersOn);
@@ -411,12 +486,16 @@ function getSettings() {
   }
   const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
   const dayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
+  const weatherCloudNoiseSeed =
+    appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
+  const weather = getActiveWeatherParams();
   return {
     viewType,
     overlayPaths,
     overlayGraph,
     overlayContours,
     showPlayColliders,
+    showWorldReactionsOverlay,
     playColliderOverlayCache: collidersOn ? getPlayColliderOverlayCache() : null,
     playDetailColliderHighlight,
     appMode,
@@ -424,8 +503,133 @@ function getSettings() {
     time: gameTime,
     dayPhase,
     worldHours: wrapHours(worldHours),
-    dayCycleTint
+    dayCycleTint,
+    weatherPreset: currentWeatherPreset,
+    weatherIntensity: currentWeatherIntensity,
+    weatherCloudPresence: weather.cloudPresence,
+    weatherCloudThreshold: weather.cloudThreshold,
+    weatherCloudMinMul: weather.cloudMinMul,
+    weatherCloudMaxMul: weather.cloudMaxMul,
+    weatherCloudAlphaMul: weather.cloudAlphaMul,
+    weatherRainIntensity: weather.rainIntensity,
+    weatherScreenTint: weather.screenTint,
+    weatherCloudNoiseSeed
   };
+}
+
+function cloneWeatherParams(src) {
+  return {
+    cloudPresence: src.cloudPresence,
+    cloudThreshold: src.cloudThreshold,
+    cloudMinMul: src.cloudMinMul,
+    cloudMaxMul: src.cloudMaxMul,
+    cloudAlphaMul: src.cloudAlphaMul,
+    rainIntensity: src.rainIntensity,
+    screenTint: src.screenTint ? { ...src.screenTint } : null
+  };
+}
+
+function getActiveWeatherParams() {
+  if (!activeWeatherParams) {
+    activeWeatherParams = cloneWeatherParams(
+      resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity)
+    );
+  }
+  return activeWeatherParams;
+}
+
+/**
+ * Exponentially eases the currently displayed weather params toward the target preset.
+ * Called from the game loop's per-tick hook with `dt` in seconds.
+ */
+function tickWeatherSmoothing(dt) {
+  if (!Number.isFinite(dt) || dt <= 0) return;
+  const target = resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity);
+  const active = getActiveWeatherParams();
+  const k = 1 - Math.exp(-dt / Math.max(0.05, WEATHER_SMOOTH_TAU_SEC));
+  const lerpN = (a, b) => a + (b - a) * k;
+
+  active.cloudPresence = lerpN(active.cloudPresence, target.cloudPresence);
+  active.cloudThreshold = lerpN(active.cloudThreshold, target.cloudThreshold);
+  active.cloudMinMul = lerpN(active.cloudMinMul, target.cloudMinMul);
+  active.cloudMaxMul = lerpN(active.cloudMaxMul, target.cloudMaxMul);
+  active.cloudAlphaMul = lerpN(active.cloudAlphaMul, target.cloudAlphaMul);
+  active.rainIntensity = lerpN(active.rainIntensity, target.rainIntensity);
+
+  // Tint blends via alpha so `null` targets smoothly fade out instead of popping.
+  const curT = active.screenTint;
+  const tgtT = target.screenTint;
+  if (!curT && !tgtT) {
+    active.screenTint = null;
+  } else {
+    const cur = curT || { r: tgtT.r, g: tgtT.g, b: tgtT.b, a: 0 };
+    const tgt = tgtT || { r: cur.r, g: cur.g, b: cur.b, a: 0 };
+    const blended = {
+      r: lerpN(cur.r, tgt.r),
+      g: lerpN(cur.g, tgt.g),
+      b: lerpN(cur.b, tgt.b),
+      a: lerpN(cur.a, tgt.a)
+    };
+    active.screenTint = blended.a > 0.002 ? blended : null;
+  }
+
+  // Share smoothed rain intensity with gameplay systems (fire extinguishing, etc.).
+  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: currentWeatherPreset });
+}
+
+/**
+ * Maps a weather preset + 0..1 intensity to cloud/rain render params.
+ * Kept in main.js so both UI sync and `getSettings` share the same contract.
+ */
+function resolveWeatherParams(preset, intensity01) {
+  const t = Math.max(0, Math.min(1, Number(intensity01) || 0));
+  const lerp = (a, b) => a + (b - a) * t;
+  switch (preset) {
+    case 'rain':
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.02),
+        cloudMinMul: lerp(0.45, 0.7),
+        cloudMaxMul: lerp(1.55, 1.95),
+        cloudAlphaMul: lerp(1, 1.25),
+        rainIntensity: t,
+        screenTint: t > 0 ? { r: 110, g: 120, b: 145, a: lerp(0, 0.28) } : null
+      };
+    case 'cloudy':
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.22),
+        cloudMinMul: 0.45,
+        cloudMaxMul: lerp(1.55, 1.7),
+        cloudAlphaMul: 1,
+        rainIntensity: 0,
+        screenTint: null
+      };
+    case 'clear':
+    default:
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.42, 0.78),
+        cloudMinMul: 0.4,
+        cloudMaxMul: lerp(1.55, 1.1),
+        cloudAlphaMul: lerp(1, 0.75),
+        rainIntensity: 0,
+        screenTint: null
+      };
+  }
+}
+
+function syncWeatherUi() {
+  for (const btn of playWeatherPresetBtns) {
+    btn.classList.toggle('is-active', btn.dataset.weather === currentWeatherPreset);
+  }
+  if (playWeatherCurrentEl) {
+    const label = { clear: 'Clear', cloudy: 'Cloudy', rain: 'Rain' }[currentWeatherPreset] || '—';
+    playWeatherCurrentEl.textContent = label;
+  }
+  if (playWeatherIntensityEl) {
+    playWeatherIntensityEl.value = String(Math.round(currentWeatherIntensity * 100));
+  }
 }
 
 function updateView() {
@@ -448,6 +652,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
+    tickWeatherSmoothing(dt);
   },
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
@@ -460,6 +665,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   }
 });
 
+/** Help wiki registers Escape (capture) before this so Esc closes the modal instead of exiting play. */
 registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,
@@ -898,6 +1104,20 @@ wireWorldTimePreset('play-world-preset-day', PRESET_HOUR.day);
 wireWorldTimePreset('play-world-preset-afternoon', PRESET_HOUR.afternoon);
 wireWorldTimePreset('play-world-preset-night', PRESET_HOUR.night);
 
+for (const btn of playWeatherPresetBtns) {
+  btn.addEventListener('click', () => {
+    const next = btn.dataset.weather;
+    if (next !== 'clear' && next !== 'cloudy' && next !== 'rain') return;
+    currentWeatherPreset = next;
+    syncWeatherUi();
+  });
+}
+playWeatherIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherIntensityEl.value);
+  currentWeatherIntensity = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 100) / 100));
+});
+syncWeatherUi();
+
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
 document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   const on = document.getElementById('chkPlayColliders')?.checked ?? false;
@@ -910,6 +1130,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   }
   updateView();
 });
+document.getElementById('chkWorldReactionsOverlay')?.addEventListener('change', updateView);
 
 function syncForceLod0FromUi() {
   setPlayForceLod0Always(!!document.getElementById('chkForceLod0')?.checked);
@@ -930,6 +1151,10 @@ loadTilesetImages().then(async () => {
     defaultPlayImmersiveChrome: document.documentElement?.dataset?.appShell === 'play'
   });
   playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
+  void playSocialOverlay.refreshPortraits(player.dexId);
+  window.addEventListener('pkmn-player-species-changed', () => {
+    void playSocialOverlay.refreshPortraits(player.dexId);
+  });
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   run();

@@ -145,16 +145,25 @@ export async function probeSpriteCollabPortraitPrefix(dexId) {
       `${base}/${pad}/0001/`
     ];
     inflight = (async () => {
-      for (const base of getPortraitSearchRoots()) {
-        for (const prefix of layouts(base)) {
-          if (await imageLoads(`${prefix}Normal.png`)) {
-            portraitPrefixByDex.set(d, prefix);
-            return prefix;
-          }
+      const candidates = [];
+      const roots = getPortraitSearchRoots();
+      for (const base of roots) {
+        for (const pfx of layouts(base)) {
+          candidates.push(pfx);
         }
       }
-      portraitPrefixByDex.set(d, null);
-      return null;
+
+      // Concurrent probe to avoid sequential HTTP stall
+      const results = await Promise.all(
+        candidates.map(async (prefix) => {
+          const ok = await imageLoads(`${prefix}Normal.png`);
+          return ok ? prefix : null;
+        })
+      );
+
+      const found = results.find((r) => r !== null) || null;
+      portraitPrefixByDex.set(d, found);
+      return found;
     })();
     prefixProbeInflight.set(k, inflight);
   }

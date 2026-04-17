@@ -3,6 +3,8 @@ import { getDexAnimMeta } from './pmd-anim-metadata.js';
 
 const FALLBACK_WALK = 'tilesets/gengar_walk.png';
 const FALLBACK_IDLE = 'tilesets/gengar_idle.png';
+const tumblePathByDex = new Map();
+const tumbleProbeInflight = new Map();
 
 /** Only species with explicit `dig` in PMD metadata may load `NNN_dig.png` (avoids wrong/stale assets for others). */
 function speciesHasDedicatedDigSheetMeta(dexId) {
@@ -68,6 +70,59 @@ function loadOptionalSheet(imageCache, src) {
   return p;
 }
 
+function tumbleBaseCandidates() {
+  const out = [];
+  const push = (v) => {
+    if (typeof v !== 'string') return;
+    const s = v.trim().replace(/[\\/]+$/, '');
+    if (!s) return;
+    if (!out.includes(s)) out.push(s);
+  };
+  push(globalThis?.window?.__SPRITECOLLAB_SPRITE_BASE__);
+  push('tilesets/spritecollab-sprite');
+  push('../SpriteCollab/sprite');
+  push('../../SpriteCollab/sprite');
+  return out;
+}
+
+function probeImageUrl(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = src;
+  });
+}
+
+async function probeSpriteCollabTumblePath(dexId) {
+  const dNum = Math.floor(Number(dexId) || 0);
+  if (dNum < 1 || dNum > 9999) return null;
+  const d = padDex3(dNum);
+  const d4 = String(dNum).padStart(4, '0');
+  if (tumblePathByDex.has(d)) return tumblePathByDex.get(d) || null;
+  const existing = tumbleProbeInflight.get(d);
+  if (existing) return existing;
+
+  const p = (async () => {
+    const candidates = tumbleBaseCandidates();
+    // Probe all candidates concurrently to avoid sequential HTTP waits
+    const results = await Promise.all(
+      candidates.map(async (base) => {
+        const src = `${base}/${d4}/Tumble-Anim.png`;
+        const ok = await probeImageUrl(src);
+        return ok ? src : null;
+      })
+    );
+    // Find the first successful source
+    const found = results.find((r) => r !== null) || null;
+    tumblePathByDex.set(d, found);
+    tumbleProbeInflight.delete(d);
+    return found;
+  })();
+  tumbleProbeInflight.set(d, p);
+  return p;
+}
+
 /**
  * Lazy-load species sheets (same layout as Gengar). Missing files fall back to Gengar assets.
  * @param {Map<string, HTMLImageElement>} imageCache same as render.imageCache
@@ -109,11 +164,18 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   if (speciesHasDedicatedSliceMeta(dexId, 'attack')) {
     tasks.push(loadOptionalSheet(imageCache, attack));
   }
+  tasks.push(
+    probeSpriteCollabTumblePath(dexId).then((src) => {
+      if (!src) return;
+      return loadOptionalSheet(imageCache, src);
+    })
+  );
   return Promise.all(tasks);
 }
 
 export function getPokemonSheetPaths(dexId) {
   const id = padDex3(dexId);
+  const tumble = tumblePathByDex.get(id) || null;
   const walk = `tilesets/pokemon/${id}_walk.png`;
   return {
     walk,
@@ -125,6 +187,7 @@ export function getPokemonSheetPaths(dexId) {
     charge: `tilesets/pokemon/${id}_charge.png`,
     shoot: `tilesets/pokemon/${id}_shoot.png`,
     attack: `tilesets/pokemon/${id}_attack.png`,
+    tumble,
     fallbackWalk: FALLBACK_WALK,
     fallbackIdle: FALLBACK_IDLE
   };
@@ -133,10 +196,10 @@ export function getPokemonSheetPaths(dexId) {
 /**
  * @param {Map<string, HTMLImageElement>} imageCache
  * @param {number} dexId
- * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined, charge?: HTMLImageElement | undefined, shoot?: HTMLImageElement | undefined, attack?: HTMLImageElement | undefined }}
+ * @returns {{ walk: HTMLImageElement | undefined, idle: HTMLImageElement | undefined, dig: HTMLImageElement | undefined, hurt: HTMLImageElement | undefined, sleep: HTMLImageElement | undefined, faint: HTMLImageElement | undefined, tumble?: HTMLImageElement | undefined, charge?: HTMLImageElement | undefined, shoot?: HTMLImageElement | undefined, attack?: HTMLImageElement | undefined }}
  */
 export function getResolvedSheets(imageCache, dexId) {
-  const { walk, idle, dig, hurt, sleep, faint, charge, shoot, attack, fallbackWalk, fallbackIdle } =
+  const { walk, idle, dig, hurt, sleep, faint, tumble, charge, shoot, attack, fallbackWalk, fallbackIdle } =
     getPokemonSheetPaths(dexId);
   const w = imageCache.get(walk) || imageCache.get(fallbackWalk);
   const useDedicatedDig = speciesHasDedicatedDigSheetMeta(dexId);
@@ -168,6 +231,8 @@ export function getResolvedSheets(imageCache, dexId) {
     faint: useDedicatedFaint
       ? imageCache.get(faint) || idleSheet
       : idleSheet,
+    /** Optional SpriteCollab tumble sheet (`.../sprite/NNN/Tumble-Anim.png`). */
+    tumble: tumble ? imageCache.get(tumble) : undefined,
     /** Optional `NNN_charge.png` when metadata + file exist. */
     charge: useChargeAsset ? imageCache.get(charge) : undefined,
     /** Optional `NNN_shoot.png` when metadata + file exist. */

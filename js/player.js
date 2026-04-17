@@ -22,18 +22,26 @@ import {
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
 import { playInputState } from './main/play-input-state.js';
-import { strengthCarryBlocksWalk, onStrengthCarrierDamaged } from './main/play-strength-carry.js';
+import {
+  strengthCarryBlocksWalk,
+  onStrengthCarrierDamaged,
+  getStrengthCarryMoveSpeedMultiplier
+} from './main/play-strength-carry.js';
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
+import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from './world-movement-constants.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
+import { advancePlayerSpeechBubble, setPlayerSpeechBubble } from './social/speech-bubble-state.js';
 import { playJumpSfx } from './audio/jump-sfx.js';
+import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
+import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
 
-const MAX_SPEED = 3.2;
+const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
 const FRICTION = 20.0;
 const GRAVITY = 9.8;
@@ -150,10 +158,12 @@ export const player = {
   /** Visual lunge offset in tile units (sprite only; collision uses x,y). */
   _tackleLungeDx: 0,
   _tackleLungeDy: 0,
-  /** Social emoji balloon rendered above the player. */
+  /** Classic emotion balloon (when not using Sims-style `speechBubble`). */
   socialEmotionType: null,
   socialEmotionAge: 0,
   socialEmotionPortraitSlug: null,
+  /** @type {null | { segments: unknown[], ageSec: number, durationSec: number, kind: string }} */
+  speechBubble: null,
   /** Creative flight: dashed feet↔sprite tether allowed this frame (render / debug overlay). */
   flightGroundTetherVisible: false,
   /**
@@ -174,7 +184,9 @@ export const player = {
    *   durationSec: number, elapsedSec: number, startX: number, startY: number, startedAtSec: number
    * }}
    */
-  _strengthGrabAction: null
+  _strengthGrabAction: null,
+  /** Cut combo 3rd hit: movement locked (seconds). */
+  cutThirdHitLockoutSec: 0
 };
 
 export function setPlayerSpecies(dexId) {
@@ -203,6 +215,7 @@ export function setPlayerSpecies(dexId) {
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
+  player.speechBubble = null;
   player._flightIdleCycleSec = 0;
   player.flightGroundTetherVisible = false;
   player.jumpsUsed = 0;
@@ -210,6 +223,10 @@ export function setPlayerSpecies(dexId) {
   player._strengthCarry = null;
   player._strengthCarryHitStreak = 0;
   player._strengthGrabAction = null;
+  player.cutThirdHitLockoutSec = 0;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pkmn-player-species-changed', { detail: { dexId } }));
+  }
 }
 
 export function setPlayerPos(x, y) {
@@ -254,6 +271,7 @@ export function setPlayerPos(x, y) {
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
+  player.speechBubble = null;
   player._flightIdleCycleSec = 0;
   player.flightGroundTetherVisible = false;
   player.lmbAttackAnimSec = 0;
@@ -264,17 +282,23 @@ export function setPlayerPos(x, y) {
   player._tackleReachTiles = TACKLE_REACH_TILES;
   player._tackleLungeDx = 0;
   player._tackleLungeDy = 0;
+  player.cutThirdHitLockoutSec = 0;
 }
 
 /**
- * @param {{ balloonType?: number, portraitSlug?: string | null } | null | undefined} action
+ * Numpad social: Sims-style bubble (SpriteCollab portrait when available; emoji fallback only if portrait missing).
+ * @param {{ emoji?: string, label?: string, portraitSlug?: string } | null | undefined} action
  */
 export function showPlayerSocialEmotion(action) {
-  const balloonType = Number(action?.balloonType);
-  if (!Number.isFinite(balloonType)) return;
-  player.socialEmotionType = Math.max(0, Math.min(9, Math.floor(balloonType)));
-  player.socialEmotionAge = 0;
-  player.socialEmotionPortraitSlug = action?.portraitSlug ? String(action.portraitSlug) : null;
+  if (!action) return;
+  const emoji = String(action.emoji || '💬');
+  const label = String(action.label || '').trim();
+  const slugRaw = String(action.portraitSlug || 'Normal').trim() || 'Normal';
+  const slug = slugRaw.replace(/[^\w.-]/g, '') || 'Normal';
+  /** @type {{ kind: string, text?: string, slug?: string, fallbackEmoji?: string }[]} */
+  const segs = [{ kind: 'portrait', slug, fallbackEmoji: emoji }];
+  if (label) segs.push({ kind: 'text', text: label });
+  setPlayerSpeechBubble(player, segs, { durationSec: 2.75, kind: 'say' });
 }
 
 /**
@@ -300,6 +324,9 @@ export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false,
 export function updatePlayerCombatTimers(dt) {
   if (player.projIFrameSec > 0) player.projIFrameSec = Math.max(0, player.projIFrameSec - dt);
   if (player.poisonVisualSec > 0) player.poisonVisualSec = Math.max(0, player.poisonVisualSec - dt);
+  if (player.cutThirdHitLockoutSec > 0) {
+    player.cutThirdHitLockoutSec = Math.max(0, player.cutThirdHitLockoutSec - dt);
+  }
 }
 
 /** Toggle creative flight (Flying-type species only). Called from play keyboard (e.g. KeyF). */
@@ -519,6 +546,7 @@ export function tryMovePlayer(dx, dy, data) {
  * - Se estiver no plano, faz apenas um pulinho (hop) no lugar para feedback visual.
  */
 export function tryJumpPlayer(data) {
+  if ((player.cutThirdHitLockoutSec || 0) > 0) return false;
   const canFly = speciesHasFlyingType(player.dexId ?? 0);
   if (canFly && player.flightActive) return false;
   const maxJumps = canFly ? PLAYER_FLYING_MAX_JUMPS : PLAYER_BASE_MAX_JUMPS;
@@ -595,6 +623,14 @@ export function updatePlayer(dt, data) {
     player.inputX = 0;
     player.inputY = 0;
     player.runMode = false;
+  }
+
+  if ((player.cutThirdHitLockoutSec || 0) > 0) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
+    player.vx = 0;
+    player.vy = 0;
   }
 
   // 1. Horizontal Input & Physics
@@ -693,6 +729,7 @@ export function updatePlayer(dt, data) {
     terrainSlowMul *
     flightMul *
     flightHorizontalMoveBoost *
+    getStrengthCarryMoveSpeedMultiplier(player) *
     combatChargeSlowMul;
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
@@ -791,11 +828,18 @@ export function updatePlayer(dt, data) {
 
   clampPlayerToPlayColliderBoundsIfActive(player);
 
+  const movedWorldTiles = Math.hypot(player.x - ox, player.y - oy);
+  const wantFootFloorSfx =
+    !!player.grounded && !isAirborne && !player.digBurrowMode && !playerBurrowWalkActive;
+  advanceFootFloorStepsForDistance(player, movedWorldTiles, wantFootFloorSfx, player);
+
   // 3. Vertical — creative flight (Flying) or jump / gravity
   if (flightMove) {
+    const zFlightPrev = player.z;
     const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
-    const up = playInputState.spaceHeld ? vSp : 0;
-    const down = playInputState.shiftLeftHeld ? vSp : 0;
+    const cutLock = (player.cutThirdHitLockoutSec || 0) > 0;
+    const up = cutLock ? 0 : playInputState.spaceHeld ? vSp : 0;
+    const down = cutLock ? 0 : playInputState.shiftLeftHeld ? vSp : 0;
     const dz = (up - down) * dt;
     player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
     player.vz = 0;
@@ -804,10 +848,12 @@ export function updatePlayer(dt, data) {
       player.z = 0;
       player.grounded = true;
       player.jumpsUsed = 0;
+      if (zFlightPrev > 0.14) playFloorHit2Sfx(player);
     } else {
       player.grounded = false;
     }
   } else if (!player.grounded) {
+    const zJumpPrev = player.z;
     player.vz -= GRAVITY * dt;
     player.z += player.vz * dt;
 
@@ -817,6 +863,7 @@ export function updatePlayer(dt, data) {
       player.grounded = true;
       player.jumping = false;
       player.jumpsUsed = 0;
+      if (zJumpPrev > 0.04) playFloorHit2Sfx(player);
     }
   }
 
@@ -979,6 +1026,7 @@ export function updatePlayer(dt, data) {
       player.socialEmotionPortraitSlug = null;
     }
   }
+  advancePlayerSpeechBubble(player, dt);
 
   // Ground ↔ air tether: while changing height in flight, or each 4s hover-idle the last 1s blinks on/off.
   if (flightMove) {

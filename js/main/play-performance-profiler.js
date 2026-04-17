@@ -9,6 +9,11 @@ const PERF_WARMUP_MS = 2500;
  *   updPlayerMs: number,
  *   updWildWindowMs: number,
  *   updWildMs: number,
+ *   updWildMiscMs: number,
+ *   updWildVerticalMs: number,
+ *   updWildSocialMs: number,
+ *   updWildMotionMs: number,
+ *   updWildPostMs: number,
  *   updPointerMs: number,
  *   updMovesMs: number,
  *   updGrassFireMs: number,
@@ -49,6 +54,11 @@ function safeFpsFromFrameMs(ms) {
  *   updPlayerMs?: number,
  *   updWildWindowMs?: number,
  *   updWildMs?: number,
+ *   updWildMiscMs?: number,
+ *   updWildVerticalMs?: number,
+ *   updWildSocialMs?: number,
+ *   updWildMotionMs?: number,
+ *   updWildPostMs?: number,
  *   updPointerMs?: number,
  *   updMovesMs?: number,
  *   updGrassFireMs?: number,
@@ -68,6 +78,11 @@ function safeFpsFromFrameMs(ms) {
  *   p95UpdPlayerMsStable: number,
  *   p95UpdWildWindowMsStable: number,
  *   p95UpdWildMsStable: number,
+ *   p95UpdWildMiscMsStable: number,
+ *   p95UpdWildVerticalMsStable: number,
+ *   p95UpdWildSocialMsStable: number,
+ *   p95UpdWildMotionMsStable: number,
+ *   p95UpdWildPostMsStable: number,
  *   p95UpdPointerMsStable: number,
  *   p95UpdMovesMsStable: number,
  *   p95UpdGrassFireMsStable: number,
@@ -84,6 +99,11 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
     updPlayerMs: updateBreakdown.updPlayerMs ?? 0,
     updWildWindowMs: updateBreakdown.updWildWindowMs ?? 0,
     updWildMs: updateBreakdown.updWildMs ?? 0,
+    updWildMiscMs: updateBreakdown.updWildMiscMs ?? 0,
+    updWildVerticalMs: updateBreakdown.updWildVerticalMs ?? 0,
+    updWildSocialMs: updateBreakdown.updWildSocialMs ?? 0,
+    updWildMotionMs: updateBreakdown.updWildMotionMs ?? 0,
+    updWildPostMs: updateBreakdown.updWildPostMs ?? 0,
     updPointerMs: updateBreakdown.updPointerMs ?? 0,
     updMovesMs: updateBreakdown.updMovesMs ?? 0,
     updGrassFireMs: updateBreakdown.updGrassFireMs ?? 0,
@@ -100,6 +120,11 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
   const stableUpdPlayerSorted = toSorted(stable, (s) => s.updPlayerMs);
   const stableUpdWildWindowSorted = toSorted(stable, (s) => s.updWildWindowMs);
   const stableUpdWildSorted = toSorted(stable, (s) => s.updWildMs);
+  const stableUpdWildMiscSorted = toSorted(stable, (s) => s.updWildMiscMs);
+  const stableUpdWildVerticalSorted = toSorted(stable, (s) => s.updWildVerticalMs);
+  const stableUpdWildSocialSorted = toSorted(stable, (s) => s.updWildSocialMs);
+  const stableUpdWildMotionSorted = toSorted(stable, (s) => s.updWildMotionMs);
+  const stableUpdWildPostSorted = toSorted(stable, (s) => s.updWildPostMs);
   const stableUpdPointerSorted = toSorted(stable, (s) => s.updPointerMs);
   const stableUpdMovesSorted = toSorted(stable, (s) => s.updMovesMs);
   const stableUpdGrassFireSorted = toSorted(stable, (s) => s.updGrassFireMs);
@@ -123,6 +148,11 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
     p95UpdPlayerMsStable: percentile(stableUpdPlayerSorted, 0.95),
     p95UpdWildWindowMsStable: percentile(stableUpdWildWindowSorted, 0.95),
     p95UpdWildMsStable: percentile(stableUpdWildSorted, 0.95),
+    p95UpdWildMiscMsStable: percentile(stableUpdWildMiscSorted, 0.95),
+    p95UpdWildVerticalMsStable: percentile(stableUpdWildVerticalSorted, 0.95),
+    p95UpdWildSocialMsStable: percentile(stableUpdWildSocialSorted, 0.95),
+    p95UpdWildMotionMsStable: percentile(stableUpdWildMotionSorted, 0.95),
+    p95UpdWildPostMsStable: percentile(stableUpdWildPostSorted, 0.95),
     p95UpdPointerMsStable: percentile(stableUpdPointerSorted, 0.95),
     p95UpdMovesMsStable: percentile(stableUpdMovesSorted, 0.95),
     p95UpdGrassFireMsStable: percentile(stableUpdGrassFireSorted, 0.95),
