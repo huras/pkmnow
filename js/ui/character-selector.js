@@ -441,10 +441,12 @@ export class CharacterSelector {
     if (!(wrap instanceof HTMLElement) || !(fill instanceof HTMLElement) || !(label instanceof HTMLElement)) return;
     const skillId = getPlayerInputBindings(player.dexId).lmb;
     const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-    const shouldShow = skillId === 'tackle' && p > 0.005;
+    const canChargeFieldSkill = skillId === 'tackle' || skillId === 'cut';
+    const shouldShow = canChargeFieldSkill && p > 0.005;
+    const moveLabel = skillId === 'cut' ? 'Cut' : 'Tackle';
     wrap.classList.toggle('hidden', !shouldShow);
     fill.style.width = `${Math.round(p * 100)}%`;
-    label.textContent = `Tackle Charge ${Math.round(p * 100)}%`;
+    label.textContent = `${moveLabel} Charge ${Math.round(p * 100)}%`;
   }
 
   syncPlayPointerModeRadios() {

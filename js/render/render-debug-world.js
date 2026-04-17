@@ -38,6 +38,7 @@ const SNES_CLOUD_CLUSTERS = Object.freeze([
 ]);
 
 let cloudSpriteCache = null;
+let ghostMistCache = null;
 
 function makeCloudSpriteFromPuffs(puffs, color) {
   const W = 320;
@@ -165,6 +166,80 @@ function drawSnesCloudParallax(ctx, options) {
   ctx.imageSmoothingEnabled = false;
   drawLayer(true);
   drawLayer(false);
+  ctx.restore();
+}
+
+function buildGhostMistLayer(cw, ch, lodMul) {
+  const layer = document.createElement('canvas');
+  layer.width = cw;
+  layer.height = ch;
+  const c = layer.getContext('2d', { alpha: true });
+
+  const gcx = cw * 0.5;
+  const gcy = ch * 0.46;
+  const r0 = Math.min(cw, ch) * 0.16;
+  const r1 = Math.hypot(cw, ch) * 0.62;
+  const radial = c.createRadialGradient(gcx, gcy, r0, gcx, gcy, r1);
+  radial.addColorStop(0, 'rgba(255,255,255,0)');
+  radial.addColorStop(0.42, `rgba(255,255,255,${0.1 * lodMul})`);
+  radial.addColorStop(1, `rgba(250,252,255,${0.32 * lodMul})`);
+  c.fillStyle = radial;
+  c.globalAlpha = 1;
+  c.fillRect(0, 0, cw, ch);
+
+  c.fillStyle = '#ffffff';
+  c.globalAlpha = 0.1 * lodMul;
+  c.fillRect(0, 0, cw, ch);
+
+  // One-time static banding texture to fake volumetric haze cheaply.
+  c.globalAlpha = 0.07 * lodMul;
+  for (let y = 0; y < ch; y += 8) {
+    const wave = 0.5 + 0.5 * Math.sin(y * 0.031);
+    c.fillStyle = `rgba(236,242,255,${0.2 + wave * 0.4})`;
+    c.fillRect(0, y, cw, 2);
+  }
+
+  return layer;
+}
+
+function getGhostMistLayer(cw, ch, lodDetail) {
+  const lodMul = lodDetail >= 2 ? 0.52 : lodDetail >= 1 ? 0.82 : 1;
+  if (
+    ghostMistCache &&
+    ghostMistCache.cw === cw &&
+    ghostMistCache.ch === ch &&
+    ghostMistCache.lodMul === lodMul
+  ) {
+    return ghostMistCache.layer;
+  }
+  const layer = buildGhostMistLayer(cw, ch, lodMul);
+  ghostMistCache = { cw, ch, lodMul, layer };
+  return layer;
+}
+
+function drawWrappedScreenLayer(ctx, layer, cw, ch, ox, oy, alpha) {
+  const x = ((ox % cw) + cw) % cw;
+  const y = ((oy % ch) + ch) % ch;
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(layer, x - cw, y - ch, cw, ch);
+  ctx.drawImage(layer, x, y - ch, cw, ch);
+  ctx.drawImage(layer, x - cw, y, cw, ch);
+  ctx.drawImage(layer, x, y, cw, ch);
+}
+
+function drawGhostMistShaderLike(ctx, cw, ch, lodDetail, time) {
+  const layer = getGhostMistLayer(cw, ch, lodDetail);
+  const t = Number.isFinite(time) ? time : 0;
+  const oxA = Math.round(Math.sin(t * 0.19) * cw * 0.06);
+  const oyA = Math.round(Math.cos(t * 0.14) * ch * 0.045);
+  const oxB = Math.round(Math.cos(t * 0.11 + 1.9) * cw * 0.05);
+  const oyB = Math.round(Math.sin(t * 0.16 + 0.8) * ch * 0.035);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawWrappedScreenLayer(ctx, layer, cw, ch, oxA, oyA, 0.95);
+  ctx.globalCompositeOperation = 'lighter';
+  drawWrappedScreenLayer(ctx, layer, cw, ch, oxB, oyB, 0.32);
   ctx.restore();
 }
 
@@ -424,41 +499,21 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.restore();
   }
 
-  if (mistTile?.biomeId !== BIOMES.GHOST_WOODS.id) {
-    drawSnesCloudParallax(ctx, {
-      ch,
-      timeSec: time,
-      startX,
-      startY,
-      endX,
-      endY,
-      tileW,
-      tileH,
-      worldCols,
-      worldRows
-    });
-  }
+  drawSnesCloudParallax(ctx, {
+    ch,
+    timeSec: time,
+    startX,
+    startY,
+    endX,
+    endY,
+    tileW,
+    tileH,
+    worldCols,
+    worldRows
+  });
 
   if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {
-    const fogLodMul = lodDetail >= 2 ? 0.52 : lodDetail >= 1 ? 0.82 : 1;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const mt = (time || 0) * 0.26;
-    const gcx = cw * 0.5 + Math.sin(mt) * cw * 0.065;
-    const gcy = ch * 0.46 + Math.cos(mt * 0.88) * ch * 0.038;
-    const r0 = Math.min(cw, ch) * 0.16;
-    const r1 = Math.hypot(cw, ch) * 0.62;
-    const g = ctx.createRadialGradient(gcx, gcy, r0, gcx, gcy, r1);
-    g.addColorStop(0, 'rgba(255,255,255,0)');
-    g.addColorStop(0.42, `rgba(255,255,255,${0.1 * fogLodMul})`);
-    g.addColorStop(1, `rgba(250,252,255,${0.32 * fogLodMul})`);
-    ctx.fillStyle = g;
-    ctx.globalAlpha = 1;
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.fillStyle = 'rgba(255,255,255,1)';
-    ctx.globalAlpha = 0.1 * fogLodMul;
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.restore();
+    drawGhostMistShaderLike(ctx, cw, ch, lodDetail, time);
   }
 }
 

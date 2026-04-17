@@ -10,8 +10,20 @@ export const AnimationRenderer = {
     cache: new Map(),
 
     // Configurações de balanço (Sutil)
-    // 5 frames deixam o vento mais fluido sem exagerar a rotação.
-    WIND_ANGLES: [-0.06, -0.045, -0.03, 0, 0.03, 0.045, 0.06],
+    // 11 frames deixam o vento ainda mais suave e fluido ao longo do ciclo.
+    WIND_ANGLES: [
+        -0.06,
+        -0.048,
+        -0.036,
+        -0.024,
+        -0.012,
+        0,
+        0.012,
+        0.024,
+        0.036,
+        0.048,
+        0.06
+    ],
 
     /**
      * Retorna um frame pré-renderizado (Canvas) para o balanço de vento.

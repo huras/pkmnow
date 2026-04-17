@@ -38,6 +38,7 @@ const FIELD_CUT_COMBO_RESET_SEC = 1.15;
 const FIELD_TACKLE_CHARGE_MAX_SEC = 2.0;
 const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 8.0;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
+const FIELD_CUT_CHARGE_MAX_RADIUS_MUL = 3.0;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
 const FIELD_SKILL_CUT_ADVANCE_TILES = 0.5;
 const FIELD_SKILL_LABEL = {
@@ -548,7 +549,7 @@ function castPlayerCut(player, data, charged = false) {
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
 }
 
-function castChargedFieldSpinAttack(player, data, meleeId) {
+function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
@@ -562,25 +563,30 @@ function castChargedFieldSpinAttack(player, data, meleeId) {
   let damage = 16;
   let knockback = 5;
   let styleId = 'slash';
+  let fxLifeSec = 0.44;
+  let rays = 24;
   if (meleeId === 'cut') {
+    const u = Math.max(0, Math.min(1, Number(charge01) || 0));
     const cutStyle = resolveCutStyleForDex(player.dexId ?? 1);
     const profile = resolveCutProfile(cutStyle);
     styleId = cutStyle;
-    radius = Math.max(2.1, profile.radius * 1.52);
-    damage = profile.damage + 8;
-    knockback = profile.knockback + 1.8;
+    const radiusMul = 1 + (FIELD_CUT_CHARGE_MAX_RADIUS_MUL - 1) * u;
+    radius = Math.max(2.1, profile.radius * radiusMul);
+    damage = Math.round(profile.damage + 5 + 10 * u);
+    knockback = profile.knockback + 1.1 + 2.6 * u;
+    fxLifeSec = 0.44 + 0.16 * u;
+    rays = 24 + Math.round(20 * u);
     fieldCutComboStep = 0;
     fieldCutComboTimerSec = 0;
   }
   spawnFieldSpinAttackFx(centerX, centerY, headingRad, {
     radiusTiles: radius,
     styleId,
-    lifeSec: 0.44
+    lifeSec: fxLifeSec
   });
   tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius, { damage, knockback });
   const worldHitOnceSet = new Set();
   const spawnedHitOnceSet = new Set();
-  const rays = 24;
   const spinHitSource = meleeId === 'cut' ? 'cut' : 'tackle';
   for (let i = 0; i < rays; i++) {
     const ang = (i / rays) * Math.PI * 2;
@@ -601,7 +607,7 @@ function castChargedFieldSpinAttack(player, data, meleeId) {
 function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, meleeId = 'tackle') {
   if (!player) return;
   if (charged && meleeId === 'cut') {
-    castChargedFieldSpinAttack(player, data, meleeId);
+    castChargedFieldSpinAttack(player, data, meleeId, charge01);
     return;
   }
   if (meleeId === 'cut') {

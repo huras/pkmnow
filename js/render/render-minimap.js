@@ -1,6 +1,15 @@
 import { BIOMES } from '../biomes.js';
-import { MACRO_TILE_STRIDE, foliageDensity } from '../chunking.js';
-import { TREE_NOISE_SCALE } from '../biome-tiles.js';
+import { MACRO_TILE_STRIDE, foliageDensity, getMicroTile } from '../chunking.js';
+import {
+  BIOME_VEGETATION,
+  FOLIAGE_DENSITY_THRESHOLD,
+  TREE_DENSITY_THRESHOLD,
+  TREE_NOISE_SCALE,
+  getTreeType
+} from '../biome-tiles.js';
+import { PLAY_CHUNK_SIZE } from './render-constants.js';
+import { playChunkMap } from './play-chunk-cache.js';
+import { seededHash } from '../tessellation-logic.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import {
@@ -36,11 +45,9 @@ let baseCacheData = null;
 let baseCacheZoom = '';
 let baseCacheW = 0;
 let baseCacheH = 0;
-/** @type {HTMLCanvasElement | null} */
-let closeNoiseDetailCacheCanvas = null;
-let closeNoiseDetailCacheData = null;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
+const minimapBiomeRgbCache = new Map();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -212,54 +219,132 @@ function rebuildBase(w, h, data, zoom) {
   return canvas;
 }
 
-/**
- * Build a colorized detail-noise texture (1px per macro tile) for close zoom.
- * Channels reflect signals used by detail placement:
- * - R: scatter/clump noise (rocks/crystals + dense-detail suppression)
- * - G: foliage density noise (grass/vegetation coverage tendency)
- * - B: formal-tree blob noise
- * @param {object} data
- * @returns {HTMLCanvasElement | null}
- */
-function rebuildCloseNoiseDetail(data) {
-  const { width: dataW, height: dataH, seed } = data || {};
-  if (!dataW || !dataH || !Number.isFinite(seed)) return null;
+function hexToRgb(hexLike) {
+  const s = String(hexLike || '').trim();
+  const m = s.match(/^#?([a-fA-F0-9]{6})$/);
+  if (!m) return { r: 100, g: 130, b: 100 };
+  const h = m[1];
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16)
+  };
+}
 
-  const canvas = document.createElement('canvas');
-  canvas.width = dataW;
-  canvas.height = dataH;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
+function biomeRgb(biomeId) {
+  const key = Number(biomeId) || 0;
+  if (minimapBiomeRgbCache.has(key)) return minimapBiomeRgbCache.get(key);
+  const biome = Object.values(BIOMES).find((b) => b.id === key);
+  const rgb = hexToRgb(biome?.color);
+  minimapBiomeRgbCache.set(key, rgb);
+  return rgb;
+}
 
-  for (let y = 0; y < dataH; y++) {
-    for (let x = 0; x < dataW; x++) {
-      const nScatter = foliageDensity(x, y, seed + 111, 2.5);      // 0..1
-      const nFoliage = foliageDensity(x, y, seed + 9992, 0.08);    // 0..1
-      const nTrees = foliageDensity(x, y, seed + 5555, TREE_NOISE_SCALE); // 0..1
+function mixRgb(a, b, t) {
+  const k = Math.max(0, Math.min(1, Number(t) || 0));
+  return {
+    r: Math.round(a.r * (1 - k) + b.r * k),
+    g: Math.round(a.g * (1 - k) + b.g * k),
+    b: Math.round(a.b * (1 - k) + b.b * k)
+  };
+}
 
-      const r = Math.max(0, Math.min(255, Math.round(nScatter * 255)));
-      const g = Math.max(0, Math.min(255, Math.round(nFoliage * 255)));
-      const b = Math.max(0, Math.min(255, Math.round(nTrees * 255)));
-      const a = 0.55;
-      ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
-      ctx.fillRect(x, y, 1, 1);
+const MM_TILE_BARE = 1;
+const MM_TILE_GRASS = 2;
+const MM_TILE_TREE = 3;
+const MM_TILE_ROCK = 4;
+const MM_TILE_CRYSTAL = 5;
 
-      // Isolines from vegetation-driving noise (nFoliage):
-      // - thin lines every 0.1
-      // - stronger major lines every 0.2
-      const contour10 = Math.abs(((nFoliage * 10) % 1) - 0.5);
-      const contour5 = Math.abs(((nFoliage * 5) % 1) - 0.5);
-      if (contour5 < 0.04) {
-        ctx.fillStyle = 'rgba(255,255,255,0.32)';
-        ctx.fillRect(x, y, 1, 1);
-      } else if (contour10 < 0.03) {
-        ctx.fillStyle = 'rgba(0,0,0,0.24)';
-        ctx.fillRect(x, y, 1, 1);
+function classifyLocalMinimapTile(mx, my, tile, data) {
+  if (!tile) return MM_TILE_BARE;
+
+  const treeType = getTreeType(tile.biomeId, mx, my, data.seed);
+  const treeNoise = foliageDensity(mx, my, data.seed + 5555, TREE_NOISE_SCALE);
+  const treeWestNoise = foliageDensity(mx - 1, my, data.seed + 5555, TREE_NOISE_SCALE);
+  const isTreeRoot = !!treeType && (mx + my) % 3 === 0 && treeNoise >= TREE_DENSITY_THRESHOLD;
+  const isTreeRight = !!treeType && (mx + my) % 3 === 1 && treeWestNoise >= TREE_DENSITY_THRESHOLD;
+  if (isTreeRoot || isTreeRight) return MM_TILE_TREE;
+
+  if (!tile.isRoad && !tile.isCity && !tile.urbanBuilding) {
+    const scatterNoise = foliageDensity(mx, my, data.seed + 111, 2.5);
+    if (scatterNoise > 0.82) {
+      const items = BIOME_VEGETATION[tile.biomeId] || [];
+      if (items.length) {
+        const itemKey = items[Math.floor(seededHash(mx, my, data.seed + 222) * items.length)] || '';
+        const item = String(itemKey).toLowerCase();
+        if (item.includes('crystal')) return MM_TILE_CRYSTAL;
+        if (item.includes('rock')) return MM_TILE_ROCK;
       }
     }
   }
 
-  return canvas;
+  const hasGrass = !tile.isRoad && !tile.isCity && tile.foliageDensity >= FOLIAGE_DENSITY_THRESHOLD;
+  return hasGrass ? MM_TILE_GRASS : MM_TILE_BARE;
+}
+
+function localMinimapColor(biomeId, tileKind) {
+  const base = biomeRgb(biomeId);
+  if (tileKind === MM_TILE_TREE) return mixRgb(base, { r: 28, g: 95, b: 38 }, 0.62);
+  if (tileKind === MM_TILE_GRASS) return mixRgb(base, { r: 92, g: 180, b: 82 }, 0.5);
+  if (tileKind === MM_TILE_ROCK) return mixRgb(base, { r: 130, g: 130, b: 130 }, 0.72);
+  if (tileKind === MM_TILE_CRYSTAL) return mixRgb(base, { r: 175, g: 226, b: 255 }, 0.76);
+  return mixRgb(base, { r: 20, g: 20, b: 20 }, 0.35);
+}
+
+/**
+ * Local minimap at close zoom:
+ * 1 screen pixel = 1 micro sprite-tile, only where chunks are currently loaded.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} data
+ * @param {number} playerX micro X
+ * @param {number} playerY micro Y
+ * @param {{ w: number, h: number }} canvasSize
+ */
+function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSize) {
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const originX = Math.floor(playerX - canvasSize.w * 0.5);
+  const originY = Math.floor(playerY - canvasSize.h * 0.5);
+
+  ctx.fillStyle = 'rgba(8, 12, 20, 0.9)';
+  ctx.fillRect(0, 0, canvasSize.w, canvasSize.h);
+
+  const startX = Math.max(0, originX);
+  const startY = Math.max(0, originY);
+  const endX = Math.min(microW, originX + canvasSize.w);
+  const endY = Math.min(microH, originY + canvasSize.h);
+  if (startX >= endX || startY >= endY) return;
+
+  const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
+  const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
+  const endCx = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
+  const endCy = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+
+  for (let cy = startCy; cy <= endCy; cy++) {
+    for (let cx = startCx; cx <= endCx; cx++) {
+      const key = `${cx},${cy}`;
+      if (!playChunkMap.has(key)) continue;
+
+      const chunkX0 = cx * PLAY_CHUNK_SIZE;
+      const chunkY0 = cy * PLAY_CHUNK_SIZE;
+      const x0 = Math.max(startX, chunkX0);
+      const y0 = Math.max(startY, chunkY0);
+      const x1 = Math.min(endX, chunkX0 + PLAY_CHUNK_SIZE);
+      const y1 = Math.min(endY, chunkY0 + PLAY_CHUNK_SIZE);
+
+      for (let my = y0; my < y1; my++) {
+        const sy = my - originY;
+        for (let mx = x0; mx < x1; mx++) {
+          const sx = mx - originX;
+          const tile = getMicroTile(mx, my, data);
+          const kind = classifyLocalMinimapTile(mx, my, tile, data);
+          const color = localMinimapColor(tile?.biomeId, kind);
+          ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+          ctx.fillRect(sx, sy, 1, 1);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -404,25 +489,24 @@ export function renderMinimap(canvas, data, player) {
   const { scale, ox, oy } = computeTransform(
     w, h, data.width, data.height, playerMacroX, playerMacroY, zoom
   );
+  let tfScale = scale;
+  let tfOx = ox;
+  let tfOy = oy;
+  if (zoom === 'close') {
+    tfScale = MACRO_TILE_STRIDE; // 1 screen px == 1 micro tile
+    tfOx = playerMacroX + 0.5 - w / (2 * tfScale);
+    tfOy = playerMacroY + 0.5 - h / (2 * tfScale);
+  }
 
   // --- Composite base layer with panning ---
   ctx.clearRect(0, 0, w, h);
-  ctx.save();
-  ctx.translate(-ox * scale, -oy * scale);
-  ctx.drawImage(baseCacheCanvas, 0, 0, data.width * scale, data.height * scale);
-  ctx.restore();
-
   if (zoom === 'close') {
-    if (closeNoiseDetailCacheData !== data) {
-      closeNoiseDetailCacheCanvas = rebuildCloseNoiseDetail(data);
-      closeNoiseDetailCacheData = data;
-    }
-    if (closeNoiseDetailCacheCanvas) {
-      ctx.save();
-      ctx.translate(-ox * scale, -oy * scale);
-      ctx.drawImage(closeNoiseDetailCacheCanvas, 0, 0, data.width * scale, data.height * scale);
-      ctx.restore();
-    }
+    drawLocalLoadedSpriteTileMinimap(ctx, data, player.x, player.y, { w, h });
+  } else {
+    ctx.save();
+    ctx.translate(-tfOx * tfScale, -tfOy * tfScale);
+    ctx.drawImage(baseCacheCanvas, 0, 0, data.width * tfScale, data.height * tfScale);
+    ctx.restore();
   }
 
   // --- Viewport border pulse for close zoom ---
@@ -435,10 +519,10 @@ export function renderMinimap(canvas, data, player) {
   }
 
   // --- Player marker (always screen-centred for mid/close zoom) ---
-  const playerScreenX = (playerMacroX - ox + 0.5) * scale;
-  const playerScreenY = (playerMacroY - oy + 0.5) * scale;
+  const playerScreenX = (playerMacroX - tfOx + 0.5) * tfScale;
+  const playerScreenY = (playerMacroY - tfOy + 0.5) * tfScale;
 
-  const dotR = Math.max(3, Math.min(5, scale * 0.6));
+  const dotR = Math.max(3, Math.min(5, tfScale * 0.6));
 
   // Outer glow
   ctx.save();
@@ -458,7 +542,7 @@ export function renderMinimap(canvas, data, player) {
 
   drawWildSpawnPortraitMarkers(
     ctx,
-    { scale, ox, oy },
+    { scale: tfScale, ox: tfOx, oy: tfOy },
     { x: playerMacroX, y: playerMacroY },
     { w, h }
   );
@@ -482,6 +566,5 @@ export function cycleMinimapZoom(canvas) {
   canvas.dataset.zoom = next;
   // Invalidate base cache (zoom changed)
   baseCacheData = null;
-  closeNoiseDetailCacheData = null;
   return next;
 }
