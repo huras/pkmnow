@@ -38,6 +38,7 @@ import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
   grassFireTryIgniteAt,
+  grassFireVisualPhaseAt,
   GRASS_FIRE_PARTICLE_SEC
 } from '../play-grass-fire.js';
 import {
@@ -819,6 +820,15 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       continue;
     }
     if (p.type === 'grassFire') {
+      // Flames die with their tile: if the tile is no longer in `burning` phase
+      // (extinguished by water or snuffed by rain), drop the particle immediately
+      // so visible flames clear within one frame instead of riding out their full life.
+      const mx = Math.floor(p.x);
+      const my = Math.floor(p.y);
+      if (grassFireVisualPhaseAt(mx, my) !== 'burning') {
+        activeParticles.splice(i, 1);
+        continue;
+      }
       p.z = 0.08;
       continue;
     }
