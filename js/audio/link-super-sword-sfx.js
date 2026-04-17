@@ -5,11 +5,11 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
-const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
+const _resolved = new URL('../../audio/sfx/Link - Super Sword.wav', import.meta.url).href;
+const SUPER_SWORD_URL = _resolved.replace(/ /g, '%20');
 
-const POOL_SIZE = 4;
-const TREE_TACKLE_VOL = 0.62;
+const POOL_SIZE = 3;
+const VOL = 0.62;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -18,7 +18,7 @@ function ensurePool() {
   if (!pool) {
     pool = [];
     for (let i = 0; i < POOL_SIZE; i++) {
-      const a = new Audio(TREE_TACKLE_WAV_URL);
+      const a = new Audio(SUPER_SWORD_URL);
       a.preload = 'auto';
       pool.push(a);
     }
@@ -26,7 +26,7 @@ function ensurePool() {
   return pool;
 }
 
-function borrowAudio() {
+function borrow() {
   const p = ensurePool();
   for (const a of p) {
     if (a.paused || a.ended) return a;
@@ -34,19 +34,16 @@ function borrowAudio() {
   return p[0];
 }
 
-/**
- * @param {{ x?: number, y?: number, visualX?: number, visualY?: number, z?: number } | null | undefined} source
- */
-export function playTreeTackleSfx(source) {
-  const a = borrowAudio();
+/** Strong charged Cut (first bar full). */
+export function playLinkSuperSwordSfx(source) {
+  const a = borrow();
   try {
     a.currentTime = 0;
   } catch {
     /* ignore */
   }
-  a.volume = TREE_TACKLE_VOL;
+  a.volume = VOL;
   a.playbackRate = 1;
-
   void resumeSpatialAudioContext();
   const graph = wireSpatialMediaElement(a);
   const wx = Number(source?.visualX ?? source?.x);
@@ -56,7 +53,6 @@ export function playTreeTackleSfx(source) {
   } else {
     centerSpatialSourceOnListener(graph);
   }
-
   const playP = a.play();
   if (playP !== undefined && typeof playP.catch === 'function') playP.catch(() => {});
 }

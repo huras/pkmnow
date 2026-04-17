@@ -4,6 +4,7 @@ import { OBJECT_SETS } from '../tessellation-data.js';
 import { scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { playRockSmashingCarryDropSfx } from '../audio/rock-smashing-sfx.js';
+import { playGrabbingSfx } from '../audio/grabbing-sfx.js';
 import {
   findCarryableFaintedWildNear,
   getWildPokemonEntityByKey,
@@ -264,6 +265,7 @@ function finalizeStrengthGrab(player, data, nowSec, action) {
       hitsMax: 1
     };
     player._strengthCarryHitStreak = 0;
+    playGrabbingSfx(player);
     return true;
   }
   const liftState = tryStrengthLiftSolidScatterAt(action.ox, action.oy, data, nowSec);
@@ -279,6 +281,7 @@ function finalizeStrengthGrab(player, data, nowSec, action) {
     hitsMax: Math.max(1, Math.floor(Number(liftState.hitsMax) || 1))
   };
   player._strengthCarryHitStreak = 0;
+  playGrabbingSfx(player);
   return true;
 }
 

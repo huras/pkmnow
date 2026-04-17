@@ -18,6 +18,7 @@ import {
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
+import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 
 /** @typedef {'strengthRock' | 'faintedWild'} ThrownMapDetailKind */
 
@@ -387,6 +388,7 @@ export function updateThrownMapDetailEntities(dt, data) {
 
     const airbornLongEnough = t.age > 0.05;
     if (airbornLongEnough && t.z <= 0.02 && t.vz <= 0.15) {
+      playFloorHit2Sfx({ x: t.x, y: t.y, z: 0 });
       t.z = 0;
       t.vz = 0;
       t.phase = 'roll';
@@ -396,6 +398,7 @@ export function updateThrownMapDetailEntities(dt, data) {
     if (t.age > THROW_MAX_AGE_SEC || t.x < -3 || t.y < -3 || t.x > microW + 3 || t.y > microH + 3) {
       finalizeStrengthRockLand(t, data, t.x, t.y);
     } else if (prevZ > 0.04 && t.z < -0.08) {
+      playFloorHit2Sfx({ x: t.x, y: t.y, z: 0 });
       t.z = 0;
       t.vz = 0;
       t.phase = 'roll';

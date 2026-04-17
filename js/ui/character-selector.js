@@ -15,6 +15,7 @@ import {
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
+import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
@@ -332,7 +333,17 @@ export class CharacterSelector {
             LMB: <span id="player-field-skill-label">Tackle</span>
           </div>
           <div class="player-field-charge hidden" id="player-field-charge" aria-label="Field move charge">
-            <div class="player-field-charge__bar"><div class="player-field-charge__fill" id="player-field-charge-fill"></div></div>
+            <div class="player-field-charge__bar">
+              <div class="player-field-charge__segment player-field-charge__segment--1">
+                <div class="player-field-charge__fill player-field-charge__fill--1" id="player-field-charge-fill-1"></div>
+              </div>
+              <div class="player-field-charge__segment player-field-charge__segment--2">
+                <div class="player-field-charge__fill player-field-charge__fill--2" id="player-field-charge-fill-2"></div>
+              </div>
+              <div class="player-field-charge__segment player-field-charge__segment--3">
+                <div class="player-field-charge__fill player-field-charge__fill--3" id="player-field-charge-fill-3"></div>
+              </div>
+            </div>
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
@@ -436,17 +447,29 @@ export class CharacterSelector {
 
   updatePlayFieldMoveChargeHud() {
     const wrap = this.container?.querySelector('#player-field-charge');
-    const fill = this.container?.querySelector('#player-field-charge-fill');
+    const fill1 = this.container?.querySelector('#player-field-charge-fill-1');
+    const fill2 = this.container?.querySelector('#player-field-charge-fill-2');
+    const fill3 = this.container?.querySelector('#player-field-charge-fill-3');
     const label = this.container?.querySelector('#player-field-charge-label');
-    if (!(wrap instanceof HTMLElement) || !(fill instanceof HTMLElement) || !(label instanceof HTMLElement)) return;
+    if (
+      !(wrap instanceof HTMLElement) ||
+      !(fill1 instanceof HTMLElement) ||
+      !(fill2 instanceof HTMLElement) ||
+      !(fill3 instanceof HTMLElement) ||
+      !(label instanceof HTMLElement)
+    ) return;
     const skillId = getPlayerInputBindings(player.dexId).lmb;
     const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+    const [p1, p2, p3] = getChargeBarProgresses(p);
+    const lvl = getChargeLevel(p);
     const canChargeFieldSkill = skillId === 'tackle' || skillId === 'cut';
     const shouldShow = canChargeFieldSkill && p > 0.005;
     const moveLabel = skillId === 'cut' ? 'Cut' : 'Tackle';
     wrap.classList.toggle('hidden', !shouldShow);
-    fill.style.width = `${Math.round(p * 100)}%`;
-    label.textContent = `${moveLabel} Charge ${Math.round(p * 100)}%`;
+    fill1.style.width = `${Math.round(p1 * 100)}%`;
+    fill2.style.width = `${Math.round(p2 * 100)}%`;
+    fill3.style.width = `${Math.round(p3 * 100)}%`;
+    label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
   }
 
   syncPlayPointerModeRadios() {

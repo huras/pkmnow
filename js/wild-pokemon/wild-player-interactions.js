@@ -13,6 +13,7 @@ import {
   getPokemonHurtboxRadiusTiles,
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
+import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
 
 const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
 const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
@@ -24,6 +25,15 @@ const PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES = 0.05;
 
 const PLAYER_CUT_WILD_DAMAGE = 9;
 const PLAYER_CUT_WILD_KNOCKBACK = 3.35;
+const WILD_MELEE_HITSTOP_SEC = 0.075;
+
+function applyMeleeHitStop(entity) {
+  if (!entity) return;
+  entity.meleeHitStopSec = Math.max(entity.meleeHitStopSec || 0, WILD_MELEE_HITSTOP_SEC);
+  entity.vx = 0;
+  entity.vy = 0;
+  entity.animMoving = false;
+}
 
 function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
   const dx = bx - ax;
@@ -88,7 +98,7 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
  * LMB tackle melee hit against nearest wild along the tackle segment.
  * @returns {{ hit: boolean, dexId?: number }}
  */
-export function tryPlayerTackleHitWild(player, data) {
+export function tryPlayerTackleHitWild(player, data, opts = {}) {
   if (!player || !data) return { hit: false };
   const px = Number(player.x);
   const py = Number(player.y);
@@ -128,9 +138,12 @@ export function tryPlayerTackleHitWild(player, data) {
   }
   if (!best) return { hit: false };
 
-  if (typeof best.takeDamage === 'function') best.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
+  const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
+  if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
-  applyWildKnockbackFromPoint(best, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);
+  applyWildKnockbackFromPoint(best, px, py, knockback);
   pushRecentNearbyEvent(best, 'player_field_move', 1.18);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
   return { hit: true, dexId: best.dexId };
@@ -154,7 +167,9 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
 }
 
 /**
- * Circular melee hit used by field skills like Cut.
+ * Circular melee hit used by field skills like Cut (and charged spin when `opts` matches).
+ * @param {{ damage?: number, knockback?: number, cutWildHitSound?: boolean }} [opts]
+ *   When `cutWildHitSound` is true, each wild hit plays Cut contact SFX (not used for tackle spin).
  * @returns {{ hit: boolean, hitCount: number }}
  */
 export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radiusTiles, opts = {}) {
@@ -167,6 +182,7 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
   }
   const damage = Math.max(1, Number(opts.damage) || PLAYER_CUT_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_CUT_WILD_KNOCKBACK);
+  const playCutHitSfx = !!opts.cutWildHitSound;
   const pz = Number(player.z) || 0;
   let hitCount = 0;
   for (const e of entitiesByKey.values()) {
@@ -179,7 +195,9 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
     const dy = hy - cy;
     if (dx * dx + dy * dy > rr * rr) continue;
     hitCount++;
+    if (playCutHitSfx) playModerateSwordHitSfx({ x: hx, y: hy, z: e.z ?? 0 });
     if (typeof e.takeDamage === 'function') e.takeDamage(damage);
+    applyMeleeHitStop(e);
     setEmotion(e, 5, false, 'Pain');
     applyWildKnockbackFromPoint(e, player.x ?? cx, player.y ?? cy, knockback);
     pushRecentNearbyEvent(e, 'player_field_move', 1.08);

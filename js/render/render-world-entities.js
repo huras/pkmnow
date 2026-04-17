@@ -22,6 +22,56 @@ import {
 import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-config.js';
 
+const DROP_GLOW_TEXTURE_PATH = 'vfx/ETF_Texture_Sparkle_02.png';
+const DROP_GLOW_PERIOD_SEC = 3;
+const DROP_GLOW_DURATION_SEC = 0.5;
+let dropGlowTextureInflight = null;
+
+function queueDropGlowTextureLoad(imageCache) {
+  if (imageCache.has(DROP_GLOW_TEXTURE_PATH) || dropGlowTextureInflight) return;
+  dropGlowTextureInflight = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(DROP_GLOW_TEXTURE_PATH, img);
+      dropGlowTextureInflight = null;
+      resolve();
+    };
+    img.onerror = () => {
+      dropGlowTextureInflight = null;
+      resolve();
+    };
+    img.src = DROP_GLOW_TEXTURE_PATH;
+  });
+}
+
+function dropGlowPulse01(drop) {
+  const ageSec = Number(drop?.age) || 0;
+  const seed = Number(drop?.bobSeed) || 0;
+  const phaseSec = (ageSec + seed * 0.37) % DROP_GLOW_PERIOD_SEC;
+  if (phaseSec >= DROP_GLOW_DURATION_SEC) return 0;
+  const t = phaseSec / DROP_GLOW_DURATION_SEC;
+  return Math.sin(Math.PI * t);
+}
+
+function drawDropGlow(ctx, drop, imageCache, px, py, targetW, targetH) {
+  const glow = dropGlowPulse01(drop);
+  if (glow <= 0.001) return;
+  const glowImg = imageCache.get(DROP_GLOW_TEXTURE_PATH);
+  if (!glowImg?.naturalWidth) {
+    queueDropGlowTextureLoad(imageCache);
+    return;
+  }
+  const suctionT = Math.max(0, Math.min(1, Number(drop?.collectShrink) || 0));
+  const scaleBoost = 1 + glow * 0.48;
+  const dw = Math.max(16, targetW * 1.9 * scaleBoost);
+  const dh = Math.max(16, targetH * 1.9 * scaleBoost);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = (0.28 + glow * 0.5) * (1 - suctionT * 0.62);
+  ctx.drawImage(glowImg, px - dw * 0.5, py - dh * 0.5, dw, dh);
+  ctx.restore();
+}
+
 /**
  * Handles drawing of a scatter object (bushes, rocks, etc.).
  */
@@ -224,6 +274,7 @@ export function drawCrystalDrop(ctx, item, options) {
     ctx.arc(px - rr * 0.25, py - rr * 0.25, Math.max(1, rr * 0.35), 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    drawDropGlow(ctx, d, imageCache, px, py, rr * 2.7, rr * 2.7);
   } else {
     const path = d.imgPath;
     const img = path ? imageCache.get(path) : null;
@@ -258,6 +309,7 @@ export function drawCrystalDrop(ctx, item, options) {
         ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileDw, tileDh);
       }
       ctx.restore();
+      drawDropGlow(ctx, d, imageCache, px, py, footW, footH);
     }
   }
 }
@@ -657,14 +709,16 @@ export function drawPsybeamChargeBall(ctx, item, options) {
 }
 
 /**
- * In-place fade for broken scatter (grass, flowers, tree-without-top, rocks, etc.) — no vertical drop.
+ * Fall + fade for broken scatter vegetation details (grass, flowers, tree-without-top, rocks, etc.).
  */
 export function drawScatterVegetationFadeOut(ctx, item, options) {
-  const { originX, originY, itemKey, cols, rows, alpha } = item;
+  const { tileH } = options;
+  const { originX, originY, itemKey, cols, rows, dropYTiles = 0, alpha } = item;
   const objSet = OBJECT_SETS[itemKey];
   if (!objSet || alpha < 0.02) return;
   ctx.save();
   ctx.globalAlpha = ctx.globalAlpha * alpha;
+  if (dropYTiles > 0) ctx.translate(0, dropYTiles * tileH);
   drawScatter(
     ctx,
     {

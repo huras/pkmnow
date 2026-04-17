@@ -31,6 +31,8 @@ import * as groupBehavior from './wild-group-behavior.js';
 import { scenarioOrchestrator } from './wild-scenario-orchestrator.js';
 import { WILD_SOCIAL_SCENARIOS } from './wild-scenario-data.js';
 import { sampleWorldDangerEscapeAngle, sampleWorldDangerScore } from '../simulation/world-reactions.js';
+import { advanceFootFloorStepsForDistance } from '../audio/foot-floor-sfx.js';
+import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 
 const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
@@ -127,6 +129,7 @@ export function integrateWildPokemonVertical(entity, dt) {
   ensureWildPhysicsState(entity);
   if (entity.jumpCooldown > 0) entity.jumpCooldown = Math.max(0, entity.jumpCooldown - dt);
   if (!entity.grounded) {
+    const zWildPrev = entity.z ?? 0;
     entity.vz -= WILD_GRAVITY * dt;
     entity.z += entity.vz * dt;
     if (entity.z <= 0) {
@@ -134,6 +137,7 @@ export function integrateWildPokemonVertical(entity, dt) {
       entity.vz = 0;
       entity.grounded = true;
       entity.jumping = false;
+      if (zWildPrev > 0.04) playFloorHit2Sfx(entity);
     }
   }
 }
@@ -455,6 +459,13 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     entity._followerTackleCooldownSec = Math.max(0, (entity._followerTackleCooldownSec || 0) - dt);
   }
   if (entity.deadState) {
+    entity.vx = 0;
+    entity.vy = 0;
+    entity.animMoving = false;
+    return;
+  }
+  if ((entity.meleeHitStopSec || 0) > 0) {
+    entity.meleeHitStopSec = Math.max(0, (entity.meleeHitStopSec || 0) - dt);
     entity.vx = 0;
     entity.vy = 0;
     entity.animMoving = false;
@@ -839,6 +850,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     }
   }
 
+  const wildFootX0 = entity.x;
+  const wildFootY0 = entity.y;
+
   let air = wildIsAirborne(entity);
   const nx = entity.x + entity.vx * dt;
   const ny = entity.y + entity.vy * dt;
@@ -917,8 +931,14 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     }
   }
 
+  const wildMovedTiles = Math.hypot(entity.x - wildFootX0, entity.y - wildFootY0);
+
   const spd = Math.hypot(entity.vx, entity.vy);
   entity.animMoving = spd > 0.1;
+
+  const wantWildFootFloor =
+    !!entity.grounded && !wildIsAirborne(entity) && !(isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving);
+  advanceFootFloorStepsForDistance(entity, wildMovedTiles, wantWildFootFloor, entity);
 
   if (entity.aiState === 'approach' && distP <= beh.stopDist) {
     const ang = Math.atan2(-dyP, -dxP);

@@ -1,6 +1,37 @@
 import { imageCache } from '../image-cache.js';
 import { BURN_START_FRAME, BURN_START_FRAMES } from '../moves/move-constants.js';
 
+const FIELD_SPIN_WIND_TEX = 'vfx/ETF_Texture_Wind_01.png';
+let fieldSpinWindTexInflight = null;
+
+function queueFieldSpinWindTextureLoad() {
+  if (imageCache.get(FIELD_SPIN_WIND_TEX)?.naturalWidth || fieldSpinWindTexInflight) return;
+  fieldSpinWindTexInflight = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(FIELD_SPIN_WIND_TEX, img);
+      fieldSpinWindTexInflight = null;
+      resolve();
+    };
+    img.onerror = () => {
+      fieldSpinWindTexInflight = null;
+      resolve();
+    };
+    img.src = FIELD_SPIN_WIND_TEX;
+  });
+}
+
+function psychicCutAlternatingPalette(p) {
+  const nowMs = performance.now();
+  const seed = ((Number(p?.x) || 0) + (Number(p?.y) || 0)) * 37;
+  const flip = (Math.floor((nowMs + seed) / 95) & 1) === 0;
+  const pink = [255, 108, 210];
+  const purple = [174, 116, 255];
+  return flip
+    ? { glow: pink, core: [255, 196, 240], ring: purple }
+    : { glow: purple, core: [231, 206, 255], ring: pink };
+}
+
 /**
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} p
@@ -134,8 +165,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     const outerR = r * (0.9 + 0.2 * ease);
     const innerR = outerR * (psychic ? 0.62 : 0.7);
     const tipInset = half * (psychic ? 0.24 : 0.18);
-    const glow = psychic ? [255, 122, 220] : [240, 240, 255];
-    const core = psychic ? [255, 84, 190] : [255, 255, 255];
+    const psychicPal = psychic ? psychicCutAlternatingPalette(p) : null;
+    const glow = psychic ? psychicPal.glow : [240, 240, 255];
+    const core = psychic ? psychicPal.core : [255, 255, 255];
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(heading);
@@ -162,8 +194,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
       ringColor = [136, 255, 126];
       coreColor = [216, 255, 206];
     } else if (styleId === 'psychic') {
-      ringColor = [255, 116, 216];
-      coreColor = [255, 182, 232];
+      const psychicPal = psychicCutAlternatingPalette(p);
+      ringColor = psychicPal.ring;
+      coreColor = psychicPal.core;
     } else if (styleId === 'strength') {
       ringColor = [255, 196, 124];
       coreColor = [255, 232, 184];
@@ -210,6 +243,26 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
         ctx.beginPath();
         ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, Math.max(1.2, tileW * 0.032), 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+    if (p.windTex) {
+      const windImg = imageCache.get(FIELD_SPIN_WIND_TEX);
+      if (!windImg?.naturalWidth) {
+        queueFieldSpinWindTextureLoad();
+      } else {
+        ctx.save();
+        const windSpin = performance.now() * 0.0034 + sweepStart * 0.35 + t * Math.PI * 1.1;
+        ctx.rotate(windSpin);
+        const span = radius * 2.25;
+        const prevComp = ctx.globalCompositeOperation;
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalCompositeOperation = 'lighter';
+        const windA = Math.min(1, 0.22 + 0.3 * (1 - t * 0.45));
+        ctx.globalAlpha = prevAlpha * windA;
+        ctx.drawImage(windImg, -span * 0.5, -span * 0.5, span, span);
+        ctx.globalCompositeOperation = prevComp;
+        ctx.globalAlpha = prevAlpha;
+        ctx.restore();
       }
     }
     ctx.restore();

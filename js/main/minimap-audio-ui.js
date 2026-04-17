@@ -36,7 +36,7 @@ export function installMinimapAudioUi() {
   const pop = document.getElementById('minimap-audio-popover');
   const toggle = document.getElementById('minimap-audio-toggle');
   const bgmRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-bgm'));
-  const criesRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-cries'));
+  const sfxRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-sfx'));
   const muteChk = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-audio-mute'));
   const toastSuppressChk = /** @type {HTMLInputElement | null} */ (
     document.getElementById('minimap-bgm-toast-suppress')
@@ -44,7 +44,7 @@ export function installMinimapAudioUi() {
   const trackEl = document.getElementById('minimap-audio-track');
   const statusEl = document.getElementById('minimap-audio-status');
 
-  if (!pop || !toggle || !bgmRange || !criesRange || !trackEl || !statusEl) {
+  if (!pop || !toggle || !bgmRange || !sfxRange || !trackEl || !statusEl) {
     return { syncMinimapAudioPopover: () => {}, forceCloseMinimapAudioPopover: () => {} };
   }
 
@@ -59,7 +59,7 @@ export function installMinimapAudioUi() {
       syncNowPlayingText();
       mutating = true;
       bgmRange.value = String(Math.round(getBgmMix01() * 100));
-      criesRange.value = String(Math.round(getCriesMix01() * 100));
+      sfxRange.value = String(Math.round(getCriesMix01() * 100));
       if (muteChk) muteChk.checked = isAudioMuted();
       if (toastSuppressChk) toastSuppressChk.checked = isBgmTrackChangeToastSuppressed();
       mutating = false;
@@ -77,9 +77,9 @@ export function installMinimapAudioUi() {
     applyBgmUserMixFromStorage();
   });
 
-  criesRange.addEventListener('input', () => {
+  sfxRange.addEventListener('input', () => {
     if (mutating) return;
-    setCriesMix01(Number(criesRange.value) / 100);
+    setCriesMix01(Number(sfxRange.value) / 100);
   });
 
   muteChk?.addEventListener('change', () => {
@@ -111,7 +111,7 @@ export function installMinimapAudioUi() {
 
   mutating = true;
   bgmRange.value = String(Math.round(getBgmMix01() * 100));
-  criesRange.value = String(Math.round(getCriesMix01() * 100));
+  sfxRange.value = String(Math.round(getCriesMix01() * 100));
   if (muteChk) muteChk.checked = isAudioMuted();
   if (toastSuppressChk) toastSuppressChk.checked = isBgmTrackChangeToastSuppressed();
   mutating = false;

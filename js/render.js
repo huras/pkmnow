@@ -503,6 +503,26 @@ export function render(canvas, data, options = {}) {
         }
 
         ctx.filter = 'none';
+        if (item.type === 'wild' && item.hitFlashTimer > 0) {
+          const spark01 = Math.max(0, Math.min(1, (item.hitFlashTimer || 0) / 0.2));
+          const pulse = 0.65 + 0.35 * Math.sin((time || 0) * 90 + item.x * 2.3 + item.y * 1.9);
+          const sr = Math.max(4, tileW * (0.16 + 0.12 * spark01) * pulse);
+          ctx.save();
+          ctx.globalAlpha = alpha * spark01 * 0.78;
+          ctx.strokeStyle = 'rgba(255, 242, 182, 0.95)';
+          ctx.lineWidth = Math.max(1, tileW * 0.03);
+          ctx.beginPath();
+          ctx.moveTo(item.cx - sr, item.cy);
+          ctx.lineTo(item.cx + sr, item.cy);
+          ctx.moveTo(item.cx, item.cy - sr);
+          ctx.lineTo(item.cx, item.cy + sr);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(255, 145, 98, 0.75)';
+          ctx.beginPath();
+          ctx.arc(item.cx, item.cy, sr * 0.52, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
 
         // Terrain / grass depth cue (LOD 0)

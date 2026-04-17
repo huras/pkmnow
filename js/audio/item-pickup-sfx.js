@@ -4,14 +4,15 @@ import {
   setSpatialSourceWorldPosition,
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
+import { getEffectiveCriesMix01 } from './play-audio-mix-settings.js';
 
-const ITEM_PICKUP_WAV_URL = new URL(
-  '../../audio/sfx/Game Boy Advance - Pokemon Emerald - Miscellaneous - Sound Effects/emerald_00A7.wav',
-  import.meta.url
-).href;
+const ITEM_PICKUP_WAV_URL = new URL('../../audio/sfx/A-Drip.wav', import.meta.url).href;
 
 const POOL_SIZE = 4;
+/** Base linear gain before file loudness trim and cries/SFX mix slider. */
 const ITEM_PICKUP_VOL = 0.62;
+/** A-Drip is hot on disk — half vs other spatial SFX at the same mix. */
+const ITEM_PICKUP_LOUD_FILE_TRIM = 0.5;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -46,7 +47,8 @@ export function playItemPickupSfx(source) {
   } catch {
     /* ignore */
   }
-  a.volume = ITEM_PICKUP_VOL;
+  const mix = getEffectiveCriesMix01();
+  a.volume = Math.max(0, Math.min(1, ITEM_PICKUP_VOL * ITEM_PICKUP_LOUD_FILE_TRIM * mix));
   a.playbackRate = 1;
 
   void resumeSpatialAudioContext();

@@ -5,11 +5,11 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
-const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
+const _grabbingResolved = new URL('../../audio/sfx/Grabbing.wav', import.meta.url).href;
+const GRABBING_WAV_URL = _grabbingResolved.replace(/ /g, '%20');
 
 const POOL_SIZE = 4;
-const TREE_TACKLE_VOL = 0.62;
+const GRABBING_VOL = 0.62;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -18,7 +18,7 @@ function ensurePool() {
   if (!pool) {
     pool = [];
     for (let i = 0; i < POOL_SIZE; i++) {
-      const a = new Audio(TREE_TACKLE_WAV_URL);
+      const a = new Audio(GRABBING_WAV_URL);
       a.preload = 'auto';
       pool.push(a);
     }
@@ -35,16 +35,17 @@ function borrowAudio() {
 }
 
 /**
+ * Strength / carry: when a Pokémon successfully grabs a liftable object or fainted wild.
  * @param {{ x?: number, y?: number, visualX?: number, visualY?: number, z?: number } | null | undefined} source
  */
-export function playTreeTackleSfx(source) {
+export function playGrabbingSfx(source) {
   const a = borrowAudio();
   try {
     a.currentTime = 0;
   } catch {
     /* ignore */
   }
-  a.volume = TREE_TACKLE_VOL;
+  a.volume = GRABBING_VOL;
   a.playbackRate = 1;
 
   void resumeSpatialAudioContext();

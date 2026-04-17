@@ -5,11 +5,11 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
-const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
+const _resolved = new URL('../../audio/sfx/Moderate Sword Hit.wav', import.meta.url).href;
+const MODERATE_SWORD_HIT_URL = _resolved.replace(/ /g, '%20');
 
-const POOL_SIZE = 4;
-const TREE_TACKLE_VOL = 0.62;
+const POOL_SIZE = 6;
+const VOL = 0.58;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -18,7 +18,7 @@ function ensurePool() {
   if (!pool) {
     pool = [];
     for (let i = 0; i < POOL_SIZE; i++) {
-      const a = new Audio(TREE_TACKLE_WAV_URL);
+      const a = new Audio(MODERATE_SWORD_HIT_URL);
       a.preload = 'auto';
       pool.push(a);
     }
@@ -26,7 +26,7 @@ function ensurePool() {
   return pool;
 }
 
-function borrowAudio() {
+function borrow() {
   const p = ensurePool();
   for (const a of p) {
     if (a.paused || a.ended) return a;
@@ -35,28 +35,27 @@ function borrowAudio() {
 }
 
 /**
- * @param {{ x?: number, y?: number, visualX?: number, visualY?: number, z?: number } | null | undefined} source
+ * Cut (field) contact on a wild Pokémon hurtbox center.
+ * @param {{ x?: number, y?: number, z?: number } | null | undefined} worldPos
  */
-export function playTreeTackleSfx(source) {
-  const a = borrowAudio();
+export function playModerateSwordHitSfx(worldPos) {
+  const a = borrow();
   try {
     a.currentTime = 0;
   } catch {
     /* ignore */
   }
-  a.volume = TREE_TACKLE_VOL;
+  a.volume = VOL;
   a.playbackRate = 1;
-
   void resumeSpatialAudioContext();
   const graph = wireSpatialMediaElement(a);
-  const wx = Number(source?.visualX ?? source?.x);
-  const wy = Number(source?.visualY ?? source?.y);
+  const wx = Number(worldPos?.x);
+  const wy = Number(worldPos?.y);
   if (Number.isFinite(wx) && Number.isFinite(wy)) {
-    setSpatialSourceWorldPosition(graph, wx, wy, Math.max(0, Number(source?.z) || 0));
+    setSpatialSourceWorldPosition(graph, wx, wy, Math.max(0, Number(worldPos?.z) || 0));
   } else {
     centerSpatialSourceOnListener(graph);
   }
-
   const playP = a.play();
   if (playP !== undefined && typeof playP.catch === 'function') playP.catch(() => {});
 }

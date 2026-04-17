@@ -5,11 +5,11 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
-const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
+const _floorHit2Resolved = new URL('../../audio/sfx/Floor Hit 2.wav', import.meta.url).href;
+const FLOOR_HIT_2_WAV_URL = _floorHit2Resolved.replace(/ /g, '%20');
 
-const POOL_SIZE = 4;
-const TREE_TACKLE_VOL = 0.62;
+const POOL_SIZE = 6;
+const FLOOR_HIT_2_VOL = 0.68;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -18,7 +18,7 @@ function ensurePool() {
   if (!pool) {
     pool = [];
     for (let i = 0; i < POOL_SIZE; i++) {
-      const a = new Audio(TREE_TACKLE_WAV_URL);
+      const a = new Audio(FLOOR_HIT_2_WAV_URL);
       a.preload = 'auto';
       pool.push(a);
     }
@@ -37,14 +37,14 @@ function borrowAudio() {
 /**
  * @param {{ x?: number, y?: number, visualX?: number, visualY?: number, z?: number } | null | undefined} source
  */
-export function playTreeTackleSfx(source) {
+export function playFloorHit2Sfx(source) {
   const a = borrowAudio();
   try {
     a.currentTime = 0;
   } catch {
     /* ignore */
   }
-  a.volume = TREE_TACKLE_VOL;
+  a.volume = FLOOR_HIT_2_VOL;
   a.playbackRate = 1;
 
   void resumeSpatialAudioContext();

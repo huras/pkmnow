@@ -5,11 +5,10 @@ import {
   centerSpatialSourceOnListener
 } from './spatial-audio.js';
 
-const _treeTackleResolved = new URL('../../audio/sfx/DK - Whiff.wav', import.meta.url).href;
-const TREE_TACKLE_WAV_URL = _treeTackleResolved.replace(/ /g, '%20');
-
-const POOL_SIZE = 4;
-const TREE_TACKLE_VOL = 0.62;
+const _homeRunBatHitResolved = new URL('../../audio/sfx/Home Run Bat Hit.wav', import.meta.url).href;
+const HOME_RUN_BAT_HIT_WAV_URL = _homeRunBatHitResolved.replace(/ /g, '%20');
+const POOL_SIZE = 3;
+const HOME_RUN_BAT_HIT_VOL = 0.82;
 
 /** @type {HTMLAudioElement[] | null} */
 let pool = null;
@@ -18,7 +17,7 @@ function ensurePool() {
   if (!pool) {
     pool = [];
     for (let i = 0; i < POOL_SIZE; i++) {
-      const a = new Audio(TREE_TACKLE_WAV_URL);
+      const a = new Audio(HOME_RUN_BAT_HIT_WAV_URL);
       a.preload = 'auto';
       pool.push(a);
     }
@@ -37,14 +36,14 @@ function borrowAudio() {
 /**
  * @param {{ x?: number, y?: number, visualX?: number, visualY?: number, z?: number } | null | undefined} source
  */
-export function playTreeTackleSfx(source) {
+export function playHomeRunBatHitSfx(source) {
   const a = borrowAudio();
   try {
     a.currentTime = 0;
   } catch {
     /* ignore */
   }
-  a.volume = TREE_TACKLE_VOL;
+  a.volume = HOME_RUN_BAT_HIT_VOL;
   a.playbackRate = 1;
 
   void resumeSpatialAudioContext();
