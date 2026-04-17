@@ -54,6 +54,7 @@ import {
   buildWildSpatialIndex,
   queryWildSpatialIndexInAabb,
   applyWildKnockbackFromProjectile,
+  checkDamageHitCircle,
   distPointToSegmentTiles,
   broadPhaseOk,
   isProjectileBlockedByTree,

@@ -772,7 +772,9 @@ export function render(canvas, data, options = {}) {
       tileW,
       tileH,
       worldCols: width * MACRO_TILE_STRIDE,
-      worldRows: height * MACRO_TILE_STRIDE
+      worldRows: height * MACRO_TILE_STRIDE,
+      cloudPresence: options.settings?.weatherCloudPresence,
+      cloudNoiseSeed: options.settings?.weatherCloudNoiseSeed
     });
 
     const minimapCanvas = document.getElementById('minimap');

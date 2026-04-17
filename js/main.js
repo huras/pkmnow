@@ -474,6 +474,9 @@ function getSettings() {
   }
   const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
   const dayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
+  const weatherCloudPresence = 1;
+  const weatherCloudNoiseSeed =
+    appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   return {
     viewType,
     overlayPaths,
@@ -488,7 +491,9 @@ function getSettings() {
     time: gameTime,
     dayPhase,
     worldHours: wrapHours(worldHours),
-    dayCycleTint
+    dayCycleTint,
+    weatherCloudPresence,
+    weatherCloudNoiseSeed
   };
 }
 

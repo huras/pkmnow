@@ -20,12 +20,26 @@ import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 2;
 const CLOUD_SHADOW_ALPHA_RATIO = 0.68;
-const CLOUD_SIZE_GAIN = 2.5;
-const CLOUD_PERIOD_X_TILES = 96;
-const CLOUD_PERIOD_Y_TILES = 72;
-const CLOUD_SHADOW_OFFSET_MULT = 3;
+const CLOUD_SIZE_GAIN = 1.5;
+const CLOUD_SHADOW_OFFSET_MULT = 1.5;
 const CLOUD_SHADOW_OFFSET_BASE_X_TILES = 2.6;
 const CLOUD_SHADOW_OFFSET_BASE_Y_TILES = 3.3;
+/** Side length (power of two) of the precomputed cloud-size noise field. Small = cheap to regenerate, tile-wraps in world space. */
+const CLOUD_SIZE_FIELD_N = 64;
+/** Spacing between cloud slots in world-tiles. One potential cloud per slot; noise decides if/size. */
+const CLOUD_SLOT_STEP_WORLD_TILES = 10;
+/** World-tile span covered by each field cell. Field repeats every `N * cellWorld` world tiles. */
+const CLOUD_SIZE_FIELD_CELL_WORLD_TILES = 6; // 64*6 = 384 tiles per repeat
+/** Below this 0..1 noise value, the slot produces no cloud (clear sky). */
+const CLOUD_SIZE_SKIP_THRESHOLD = 0.42;
+/** Cloud size multiplier range, scaled from (noise - threshold)/(1 - threshold). */
+const CLOUD_SIZE_MIN_MUL = 0.45;
+const CLOUD_SIZE_MAX_MUL = 1.55;
+/** Global wind drift applied to the whole cloud field (tiles per second). */
+const CLOUD_WIND_VX_TILES_PER_SEC = 0.32;
+const CLOUD_WIND_VY_TILES_PER_SEC = 0.09;
+/** Per-slot position jitter (as a fraction of slot step) so the grid doesn't read as a grid. */
+const CLOUD_SLOT_JITTER_FRAC = 0.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
   { seedX: 0.07, seedY: 0.12, scale: 1.14, speed: 0.020, speedY: 0.010, alpha: 0.26, puffs: [[-0.9, 0.06, 0.84], [-0.15, -0.02, 1.0], [0.72, 0.08, 0.86]] },
   { seedX: 0.21, seedY: 0.28, scale: 1.03, speed: 0.024, speedY: 0.008, alpha: 0.29, puffs: [[-0.7, 0.05, 0.74], [0.0, -0.04, 1.03], [0.8, 0.07, 0.78]] },
@@ -90,6 +104,112 @@ function getCloudSpritePairForCluster(clusterIdx) {
   return pair;
 }
 
+/** Deterministic [0, 1); integer lattice hash. */
+function hash01Cell(ix, iy, iz) {
+  const x = ix | 0;
+  const y = iy | 0;
+  const z = iz | 0;
+  const n = Math.sin(x * 127.1 + y * 311.7 + z * 419.2) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function smoothstep01(t) {
+  const u = Math.max(0, Math.min(1, t));
+  return u * u * (3 - 2 * u);
+}
+
+let cloudSizeField = null;
+let cloudSizeFieldSeed = null;
+
+/**
+ * Builds a small toroidal 2-octave value-noise field (0..1). Cheap to regen,
+ * then each cloud just does 4 array reads + bilinear — no sin per instance.
+ */
+function buildCloudSizeField(seed) {
+  const N = CLOUD_SIZE_FIELD_N;
+  const out = new Float32Array(N * N);
+  const s1 = (seed | 0) % 2147483000;
+  const s2 = ((seed * 1013904223) | 0) % 2147483000 ^ 0x6c078965;
+  const coarseScale = 1 / 8;
+  const fineScale = 1 / 3;
+  const weightCoarse = 0.65;
+  const weightFine = 0.35;
+  let vmin = Infinity;
+  let vmax = -Infinity;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const coarse = octaveSampleWrap(x, y, coarseScale, N, s1);
+      const fine = octaveSampleWrap(x, y, fineScale, N, s2);
+      const v = weightCoarse * coarse + weightFine * fine;
+      if (v < vmin) vmin = v;
+      if (v > vmax) vmax = v;
+      out[y * N + x] = v;
+    }
+  }
+  const range = Math.max(1e-6, vmax - vmin);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = (out[i] - vmin) / range;
+  }
+  return out;
+}
+
+function octaveSampleWrap(x, y, scale, N, seed) {
+  const sx = x * scale;
+  const sy = y * scale;
+  const x0 = Math.floor(sx);
+  const y0 = Math.floor(sy);
+  const fx = sx - x0;
+  const fy = sy - y0;
+  const wrapX = Math.max(1, Math.floor(N * scale));
+  const wrapY = Math.max(1, Math.floor(N * scale));
+  const ix0 = ((x0 % wrapX) + wrapX) % wrapX;
+  const iy0 = ((y0 % wrapY) + wrapY) % wrapY;
+  const ix1 = (ix0 + 1) % wrapX;
+  const iy1 = (iy0 + 1) % wrapY;
+  const h00 = hash01Cell(ix0, iy0, seed);
+  const h10 = hash01Cell(ix1, iy0, seed);
+  const h01 = hash01Cell(ix0, iy1, seed);
+  const h11 = hash01Cell(ix1, iy1, seed);
+  const u = smoothstep01(fx);
+  const v = smoothstep01(fy);
+  const a = h00 + u * (h10 - h00);
+  const b = h01 + u * (h11 - h01);
+  return a + v * (b - a);
+}
+
+function ensureCloudSizeField(seed) {
+  if (cloudSizeField && cloudSizeFieldSeed === seed) return cloudSizeField;
+  cloudSizeField = buildCloudSizeField(seed);
+  cloudSizeFieldSeed = seed;
+  return cloudSizeField;
+}
+
+/** Returns 0..1 via wrap-sampling the precomputed field in world-tile space (bilinear). */
+function sampleCloudSizeField01(worldX, worldY, seed) {
+  const field = ensureCloudSizeField(seed);
+  const N = CLOUD_SIZE_FIELD_N;
+  const inv = 1 / CLOUD_SIZE_FIELD_CELL_WORLD_TILES;
+  const fx = worldX * inv;
+  const fy = worldY * inv;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const ix0 = ((x0 % N) + N) % N;
+  const iy0 = ((y0 % N) + N) % N;
+  const ix1 = (ix0 + 1) % N;
+  const iy1 = (iy0 + 1) % N;
+  const v00 = field[iy0 * N + ix0];
+  const v10 = field[iy0 * N + ix1];
+  const v01 = field[iy1 * N + ix0];
+  const v11 = field[iy1 * N + ix1];
+  const u = smoothstep01(tx);
+  const v = smoothstep01(ty);
+  const a = v00 + u * (v10 - v00);
+  const b = v01 + u * (v11 - v01);
+  return a + v * (b - a);
+}
+
 function drawSnesCloudParallax(ctx, options) {
   const {
     ch,
@@ -100,66 +220,80 @@ function drawSnesCloudParallax(ctx, options) {
     endY,
     tileW,
     tileH,
-    worldCols,
-    worldRows
+    cloudPresence: cloudPresenceRaw = 1,
+    cloudNoiseSeed = 0
   } = options;
-  const lodMul = 1;
-  const activeClusters = SNES_CLOUD_CLUSTERS.length;
+  const cloudPresence = Math.max(0, Math.min(1, Number(cloudPresenceRaw) || 0));
+  const noiseSeed = (cloudNoiseSeed | 0) >>> 0;
+  const variantCount = SNES_CLOUD_CLUSTERS.length;
   const time = Number.isFinite(timeSec) ? timeSec : 0;
   const baseScale = Math.max(0.7, Math.min(1.25, ch / 900));
   const shadowOffsetX = Math.round(tileW * CLOUD_SHADOW_OFFSET_BASE_X_TILES * CLOUD_SHADOW_OFFSET_MULT);
   const shadowOffsetY = Math.round(tileH * CLOUD_SHADOW_OFFSET_BASE_Y_TILES * CLOUD_SHADOW_OFFSET_MULT);
-  const cloudPresence = 1;
-  const cloudScreenYOffset = 0;
   const paddedStartX = startX - 30;
   const paddedEndX = endX + 30;
   const paddedStartY = startY - 24;
   const paddedEndY = endY + 24;
-  const worldW = Math.max(1, Number(worldCols) || 1);
-  const worldH = Math.max(1, Number(worldRows) || 1);
-  const periodX = Math.max(24, Math.min(worldW, CLOUD_PERIOD_X_TILES));
-  const periodY = Math.max(18, Math.min(worldH, CLOUD_PERIOD_Y_TILES));
+
+  // One slot grid drives the whole sky. Noise determines whether a cloud exists and its size.
+  const step = CLOUD_SLOT_STEP_WORLD_TILES;
+  const windX = time * CLOUD_WIND_VX_TILES_PER_SEC;
+  const windY = time * CLOUD_WIND_VY_TILES_PER_SEC;
+
+  // Visible slot range (add a margin big enough for the max-size cloud so none pop at edges).
+  const maxClusterScale = 1.28;
+  const maxHeightPx = tileH * 6.4 * CLOUD_SIZE_GAIN * maxClusterScale * baseScale * CLOUD_SIZE_MAX_MUL;
+  const maxHalfTileH = maxHeightPx / Math.max(1e-6, tileH) * 0.5;
+  // Sprite is ~320x220 so width ≈ height * 1.45; take generous margin.
+  const maxHalfTileW = maxHalfTileH * 1.6;
+  const jitterMargin = step * CLOUD_SLOT_JITTER_FRAC * 0.5;
+  const sxMin = Math.floor((paddedStartX - windX - maxHalfTileW - jitterMargin) / step);
+  const sxMax = Math.ceil((paddedEndX - windX + maxHalfTileW + jitterMargin) / step);
+  const syMin = Math.floor((paddedStartY - windY - maxHalfTileH - jitterMargin) / step);
+  const syMax = Math.ceil((paddedEndY - windY + maxHalfTileH + jitterMargin) / step);
 
   const drawLayer = (isShadow) => {
-    for (let i = 0; i < activeClusters; i++) {
-      const c = SNES_CLOUD_CLUSTERS[i];
-      const driftX = time * c.speed * 22;
-      const driftY = time * c.speedY * 12;
-      const baseWorldX = c.seedX * periodX + driftX;
-      const baseWorldY = c.seedY * periodY + driftY;
-      const alphaCluster =
-        c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * lodMul;
-      const yNudge = isShadow ? shadowOffsetY : 0;
-      const xNudge = isShadow ? shadowOffsetX : 0;
-      const spritePair = getCloudSpritePairForCluster(i);
-      const sprite = isShadow ? spritePair.shadow : spritePair.cloud;
-      const h = Math.max(2, Math.round(tileH * 6.4 * CLOUD_SIZE_GAIN * c.scale * baseScale));
-      const w = Math.max(2, Math.round(h * (sprite.width / Math.max(1, sprite.height))));
-      const cloudTileW = w / Math.max(1e-6, tileW);
-      const cloudTileH = h / Math.max(1e-6, tileH);
-      const kxMin = Math.floor((paddedStartX - baseWorldX - cloudTileW) / periodX);
-      const kxMax = Math.ceil((paddedEndX - baseWorldX) / periodX);
-      const kyMin = Math.floor((paddedStartY - baseWorldY - cloudTileH) / periodY);
-      const kyMax = Math.ceil((paddedEndY - baseWorldY) / periodY);
+    const yNudge = isShadow ? shadowOffsetY : 0;
+    const xNudge = isShadow ? shadowOffsetX : 0;
+    for (let sy = syMin; sy <= syMax; sy++) {
+      for (let sx = sxMin; sx <= sxMax; sx++) {
+        // Slot identity (stable across frames); noise sampled here → permanent size per slot.
+        const identityX = sx * step;
+        const identityY = sy * step;
+        const sizeNoise = sampleCloudSizeField01(identityX, identityY, noiseSeed);
+        if (sizeNoise < CLOUD_SIZE_SKIP_THRESHOLD) continue;
 
-      for (let ky = kyMin; ky <= kyMax; ky++) {
-        const worldY = baseWorldY + ky * periodY;
-        const yAnchor =
-          worldY * tileH + Math.sin(time * (0.26 + i * 0.03) + c.seedX * 6.2831) * (tileH * 0.6) + cloudScreenYOffset;
-        for (let kx = kxMin; kx <= kxMax; kx++) {
-          const worldX = baseWorldX + kx * periodX;
-          const x = Math.round(worldX * tileW + xNudge);
-          const y = Math.round(yAnchor + yNudge);
-          const cloudMinX = x / tileW;
-          const cloudMaxX = (x + w) / tileW;
-          const cloudMinY = y / tileH;
-          const cloudMaxY = (y + h) / tileH;
-          if (cloudMaxX < paddedStartX || cloudMinX > paddedEndX || cloudMaxY < paddedStartY || cloudMinY > paddedEndY) {
-            continue;
-          }
-          ctx.globalAlpha = Math.max(0, Math.min(1, alphaCluster));
-          ctx.drawImage(sprite, x, y, w, h);
+        const variantIdx = Math.floor(hash01Cell(sx, sy, noiseSeed ^ 0x9e3779b1) * variantCount) % variantCount;
+        const c = SNES_CLOUD_CLUSTERS[variantIdx];
+        const spritePair = getCloudSpritePairForCluster(variantIdx);
+        const sprite = isShadow ? spritePair.shadow : spritePair.cloud;
+
+        const t01 = (sizeNoise - CLOUD_SIZE_SKIP_THRESHOLD) / (1 - CLOUD_SIZE_SKIP_THRESHOLD);
+        const sizeMul = CLOUD_SIZE_MIN_MUL + t01 * (CLOUD_SIZE_MAX_MUL - CLOUD_SIZE_MIN_MUL);
+        const h = Math.max(2, Math.round(tileH * 6.4 * CLOUD_SIZE_GAIN * c.scale * baseScale * sizeMul));
+        const w = Math.max(2, Math.round(h * (sprite.width / Math.max(1, sprite.height))));
+
+        // Per-slot jitter + gentle bob → not a visible grid.
+        const jitterX = (hash01Cell(sx, sy, noiseSeed ^ 0x5bd1e995) - 0.5) * step * CLOUD_SLOT_JITTER_FRAC;
+        const jitterY = (hash01Cell(sx, sy, noiseSeed ^ 0x27d4eb2d) - 0.5) * step * CLOUD_SLOT_JITTER_FRAC;
+        const bob = Math.sin(time * 0.28 + sx * 0.81 + sy * 1.37) * (tileH * 0.5);
+
+        const centerWorldX = identityX + windX + jitterX;
+        const centerWorldY = identityY + windY + jitterY;
+        const x = Math.round(centerWorldX * tileW - w * 0.5 + xNudge);
+        const y = Math.round(centerWorldY * tileH - h * 0.5 + yNudge + bob);
+
+        const cloudMinX = x / tileW;
+        const cloudMaxX = (x + w) / tileW;
+        const cloudMinY = y / tileH;
+        const cloudMaxY = (y + h) / tileH;
+        if (cloudMaxX < paddedStartX || cloudMinX > paddedEndX || cloudMaxY < paddedStartY || cloudMinY > paddedEndY) {
+          continue;
         }
+
+        const alpha = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1);
+        ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+        ctx.drawImage(sprite, x, y, w, h);
       }
     }
   };
@@ -167,8 +301,10 @@ function drawSnesCloudParallax(ctx, options) {
   ctx.save();
   // Keep cloud/shadow locked to world coordinates; camera translation is already active in render.js.
   ctx.imageSmoothingEnabled = false;
-  drawLayer(true);
-  drawLayer(false);
+  if (cloudPresence > 0.001) {
+    drawLayer(true);
+    drawLayer(false);
+  }
   ctx.restore();
 }
 
@@ -474,6 +610,8 @@ export function drawWorldReactionsOverlay(ctx, options) {
 
 /**
  * Draws screen-space effects like day/night tint and fog.
+ * @param {number} [options.cloudPresence=1] — 0..1 global cloud opacity scale.
+ * @param {number} [options.cloudNoiseSeed=0] — integer; shifts the precomputed cloud-size noise field per map.
  */
 export function drawEnvironmentalEffects(ctx, options) {
   const {
@@ -489,8 +627,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     endY,
     tileW,
     tileH,
-    worldCols,
-    worldRows
+    cloudPresence = 1,
+    cloudNoiseSeed = 0
   } = options;
 
   if (tint && typeof tint.r === 'number') {
@@ -511,8 +649,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     endY,
     tileW,
     tileH,
-    worldCols,
-    worldRows
+    cloudPresence,
+    cloudNoiseSeed
   });
 
   if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {
