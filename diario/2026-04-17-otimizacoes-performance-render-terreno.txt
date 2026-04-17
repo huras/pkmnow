@@ -1,0 +1,86 @@
+Data: 2026-04-17
+Contexto: Otimizacoes de performance no pipeline de bake/render de terreno (modo play), com foco em reduzir draw calls, CPU por tile e alocacoes evitaveis.
+
+Resumo executivo
+- Reduzimos trabalho invisivel (sprites que eram desenhados mas ficavam 100% ocultos).
+- Eliminamos buscas e alocacoes repetidas em loops quentes.
+- Introduzimos memoizacao local de calculo de role para evitar recomputacao pesada.
+
+Arquivos alterados
+- js/render/play-chunk-bake.js
+- js/play-grass-eligibility.js
+
+1) Culling de sprite "embaixo" quando superficie e CENTER
+Arquivo: js/render/play-chunk-bake.js
+
+O que foi feito
+- Foi adicionado um pre-calculo por tile do chunk (`skipUnderCenterSprite`).
+- Se o papel de superficie for `CENTER` (base de terreno ou skin/foliage), a camada imediatamente abaixo (`heightStep - 1`) e pulada.
+
+Por que melhora
+- Evita draw de sprites totalmente escondidos.
+- Menos `drawImage` em areas internas planas (que tendem a ser maioria).
+
+Risco/impacto visual
+- Baixo, pois so remove draw invisivel.
+
+2) Lookup O(1) para cor de fallback de bioma
+Arquivo: js/render/play-chunk-bake.js
+
+O que foi feito
+- Substituida a busca por tile:
+  `Object.values(BIOMES).find((b) => b.id === tile.biomeId)`
+- Agora usa map precomputado:
+  `BIOME_COLOR_BY_ID.get(tile.biomeId)`
+
+Por que melhora
+- Remove varredura linear em loop por tile (PASS 1).
+- Menos custo de CPU em cada bake de chunk.
+
+3) `suppressedSet` com chave numerica (em vez de string)
+Arquivos:
+- js/render/play-chunk-bake.js
+- js/play-grass-eligibility.js
+
+O que foi feito
+- Antes: `Set<string>` com chave `"x,y"`.
+- Agora: `Set<number>` com chave compacta local por chunk (`(localY << 8) | localX`).
+- O consumidor (`play-grass-eligibility`) foi atualizado para consultar com a mesma chave numerica.
+
+Por que melhora
+- Reduz alocacao de strings e pressao de GC em trechos quentes (scatter/clump suppression).
+- Mantem a mesma logica funcional de ocupacao/supressao.
+
+4) Cache local de `getRoleForCell` no bake (caso "at or above height")
+Arquivo: js/render/play-chunk-bake.js
+
+O que foi feito
+- Criado helper memoizado:
+  `getRoleAtOrAboveHeight(mx, my, level, setType)`
+- Cache por:
+  - `setType`
+  - `level`
+  - `tileKey (mx,my)`
+- Esse cache foi aplicado nas chamadas repetidas de role cujo predicado e:
+  `(neighbor.heightStep >= level)`.
+
+Pontos onde foi aplicado
+- Pre-calculo de surface role para `skipUnderCenterSprite`.
+- Pass de agua.
+- Base layer quando `tile.heightStep === level`.
+- Checagens de `CENTER` no PASS 2 (formal tree/scatter continuation).
+
+Por que melhora
+- Evita recomputar role identico varias vezes no mesmo bake de chunk.
+- Diminui custo de CPU em loops com alta repeticao de tiles/levels.
+
+Observacao
+- Nao foi aplicado aos casos de mask custom (foliage pool/safe, road, stair), pois usam predicados diferentes.
+
+Verificacao
+- Linter executado nos arquivos alterados sem erros reportados.
+
+Resultado esperado agregado
+- Menor tempo de bake por chunk.
+- Menor variacao de frame time em areas densas.
+- Menor overhead de memoria temporaria durante renderizacao.

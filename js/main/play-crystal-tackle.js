@@ -94,6 +94,36 @@ const MAX_TREE_TOP_FALLS = 56;
  * >}
  */
 const activeTreeTopFalls = [];
+const chunkRebakeBatchKeys = new Set();
+let chunkRebakeBatchDepth = 0;
+
+function beginChunkRebakeBatch() {
+  chunkRebakeBatchDepth++;
+}
+
+function endChunkRebakeBatch() {
+  if (chunkRebakeBatchDepth <= 0) return;
+  chunkRebakeBatchDepth--;
+  if (chunkRebakeBatchDepth > 0) return;
+  if (chunkRebakeBatchKeys.size === 0) return;
+  for (const key of chunkRebakeBatchKeys) {
+    const [sx, sy] = key.split(',');
+    const cx = Number(sx);
+    const cy = Number(sy);
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+    enqueuePlayChunkBake(cx, cy, true);
+  }
+  chunkRebakeBatchKeys.clear();
+}
+
+function queuePlayChunkRebake(cx, cy, forceRebake = true) {
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+  if (chunkRebakeBatchDepth > 0) {
+    chunkRebakeBatchKeys.add(`${Math.floor(cx)},${Math.floor(cy)}`);
+    return;
+  }
+  enqueuePlayChunkBake(Math.floor(cx), Math.floor(cy), forceRebake);
+}
 
 function easeOutQuadTreeFall(u) {
   const x = Math.max(0, Math.min(1, u));
@@ -340,8 +370,8 @@ function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut', data 
     const treeType = t ? getTreeType(t.biomeId, rootX, my, data.seed) : null;
     if (treeType) pushFormalTreeTopFall(rootX, my, treeType, nowSec);
   }
-  enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-  enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
 }
 
 function formalTreeStumpCircleAtRoot(rootX, my) {
@@ -380,7 +410,7 @@ function queueChunkRebakeOverlappingFootprint(rootOx, rootOy, cols, rows) {
     const cx = Number(sx);
     const cy = Number(sy);
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
-    enqueuePlayChunkBake(cx, cy, true);
+    queuePlayChunkRebake(cx, cy, true);
   }
 }
 
@@ -480,6 +510,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
   if (!data) return false;
   if (!Object.prototype.hasOwnProperty.call(FORMAL_TREE_BURN_ADD_BY_PROJECTILE, projType)) return false;
   if (Math.abs(Number(projZ) || 0) > FORMAL_TREE_BURN_GROUND_Z_MAX) return false;
+  beginChunkRebakeBatch();
   const ix = Math.floor(worldX);
   const iy = Math.floor(worldY);
   const nowSec = performance.now() * 0.001;
@@ -510,6 +541,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
       anyApplied = true;
     }
   }
+  endChunkRebakeBatch();
   return anyApplied;
 }
 
@@ -521,8 +553,8 @@ function tryHarvestCharredFormalTreeAtRoot(rootX, my) {
   const stump = formalTreeStumpCircleAtRoot(rootX, my);
   spawnPickableCrystalDropAt(stump.cx, stump.cy, 'charcoal', 1);
   harvestedBurnedFormalTreeRoots.add(key);
-  enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-  enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
   return true;
 }
 
@@ -712,7 +744,7 @@ function invalidateChunksOverlappingFootprint(rootOx, rootOy, cols, rows) {
     const cy = Number(sy);
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
     // Keep stale chunk visible until fresh bake completes (prevents black gaps).
-    enqueuePlayChunkBake(cx, cy, true);
+    queuePlayChunkRebake(cx, cy, true);
   }
 }
 
@@ -1219,6 +1251,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
   const segLen = Math.hypot(ex - px, ey - py);
   if (!Number.isFinite(segLen) || segLen <= 1e-6) return;
+  beginChunkRebakeBatch();
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   /** @type {Array<any>} */
@@ -1350,7 +1383,10 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       }
     }
   }
-  if (hits.length === 0) return;
+  if (hits.length === 0) {
+    endChunkRebakeBatch();
+    return;
+  }
   hits.sort((a, b) => a.t - b.t);
   const consumedSpawned = new Set();
   const consumedWorld = new Set();
@@ -1549,6 +1585,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
     }
   }
+  endChunkRebakeBatch();
 }
 
 /**
@@ -1637,6 +1674,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
  */
 export function updateBreakableDetailRegeneration(dt, data) {
   if (!data) return;
+  beginChunkRebakeBatch();
   pruneTreeTopFalls(performance.now() * 0.001);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
@@ -1717,11 +1755,12 @@ export function updateBreakableDetailRegeneration(dt, data) {
       burningFormalTreeEndsAtSecByRoot.delete(key);
       harvestedBurnedFormalTreeRoots.delete(key);
       if (Number.isFinite(rootX) && Number.isFinite(my)) {
-        enqueuePlayChunkBake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
-        enqueuePlayChunkBake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+        queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+        queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
       }
     }
   }
+  endChunkRebakeBatch();
 }
 
 export function getCrystalLootCount() {

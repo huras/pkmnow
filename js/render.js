@@ -14,9 +14,13 @@ import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-ca
 import {
   syncPlayChunkCache,
   playChunkMap,
+  hasPlayChunk,
+  getPlayChunk,
+  setPlayChunk,
   enqueuePlayChunkBake,
   dequeuePlayChunkBakes,
-  getPlayChunkBakeQueueSize
+  getPlayChunkBakeQueueSize,
+  prunePlayChunkCache
 } from './render/play-chunk-cache.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
 import {
@@ -276,13 +280,15 @@ export function render(canvas, data, options = {}) {
     let cEndY = Math.min(maxChunkYi, Math.floor((endY - 1) / PLAY_CHUNK_SIZE) + padC);
 
     const visibleChunkCoords = [];
+    const visibleChunkKeys = new Set();
     let missingVisibleChunks = 0;
     let cachedVisibleChunks = 0;
     for (let cy = cStartY; cy <= cEndY; cy++) {
       for (let cx = cStartX; cx <= cEndX; cx++) {
         const key = `${cx},${cy}`;
         visibleChunkCoords.push({ cx, cy, key });
-        if (playChunkMap.has(key)) cachedVisibleChunks++;
+        visibleChunkKeys.add(key);
+        if (hasPlayChunk(key)) cachedVisibleChunks++;
         else {
           missingVisibleChunks++;
           enqueuePlayChunkBake(cx, cy);
@@ -298,8 +304,8 @@ export function render(canvas, data, options = {}) {
 
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
     for (const req of bakeRequests) {
-      if (playChunkMap.has(req.key) && !req.forceRebake) continue;
-      playChunkMap.set(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
+      if (hasPlayChunk(req.key) && !req.forceRebake) continue;
+      setPlayChunk(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
     }
 
     const currentTransX = playCam.currentTransX;
@@ -310,7 +316,7 @@ export function render(canvas, data, options = {}) {
 
     let drawnVisibleChunks = 0;
     for (const { cx, cy, key } of visibleChunkCoords) {
-      const chunk = playChunkMap.get(key);
+      const chunk = getPlayChunk(key);
       if (!chunk) continue;
       drawnVisibleChunks++;
       ctx.drawImage(
@@ -330,6 +336,11 @@ export function render(canvas, data, options = {}) {
       bakeBudget: chunkBakeBudget,
       bakeBoost: getPlayChunkBakeBoost(),
       queueSize: getPlayChunkBakeQueueSize()
+    });
+    prunePlayChunkCache({
+      keepKeys: visibleChunkKeys,
+      centerCx: Math.floor(player.x / PLAY_CHUNK_SIZE),
+      centerCy: Math.floor(player.y / PLAY_CHUNK_SIZE)
     });
     ctx.imageSmoothingEnabled = prevSmoothing;
     ctx.translate(currentTransX, currentTransY);

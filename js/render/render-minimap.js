@@ -8,7 +8,7 @@ import {
   getTreeType
 } from '../biome-tiles.js';
 import { PLAY_CHUNK_SIZE } from './render-constants.js';
-import { playChunkMap } from './play-chunk-cache.js';
+import { playChunkMap, hasPlayChunk, getPlayChunkCacheRevision } from './play-chunk-cache.js';
 import { seededHash } from '../tessellation-logic.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
@@ -48,6 +48,16 @@ let baseCacheH = 0;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
 const minimapBiomeRgbCache = new Map();
+const LOCAL_MINIMAP_REBUILD_MIN_MS = 80;
+/** @type {HTMLCanvasElement | null} */
+let localMinimapCacheCanvas = null;
+let localMinimapCacheData = null;
+let localMinimapCacheW = 0;
+let localMinimapCacheH = 0;
+let localMinimapCacheOriginX = 0;
+let localMinimapCacheOriginY = 0;
+let localMinimapCacheChunkRevision = -1;
+let localMinimapCacheLastRebuildAtMs = 0;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -301,50 +311,104 @@ function localMinimapColor(biomeId, tileKind) {
  * @param {{ w: number, h: number }} canvasSize
  */
 function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSize) {
+  const w = canvasSize.w;
+  const h = canvasSize.h;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
-  const originX = Math.floor(playerX - canvasSize.w * 0.5);
-  const originY = Math.floor(playerY - canvasSize.h * 0.5);
+  const originX = Math.floor(playerX - w * 0.5);
+  const originY = Math.floor(playerY - h * 0.5);
+  const chunkRevision = getPlayChunkCacheRevision();
+  const nowMs = performance.now();
+  const needsRebuild =
+    !localMinimapCacheCanvas ||
+    localMinimapCacheData !== data ||
+    localMinimapCacheW !== w ||
+    localMinimapCacheH !== h ||
+    localMinimapCacheOriginX !== originX ||
+    localMinimapCacheOriginY !== originY ||
+    localMinimapCacheChunkRevision !== chunkRevision;
 
-  ctx.fillStyle = 'rgba(8, 12, 20, 0.9)';
-  ctx.fillRect(0, 0, canvasSize.w, canvasSize.h);
+  if (!needsRebuild) {
+    ctx.drawImage(localMinimapCacheCanvas, 0, 0);
+    return;
+  }
+
+  const canThrottle =
+    localMinimapCacheCanvas &&
+    localMinimapCacheData === data &&
+    localMinimapCacheW === w &&
+    localMinimapCacheH === h &&
+    nowMs - localMinimapCacheLastRebuildAtMs < LOCAL_MINIMAP_REBUILD_MIN_MS;
+  if (canThrottle) {
+    ctx.drawImage(localMinimapCacheCanvas, 0, 0);
+    return;
+  }
+
+  const cacheCanvas = document.createElement('canvas');
+  cacheCanvas.width = w;
+  cacheCanvas.height = h;
+  const cctx = cacheCanvas.getContext('2d');
+  if (!cctx) return;
+
+  const img = cctx.createImageData(w, h);
+  const pix = img.data;
+  for (let i = 0; i < pix.length; i += 4) {
+    pix[i] = 8;
+    pix[i + 1] = 12;
+    pix[i + 2] = 20;
+    pix[i + 3] = 230;
+  }
 
   const startX = Math.max(0, originX);
   const startY = Math.max(0, originY);
-  const endX = Math.min(microW, originX + canvasSize.w);
-  const endY = Math.min(microH, originY + canvasSize.h);
-  if (startX >= endX || startY >= endY) return;
+  const endX = Math.min(microW, originX + w);
+  const endY = Math.min(microH, originY + h);
+  if (startX < endX && startY < endY) {
+    const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
+    const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
+    const endCx = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
+    const endCy = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
 
-  const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
-  const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
-  const endCx = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
-  const endCy = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+    for (let cy = startCy; cy <= endCy; cy++) {
+      for (let cx = startCx; cx <= endCx; cx++) {
+        const key = `${cx},${cy}`;
+        if (!hasPlayChunk(key)) continue;
 
-  for (let cy = startCy; cy <= endCy; cy++) {
-    for (let cx = startCx; cx <= endCx; cx++) {
-      const key = `${cx},${cy}`;
-      if (!playChunkMap.has(key)) continue;
+        const chunkX0 = cx * PLAY_CHUNK_SIZE;
+        const chunkY0 = cy * PLAY_CHUNK_SIZE;
+        const x0 = Math.max(startX, chunkX0);
+        const y0 = Math.max(startY, chunkY0);
+        const x1 = Math.min(endX, chunkX0 + PLAY_CHUNK_SIZE);
+        const y1 = Math.min(endY, chunkY0 + PLAY_CHUNK_SIZE);
 
-      const chunkX0 = cx * PLAY_CHUNK_SIZE;
-      const chunkY0 = cy * PLAY_CHUNK_SIZE;
-      const x0 = Math.max(startX, chunkX0);
-      const y0 = Math.max(startY, chunkY0);
-      const x1 = Math.min(endX, chunkX0 + PLAY_CHUNK_SIZE);
-      const y1 = Math.min(endY, chunkY0 + PLAY_CHUNK_SIZE);
-
-      for (let my = y0; my < y1; my++) {
-        const sy = my - originY;
-        for (let mx = x0; mx < x1; mx++) {
-          const sx = mx - originX;
-          const tile = getMicroTile(mx, my, data);
-          const kind = classifyLocalMinimapTile(mx, my, tile, data);
-          const color = localMinimapColor(tile?.biomeId, kind);
-          ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
-          ctx.fillRect(sx, sy, 1, 1);
+        for (let my = y0; my < y1; my++) {
+          const sy = my - originY;
+          for (let mx = x0; mx < x1; mx++) {
+            const sx = mx - originX;
+            const tile = getMicroTile(mx, my, data);
+            const kind = classifyLocalMinimapTile(mx, my, tile, data);
+            const color = localMinimapColor(tile?.biomeId, kind);
+            const p = (sy * w + sx) * 4;
+            pix[p] = color.r;
+            pix[p + 1] = color.g;
+            pix[p + 2] = color.b;
+            pix[p + 3] = 255;
+          }
         }
       }
     }
   }
+
+  cctx.putImageData(img, 0, 0);
+  localMinimapCacheCanvas = cacheCanvas;
+  localMinimapCacheData = data;
+  localMinimapCacheW = w;
+  localMinimapCacheH = h;
+  localMinimapCacheOriginX = originX;
+  localMinimapCacheOriginY = originY;
+  localMinimapCacheChunkRevision = chunkRevision;
+  localMinimapCacheLastRebuildAtMs = nowMs;
+  ctx.drawImage(cacheCanvas, 0, 0);
 }
 
 /**
