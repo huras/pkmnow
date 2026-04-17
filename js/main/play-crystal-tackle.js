@@ -16,6 +16,7 @@ import {
 } from './scatter-item-override.js';
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
+import { isRainExtinguishing, FIRE_RAIN_EXTINGUISH_GRACE_SEC } from './weather-state.js';
 import {
   pushVegetationDissolveFromSt,
   pushFormalTreeTopFall,
@@ -1396,8 +1397,23 @@ export function updateBreakableDetailRegeneration(dt, data) {
   pruneTreeTopFalls(performance.now() * 0.001);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
+    const rainSnuffing = isRainExtinguishing();
     for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot.entries()) {
-      if (!Number.isFinite(burnEnd) || nowSec < burnEnd) continue;
+      if (!Number.isFinite(burnEnd)) {
+        burningFormalTreeEndsAtSecByRoot.delete(key);
+        continue;
+      }
+      // Rain puts out trees that have been on fire for at least the grace period,
+      // sparing them from becoming burned stumps.
+      if (rainSnuffing) {
+        const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
+        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+          burningFormalTreeEndsAtSecByRoot.delete(key);
+          formalTreeBurnMeterByRoot.delete(key);
+          continue;
+        }
+      }
+      if (nowSec < burnEnd) continue;
       const [sx, sy] = key.split(',');
       const rootX = Number(sx);
       const my = Number(sy);
@@ -1421,8 +1437,21 @@ export function updateBreakableDetailRegeneration(dt, data) {
   }
   if (burningScatterTreeEndsAtSecByOrigin.size > 0) {
     const nowSec = performance.now() * 0.001;
+    const rainSnuffing = isRainExtinguishing();
     for (const [key, burnEnd] of burningScatterTreeEndsAtSecByOrigin.entries()) {
-      if (!Number.isFinite(burnEnd) || nowSec < burnEnd) continue;
+      if (!Number.isFinite(burnEnd)) {
+        burningScatterTreeEndsAtSecByOrigin.delete(key);
+        continue;
+      }
+      if (rainSnuffing) {
+        const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
+        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+          burningScatterTreeEndsAtSecByOrigin.delete(key);
+          scatterTreeBurnMeterByOrigin.delete(key);
+          continue;
+        }
+      }
+      if (nowSec < burnEnd) continue;
       const [sx, sy] = key.split(',');
       const ox = Number(sx);
       const oy = Number(sy);

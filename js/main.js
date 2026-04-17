@@ -29,6 +29,7 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { setWeatherRenderState } from './main/weather-state.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
@@ -189,9 +190,9 @@ let gameTime = 0;
 let worldHours = 12;
 let worldTimeRunning = true;
 /** @type {'clear' | 'cloudy' | 'rain'} */
-let currentWeatherPreset = 'clear';
+let currentWeatherPreset = 'cloudy';
 /** 0..1 intensity scalar (UI slider target). */
-let currentWeatherIntensity = 1;
+let currentWeatherIntensity = 0.75;
 /** Currently-displayed weather params (smoothly eased toward the target preset+intensity). */
 let activeWeatherParams = null;
 /** Time constant (seconds) for exponential smoothing of weather transitions. */
@@ -571,6 +572,9 @@ function tickWeatherSmoothing(dt) {
     };
     active.screenTint = blended.a > 0.002 ? blended : null;
   }
+
+  // Share smoothed rain intensity with gameplay systems (fire extinguishing, etc.).
+  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: currentWeatherPreset });
 }
 
 /**

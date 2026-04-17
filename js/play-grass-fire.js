@@ -1,6 +1,7 @@
 import { getMicroTile } from './chunking.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
 import { playChunkMap } from './render/play-chunk-cache.js';
+import { isRainExtinguishing, FIRE_RAIN_EXTINGUISH_GRACE_SEC } from './main/weather-state.js';
 
 /** Seconds active burn (orange fire look) before switching to charred black. */
 export const GRASS_FIRE_BURN_PHASE_SEC = 10;
@@ -16,7 +17,7 @@ const GROUND_Z_MAX = 0.55;
 const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
 const WATER_PROJECTILE_TYPES = new Set(['waterShot', 'waterGunShot', 'bubbleShot']);
 
-/** @typedef {{ phase: 'burning', phaseEndAt: number } | { phase: 'charred', startedAtMs: number }} GrassFireTileState */
+/** @typedef {{ phase: 'burning', phaseEndAt: number, startedAtMs: number } | { phase: 'charred', startedAtMs: number }} GrassFireTileState */
 
 /** @type {Map<string, GrassFireTileState>} */
 const tileStates = new Map();
@@ -68,10 +69,15 @@ function tryIgnite(mx, my, data) {
   const burnEnd = now + GRASS_FIRE_BURN_PHASE_SEC * 1000;
   const existing = tileStates.get(k);
   if (existing?.phase === 'burning' && existing.phaseEndAt > now) {
-    tileStates.set(k, { phase: 'burning', phaseEndAt: Math.max(existing.phaseEndAt, burnEnd) });
+    // Preserve the original ignition time so rain's grace period stays honest on re-ignite.
+    tileStates.set(k, {
+      phase: 'burning',
+      phaseEndAt: Math.max(existing.phaseEndAt, burnEnd),
+      startedAtMs: existing.startedAtMs
+    });
     return false;
   }
-  tileStates.set(k, { phase: 'burning', phaseEndAt: burnEnd });
+  tileStates.set(k, { phase: 'burning', phaseEndAt: burnEnd, startedAtMs: now });
   return true;
 }
 
@@ -120,9 +126,16 @@ export function updateGrassFire(dt, _data, _playerX, _playerY) {
 
   const now = performance.now();
   const charredTotalSec = GRASS_FIRE_CHARRED_SOLID_SEC + GRASS_FIRE_REGROW_BLEND_SEC;
+  const graceMs = FIRE_RAIN_EXTINGUISH_GRACE_SEC * 1000;
+  const isRaining = isRainExtinguishing();
   const entries = [...tileStates.entries()];
   for (const [k, st] of entries) {
     if (st.phase === 'burning') {
+      // Rain snuffs fires older than the grace period by fast-forwarding to charred.
+      if (isRaining && now - st.startedAtMs >= graceMs) {
+        tileStates.set(k, { phase: 'charred', startedAtMs: now });
+        continue;
+      }
       if (now < st.phaseEndAt) continue;
       tileStates.set(k, { phase: 'charred', startedAtMs: now });
       continue;
