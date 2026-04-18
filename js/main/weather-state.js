@@ -9,7 +9,7 @@
  */
 
 let rainIntensity01 = 0;
-/** @type {'clear' | 'cloudy' | 'rain'} */
+/** @type {'clear' | 'cloudy' | 'rain' | 'blizzard'} */
 let presetName = 'clear';
 
 /** Minimum rain to meaningfully dampen / put out fires. Avoids trace rain ruining gameplay. */
@@ -30,7 +30,7 @@ export const FIRE_RAIN_EXTINGUISH_GRACE_SEC = FIRE_RAIN_EXTINGUISH_STRONG_SEC;
 export function setWeatherRenderState({ rainIntensity = 0, preset = 'clear' } = {}) {
   const r = Number(rainIntensity);
   rainIntensity01 = Math.max(0, Math.min(1, Number.isFinite(r) ? r : 0));
-  if (preset === 'clear' || preset === 'cloudy' || preset === 'rain') presetName = preset;
+  if (preset === 'clear' || preset === 'cloudy' || preset === 'rain' || preset === 'blizzard') presetName = preset;
 }
 
 export function getWeatherRainIntensity() {

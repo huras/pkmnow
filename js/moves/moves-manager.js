@@ -50,7 +50,7 @@ import {
   tickThunderboltChains,
   PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL
 } from './thunderbolt-move.js';
-import { castRainDance, castSunnyDay } from './weather-moves.js';
+import { castRainDance, castSunnyDay, castBlizzard } from './weather-moves.js';
 import { tickActiveProjectiles } from './moves-projectiles-tick.js';
 import {
   MOVE_CAST_VIS_SEC,
@@ -102,8 +102,8 @@ let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
 let playerThunderboltCooldown = 0;
-let playerRainDanceCooldown = 0;
-let playerSunnyDayCooldown = 0;
+/** Shared gate for Rain Dance / Sunny Day / Blizzard so weather cannot be spam-strobed. */
+let playerWeatherSwapCooldown = 0;
 
 function computeFlamethrowerStreamPressure01() {
   const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
@@ -255,8 +255,6 @@ function resolveMoveRuntimeAlias(moveId) {
     case 'auroraBeam':
     case 'iceBeam':
       return 'bubbleBeam';
-    case 'blizzard':
-      return 'bubble';
     case 'dragonRage':
       return 'incinerate';
     case 'dreamEater':
@@ -313,6 +311,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'thunderbolt') return castThunderboltMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'rainDance') return castRainDanceMove(sourceEntity);
   if (moveId === 'sunnyDay') return castSunnyDayMove(sourceEntity);
+  if (moveId === 'blizzard') return castBlizzardMove(sourceEntity);
   return false;
 }
 
@@ -610,11 +609,8 @@ export function castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourc
  * Gated by its own cooldown so the player can't strobe weather on every frame.
  */
 export function castRainDanceMove(sourceEntity = null) {
-  if (playerRainDanceCooldown > 0) return false;
-  playerRainDanceCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
-  // Share cooldown with Sunny Day so the pair feels like a single "weather swap" tool —
-  // spamming both back-to-back would otherwise bypass either's individual cooldown.
-  playerSunnyDayCooldown = Math.max(playerSunnyDayCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
   castRainDance();
   return true;
@@ -626,11 +622,22 @@ export function castRainDanceMove(sourceEntity = null) {
  * behavior; they share the swap-cooldown to prevent ping-ponging.
  */
 export function castSunnyDayMove(sourceEntity = null) {
-  if (playerSunnyDayCooldown > 0) return false;
-  playerSunnyDayCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
-  playerRainDanceCooldown = Math.max(playerRainDanceCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
   castSunnyDay();
+  return true;
+}
+
+/**
+ * Blizzard — instant-cast status move that queues the `blizzard` weather preset
+ * (dense clouds, strong wind, heavy precip + icy tint).
+ */
+export function castBlizzardMove(sourceEntity = null) {
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castBlizzard();
   return true;
 }
 
@@ -926,6 +933,7 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       );
     case 'rainDance':
     case 'sunnyDay':
+    case 'blizzard':
       return PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
     case 'ultimate':
       return 7.5;
@@ -976,9 +984,9 @@ export function getPlayerMoveCooldownRemaining(moveId) {
     case 'thunderbolt':
       return playerThunderboltCooldown;
     case 'rainDance':
-      return playerRainDanceCooldown;
     case 'sunnyDay':
-      return playerSunnyDayCooldown;
+    case 'blizzard':
+      return playerWeatherSwapCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -1014,8 +1022,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
   playerThunderboltCooldown = Math.max(0, playerThunderboltCooldown - dt);
-  playerRainDanceCooldown = Math.max(0, playerRainDanceCooldown - dt);
-  playerSunnyDayCooldown = Math.max(0, playerSunnyDayCooldown - dt);
+  playerWeatherSwapCooldown = Math.max(0, playerWeatherSwapCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
   const wildSpatial = buildWildSpatialIndex(wildList);

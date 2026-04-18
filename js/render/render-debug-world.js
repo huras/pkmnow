@@ -749,6 +749,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {number} [options.rainIntensity=0] — 0..1 rain VFX intensity.
  * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (drives streamline density/brightness).
  * @param {number} [options.windDirRad=0] — wind direction in radians (0 = east, +π/2 = south).
+ * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | string} [options.weatherPreset='clear'] — current weather preset id.
  * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
@@ -773,6 +774,7 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudMinMul,
     cloudMaxMul,
     cloudAlphaMul,
+    weatherPreset = 'clear',
     rainIntensity = 0,
     windIntensity = 0,
     windDirRad = 0,
@@ -828,11 +830,23 @@ export function drawEnvironmentalEffects(ctx, options) {
   }
 
   const rainI = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
+  const isBlizzard = weatherPreset === 'blizzard';
   if (rainI > 0.001) {
-    // World-space splashes on entities (ctx transform = camera world pixels).
-    tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
-    // World-space streaks (same ctx transform as splashes / entities) so slant matches puddles.
-    drawRainStreaks(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
+    if (isBlizzard) {
+      // Blizzard precipitation: dense, wind-drifted flakes (not rain splashes/streak lines).
+      rainSplashes.length = 0;
+      rainSplashSpawnDebt = 0;
+      rainLastTimeSec = -1;
+      rainStreakScrollLastSec = -1;
+      rainStreakScrollPxX = 0;
+      rainStreakScrollPxY = 0;
+      drawBlizzardSnowflakes(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
+    } else {
+      // World-space splashes on entities (ctx transform = camera world pixels).
+      tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
+      // World-space streaks (same ctx transform as splashes / entities) so slant matches puddles.
+      drawRainStreaks(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
+    }
   } else {
     rainSplashes.length = 0;
     rainSplashSpawnDebt = 0;
@@ -855,6 +869,101 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();
   }
+}
+
+function wrapToSpan(v, min, max) {
+  const span = max - min;
+  if (!Number.isFinite(span) || span <= 1e-6) return min;
+  return min + ((((v - min) % span) + span) % span);
+}
+
+/**
+ * Blizzard precipitation rendered as drifting snowflakes in world space.
+ * Uses a hashed slot field + wrapped advection so flakes never "pop" at camera edges.
+ */
+function drawBlizzardSnowflakes(
+  ctx,
+  timeSec,
+  intensity,
+  tileW,
+  tileH,
+  windDirRad,
+  windIntensity,
+  startX,
+  startY,
+  endX,
+  endY,
+  lodDetail = 0
+) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+
+  const tw = Math.max(1, Number(tileW) || 32);
+  const th = Math.max(1, Number(tileH) || tw);
+  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
+  const liveDir = Number.isFinite(windDirRad) ? windDirRad : WIND_CLOUD_BLEND_BASELINE_DIR_RAD;
+  const windTiles = getWindVelocityTilesPerSec(windI01, liveDir);
+
+  const marginTiles = 7 + 6 * intensity;
+  const xMin = Number(startX) - marginTiles;
+  const xMax = Number(endX) + marginTiles;
+  const yMin = Number(startY) - marginTiles;
+  const yMax = Number(endY) + marginTiles;
+
+  const lod = Number(lodDetail) || 0;
+  const slotStep = lod >= 2 ? 2.05 : lod >= 1 ? 1.8 : 1.55;
+  const threshold = Math.min(0.83, 0.33 + intensity * 0.42);
+  const velX = windTiles.vx * (0.95 + intensity * 0.5);
+  const velY = 2.6 + intensity * 1.9 + windTiles.vy * 0.45;
+  const wiggleMagTiles = 0.06 + 0.2 * intensity;
+  const spriteScale = 0.8 + intensity * 1.2;
+  const alphaBase = 0.26 + intensity * 0.5;
+
+  const sx0 = Math.floor(xMin / slotStep);
+  const sx1 = Math.ceil(xMax / slotStep);
+  const sy0 = Math.floor(yMin / slotStep);
+  const sy1 = Math.ceil(yMax / slotStep);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let sy = sy0; sy <= sy1; sy++) {
+    for (let sx = sx0; sx <= sx1; sx++) {
+      const hExist = hash01Cell(sx, sy, 0x54f1);
+      if (hExist > threshold) continue;
+      const hJx = hash01Cell(sx, sy, 0x22ab);
+      const hJy = hash01Cell(sx, sy, 0x6d13);
+      const hSize = hash01Cell(sx, sy, 0x9911);
+      const hTwinkle = hash01Cell(sx, sy, 0x39c1);
+      const hPhase = hash01Cell(sx, sy, 0x1495);
+
+      const baseX = sx * slotStep + (hJx - 0.5) * slotStep * 0.95;
+      const baseY = sy * slotStep + (hJy - 0.5) * slotStep * 0.95;
+      const wiggle = Math.sin(time * (1.35 + hTwinkle * 1.9) + hPhase * Math.PI * 2) * wiggleMagTiles;
+      const advX = baseX + time * velX + wiggle;
+      const advY = baseY + time * velY;
+      const wx = wrapToSpan(advX, xMin, xMax);
+      const wy = wrapToSpan(advY, yMin, yMax);
+
+      const px = wx * tw;
+      const py = wy * th;
+      const flakeR = (0.75 + hSize * 1.45) * spriteScale;
+      const twinkle = 0.72 + 0.28 * Math.sin(time * (2.2 + hTwinkle * 1.7) + hPhase * Math.PI * 2);
+      ctx.globalAlpha = alphaBase * (0.65 + hTwinkle * 0.55) * twinkle;
+      ctx.fillStyle = '#f8fcff';
+
+      if (flakeR < 1.15) {
+        ctx.fillRect(Math.round(px - 0.5), Math.round(py - 0.5), 1, 1);
+      } else {
+        const arm = flakeR * (1.45 + hSize * 0.5);
+        const d = Math.max(1, Math.round(arm * 0.66));
+        ctx.fillRect(Math.round(px - arm), Math.round(py - 0.5), Math.max(1, Math.round(arm * 2)), 1);
+        ctx.fillRect(Math.round(px - 0.5), Math.round(py - arm), 1, Math.max(1, Math.round(arm * 2)));
+        ctx.fillRect(Math.round(px - d), Math.round(py - d), Math.max(1, d * 2), 1);
+        ctx.fillRect(Math.round(px - d), Math.round(py + d), Math.max(1, d * 2), 1);
+      }
+    }
+  }
+  ctx.restore();
 }
 
 const RAIN_HASH_CACHE = [];

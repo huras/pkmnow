@@ -43,14 +43,20 @@ let windGust01 = 1;
  * with the returned values to publish them.
  *
  * @param {number} time world time seconds
- * @param {'clear' | 'cloudy' | 'rain'} preset
+ * @param {'clear' | 'cloudy' | 'rain' | 'blizzard'} preset
  * @param {number} rainIntensity01
  * @returns {{ baseIntensity: number, dirRad: number, gust: number }}
  */
 export function computeLiveWindState(time, preset, rainIntensity01) {
   const rain = Math.max(0, Math.min(1, Number(rainIntensity01) || 0));
   const baseByPreset =
-    preset === 'rain' ? 0.25 + 0.55 * rain : preset === 'cloudy' ? 0.3 : 0.08;
+    preset === 'blizzard'
+      ? 0.52 + 0.44 * rain
+      : preset === 'rain'
+        ? 0.25 + 0.55 * rain
+        : preset === 'cloudy'
+          ? 0.3
+          : 0.08;
   const baseIntensity = Math.max(0, Math.min(1, baseByPreset));
   // Two-sine gust envelope (period ≈ 6–16 s), biased so average sits near ~0.7.
   const g1 = Math.sin(time * 0.38);

@@ -843,6 +843,7 @@ export function render(canvas, data, options = {}) {
       cloudMinMul: options.settings?.weatherCloudMinMul,
       cloudMaxMul: options.settings?.weatherCloudMaxMul,
       cloudAlphaMul: options.settings?.weatherCloudAlphaMul,
+      weatherPreset: options.settings?.weatherPreset,
       rainIntensity: rainI,
       windIntensity: options.settings?.weatherWindIntensity ?? 0,
       windDirRad: options.settings?.weatherWindDirRad ?? 0,

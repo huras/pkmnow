@@ -10,7 +10,7 @@
  *  4. Optionally wire the ambient audio layer in `weather-ambient-audio.js`.
  */
 
-/** @typedef {'clear' | 'cloudy' | 'rain'} WeatherPresetId */
+/** @typedef {'clear' | 'cloudy' | 'rain' | 'blizzard'} WeatherPresetId */
 
 /**
  * @typedef {object} WeatherRenderParams
@@ -25,13 +25,14 @@
  */
 
 /** Ordered list of supported preset ids. Source of truth for UI iteration. */
-export const WEATHER_PRESETS = /** @type {const} */ (['clear', 'cloudy', 'rain']);
+export const WEATHER_PRESETS = /** @type {const} */ (['clear', 'cloudy', 'rain', 'blizzard']);
 
 /** Human-readable labels for each preset. Used by the debug panel chip. */
 export const WEATHER_PRESET_LABELS = {
   clear: 'Clear',
   cloudy: 'Cloudy',
-  rain: 'Rain'
+  rain: 'Rain',
+  blizzard: 'Blizzard'
 };
 
 /**
@@ -41,7 +42,7 @@ export const WEATHER_PRESET_LABELS = {
  * @returns {id is WeatherPresetId}
  */
 export function isWeatherPreset(id) {
-  return id === 'clear' || id === 'cloudy' || id === 'rain';
+  return id === 'clear' || id === 'cloudy' || id === 'rain' || id === 'blizzard';
 }
 
 /**
@@ -71,6 +72,17 @@ export function resolveWeatherParams(preset, intensity01) {
         cloudAlphaMul: lerp(1, 1.25),
         rainIntensity: t,
         screenTint: t > 0 ? { r: 110, g: 120, b: 145, a: lerp(0, 0.28) } : null
+      };
+    case 'blizzard':
+      // Heavy overcast + strong horizontal precip (reuses rain streaks) + icy wash; wind scales in `wind-state`.
+      return {
+        cloudPresence: 1,
+        cloudThreshold: lerp(0.36, 0.015),
+        cloudMinMul: lerp(0.52, 0.82),
+        cloudMaxMul: lerp(1.62, 2.05),
+        cloudAlphaMul: lerp(1.08, 1.32),
+        rainIntensity: lerp(0.55, 0.98),
+        screenTint: t > 0 ? { r: 210, g: 228, b: 248, a: lerp(0.08, 0.34) } : null
       };
     case 'cloudy':
       return {
