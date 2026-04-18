@@ -13,7 +13,11 @@ import {
   getPlayerMoveCooldownUiMax,
   moveSupportsChargedRelease
 } from '../moves/moves-manager.js';
-import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
+import {
+  getCollectedDetailInventorySnapshot,
+  getCrystalLootCount,
+  PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE
+} from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
 import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
@@ -103,6 +107,8 @@ export class CharacterSelector {
 
     /** @type {Map<string, string> | null} */
     this._lootIconPathMap = null;
+    /** Cache so the loot list DOM is not rebuilt every frame (enables HTML5 drag from rows). */
+    this._lastPlayItemHudSig = '';
     void getPokemondbItemIconPathMap().then((m) => {
       this._lootIconPathMap = m;
       const crystalPath = m.get('star-piece');
@@ -217,22 +223,38 @@ export class CharacterSelector {
 
   /** Clears item HUD counters (e.g. when leaving play mode). */
   clearPlayItemsHud() {
+    this._lastPlayItemHudSig = '';
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (v) v.textContent = '0';
     const listEl = this.container?.querySelector('#play-item-loot-list');
     if (listEl) listEl.innerHTML = '';
+    const crystalRow = this.container?.querySelector('#play-item-crystal-row');
+    if (crystalRow) crystalRow.setAttribute('draggable', 'false');
+  }
+
+  /** Call after mutating inventory outside the normal HUD tick (e.g. ground drop). */
+  invalidatePlayItemsHudSignature() {
+    this._lastPlayItemHudSig = '';
   }
 
   /** Live item counters (play mode; game loop). */
   updatePlayItemsHud() {
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (!v) return;
-    v.textContent = String(Math.max(0, getCrystalLootCount() | 0));
+    const crystalN = Math.max(0, getCrystalLootCount() | 0);
+    v.textContent = String(crystalN);
+    const crystalRow = this.container?.querySelector('#play-item-crystal-row');
+    if (crystalRow) crystalRow.setAttribute('draggable', crystalN > 0 ? 'true' : 'false');
+
     const listEl = this.container?.querySelector('#play-item-loot-list');
     if (!listEl) return;
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
       .slice(0, 4);
+    const sig = `${crystalN}|${rows.map((r) => `${r.itemKey}:${r.count | 0}`).join(';')}`;
+    if (sig === this._lastPlayItemHudSig) return;
+    this._lastPlayItemHudSig = sig;
+
     const m = this._lootIconPathMap;
     listEl.innerHTML = rows
       .map((r) => {
@@ -241,8 +263,9 @@ export class CharacterSelector {
         const icon = path
           ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="20" height="20" decoding="async" />`
           : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+        const dragKey = encodeURIComponent(String(r.itemKey || ''));
         return `
-          <div class="play-item-hud__row">
+          <div class="play-item-hud__row play-item-hud__row--draggable" draggable="true" data-inventory-drag="${dragKey}" title="Drag to the map to drop">
             <span class="play-item-hud__icon" aria-hidden="true">${icon}</span>
             <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
             <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
@@ -377,7 +400,13 @@ export class CharacterSelector {
 
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__title">Items</div>
-          <div class="play-item-hud__row">
+          <div
+            class="play-item-hud__row play-item-hud__row--draggable"
+            id="play-item-crystal-row"
+            draggable="false"
+            data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
+            title="Drag to the map to drop"
+          >
             <span class="play-item-hud__icon" aria-hidden="true">
               <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="20" height="20" alt="" decoding="async" />
             </span>
@@ -443,6 +472,29 @@ export class CharacterSelector {
     }
     window.addEventListener('play-field-skill-change', this._onFieldSkillChange);
     window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
+
+    const itemHud = this.container?.querySelector('#play-item-hud');
+    if (itemHud) {
+      itemHud.addEventListener('dragstart', (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        const row = t.closest('[data-inventory-drag]');
+        if (!row || !itemHud.contains(row)) return;
+        if (row.getAttribute('draggable') !== 'true') {
+          e.preventDefault();
+          return;
+        }
+        const raw = row.getAttribute('data-inventory-drag') || '';
+        const token =
+          raw === PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE ? raw : decodeURIComponent(raw);
+        if (!token) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', `pkmn-inventory-drop:${token}`);
+        e.dataTransfer.effectAllowed = 'copyMove';
+      });
+    }
   }
 
   async refreshPlayerMovesHud() {

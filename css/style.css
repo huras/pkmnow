@@ -315,7 +315,7 @@ button.btn-secondary:hover {
   display: none !important;
 }
 
-/* Play: minimap + small header + back-to-global-map control */
+/* Play: minimap + header (tools) + footer (zoom + back to map) */
 .minimap-panel {
   position: absolute;
   bottom: 12px;
@@ -346,6 +346,26 @@ button.btn-secondary:hover {
   flex-shrink: 0;
   background: linear-gradient(180deg, #1c1c24 0%, #121218 100%);
   border-bottom: 1px solid #2e2e38;
+  border-radius: 4px 4px 0 0;
+}
+
+.minimap-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 5px 5px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #121218 0%, #1c1c24 100%);
+  border-top: 1px solid #2e2e38;
+  border-radius: 0 0 4px 4px;
+}
+
+.minimap-panel__footer-zoom {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 .minimap-panel__header-actions {
@@ -657,14 +677,15 @@ button.btn-secondary:hover {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 0 0 4px 4px;
+  border-radius: 0;
   background-color: #000;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* Zoom + help — same shape as music / back buttons */
-.minimap-panel__zoom-btn,
+/* Zoom in/out + help — same shape as music buttons */
+.minimap-panel__zoom-in-btn,
+.minimap-panel__zoom-out-btn,
 .minimap-panel__help-btn,
 .minimap-panel__time-btn,
 .minimap-panel__social-btn {
@@ -684,7 +705,8 @@ button.btn-secondary:hover {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.minimap-panel__zoom-btn:hover,
+.minimap-panel__zoom-in-btn:hover,
+.minimap-panel__zoom-out-btn:hover,
 .minimap-panel__help-btn:hover,
 .minimap-panel__time-btn:hover,
 .minimap-panel__social-btn:hover {
@@ -700,7 +722,8 @@ button.btn-secondary:hover {
   color: #fff;
 }
 
-.minimap-panel__zoom-btn:focus-visible,
+.minimap-panel__zoom-in-btn:focus-visible,
+.minimap-panel__zoom-out-btn:focus-visible,
 .minimap-panel__help-btn:focus-visible,
 .minimap-panel__time-btn:focus-visible,
 .minimap-panel__social-btn:focus-visible {
@@ -708,7 +731,8 @@ button.btn-secondary:hover {
   outline-offset: 1px;
 }
 
-.minimap-panel__zoom-icon,
+.minimap-panel__zoom-in-icon,
+.minimap-panel__zoom-out-icon,
 .minimap-panel__help-icon,
 .minimap-panel__time-icon,
 .minimap-panel__social-icon {

@@ -55,6 +55,15 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.play-item-hud__row--draggable[draggable='true'] {
+  cursor: grab;
+  user-select: none;
+}
+
+.play-item-hud__row--draggable[draggable='true']:active {
+  cursor: grabbing;
+}
+
 .play-item-hud__icon {
   display: flex;
   align-items: center;

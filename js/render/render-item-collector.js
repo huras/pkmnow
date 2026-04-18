@@ -57,6 +57,7 @@ import {
 } from '../wild-pokemon/underground-burrow.js';
 import { isGhostPhaseShiftBurrowEligibleDex } from '../wild-pokemon/ghost-phase-shift.js';
 import { speciesHasFlyingType } from '../pokemon/pokemon-type-helpers.js';
+import { markWildMinimapSpeciesKnown } from '../wild-pokemon/wild-minimap-species-known.js';
 
 /**
  * Collects all items that need to be rendered in the current frame, sorted by Y.
@@ -338,6 +339,8 @@ export function collectRenderItems(options) {
           targetHeightTiles,
           sexHud: wildSexHudLabel(w.sex)
         });
+
+        markWildMinimapSpeciesKnown(w);
 
         // 2b. Sims-style speech bubble (rich segments) — takes priority over classic emotion overlay.
         if (w.speechBubble?.segments?.length && lodDetail < 2) {

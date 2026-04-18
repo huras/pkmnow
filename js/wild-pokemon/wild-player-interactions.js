@@ -14,6 +14,7 @@ import {
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
+import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 
 const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
 const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
@@ -91,6 +92,7 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
   pushRecentNearbyEvent(best, 'player_field_move', 1.0);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.7, best);
   broadcastNearbySpeciesAllyHurt(best.x, best.y, best.dexId ?? 1, 0.78, best);
+  markWildMinimapSpeciesKnown(best);
   return { hit: true, dexId: best.dexId };
 }
 

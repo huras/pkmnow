@@ -127,6 +127,7 @@ import {
   getActiveDetailHitPulses
 } from './main/play-crystal-tackle.js';
 import { playInputState } from './main/play-input-state.js';
+import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
@@ -246,6 +247,7 @@ export function render(canvas, data, options = {}) {
       framingHeightTiles: POKEMON_HEIGHTS[playerDexForCam] || 1.1
     });
     setPlayCameraSnapshot({ ...playCam, cw, ch });
+    applyPlayPointerWithPlayCam(canvas, playCam);
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
@@ -337,8 +339,8 @@ export function render(canvas, data, options = {}) {
         chunk.canvas, 0, 0, chunk.canvas.width, chunk.canvas.height,
         currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
         currentTransY + cy * PLAY_CHUNK_SIZE * tileH,
-        Math.max(1, Math.ceil(chunk.canvas.width * chunkDrawScale - 1e-6)),
-        Math.max(1, Math.ceil(chunk.canvas.height * chunkDrawScale - 1e-6))
+        Math.max(1, PLAY_CHUNK_SIZE * tileW),
+        Math.max(1, PLAY_CHUNK_SIZE * tileH)
       );
     }
     setLastPlayChunkFrameStats({

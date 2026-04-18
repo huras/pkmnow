@@ -294,3 +294,41 @@ export function getCollectedDetailInventorySnapshot() {
   out.sort((a, b) => b.count - a.count || a.itemKey.localeCompare(b.itemKey));
   return out;
 }
+
+/** `data-inventory-drag` value for the aggregated “Crystal Shards” HUD row. */
+export const PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE = '__pkmn_crystal_shards__';
+
+function spendOneUnitForItemKey(itemKey) {
+  const key = String(itemKey || '');
+  const prev = collectedDetailInventory.get(key) ?? 0;
+  if (prev <= 0) return false;
+  const next = prev - 1;
+  if (next <= 0) collectedDetailInventory.delete(key);
+  else collectedDetailInventory.set(key, next);
+  if (isCrystalItemKey(key)) crystalLootCount = Math.max(0, (crystalLootCount | 0) - 1);
+  return true;
+}
+
+/**
+ * Removes one inventory unit so it can be spawned as a ground pickup. Crystal HUD uses
+ * {@link PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}: picks a concrete crystal `itemKey` with stock.
+ * @param {string} tokenOrItemKey
+ * @returns {{ itemKey: string } | null}
+ */
+export function trySpendOneInventoryUnitForGroundDrop(tokenOrItemKey) {
+  const raw = String(tokenOrItemKey || '');
+  if (raw === PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE) {
+    if ((crystalLootCount | 0) <= 0) return null;
+    const keys = [];
+    for (const [k, c] of collectedDetailInventory.entries()) {
+      if ((c | 0) > 0 && isCrystalItemKey(k)) keys.push(String(k));
+    }
+    keys.sort();
+    for (const k of keys) {
+      if (spendOneUnitForItemKey(k)) return { itemKey: k };
+    }
+    return null;
+  }
+  if (!spendOneUnitForItemKey(raw)) return null;
+  return { itemKey: raw };
+}

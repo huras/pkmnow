@@ -1,6 +1,7 @@
 import { computePlayViewState } from './play-view-camera.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-heights.js';
+import { worldContinuousFromCanvasPixelsPlayCam } from '../main/play-pointer-world.js';
 
 /**
  * Last camera used for play render — screen→world picking must use this so it matches
@@ -57,10 +58,7 @@ export function isWorldTileOnPlayCanvas(worldX, worldY) {
 export function playScreenPixelsToWorldTileCoords(canvasW, canvasH, mousePxX, mousePxY, player) {
   const snap = lastSnapshot;
   if (snap && snap.cw === canvasW && snap.ch === canvasH) {
-    return {
-      worldX: (mousePxX - snap.currentTransX) / snap.effTileW - 0.5,
-      worldY: (mousePxY - snap.currentTransY) / snap.effTileH - 0.5
-    };
+    return worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, snap);
   }
   const vx = player.visualX ?? player.x;
   const vy = player.visualY ?? player.y;
@@ -75,8 +73,5 @@ export function playScreenPixelsToWorldTileCoords(canvasW, canvasH, mousePxX, mo
     flightActive: !!player.flightActive,
     framingHeightTiles: cfg?.heightTiles ?? POKEMON_HEIGHTS[dex ?? 94] ?? 1.1
   });
-  return {
-    worldX: (mousePxX - playCam.currentTransX) / playCam.effTileW - 0.5,
-    worldY: (mousePxY - playCam.currentTransY) / playCam.effTileH - 0.5
-  };
+  return worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, playCam);
 }

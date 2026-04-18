@@ -1,4 +1,5 @@
 import { playInputState } from './play-input-state.js';
+import { invalidatePlayPointerHover } from './play-pointer-world.js';
 import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack, player } from '../player.js';
 import {
   castMoveById,
@@ -1182,6 +1183,7 @@ export function installPlayPointerCombat(deps) {
     playInputState.psybeamMiddleHold = null;
     playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
+    invalidatePlayPointerHover();
     for (const ownerId of THUNDER_PREVIEW_OWNER_IDS) withdrawThunderChargePreview(ownerId);
     updatePlayerPrismaticMergedBeamVisual(false, 0, 0, 0, 0, null);
   });

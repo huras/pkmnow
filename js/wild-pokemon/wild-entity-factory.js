@@ -7,10 +7,12 @@ import {
   pushRecentNearbyEvent
 } from './wild-social-system.js';
 import { setEmotion } from './wild-motion-ai.js';
+import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 
 export function bindStandardWildTakeDamage(entity) {
   entity.takeDamage = function (amount) {
     const memory = ensureSocialMemory(this);
+    if (Number(amount) > 0) markWildMinimapSpeciesKnown(this);
     this.hp -= amount;
     this.hurtTimer = 0.28;
     this.hurtAnimTimer = 0;

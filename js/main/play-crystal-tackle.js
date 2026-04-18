@@ -36,7 +36,9 @@ import {
   updateCrystalShardParticles,
   updateCrystalDropsAndPickup,
   getCrystalLootCount,
-  getCollectedDetailInventorySnapshot
+  getCollectedDetailInventorySnapshot,
+  PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export {
   activeCrystalShards,
@@ -46,7 +48,9 @@ export {
   updateCrystalDropsAndPickup,
   spawnPickableCrystalDropAt,
   getCrystalLootCount,
-  getCollectedDetailInventorySnapshot
+  getCollectedDetailInventorySnapshot,
+  PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export { appendTreeTopFallRenderItems } from './play-tree-top-fall.js';
 import { playTreeCutHpZeroSfx } from '../audio/tree-cut-sfx.js';

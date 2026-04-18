@@ -3,6 +3,7 @@ import { setPlayerPos } from '../player.js';
 import { getPlayPointerMode } from './play-pointer-mode.js';
 import { tryPlayerFieldMoveOnTile } from '../wild-pokemon/index.js';
 import { playScreenPixelsToWorldTileCoords } from '../render/play-camera-snapshot.js';
+import { clientToCanvasPixels } from './play-pointer-world.js';
 
 /**
  * @param {{
@@ -100,11 +101,7 @@ export function installPlayContextMenu(opts) {
     if (getAppMode() !== 'play' || !getCurrentData()) return;
     e.preventDefault();
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseClientX = e.clientX - rect.left;
-    const mouseClientY = e.clientY - rect.top;
-    const mousePxX = (mouseClientX / rect.width) * canvas.width;
-    const mousePxY = (mouseClientY / rect.height) * canvas.height;
+    const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
     const currentData = getCurrentData();
     const player = getPlayer();
 

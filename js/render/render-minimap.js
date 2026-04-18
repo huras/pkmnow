@@ -30,10 +30,21 @@ const MICRO_RADIUS = {
 const ZOOM_RADIUS = {
   far: 0,   // whole-map overview, no panning
   mid: Math.max(2, Math.round(MICRO_RADIUS.mid / SAFE_MACRO_STRIDE)),
-  close: Math.max(1, Math.round(MICRO_RADIUS.close / SAFE_MACRO_STRIDE))
+  close: Math.max(1, Math.round(MICRO_RADIUS.close / SAFE_MACRO_STRIDE)),
+  /** Same macro radius as `close` (base cache only); view uses local micro-tile layer like close. */
+  closer: Math.max(1, Math.round(MICRO_RADIUS.close / SAFE_MACRO_STRIDE))
 };
 
-const ZOOM_ORDER = ['far', 'mid', 'close'];
+const ZOOM_ORDER = ['far', 'mid', 'close', 'closer'];
+
+/** Local sprite minimap: `close` = 1 screen px per micro tile; `closer` = same mode, more zoomed in. */
+function isLocalSpriteMinimapZoom(zoom) {
+  return zoom === 'close' || zoom === 'closer';
+}
+
+function localMinimapMicroPxPerScreenPx(zoom) {
+  return zoom === 'closer' ? 2 : 1;
+}
 
 // ---------------------------------------------------------------------------
 // Offscreen base-layer cache (biomes + routes + cities).
@@ -49,7 +60,7 @@ let baseCacheH = 0;
 const minimapPortraitRequests = new Set();
 const minimapBiomeRgbCache = new Map();
 
-/** Far wilds (`_distanceInactivated`) show this instead of a species portrait. */
+/** Until `minimapSpeciesKnown`, wilds use this instead of a species portrait on the minimap. */
 const UNKNOWN_POKEMON_MINIMAP_PATH = 'map-icons/unknown-pokemon.png';
 /** @type {Promise<void> | null} */
 let unknownPokemonMinimapInflight = null;
@@ -93,6 +104,8 @@ let localMinimapCacheW = 0;
 let localMinimapCacheH = 0;
 let localMinimapCacheOriginX = 0;
 let localMinimapCacheOriginY = 0;
+/** @type {string} */
+let localMinimapCacheZoom = '';
 let localMinimapCacheChunkRevision = -1;
 let localMinimapCacheLastRebuildAtMs = 0;
 
@@ -339,21 +352,25 @@ function localMinimapColor(biomeId, tileKind) {
 }
 
 /**
- * Local minimap at close zoom:
- * 1 screen pixel = 1 micro sprite-tile, only where chunks are currently loaded.
+ * Local minimap at `close` / `closer` zoom:
+ * only where chunks are currently loaded; `closer` uses more screen pixels per micro tile.
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} data
  * @param {number} playerX micro X
  * @param {number} playerY micro Y
  * @param {{ w: number, h: number }} canvasSize
+ * @param {string} zoom
  */
-function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSize) {
+function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSize, zoom) {
   const w = canvasSize.w;
   const h = canvasSize.h;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
-  const originX = Math.floor(playerX - w * 0.5);
-  const originY = Math.floor(playerY - h * 0.5);
+  const pxPerMicro = localMinimapMicroPxPerScreenPx(zoom);
+  const microSpanW = w / pxPerMicro;
+  const microSpanH = h / pxPerMicro;
+  const originX = Math.floor(playerX - microSpanW * 0.5);
+  const originY = Math.floor(playerY - microSpanH * 0.5);
   const chunkRevision = getPlayChunkCacheRevision();
   const nowMs = performance.now();
   const needsRebuild =
@@ -361,6 +378,7 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
     localMinimapCacheData !== data ||
     localMinimapCacheW !== w ||
     localMinimapCacheH !== h ||
+    localMinimapCacheZoom !== zoom ||
     localMinimapCacheOriginX !== originX ||
     localMinimapCacheOriginY !== originY ||
     localMinimapCacheChunkRevision !== chunkRevision;
@@ -375,6 +393,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
     localMinimapCacheData === data &&
     localMinimapCacheW === w &&
     localMinimapCacheH === h &&
+    localMinimapCacheZoom === zoom &&
+    localMinimapCacheOriginX === originX &&
+    localMinimapCacheOriginY === originY &&
     nowMs - localMinimapCacheLastRebuildAtMs < LOCAL_MINIMAP_REBUILD_MIN_MS;
   if (canThrottle) {
     ctx.drawImage(localMinimapCacheCanvas, 0, 0);
@@ -398,8 +419,8 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
 
   const startX = Math.max(0, originX);
   const startY = Math.max(0, originY);
-  const endX = Math.min(microW, originX + w);
-  const endY = Math.min(microH, originY + h);
+  const endX = Math.min(microW, originX + microSpanW);
+  const endY = Math.min(microH, originY + microSpanH);
   if (startX < endX && startY < endY) {
     const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
     const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
@@ -419,17 +440,24 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
         const y1 = Math.min(endY, chunkY0 + PLAY_CHUNK_SIZE);
 
         for (let my = y0; my < y1; my++) {
-          const sy = my - originY;
           for (let mx = x0; mx < x1; mx++) {
-            const sx = mx - originX;
             const tile = getMicroTile(mx, my, data);
             const kind = classifyLocalMinimapTile(mx, my, tile, data);
             const color = localMinimapColor(tile?.biomeId, kind);
-            const p = (sy * w + sx) * 4;
-            pix[p] = color.r;
-            pix[p + 1] = color.g;
-            pix[p + 2] = color.b;
-            pix[p + 3] = 255;
+            const sx0 = Math.floor((mx - originX) * pxPerMicro);
+            const sy0 = Math.floor((my - originY) * pxPerMicro);
+            for (let dy = 0; dy < pxPerMicro; dy++) {
+              for (let dx = 0; dx < pxPerMicro; dx++) {
+                const sx = sx0 + dx;
+                const sy = sy0 + dy;
+                if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+                const p = (sy * w + sx) * 4;
+                pix[p] = color.r;
+                pix[p + 1] = color.g;
+                pix[p + 2] = color.b;
+                pix[p + 3] = 255;
+              }
+            }
           }
         }
       }
@@ -443,6 +471,7 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   localMinimapCacheH = h;
   localMinimapCacheOriginX = originX;
   localMinimapCacheOriginY = originY;
+  localMinimapCacheZoom = zoom;
   localMinimapCacheChunkRevision = chunkRevision;
   localMinimapCacheLastRebuildAtMs = nowMs;
   ctx.drawImage(cacheCanvas, 0, 0);
@@ -455,18 +484,22 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
  * @param {number} playerY micro Y
  * @param {number} w
  * @param {number} h
+ * @param {string} zoom
  */
-function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h) {
+function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h, zoom) {
   if (!minimapPlayChunkDebugOn()) return;
 
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
-  const originX = Math.floor(playerX - w * 0.5);
-  const originY = Math.floor(playerY - h * 0.5);
+  const pxPerMicro = localMinimapMicroPxPerScreenPx(zoom);
+  const microSpanW = w / pxPerMicro;
+  const microSpanH = h / pxPerMicro;
+  const originX = Math.floor(playerX - microSpanW * 0.5);
+  const originY = Math.floor(playerY - microSpanH * 0.5);
   const startX = Math.max(0, originX);
   const startY = Math.max(0, originY);
-  const endX = Math.min(microW, originX + w);
-  const endY = Math.min(microH, originY + h);
+  const endX = Math.min(microW, originX + microSpanW);
+  const endY = Math.min(microH, originY + microSpanH);
   if (startX >= endX || startY >= endY) return;
 
   const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
@@ -481,10 +514,10 @@ function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h) {
       const key = `${cx},${cy}`;
       const chunkX0 = cx * PLAY_CHUNK_SIZE;
       const chunkY0 = cy * PLAY_CHUNK_SIZE;
-      const sx0 = chunkX0 - originX;
-      const sy0 = chunkY0 - originY;
-      const sx1 = sx0 + PLAY_CHUNK_SIZE;
-      const sy1 = sy0 + PLAY_CHUNK_SIZE;
+      const sx0 = (chunkX0 - originX) * pxPerMicro;
+      const sy0 = (chunkY0 - originY) * pxPerMicro;
+      const sx1 = sx0 + PLAY_CHUNK_SIZE * pxPerMicro;
+      const sy1 = sy0 + PLAY_CHUNK_SIZE * pxPerMicro;
       const rx0 = Math.max(0, sx0);
       const ry0 = Math.max(0, sy0);
       const rx1 = Math.min(w, sx1);
@@ -530,6 +563,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
   for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
     const m = markers[i];
     const isDistanceEstimate = !!m.ent._distanceInactivated;
+    const speciesHidden = !m.ent.minimapSpeciesKnown;
     const sx = (m.mx - tf.ox + 0.5) * tf.scale;
     const sy = (m.my - tf.oy + 0.5) * tf.scale;
     if (sx < -screenPad || sy < -screenPad || sx > canvasSize.w + screenPad || sy > canvasSize.h + screenPad) {
@@ -538,14 +572,12 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
 
     const dexId = Math.floor(Number(m.ent.dexId) || 0);
     const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
-    if (isDistanceEstimate) {
+    if (speciesHidden) {
       queueUnknownPokemonMinimapIconLoad();
     }
-    const unknownImg = isDistanceEstimate ? imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH) : null;
-    const img = isDistanceEstimate
-      ? null
-      : getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
-    if (!isDistanceEstimate && (!img || !img.naturalWidth)) {
+    const unknownImg = speciesHidden ? imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH) : null;
+    const img = speciesHidden ? null : getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
+    if (!speciesHidden && (!img || !img.naturalWidth)) {
       const reqKey = `${dexId}:${portraitSlug}`;
       if (!minimapPortraitRequests.has(reqKey)) {
         minimapPortraitRequests.add(reqKey);
@@ -553,13 +585,14 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
       }
     }
 
+    const mutedRing = speciesHidden || isDistanceEstimate;
     ctx.save();
     ctx.beginPath();
     ctx.arc(sx, sy, markerR, 0, Math.PI * 2);
-    ctx.fillStyle = isDistanceEstimate ? 'rgba(2, 4, 9, 0.97)' : 'rgba(4, 7, 14, 0.9)';
+    ctx.fillStyle = mutedRing ? 'rgba(2, 4, 9, 0.97)' : 'rgba(4, 7, 14, 0.9)';
     ctx.fill();
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = isDistanceEstimate ? 'rgba(180, 190, 208, 0.7)' : 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = mutedRing ? 'rgba(180, 190, 208, 0.7)' : 'rgba(255,255,255,0.85)';
     ctx.stroke();
 
     const drawClippedRoundPortrait = (tex) => {
@@ -577,18 +610,22 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
       ctx.restore();
     };
 
-    if (unknownImg?.naturalWidth) {
+    if (unknownImg?.naturalWidth && speciesHidden) {
       drawClippedRoundPortrait(unknownImg);
     } else if (img && img.naturalWidth) {
       drawClippedRoundPortrait(img);
+      if (isDistanceEstimate) {
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        ctx.fillRect(sx - markerR, sy - markerR, markerR * 2, markerR * 2);
+      }
     } else {
-      ctx.fillStyle = isDistanceEstimate ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
+      ctx.fillStyle = speciesHidden ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
       ctx.beginPath();
       ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);
       ctx.fill();
     }
 
-    if (isDistanceEstimate && !unknownImg?.naturalWidth) {
+    if (speciesHidden && !unknownImg?.naturalWidth) {
       const qx = sx + markerR * 0.55;
       const qy = sy + markerR * 0.55;
       const qSize = Math.max(7, markerR * 1.05);
@@ -631,19 +668,21 @@ export function renderMinimap(canvas, data, player) {
   if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
 
   const zoom = getZoom(canvas);
+  /** `rebuildBase` output is identical for local sprite zooms; avoid duplicate full-world bakes. */
+  const baseZoomKey = isLocalSpriteMinimapZoom(zoom) ? 'close' : zoom;
 
   // --- Base layer cache ---
   const needsRebuild =
     !baseCacheCanvas ||
     baseCacheData !== data ||
-    baseCacheZoom !== zoom ||
+    baseCacheZoom !== baseZoomKey ||
     baseCacheW !== w ||
     baseCacheH !== h;
 
   if (needsRebuild) {
-    baseCacheCanvas = rebuildBase(w, h, data, zoom);
+    baseCacheCanvas = rebuildBase(w, h, data, baseZoomKey);
     baseCacheData = data;
-    baseCacheZoom = zoom;
+    baseCacheZoom = baseZoomKey;
     baseCacheW = w;
     baseCacheH = h;
   }
@@ -658,17 +697,18 @@ export function renderMinimap(canvas, data, player) {
   let tfScale = scale;
   let tfOx = ox;
   let tfOy = oy;
-  if (zoom === 'close') {
-    tfScale = MACRO_TILE_STRIDE; // 1 screen px == 1 micro tile
+  if (isLocalSpriteMinimapZoom(zoom)) {
+    const pxPerMicro = localMinimapMicroPxPerScreenPx(zoom);
+    tfScale = MACRO_TILE_STRIDE * pxPerMicro;
     tfOx = playerMacroX + 0.5 - w / (2 * tfScale);
     tfOy = playerMacroY + 0.5 - h / (2 * tfScale);
   }
 
   // --- Composite base layer with panning ---
   ctx.clearRect(0, 0, w, h);
-  if (zoom === 'close') {
-    drawLocalLoadedSpriteTileMinimap(ctx, data, player.x, player.y, { w, h });
-    drawPlayChunkBakeDebugOverlay(ctx, data, player.x, player.y, w, h);
+  if (isLocalSpriteMinimapZoom(zoom)) {
+    drawLocalLoadedSpriteTileMinimap(ctx, data, player.x, player.y, { w, h }, zoom);
+    drawPlayChunkBakeDebugOverlay(ctx, data, player.x, player.y, w, h, zoom);
   } else {
     ctx.save();
     ctx.translate(-tfOx * tfScale, -tfOy * tfScale);
@@ -676,8 +716,8 @@ export function renderMinimap(canvas, data, player) {
     ctx.restore();
   }
 
-  // --- Viewport border pulse for close zoom ---
-  if (zoom === 'close') {
+  // --- Viewport border pulse for local sprite zooms ---
+  if (isLocalSpriteMinimapZoom(zoom)) {
     ctx.save();
     ctx.strokeStyle = 'rgba(255,220,80,0.18)';
     ctx.lineWidth = 2;
@@ -722,16 +762,27 @@ export function renderMinimap(canvas, data, player) {
 // Exported helper: cycle zoom level on user click
 // ---------------------------------------------------------------------------
 /**
+ * @param {HTMLCanvasElement} canvas
+ * @param {number} delta  +1 = zoom in (more detail), −1 = zoom out
+ * @returns {string} new zoom key
+ */
+export function stepMinimapZoom(canvas, delta) {
+  const current = getZoom(canvas);
+  let idx = ZOOM_ORDER.indexOf(current);
+  if (idx < 0) idx = ZOOM_ORDER.indexOf('close');
+  const n = ZOOM_ORDER.length;
+  const step = Number(delta) || 0;
+  const next = ZOOM_ORDER[(idx + step + n * 16) % n];
+  canvas.dataset.zoom = next;
+  baseCacheData = null;
+  return next;
+}
+
+/**
  * Advances the minimap canvas to the next zoom level and returns the new zoom string.
  * @param {HTMLCanvasElement} canvas
  * @returns {string}
  */
 export function cycleMinimapZoom(canvas) {
-  const current = getZoom(canvas);
-  const idx = ZOOM_ORDER.indexOf(current);
-  const next = ZOOM_ORDER[(idx + 1) % ZOOM_ORDER.length];
-  canvas.dataset.zoom = next;
-  // Invalidate base cache (zoom changed)
-  baseCacheData = null;
-  return next;
+  return stepMinimapZoom(canvas, 1);
 }

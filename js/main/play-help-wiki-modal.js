@@ -157,7 +157,7 @@ const ARTICLES = [
     html: `
       <h2 class="play-help-wiki__h2">Minimapa</h2>
       <ul class="play-help-wiki__ul">
-        <li><strong>Lupa</strong> — alterna zoom: mapa inteiro → médio → aproximado → mapa inteiro. Um selo ao lado do painel mostra o nível atual.</li>
+        <li><strong>Rodapé do minimapa</strong> — <strong>−</strong> / <strong>+</strong> afastam ou aproximam o zoom (mapa inteiro → médio → aproximado → máximo → …). O botão de <strong>expandir</strong> volta ao mapa global. Um selo no painel mostra o nível de zoom atual.</li>
         <li><strong>Livro</strong> — abre esta ajuda.</li>
         <li><strong>Nota musical</strong> — volume BGM, gritos, mute e opção de não mostrar o toast ao trocar de faixa.</li>
         <li><strong>Expandir</strong> (setas nos cantos) — volta ao <strong>mapa global</strong> (mesmo efeito que “Voltar ao mapa” na toolbar).</li>

@@ -43,7 +43,11 @@ import {
 } from './main/weather-system.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
-import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
+import {
+  clearPlayCrystalTackleState,
+  spawnPickableCrystalDropAt,
+  trySpendOneInventoryUnitForGroundDrop
+} from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { createPlaySocialOverlay } from './main/play-social-overlay.js';
@@ -55,10 +59,13 @@ import {
   getPlayColliderOverlayCache
 } from './main/play-collider-overlay-cache.js';
 import { playInputState } from './main/play-input-state.js';
+import { playScreenPixelsToWorldTileCoords, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import {
-  playScreenPixelsToWorldTileCoords,
-  clearPlayCameraSnapshot
-} from './render/play-camera-snapshot.js';
+  recordPlayPointerClient,
+  clientToCanvasPixels,
+  getPlayHoverMicroTile,
+  invalidatePlayPointerHover
+} from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
 import { OBJECT_SETS } from './tessellation-data.js';
 import { parseShape } from './tessellation-logic.js';
@@ -69,7 +76,7 @@ import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
-import { cycleMinimapZoom } from './render/render-minimap.js';
+import { stepMinimapZoom } from './render/render-minimap.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -132,10 +139,16 @@ if (canvas) {
 const minimap = document.getElementById('minimap');
 const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
-const btnMinimapZoom = document.getElementById('minimap-zoom-btn');
+const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
+const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 
 /** Zoom labels shown in the panel badge */
-const ZOOM_LABELS = { far: '🗺 Far', mid: '🔍 Mid', close: '🔍+ Close' };
+const ZOOM_LABELS = {
+  far: '🗺 Far',
+  mid: '🔍 Mid',
+  close: '🔍+ Close',
+  closer: '🔍++ Close+'
+};
 
 function syncMinimapZoomBadge() {
   if (!minimap || !minimapPanel) return;
@@ -143,15 +156,20 @@ function syncMinimapZoomBadge() {
   minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
 }
 
-if (btnMinimapZoom && minimap) {
-  btnMinimapZoom.addEventListener('click', () => {
-    const next = cycleMinimapZoom(/** @type {HTMLCanvasElement} */ (minimap));
+function wireMinimapZoomStepButtons() {
+  if (!minimap) return;
+  const c = /** @type {HTMLCanvasElement} */ (minimap);
+  btnMinimapZoomIn?.addEventListener('click', () => {
+    stepMinimapZoom(c, 1);
     syncMinimapZoomBadge();
-    // Tooltip update to reflect new state
-    const NEXT_LABELS = { far: 'Zoom: mapa completo — clique para zoom médio', mid: 'Zoom: médio — clique para zoom aproximado', close: 'Zoom: aproximado — clique para mapa completo' };
-    btnMinimapZoom.title = NEXT_LABELS[next] ?? 'Alterar zoom';
+  });
+  btnMinimapZoomOut?.addEventListener('click', () => {
+    stepMinimapZoom(c, -1);
+    syncMinimapZoomBadge();
   });
 }
+
+wireMinimapZoomStepButtons();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
@@ -617,8 +635,8 @@ function syncWeatherUi(ev) {
 addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
-  refreshPlayPointerWorldFromLastClientIfHovering();
-  if (currentData) render(canvas, currentData, { settings: getSettings(), hover: lastHoverTile });
+  const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
+  if (currentData) render(canvas, currentData, { settings: getSettings(), hover });
 }
 
 const { startGameLoop, stopGameLoop } = createGameLoop({
@@ -725,44 +743,13 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
-/** Last pointer client coords on window (play); used to reproject aim/hover every frame while camera moves. */
-let playPointerLastClientX = 0;
-let playPointerLastClientY = 0;
-
-/** World aim under cursor in play (also used by `pointermove` while LMB/RMB held / captured). */
-function syncPlayPointerWorldFromClient(clientX, clientY) {
-  if (!currentData || appMode !== 'play') return;
-  playPointerLastClientX = clientX;
-  playPointerLastClientY = clientY;
-  const rect = canvas.getBoundingClientRect();
-  const mouseClientX = clientX - rect.left;
-  const mouseClientY = clientY - rect.top;
-  const mousePxX = (mouseClientX / rect.width) * canvas.width;
-  const mousePxY = (mouseClientY / rect.height) * canvas.height;
-  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
-    canvas.width,
-    canvas.height,
-    mousePxX,
-    mousePxY,
-    player
-  );
-  playInputState.mouseX = worldX;
-  playInputState.mouseY = worldY;
-  playInputState.mouseValid = true;
-  lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
-}
-
-/** Recompute world under cursor when the play camera moves but the mouse has not (hover ring + aim). */
-function refreshPlayPointerWorldFromLastClientIfHovering() {
-  if (!currentData || appMode !== 'play' || !playInputState.mouseValid) return;
-  syncPlayPointerWorldFromClient(playPointerLastClientX, playPointerLastClientY);
-}
 
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
 
   if (appMode === 'play') {
-    syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+    recordPlayPointerClient(e.clientX, e.clientY);
+    playInputState.mouseValid = true;
     return;
   }
 
@@ -791,11 +778,48 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!currentData || appMode !== 'play') return;
-  syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+  recordPlayPointerClient(e.clientX, e.clientY);
+  playInputState.mouseValid = true;
+});
+
+const PLAY_INVENTORY_DROP_PREFIX = 'pkmn-inventory-drop:';
+
+canvas.addEventListener('dragover', (e) => {
+  if (!currentData || appMode !== 'play') return;
+  const types = e.dataTransfer?.types;
+  if (!types || ![...types].includes('text/plain')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+
+canvas.addEventListener('drop', (e) => {
+  if (!currentData || appMode !== 'play' || !canvas) return;
+  const raw = e.dataTransfer?.getData('text/plain') || '';
+  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const token = raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+  const spent = trySpendOneInventoryUnitForGroundDrop(token);
+  if (!spent?.itemKey) return;
+  const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
+  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+    canvas.width,
+    canvas.height,
+    mousePxX,
+    mousePxY,
+    player
+  );
+  spawnPickableCrystalDropAt(worldX, worldY, spent.itemKey, 1);
+  playCharacterSelector?.invalidatePlayItemsHudSignature?.();
+  playCharacterSelector?.updatePlayItemsHud?.();
+  focusGameCanvas();
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (appMode === 'play') playInputState.mouseValid = false;
+  if (appMode === 'play') {
+    playInputState.mouseValid = false;
+    invalidatePlayPointerHover();
+  }
   if (currentData && appMode === 'map') updateView();
 });
 
@@ -805,6 +829,7 @@ function enterPlayMode(gx, gy) {
   clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
   playInputState.mouseValid = false;
+  invalidatePlayPointerHover();
   appMode = 'play';
   btnExport?.classList.add('hidden');
   btnBackToMap?.classList.remove('hidden');
