@@ -7,7 +7,8 @@ import {
   triggerPlayerSocialAction
 } from './wild-pokemon/index.js';
 import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
-import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
+import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { resolvePmdFrameSpecForSlice } from './pokemon/pmd-layout-metrics.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
@@ -312,27 +313,11 @@ function detailLabelFromItemKey(itemKey) {
     .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function detailPreviewHtmlForInfoBar(itemKey) {
-  const objSet = OBJECT_SETS[String(itemKey || '')];
-  if (!objSet) return '';
-  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return '';
-  const { cols } = parseShape(objSet.shape || '[1x1]');
-  const imgPath = TessellationEngine.getImagePath(objSet.file);
-  if (!imgPath) return '';
-  const atlasCols = imgPath.includes('caves') ? 50 : 57;
-  const previewIds = base.ids.slice(0, Math.max(1, Math.min(4, cols)));
-  const tiles = previewIds
-    .map((id) => {
-      const sx = (id % atlasCols) * 16;
-      const sy = Math.floor(id / atlasCols) * 16;
-      return `<span style="display:inline-block;width:14px;height:14px;background-image:url('${imgPath}');background-repeat:no-repeat;background-size:auto;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.18) inset"></span>`;
-    })
-    .join('');
-  return `<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
-}
-
-function detailPreviewHtmlForImmersiveHint(itemKey) {
+/**
+ * Multi-tile scatter preview: grid matches object `shape` so crystals read as one piece, not a strip.
+ * @param {string} extraClass optional CSS class on the wrapper
+ */
+function detailScatterGridPreviewHtml(itemKey, cellPx, extraClass) {
   const objSet = OBJECT_SETS[String(itemKey || '')];
   if (!objSet) return '';
   const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
@@ -342,14 +327,57 @@ function detailPreviewHtmlForImmersiveHint(itemKey) {
   if (!imgPath) return '';
   const atlasCols = imgPath.includes('caves') ? 50 : 57;
   const gridCols = Math.max(1, cols | 0);
+  const cls = extraClass ? ` class="${extraClass}"` : '';
   const tiles = base.ids
     .map((id) => {
       const sx = (id % atlasCols) * 16;
       const sy = Math.floor(id / atlasCols) * 16;
-      return `<span style="display:inline-block;width:15px;height:15px;background-image:url('${imgPath}');background-repeat:no-repeat;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.16) inset"></span>`;
+      return `<span style="display:inline-block;width:${cellPx}px;height:${cellPx}px;background-image:url('${imgPath}');background-repeat:no-repeat;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.16) inset"></span>`;
     })
     .join('');
-  return `<span class="play-immersive-hint__sprite" aria-hidden="true" style="display:grid;grid-template-columns:repeat(${gridCols},15px);gap:2px">${tiles}</span>`;
+  return `<span${cls} aria-hidden="true" style="display:grid;grid-template-columns:repeat(${gridCols},${cellPx}px);gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
+}
+
+function detailPreviewHtmlForInfoBar(itemKey) {
+  return detailScatterGridPreviewHtml(itemKey, 14, '');
+}
+
+function detailPreviewHtmlForImmersiveHint(itemKey) {
+  return detailScatterGridPreviewHtml(itemKey, 15, 'play-immersive-hint__sprite');
+}
+
+/** First frame of faint (or idle) PMD sheet for Strength HUD. */
+function faintedWildHudSpriteHtml(dexId, displayW) {
+  const dex = Math.max(1, Math.floor(Number(dexId) || 1));
+  void ensurePokemonSheetsLoaded(imageCache, dex);
+  const { faint: wFaint, idle: wIdle, walk: wWalk } = getResolvedSheets(imageCache, dex);
+  const sheet = wFaint || wIdle || wWalk;
+  if (!sheet || !(sheet.naturalWidth || sheet.width)) return '';
+  const { sw, sh } = resolvePmdFrameSpecForSlice(sheet, dex, 'faint');
+  const natW = sheet.naturalWidth || sheet.width;
+  const natH = sheet.naturalHeight || sheet.height;
+  const dw = Math.max(20, Math.floor(displayW));
+  const dh = Math.max(16, Math.round((sh * dw) / Math.max(1, sw)));
+  const scale = dw / Math.max(1, sw);
+  const bgW = natW * scale;
+  const bgH = natH * scale;
+  const src = String(sheet.currentSrc || sheet.src || '').replace(/'/g, '%27');
+  if (!src) return '';
+  return `<span aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px;width:${dw}px;height:${dh}px;background-image:url('${src}');background-repeat:no-repeat;background-size:${bgW}px ${bgH}px;background-position:0 0;image-rendering:pixelated;box-shadow:0 0 0 1px rgba(255,255,255,0.14) inset;border-radius:2px"></span>`;
+}
+
+/** @param {{ itemKey: string, wildDexId?: number }} ctx */
+function strengthHudObjectPreviewHtml(ctx) {
+  const wid = Math.floor(Number(ctx?.wildDexId) || 0);
+  if (wid > 0) return faintedWildHudSpriteHtml(wid, 36);
+  return detailPreviewHtmlForInfoBar(String(ctx?.itemKey || ''));
+}
+
+/** @param {{ itemKey: string, wildDexId?: number }} ctx */
+function strengthHudObjectPreviewHtmlImmersive(ctx) {
+  const wid = Math.floor(Number(ctx?.wildDexId) || 0);
+  if (wid > 0) return faintedWildHudSpriteHtml(wid, 40);
+  return detailPreviewHtmlForImmersiveHint(String(ctx?.itemKey || ''));
 }
 
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
@@ -397,7 +425,11 @@ function refreshPlayModeInfoBar(force = false) {
   const carryPrompt = player._strengthCarry
     ? {
       itemKey: String(player._strengthCarry.itemKey || ''),
-      displayName: String(player._strengthCarry.displayName || '')
+      displayName: String(player._strengthCarry.displayName || ''),
+      wildDexId:
+        player._strengthCarry.kind === 'faintedWild'
+          ? Math.max(1, Math.floor(Number(player._strengthCarry.wildDexId) || 0))
+          : 0
     }
     : null;
   const carryMobility = getStrengthCarryMobilityInfo(player);
@@ -414,7 +446,7 @@ function refreshPlayModeInfoBar(force = false) {
         : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
       playImmersiveHintEl.innerHTML =
         `<div class="play-immersive-hint__row">` +
-        `${detailPreviewHtmlForImmersiveHint(ctxPrompt.itemKey)}` +
+        `${strengthHudObjectPreviewHtmlImmersive(ctxPrompt)}` +
         `<span>(${label})</span>` +
         `${actionHtml}` +
         `</div>`;
@@ -426,13 +458,13 @@ function refreshPlayModeInfoBar(force = false) {
   }
   if (immersive) return;
   const carryHint = carryPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${detailPreviewHtmlForInfoBar(carryPrompt.itemKey)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
+    ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${strengthHudObjectPreviewHtml(carryPrompt)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
       `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Place [E]</span>` +
       `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
       `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
     : '';
   const grabHint = grabPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${detailPreviewHtmlForInfoBar(grabPrompt.itemKey)}(${String(grabPrompt.displayName || detailLabelFromItemKey(grabPrompt.itemKey) || 'Detail')}) Grab [E]</span>`
+    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${strengthHudObjectPreviewHtml(grabPrompt)}(${String(grabPrompt.displayName || detailLabelFromItemKey(grabPrompt.itemKey) || 'Detail')}) Grab [E]</span>`
     : '';
   const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
   infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${grabHint}${telem}`;

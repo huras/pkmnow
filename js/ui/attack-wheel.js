@@ -41,6 +41,7 @@ function getMoveType(moveId) {
     case 'ember':
     case 'fireBlast':
     case 'fireSpin':
+    case 'flameCharge':
     case 'flamethrower':
     case 'incinerate':
     case 'sunnyDay':

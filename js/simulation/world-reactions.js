@@ -201,7 +201,15 @@ export function sampleWorldDangerEscapeAngle(x, y, data) {
   return Math.atan2(vy, vx);
 }
 
-const FIRE_PROJECTILES = new Set(['ember', 'flamethrowerShot', 'incinerateCore', 'incinerateShard']);
+const FIRE_PROJECTILES = new Set([
+  'ember',
+  'flamethrowerShot',
+  'fireSpinBurst',
+  'incinerateCore',
+  'incinerateShard',
+  'fireBlastCore',
+  'fireBlastShard'
+]);
 const WATER_PROJECTILES = new Set(['waterShot', 'waterGunShot', 'bubbleShot', 'bubbleBeamShot', 'waterBurstShot']);
 const ELECTRIC_PROJECTILES = new Set(['prismaticShot', 'thunderBoltArc']);
 

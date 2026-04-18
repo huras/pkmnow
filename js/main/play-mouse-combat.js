@@ -14,8 +14,12 @@ import {
   tryCastPlayerPrismaticStreamPuff,
   updatePlayerPrismaticMergedBeamVisual,
   tryCastPlayerThundershockStreamPuff,
-  tryReleasePlayerPsybeam
+  tryReleasePlayerPsybeam,
+  castFireSpinMove,
+  castFireSpinCharged,
+  pushParticle
 } from '../moves/moves-manager.js';
+import { tickFireSpinHold } from '../moves/fire-spin-move.js';
 import {
   digitToBindingSlotIndex,
   getBindableMoveLabel,
@@ -79,6 +83,7 @@ function getMoveTypeClass(moveId) {
     case 'ember':
     case 'fireBlast':
     case 'fireSpin':
+    case 'flameCharge':
     case 'flamethrower':
     case 'incinerate':
     case 'sunnyDay':
@@ -675,7 +680,6 @@ const THUNDER_PREVIEW_OWNER_IDS = ['lmb', 'rmb', 'mmb'];
 function isHoldStreamMoveId(moveId) {
   return (
     moveId === 'flamethrower' ||
-    moveId === 'fireSpin' ||
     moveId === 'waterGun' ||
     moveId === 'hydroPump' ||
     moveId === 'bubbleBeam' ||
@@ -770,13 +774,22 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     castUltimate(sx, sy, tx, ty, pl);
     return;
   }
+  if (moveId === 'fireSpin') {
+    applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+    if (heldMs < TAP_MS) {
+      castFireSpinMove(sx, sy, tx, ty, pl);
+    } else {
+      castFireSpinCharged(sx, sy, tx, ty, pl, charge01 || 0);
+    }
+    return;
+  }
   const flame = which === 'l' ? leftFlameStreamedThisPress : which === 'm' ? middleFlameStreamedThisPress : rightFlameStreamedThisPress;
   const water = which === 'l' ? leftWaterStreamedThisPress : which === 'm' ? middleWaterStreamedThisPress : rightWaterStreamedThisPress;
   const bubble = which === 'l' ? leftBubbleBeamStreamedThisPress : which === 'm' ? middleBubbleBeamStreamedThisPress : rightBubbleBeamStreamedThisPress;
   const prismatic = which === 'l' ? leftPrismaticStreamedThisPress : which === 'm' ? middlePrismaticStreamedThisPress : rightPrismaticStreamedThisPress;
   const tshock = which === 'l' ? leftThundershockStreamedThisPress : which === 'm' ? middleThundershockStreamedThisPress : rightThundershockStreamedThisPress;
 
-  if (moveId === 'flamethrower' || moveId === 'fireSpin') {
+  if (moveId === 'flamethrower') {
     if (!flame) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
       tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, pl);
@@ -888,9 +901,13 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
 
   const { sx, sy, tx, ty } = aimAtCursor(player);
-  if (leftHeld && !mod && (lmb === 'flamethrower' || lmb === 'fireSpin')) {
+  if (leftHeld && !mod && lmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) leftFlameStreamedThisPress = true;
+  }
+  if (leftHeld && !mod && lmb === 'fireSpin') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeLeft01 || 0);
   }
   if (leftHeld && !mod && (lmb === 'waterGun' || lmb === 'hydroPump')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -916,9 +933,13 @@ export function updatePlayPointerCombat(dt, player, data) {
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) leftThundershockStreamedThisPress = true;
   }
 
-  if (rightHeld && !mod && (rmb === 'flamethrower' || rmb === 'fireSpin')) {
+  if (rightHeld && !mod && rmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
+  }
+  if (rightHeld && !mod && rmb === 'fireSpin') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeRight01 || 0);
   }
   if (rightHeld && !mod && (rmb === 'waterGun' || rmb === 'hydroPump')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -944,9 +965,13 @@ export function updatePlayPointerCombat(dt, player, data) {
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) rightThundershockStreamedThisPress = true;
   }
 
-  if (middleHeld && !mod && (mmb === 'flamethrower' || mmb === 'fireSpin')) {
+  if (middleHeld && !mod && mmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) middleFlameStreamedThisPress = true;
+  }
+  if (middleHeld && !mod && mmb === 'fireSpin') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeMmb01 || 0);
   }
   if (middleHeld && !mod && (mmb === 'waterGun' || mmb === 'hydroPump')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);

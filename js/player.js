@@ -187,7 +187,22 @@ export const player = {
    */
   _strengthGrabAction: null,
   /** Cut combo 3rd hit: movement locked (seconds). */
-  cutThirdHitLockoutSec: 0
+  cutThirdHitLockoutSec: 0,
+  /** Flame Charge: remaining dash time (s); velocity override while > 0. */
+  flameChargeDashSec: 0,
+  /** @type {1|2|3} */
+  flameChargeTier: 1,
+  flameChargeNx: 0,
+  flameChargeNy: 1,
+  flameChargeSpeedCapTilesPerSec: 0,
+  flameChargeTrailAcc: 0,
+  flameChargeHeadAcc: 0,
+  _flameChargeSegPrevX: 0,
+  _flameChargeSegPrevY: 0,
+  /** Fire Spin: seconds held this channel (caps in move module). */
+  fireSpinChannelSec: 0,
+  fireSpinOrbitAngle: 0,
+  fireSpinParticleAcc: 0
 };
 
 export function setPlayerSpecies(dexId) {
@@ -225,6 +240,18 @@ export function setPlayerSpecies(dexId) {
   player._strengthCarryHitStreak = 0;
   player._strengthGrabAction = null;
   player.cutThirdHitLockoutSec = 0;
+  player.flameChargeDashSec = 0;
+  player.flameChargeTier = 1;
+  player.flameChargeNx = 0;
+  player.flameChargeNy = 1;
+  player.flameChargeSpeedCapTilesPerSec = 0;
+  player.flameChargeTrailAcc = 0;
+  player.flameChargeHeadAcc = 0;
+  player._flameChargeSegPrevX = 0;
+  player._flameChargeSegPrevY = 0;
+  player.fireSpinChannelSec = 0;
+  player.fireSpinOrbitAngle = 0;
+  player.fireSpinParticleAcc = 0;
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('pkmn-player-species-changed', { detail: { dexId } }));
   }
@@ -284,6 +311,18 @@ export function setPlayerPos(x, y) {
   player._tackleLungeDx = 0;
   player._tackleLungeDy = 0;
   player.cutThirdHitLockoutSec = 0;
+  player.flameChargeDashSec = 0;
+  player.flameChargeTier = 1;
+  player.flameChargeNx = 0;
+  player.flameChargeNy = 1;
+  player.flameChargeSpeedCapTilesPerSec = 0;
+  player.flameChargeTrailAcc = 0;
+  player.flameChargeHeadAcc = 0;
+  player._flameChargeSegPrevX = 0;
+  player._flameChargeSegPrevY = 0;
+  player.fireSpinChannelSec = 0;
+  player.fireSpinOrbitAngle = 0;
+  player.fireSpinParticleAcc = 0;
 }
 
 /**
@@ -586,6 +625,10 @@ export function updatePlayer(dt, data) {
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
 
+  if ((player.flameChargeDashSec || 0) > 1e-5 && (flightMove || isAirborne || player.digBurrowMode)) {
+    player.flameChargeDashSec = 0;
+  }
+
   if (!isGroundDigLatchEligible() || flightMove) {
     player.digBurrowMode = false;
     player.digCharge01 = 0;
@@ -624,6 +667,7 @@ export function updatePlayer(dt, data) {
     player.inputX = 0;
     player.inputY = 0;
     player.runMode = false;
+    player.flameChargeDashSec = 0;
   }
 
   if ((player.cutThirdHitLockoutSec || 0) > 0) {
@@ -632,10 +676,30 @@ export function updatePlayer(dt, data) {
     player.runMode = false;
     player.vx = 0;
     player.vy = 0;
+    player.flameChargeDashSec = 0;
   }
 
+  const flameChargeActive =
+    (player.flameChargeDashSec || 0) > 1e-5 &&
+    player.grounded &&
+    !flightMove &&
+    !player.digBurrowMode;
+
   // 1. Horizontal Input & Physics
-  if (player.inputX !== 0 || player.inputY !== 0) {
+  if (flameChargeActive) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
+    const nx = Number(player.flameChargeNx) || 0;
+    const ny = Number(player.flameChargeNy) || 1;
+    const nLen = Math.hypot(nx, ny);
+    const ux = nLen > 1e-5 ? nx / nLen : 0;
+    const uy = nLen > 1e-5 ? ny / nLen : 1;
+    const cap = Math.max(4.5, Number(player.flameChargeSpeedCapTilesPerSec) || 6);
+    player.vx = ux * cap;
+    player.vy = uy * cap;
+    setPlayerFacingFromWorldAimDelta(player, ux, uy);
+  } else if (player.inputX !== 0 || player.inputY !== 0) {
     // Determine facing
     if (player.inputX === 0 && player.inputY < 0) player.facing = 'up';
     else if (player.inputX === 0 && player.inputY > 0) player.facing = 'down';
@@ -723,7 +787,7 @@ export function updatePlayer(dt, data) {
     !playInputState.ctrlLeftHeld
       ? LMB_COMBAT_CHARGE_SPEED_MUL
       : 1;
-  const currentMaxSpeed =
+  let currentMaxSpeed =
     MAX_SPEED *
     Math.max(1.0, inputMag) *
     runMul *
@@ -732,6 +796,10 @@ export function updatePlayer(dt, data) {
     flightHorizontalMoveBoost *
     getStrengthCarryMoveSpeedMultiplier(player) *
     combatChargeSlowMul;
+  if (flameChargeActive) {
+    const fcCap = Number(player.flameChargeSpeedCapTilesPerSec) || MAX_SPEED * 2.4;
+    currentMaxSpeed = Math.max(currentMaxSpeed, fcCap);
+  }
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;

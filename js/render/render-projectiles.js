@@ -171,23 +171,76 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       ctx.fill();
       ctx.restore();
     }
-  } else if (p.type === 'flamethrowerShot' || p.type === 'incinerateCore' || p.type === 'incinerateShard') {
-    if (p.type === 'flamethrowerShot') {
+  } else if (
+    p.type === 'flamethrowerShot' ||
+    p.type === 'fireSpinBurst' ||
+    p.type === 'incinerateCore' ||
+    p.type === 'incinerateShard' ||
+    p.type === 'fireBlastCore' ||
+    p.type === 'fireBlastShard'
+  ) {
+    if (p.type === 'flamethrowerShot' || p.type === 'fireSpinBurst') {
       const img = imageCache.get('tilesets/effects/actual-fire.png');
       const fh = p.sheetFrameH || FIRE_FRAME_H;
       const fw = p.sheetFrameW || FIRE_FRAME_W;
       const n = p.sheetFrames || 4;
       const frame = Math.floor((time * 18 + (p.x + p.y) * 2.3) % n);
-      const dw = Math.ceil(tileW * 1.02);
-      const dh = Math.ceil(tileH * 1.02);
+      const tier = p.type === 'fireSpinBurst' ? Number(p.spinTier) || 1 : 0;
+      const kick = p.type === 'fireSpinBurst' ? Math.min(1.85, Number(p.spinKick) || 1) : 1;
+      const spinMul = p.type === 'fireSpinBurst' ? (0.72 + tier * 0.14) * (0.85 + kick * 0.12) : 1;
+      const dw = Math.ceil(tileW * 1.02 * spinMul);
+      const dh = Math.ceil(tileH * 1.02 * spinMul);
       if (img && img.naturalWidth) {
         ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
       } else {
         ctx.fillStyle = '#ff6a00';
         ctx.beginPath();
-        ctx.arc(px, py, Math.max(3, tileW * 0.12), 0, Math.PI * 2);
+        ctx.arc(px, py, Math.max(3, tileW * 0.12 * spinMul), 0, Math.PI * 2);
         ctx.fill();
       }
+    } else if (p.type === 'fireBlastCore') {
+      const img = imageCache.get('tilesets/effects/actual-fire.png');
+      const fh = p.sheetFrameH || FIRE_FRAME_H;
+      const fw = p.sheetFrameW || FIRE_FRAME_W;
+      const n = p.sheetFrames || 4;
+      const frame = Math.floor((time * 20 + (p.x + p.y) * 2.7) % n);
+      const tier = Number(p.blastTier) || 2;
+      const scale = tier === 3 ? 1.88 : tier === 2 ? 1.48 : 1.2;
+      const dw = Math.ceil(tileW * 1.34 * scale);
+      const dh = Math.ceil(tileH * 1.34 * scale);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      if (img && img.naturalWidth) {
+        ctx.globalAlpha = 0.92;
+        ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
+        ctx.globalAlpha = 0.55;
+        ctx.drawImage(img, 0, ((frame + 1) % n) * fh, fw, fh, px - dw * 0.58, py - dh * 0.58, dw * 1.16, dh * 1.16);
+      } else {
+        ctx.fillStyle = '#ff3a00';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(6, tileW * 0.2 * scale), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (p.type === 'fireBlastShard') {
+      const img = imageCache.get('tilesets/effects/actual-fire.png');
+      const fh = FIRE_FRAME_H;
+      const fw = FIRE_FRAME_W;
+      const frame = Math.floor((time * 22 + (p.x + p.y) * 3.1) % 4);
+      const dw = Math.ceil(tileW * 0.86);
+      const dh = Math.ceil(tileH * 0.86);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      if (img && img.naturalWidth) {
+        ctx.globalAlpha = 0.88;
+        ctx.drawImage(img, 0, frame * fh, fw, fh, px - dw * 0.5, py - dh * 0.5, dw, dh);
+      } else {
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(2.5, tileW * 0.09), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     } else {
       ctx.fillStyle = '#ff4500';
       ctx.beginPath();

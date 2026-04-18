@@ -1,3 +1,7 @@
+MACRO_TILE_STRIDE (terrain + wild biome grid — single source)
+WILD_WANDER_RADIUS_TILES (wild/constants.js only; tune wander, not grid)
+GRASS_FIRE_BURN_PHASE_SEC 
+
 Ghost attack at night
 	Silph Scope protege
 
@@ -22,18 +26,21 @@ Pokemons de planta coletam a grama em materiais uteis ao inve´s de sód estruil
 
 Arvores mesma coisa so que mais complexo pq tem tronco tbm
 
+Mecanicas pokemon
+	Magnemite e Magneton terão "Screw Bullet" unique attack that turns some ancient machines on the world.
+		Puzzle Temples!
 
 Points of interest:
-	Beedrill Hive
-		Chão de mel
-		Labirinto de cera
-		Beedrills
-		Kakunas
-		Weedles
+	Hanging bridges connectin points of interest on mounts
+	Snorlaxes on the middle of the road between two verytall terrain patches, causing a reelevo corridor and walls (for some length) that snorlax is blocking
+	Ghost Ship that sails land and sea (mostly) moving through the map hiding and appearing
+		Those inside traverse things and appear and dsisapear (unnafected by external physics because of the ship's magic) too to those from outside.
 	Cemitério
 		Pokemons Fantasmas
 	Fazenda
 		Pokemons normais
+			Gloom
+				Acid
 			Miltank
 				Leite
 			Mareep
@@ -43,6 +50,12 @@ Points of interest:
 			Pidgey
 				Ovos
 	Pokemon Nest
+		Beedrill Hive
+			Chão de mel
+			Labirinto de cera
+			Beedrills
+			Kakunas
+			Weedles
 		Venusaur Nest
 			On deep of the forest, near shallow caves
 		Charizard Nest
@@ -72,3 +85,138 @@ Soltar o jogador no mapa, mas ter construções fixas localizadas aleatorias mas
 Riding pokemon serves to avoid aggressive pokemon in your path. Some pokemon can be too quick and stilloutrun you, so plan your paths.
 
 Riding pokemon can jump some small cliffs up to 2 tiles high depending on the pokemon.
+
+Em certas regiões perigosas os pokemons selvagens e capturados ficam berserk.
+Você precisa upar o numero de pokemons que pode controlar ter fora da pokebola.
+E usar um item pra que eles não saiam da pokebola pra te atacar berserk.
+
+Gerador de imagens de insignias usando formas básicas cor solidas e gradientes de forma procedural para as cidades que tem ginásio
+
+Wikipédia do mundo gerado
+	Cidades
+	Liders de ginasio
+	Insignias
+	Suas equipes pokemon
+	Rotas
+	NPCs notaveis
+	Quests
+	Biomes and Flora (talves gerar biomas proceduralmente, tbm (ai vai procedural no talo))
+	Natural Structures
+		Forests
+		Lakes
+		Mountains
+		Seas
+
+Element INteractions Debug Page	
+	Pagina com minimundos mostrando pokemons testando as mecanicas de interação sociais e de fogo em grmaa por exemplo
+	Uma chunk isolada pra cada.
+	Todos em pause mas prontos pra dar play e a simulação começar imediatamente ou em breve (USANDO O MESMO CÓDIGO QUE VAI SERVIR PARA O JOGO)
+
+
+H:\cursor\zelda-BOTW-map-generator-and-player
+
+Mindsets
+	Cada tile no mapa é uma "graminha" do caminho do jogador.
+	Só que ao invés de trazer uma batalha em turno random, deve trazer uma descoberta:
+		- Uma curiosidade social de pokémons
+	Cada pedaço de bioma deve ser um "parquinho" novo pro player.
+
+Como o sistema de pokémons sumonados é dinâmico
+	Usaremos ele ao máximo ao nosso favor, abusando dele fazendo coisas que ele permite nosso jogo fazer que não dá pra fazer nos outros.
+
+	Spawns:
+		1 pokémon (by % chance)
+		2 basic same pkmn
+		2 basic different pkmn
+		1 basic + 1 stage 1 pkmn
+		2 basic + 1 stage 1 pkmn
+		4 basic + 2 stage 1 + 1 stage 2 pkmn
+
+	Events
+		Fight over food
+		Fight over disagreement
+		Fight over territory
+		Sucessful Love declaration
+		Failed Love declaration
+		Two pokemon talking
+			Joke
+			Talking about another pokemon
+		Wild pokemon picking details the player put on another place and putting the detail back on place to help free memory (if the thing is nearby 30 tiles max)
+		Korok Events (marked on minimap with icon) (fixed due to proderually but deterministically generation)
+
+Wild Battling
+	When attacked pokemon should turn aggro
+	Current wild pokemon vision ranges seems generally short in all cases.
+
+Koroks	(needs dialog system, better wild pokemon event system)
+	Proceduraly but deterministically placed, kept track of for save file (to not allow double event/pickup)
+
+	Types
+
+			Árvore que balança com 2x da velocidade se der tackle ou cut ou burn: 
+				Cai um ekans e um ratata, e o ratata te pede ajuda.
+					se derrotar o ekans ele te dá uma korok e vira um wild pokemon
+				Cai um meowth ele te xinga mas agradece pq tava preso la em cima
+				
+				Eles te dão uma "korok seed" e viram um wild pokemon ou somem depois de andar/pular/voar até ir pra offscreen
+		0014 + 0015
+			Kakuna asking for help to get to a breedrill hive, when you place it on the ground he gives you a korok and abedrill appears to a carry it away (beedrill and kakuna vanishes after getting offscreen)
+		0011
+			Metapod asking for help to find a certain color of large tree, he climbs on the tree and vanishes after giving you a korok		
+		Marowak looking for her "up to 3" cubone babies on the map
+			1 korok seed per baby (onyl delivered once all babies are delivered)
+		Bring a crystal or rock to a pokemon
+			Put crystals or rocks to complete "pixelated shapes".
+			Ex: circle, square
+			Must not miss more than 2 stones, senão fica chato pra carai
+		Pokemon needing you to light up something
+		Pokemon needing some flame to be doused (or rescue eggs from burning)
+		Break rocks by throwing them from far high to ge the content
+		Break nuts by throwing them from high above the ground
+		Other trainners looking to battle pokemon 
+		Other trainners looking to catch a certain pokemon
+		Other NPCs collecting things on the field
+		Other NPCs looking for a certain rare vegetation item or rock or crystal or any detail
+
+Temples
+	Puzzles de Strength, joga a pedra cubica de e ela desliza (pois sãod etails especiais para puzzles)
+	Puzzles de sliding no gelon, vc pode usar goleps de fogo ou força pra quebrar os cristais de gelo (que regeneram depois de 30 seg)
+
+
+
+Terminologia recomendada
+Macro Cell (macro)
+Grade grossa do gerador (bioma/elevação base).
+Índices: macroX, macroY.
+Tamanho em unidades de jogo: MACRO_TILE_STRIDE micro-tiles por lado.
+Fonte: data.width, data.height, data.biomes[...].
+Micro Tile (micro)
+Menor unidade jogável de mundo (colisão, walkability, spawn, path).
+Índices/coords: mx, my ou x/y em espaço micro.
+Funções que usam isso: getMicroTile(...), canWalkMicroTile(...).
+Hoje MACRO_TILE_STRIDE = 32 (não 48 no código atual).
+Render/Atlas Tile (atlas ou spriteTile)
+Tile visual do tileset/autotile (IDs, roles tipo CENTER, EDGE_*).
+Não é “distância de mundo”; é lookup/render.
+Ex.: getBaseTerrainSpriteId, TERRAIN_SETS[*].roles[...].
+
+
+The true dungeons of zelda breath of the wild are not the beasts or the shrines, they are the 
+giant tall labyrith
+o lugar que fica todo preto escuro
+a ilha que fica afastadona e tem que ir de glider
+
+Fazer dungeons que o player pode "atacar/approach" de vários angulos dependendo de qual lado o player vai encontrar
+	Tipo hyrule castle em Zelda BOTW
+	https://youtu.be/TI7X27QLFdQ?si=W6VIEjiVblQISt_j&t=1128	
+	The Two Zelda Formulas Need to Have a Baby
+
+Ao terminar o pokemon, mandar para:
+	Palworld
+	Snulch, https://www.youtube.com/@gamer.snulch because of https://youtu.be/TI7X27QLFdQ?si=W6VIEjiVblQISt_j&t=1128
+	Nintendo
+	Michael
+	Hunf
+
+
+You start a village with your partner and start doing quests with pokemon around trying to recruit them to your BASES!

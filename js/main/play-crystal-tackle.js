@@ -111,8 +111,13 @@ const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   flamethrowerShot: 16,
   incinerateShard: 28,
   incinerateCore: 54,
+  fireBlastShard: 30,
+  fireBlastCore: 78,
+  fireSpinBurst: 24,
   // Lightning is a finisher: instant ignition regardless of prior damage.
   lightningStrike: 150,
+  thunderShockBeam: 38,
+  thunderBoltArc: 46,
   /** Prismatic Laser: same meter as fire, but completion skips the torch “burning” phase (see add*BurnMeter). */
   prismaticShot: 20
 });

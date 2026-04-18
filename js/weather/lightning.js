@@ -151,8 +151,11 @@ export function spawnInCloudFlashNearPlayer(playerWorldX, playerWorldY) {
  *     coming from a move-summoned storm cell that has its own visible puff and doesn't live
  *     on the procedural cloud grid.
  */
+/**
+ * @returns {boolean} true when a **new** grass burn started this frame (extended burns return false).
+ */
 export function spawnGroundStrikeAt(worldX, worldY, data, opts = {}) {
-  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return;
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return false;
   const now = performance.now();
   const color = opts.color === 'yellow' ? 'yellow' : 'default';
   const flashCloudSlot = opts.flashCloudSlot !== false;
@@ -194,10 +197,12 @@ export function spawnGroundStrikeAt(worldX, worldY, data, opts = {}) {
 
   // Ignition. Both helpers short-circuit when projType isn't recognized,
   // so they are safe to call unconditionally — the project-type set opts us in.
+  let grassIgnitedNew = false;
   if (data) {
-    grassFireTryIgniteAt(worldX, worldY, 0, 'lightningStrike', data);
+    grassIgnitedNew = !!grassFireTryIgniteAt(worldX, worldY, 0, 'lightningStrike', data);
     tryApplyFireHitToFormalTreesAt(worldX, worldY, 0, 'lightningStrike', data);
   }
+  return grassIgnitedNew;
 }
 
 /**

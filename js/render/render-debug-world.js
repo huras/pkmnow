@@ -1227,7 +1227,8 @@ function drawRainStreaks(
 }
 
 const WIND_HASH_CACHE = [];
-const WIND_MAX_STREAMS = 140;
+/** Preallocated streamline hash slots (`ensureWindHashCache`; grid draw does not cap on this yet). */
+const WIND_MAX_STREAMS = 360;
 
 function ensureWindHashCache() {
   if (WIND_HASH_CACHE.length >= WIND_MAX_STREAMS) return;
@@ -1276,8 +1277,8 @@ function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad, tileW, til
   const windX = cloudDriftXTiles * windInfluenceMul;
   const windY = cloudDriftYTiles * windInfluenceMul;
 
-  // Use a slot-based grid in world tiles.
-  const step = 14;
+  // Use a slot-based grid in world tiles (smaller step = more gusts; keep sane for fill cost).
+  const step = 9;
   const jitterMargin = step * 1.2;
   const baseLen = 9 * (tileW || 32);
   const halfLenTiles = (baseLen / (tileW || 32)) * 0.5;
@@ -1304,9 +1305,9 @@ function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad, tileW, til
 
   for (let sy = syMin; sy <= syMax; sy++) {
     for (let sx = sxMin; sx <= sxMax; sx++) {
-      // Density control: only some slots produce a streamline.
+      // Density control: only some slots produce a streamline (threshold ↑ ⇒ more visible gusts).
       const hExist = hash01Cell(sx, sy, 0x1234);
-      if (hExist > 0.15 + intensity * 0.45) continue;
+      if (hExist > 0.12 + intensity * 0.58) continue;
 
       const hSpawn = hash01Cell(sx, sy, 0x5678);
       const rawLife = (time / lifeSec + hSpawn) % 1;

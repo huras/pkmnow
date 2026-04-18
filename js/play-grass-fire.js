@@ -14,7 +14,19 @@ export const GRASS_FIRE_REGROW_BLEND_SEC = 12;
 /** Max |z| (tiles) for projectile end to count as ground impact. */
 const GROUND_Z_MAX = 0.55;
 
-const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore', 'lightningStrike']);
+const FIRE_PROJECTILE_TYPES = new Set([
+  'ember',
+  'flamethrowerShot',
+  'incinerateShard',
+  'incinerateCore',
+  'lightningStrike',
+  /** Beams ground like rain lightning — same grass cycle + rain immunity when flagged lightning-ignited. */
+  'thunderShockBeam',
+  'thunderBoltArc',
+  'fireBlastCore',
+  'fireBlastShard',
+  'fireSpinBurst'
+]);
 const WATER_PROJECTILE_TYPES = new Set(['waterShot', 'waterGunShot', 'bubbleShot']);
 
 /**
@@ -132,7 +144,9 @@ export function grassFireTryIgniteAt(worldX, worldY, projZ, projType, data) {
   if (Math.abs(Number(projZ) || 0) > GROUND_Z_MAX) return false;
   const mx = Math.floor(worldX);
   const my = Math.floor(worldY);
-  return tryIgnite(mx, my, data, { ignitedByLightning: projType === 'lightningStrike' });
+  const lightningLike =
+    projType === 'lightningStrike' || projType === 'thunderShockBeam' || projType === 'thunderBoltArc';
+  return tryIgnite(mx, my, data, { ignitedByLightning: lightningLike });
 }
 
 /**

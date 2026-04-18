@@ -20,6 +20,18 @@ import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-leve
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
+
+/** Move id (strip `field:`) → PNG basename when it differs from the id (pack filenames). */
+const SKILL_ICON_FILE_BY_MOVE_ID = Object.freeze({
+  thunder: 'thunder_Shamanskill_27',
+  thunderbolt: 'thunderbolt_Mageskill_07',
+  thunderShock: 'thundershock_Shamanskill_23'
+});
+
+function skillIconFileForMoveId(moveId) {
+  const id = String(moveId || '').replace(/^field:/, '');
+  return SKILL_ICON_FILE_BY_MOVE_ID[id] ?? id;
+}
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
 const IMMERSIVE_CHROME_STORAGE_KEY = 'pkmn_play_immersive_chrome';
 
@@ -627,7 +639,7 @@ export class CharacterSelector {
         const label = getBindableMoveLabel(moveId);
         return {
           hudMoveId: moveId,
-          iconFile: moveId,
+          iconFile: skillIconFileForMoveId(moveId),
           hk,
           title: `${label} — slot ${hk} (segure ${digit} para trocar na roda)`,
           labelText: label

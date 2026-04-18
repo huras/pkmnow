@@ -29,6 +29,7 @@ import {
   emitProjectileWorldReactionOnce,
   checkPlayerHit,
   spawnIncinerateShards,
+  spawnFireBlastBurst,
   applySplashToWild
 } from './moves-projectile-collision.js';
 import { tryDamagePlayerFromProjectile } from '../player.js';
@@ -141,6 +142,37 @@ export function tickActiveProjectiles(ctx) {
 
       if (proj.timeToLive <= 0) {
         emitProjectileWorldReactionOnce(proj, data, (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5);
+        if (
+          data &&
+          (proj.type === 'thunderShockBeam' || proj.type === 'thunderBoltArc')
+        ) {
+          const zz = 0;
+          const us = [0, 0.2, 0.4, 0.6, 0.8, 1];
+          let spawnedGrassFireParticle = false;
+          for (let ui = 0; ui < us.length; ui++) {
+            const u = us[ui];
+            const tx = sx0 + (sx1 - sx0) * u;
+            const ty = sy0 + (sy1 - sy0) * u;
+            tryApplyFireHitToFormalTreesAt(tx, ty, zz, proj.type, data);
+            if (grassFireTryIgniteAt(tx, ty, zz, proj.type, data)) {
+              if (!spawnedGrassFireParticle) {
+                pushParticle({
+                  type: 'grassFire',
+                  x: tx,
+                  y: ty,
+                  vx: 0,
+                  vy: 0,
+                  z: 0.06,
+                  vz: 0,
+                  life: GRASS_FIRE_PARTICLE_SEC,
+                  maxLife: GRASS_FIRE_PARTICLE_SEC
+                });
+                spawnedGrassFireParticle = true;
+              }
+            }
+            grassFireTryExtinguishAt(tx, ty, zz, proj.type, data);
+          }
+        }
         projectiles.splice(i, 1);
       }
       continue;
@@ -309,6 +341,10 @@ export function tickActiveProjectiles(ctx) {
         spawnHitParticles(proj.x, proj.y, 0);
         applySplashToWild(proj, wildList, 0, wildSpatial);
         spawnIncinerateShards(proj, pushProjectile, 0);
+      } else if (proj.type === 'fireBlastCore') {
+        spawnHitParticles(proj.x, proj.y, 0);
+        applySplashToWild(proj, wildList, 0, wildSpatial);
+        spawnFireBlastBurst(proj, pushProjectile, 0);
       } else if (proj.type === 'confusionOrb') {
         spawnHitParticles(proj.x, proj.y, 0);
         applySplashToWild(proj, wildList, 0, wildSpatial);
@@ -348,7 +384,9 @@ export function tickActiveProjectiles(ctx) {
                 ? 'psyTrail'
                 : proj.type === 'prismaticShot'
                   ? 'laserTrail'
-                  : proj.type === 'flamethrowerShot'
+                  : proj.type === 'flamethrowerShot' ||
+                      proj.type === 'fireBlastCore' ||
+                      proj.type === 'fireSpinBurst'
                     ? 'emberTrail'
                     : null;
     if (trailType && proj.trailAcc != null) {
@@ -401,6 +439,9 @@ export function tickActiveProjectiles(ctx) {
       if (proj.type === 'incinerateCore') {
         applySplashToWild(proj, wildList, impactZ, wildSpatial);
         spawnIncinerateShards(proj, pushProjectile, impactZ);
+      } else if (proj.type === 'fireBlastCore') {
+        applySplashToWild(proj, wildList, impactZ, wildSpatial);
+        spawnFireBlastBurst(proj, pushProjectile, impactZ);
       }
       projectiles.splice(i, 1);
       continue;
@@ -418,6 +459,8 @@ export function tickActiveProjectiles(ctx) {
       }
       if (proj.type === 'incinerateCore') {
         spawnIncinerateShards(proj, pushProjectile, pz);
+      } else if (proj.type === 'fireBlastCore') {
+        spawnFireBlastBurst(proj, pushProjectile, pz);
       }
       hit = true;
     }
@@ -440,11 +483,13 @@ export function tickActiveProjectiles(ctx) {
           if (wild.takeDamage) wild.takeDamage(proj.damage);
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(proj.x, proj.y, z);
-          if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
+          if (proj.type === 'incinerateCore' || proj.type === 'fireBlastCore' || proj.type === 'confusionOrb') {
             applySplashToWild(proj, wildList, undefined, wildSpatial);
           }
           if (proj.type === 'incinerateCore') {
             spawnIncinerateShards(proj, pushProjectile, z);
+          } else if (proj.type === 'fireBlastCore') {
+            spawnFireBlastBurst(proj, pushProjectile, z);
           }
           hit = true;
         }

@@ -8,7 +8,7 @@ import {
   getTreeType
 } from '../biome-tiles.js';
 import { PLAY_CHUNK_SIZE } from './render-constants.js';
-import { playChunkMap, hasPlayChunk, getPlayChunkCacheRevision } from './play-chunk-cache.js';
+import { hasPlayChunk, getPlayChunkCacheRevision } from './play-chunk-cache.js';
 import { seededHash } from '../tessellation-logic.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
@@ -48,7 +48,44 @@ let baseCacheH = 0;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
 const minimapBiomeRgbCache = new Map();
+
+/** Far wilds (`_distanceInactivated`) show this instead of a species portrait. */
+const UNKNOWN_POKEMON_MINIMAP_PATH = 'map-icons/unknown-pokemon.png';
+/** @type {Promise<void> | null} */
+let unknownPokemonMinimapInflight = null;
+
+function queueUnknownPokemonMinimapIconLoad() {
+  if (imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH)?.naturalWidth || unknownPokemonMinimapInflight) return;
+  unknownPokemonMinimapInflight = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(UNKNOWN_POKEMON_MINIMAP_PATH, img);
+      unknownPokemonMinimapInflight = null;
+      resolve();
+    };
+    img.onerror = () => {
+      unknownPokemonMinimapInflight = null;
+      resolve();
+    };
+    img.src = UNKNOWN_POKEMON_MINIMAP_PATH;
+  });
+}
 const LOCAL_MINIMAP_REBUILD_MIN_MS = 80;
+
+/**
+ * Close minimap: outline each 8×8 micro play-chunk region.
+ * Green = present in bake cache; magenta dashed = in view but not baked yet.
+ * Also: set `globalThis.__DEBUG_MINIMAP_PLAY_CHUNKS__ = true` in the console (no reload if you flip after load — you need a re-render tick; pan once).
+ */
+const DEBUG_MINIMAP_PLAY_CHUNK_OVERLAY = false;
+
+function minimapPlayChunkDebugOn() {
+  return (
+    DEBUG_MINIMAP_PLAY_CHUNK_OVERLAY ||
+    (typeof globalThis !== 'undefined' && globalThis.__DEBUG_MINIMAP_PLAY_CHUNKS__ === true)
+  );
+}
+
 /** @type {HTMLCanvasElement | null} */
 let localMinimapCacheCanvas = null;
 let localMinimapCacheData = null;
@@ -412,6 +449,63 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
 }
 
 /**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} data
+ * @param {number} playerX micro X
+ * @param {number} playerY micro Y
+ * @param {number} w
+ * @param {number} h
+ */
+function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h) {
+  if (!minimapPlayChunkDebugOn()) return;
+
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const originX = Math.floor(playerX - w * 0.5);
+  const originY = Math.floor(playerY - h * 0.5);
+  const startX = Math.max(0, originX);
+  const startY = Math.max(0, originY);
+  const endX = Math.min(microW, originX + w);
+  const endY = Math.min(microH, originY + h);
+  if (startX >= endX || startY >= endY) return;
+
+  const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
+  const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
+  const endCx = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
+  const endCy = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (let cy = startCy; cy <= endCy; cy++) {
+    for (let cx = startCx; cx <= endCx; cx++) {
+      const key = `${cx},${cy}`;
+      const chunkX0 = cx * PLAY_CHUNK_SIZE;
+      const chunkY0 = cy * PLAY_CHUNK_SIZE;
+      const sx0 = chunkX0 - originX;
+      const sy0 = chunkY0 - originY;
+      const sx1 = sx0 + PLAY_CHUNK_SIZE;
+      const sy1 = sy0 + PLAY_CHUNK_SIZE;
+      const rx0 = Math.max(0, sx0);
+      const ry0 = Math.max(0, sy0);
+      const rx1 = Math.min(w, sx1);
+      const ry1 = Math.min(h, sy1);
+      if (rx0 >= rx1 || ry0 >= ry1) continue;
+      const rw = rx1 - rx0;
+      const rh = ry1 - ry0;
+      if (hasPlayChunk(key)) {
+        ctx.strokeStyle = 'rgba(72, 255, 140, 0.92)';
+        ctx.setLineDash([]);
+      } else {
+        ctx.strokeStyle = 'rgba(255, 72, 210, 0.88)';
+        ctx.setLineDash([2, 2]);
+      }
+      ctx.strokeRect(rx0 + 0.5, ry0 + 0.5, Math.max(0, rw - 1), Math.max(0, rh - 1));
+    }
+  }
+  ctx.restore();
+}
+
+/**
  * Draws wild spawn markers with portrait heads on minimap.
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ scale: number, ox: number, oy: number }} tf
@@ -444,8 +538,14 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
 
     const dexId = Math.floor(Number(m.ent.dexId) || 0);
     const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
-    const img = getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
-    if (!img || !img.naturalWidth) {
+    if (isDistanceEstimate) {
+      queueUnknownPokemonMinimapIconLoad();
+    }
+    const unknownImg = isDistanceEstimate ? imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH) : null;
+    const img = isDistanceEstimate
+      ? null
+      : getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
+    if (!isDistanceEstimate && (!img || !img.naturalWidth)) {
       const reqKey = `${dexId}:${portraitSlug}`;
       if (!minimapPortraitRequests.has(reqKey)) {
         minimapPortraitRequests.add(reqKey);
@@ -462,23 +562,25 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
     ctx.strokeStyle = isDistanceEstimate ? 'rgba(180, 190, 208, 0.7)' : 'rgba(255,255,255,0.85)';
     ctx.stroke();
 
-    if (img && img.naturalWidth) {
+    const drawClippedRoundPortrait = (tex) => {
       ctx.save();
       ctx.beginPath();
       ctx.arc(sx, sy, markerR - 1.1, 0, Math.PI * 2);
       ctx.clip();
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
+      const iw = tex.naturalWidth;
+      const ih = tex.naturalHeight;
       const side = (markerR - 1.1) * 2;
       const scale = Math.max(side / iw, side / ih);
       const dw = iw * scale;
       const dh = ih * scale;
-      ctx.drawImage(img, sx - dw * 0.5, sy - dh * 0.46, dw, dh);
-      if (isDistanceEstimate) {
-        ctx.fillStyle = 'rgba(0,0,0,0.42)';
-        ctx.fillRect(sx - markerR, sy - markerR, markerR * 2, markerR * 2);
-      }
+      ctx.drawImage(tex, sx - dw * 0.5, sy - dh * 0.46, dw, dh);
       ctx.restore();
+    };
+
+    if (unknownImg?.naturalWidth) {
+      drawClippedRoundPortrait(unknownImg);
+    } else if (img && img.naturalWidth) {
+      drawClippedRoundPortrait(img);
     } else {
       ctx.fillStyle = isDistanceEstimate ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
       ctx.beginPath();
@@ -486,7 +588,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
       ctx.fill();
     }
 
-    if (isDistanceEstimate) {
+    if (isDistanceEstimate && !unknownImg?.naturalWidth) {
       const qx = sx + markerR * 0.55;
       const qy = sy + markerR * 0.55;
       const qSize = Math.max(7, markerR * 1.05);
@@ -566,6 +668,7 @@ export function renderMinimap(canvas, data, player) {
   ctx.clearRect(0, 0, w, h);
   if (zoom === 'close') {
     drawLocalLoadedSpriteTileMinimap(ctx, data, player.x, player.y, { w, h });
+    drawPlayChunkBakeDebugOverlay(ctx, data, player.x, player.y, w, h);
   } else {
     ctx.save();
     ctx.translate(-tfOx * tfScale, -tfOy * tfScale);

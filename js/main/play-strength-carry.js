@@ -461,7 +461,7 @@ export function updateStrengthCarryInteraction(dt, player, data) {
 
 /**
  * Returns a grab prompt payload when a liftable Strength detail is in range.
- * @returns {{ itemKey: string } | null}
+ * @returns {{ itemKey: string, displayName: string | null, wildDexId?: number } | null}
  */
 export function getStrengthGrabPromptInfo(player, data) {
   if (!player || !data) return null;
@@ -478,11 +478,12 @@ export function getStrengthGrabPromptInfo(player, data) {
     return null;
   }
   const fainted = nearest.fainted;
-  const dex = Math.floor(Number(fainted.dexId) || 1);
+  const dex = Math.max(1, Math.floor(Number(fainted.dexId) || 1));
   const cfg = getPokemonConfig(dex);
   return {
     itemKey: '',
-    displayName: `Fainted ${String(cfg?.name || `#${dex}`)}`
+    displayName: `Fainted ${String(cfg?.name || `#${dex}`)}`,
+    wildDexId: dex
   };
 }
 

@@ -23,12 +23,26 @@ import {
   castIncinerate,
   castSilkShoot
 } from './zelda-ported-moves.js';
+import { castFireBlast, PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL } from './fire-blast-move.js';
+import {
+  beginPlayerFlameCharge,
+  tickPlayerFlameChargeDash,
+  PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL
+} from './flame-charge-move.js';
+import {
+  resetFireSpinChannel,
+  tickFireSpinHold,
+  spawnFireSpinReleaseBurst,
+  fireSpinTierFromCharge01,
+  PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL
+} from './fire-spin-move.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { updatePlayerCombatTimers } from '../player.js';
+import { strengthCarryBlocksWalk } from '../main/play-strength-carry.js';
 import { isChargeStrongAttackEligible, getWeakPartialChargeT, getChargeLevel } from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
@@ -98,6 +112,9 @@ let playerPrismaticLaserCooldown = 0;
 let playerPrismaticMergedBeam = null;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
+let playerFireBlastCooldown = 0;
+let playerFlameChargeCooldown = 0;
+let playerFireSpinCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
@@ -119,7 +136,7 @@ function pushProjectile(p) {
   activeProjectiles.push(p);
 }
 
-function pushParticle(p) {
+export function pushParticle(p) {
   // Same policy as projectiles to prevent reindex storms at particle cap.
   if (activeParticles.length >= MAX_PARTICLES) return;
   activeParticles.push(p);
@@ -260,10 +277,6 @@ function resolveMoveRuntimeAlias(moveId) {
     case 'dreamEater':
     case 'nightShade':
       return 'confusion';
-    case 'fireBlast':
-      return 'incinerate';
-    case 'fireSpin':
-      return 'flamethrower';
     case 'gust':
     case 'razorWind':
       return 'silkShoot';
@@ -305,6 +318,9 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'fireBlast') return castFireBlastMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'flameCharge') return castFlameChargeMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'fireSpin') return castFireSpinMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -324,13 +340,16 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'thunderbolt') return castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'fireBlast') return castFireBlastCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'flameCharge') return castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'fireSpin') return castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 /**
  * True when the given move has a dedicated charged variant (mirrors the `castMoveChargedById`
  * dispatch). HUD uses this to decide whether to reveal the 4-segment charge meter while holding.
- * Keep in sync with the dispatch above.
+ * Keep in sync with the dispatch above (`castMoveChargedById` + charged field skills).
  * @param {string} moveId
  */
 export function moveSupportsChargedRelease(moveId) {
@@ -339,7 +358,10 @@ export function moveSupportsChargedRelease(moveId) {
     resolved === 'ember' ||
     resolved === 'waterBurst' ||
     resolved === 'thunder' ||
-    resolved === 'thunderbolt'
+    resolved === 'thunderbolt' ||
+    resolved === 'fireBlast' ||
+    resolved === 'flameCharge' ||
+    resolved === 'fireSpin'
   );
 }
 
@@ -663,6 +685,112 @@ export function castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEnt
   return true;
 }
 
+/**
+ * Fire Blast tap — tier **1** (quick puff). Charged releases use {@link castFireBlastCharged}.
+ */
+export function castFireBlastMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFireBlastCooldown > 0) return false;
+  playerFireBlastCooldown = PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castFireBlast(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    tier: 1
+  });
+  return true;
+}
+
+/**
+ * Charged Fire Blast. Same 3-tier ladder as Thunder: weak tap → standard → heavy (plus tier-3 ★ companions).
+ */
+export function castFireBlastCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFireBlastCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  playerFireBlastCooldown = PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castFireBlast(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    tier
+  });
+  return true;
+}
+
+/**
+ * Flame Charge tap — tier **1** (short comet hop). Charged releases use {@link castFlameChargeCharged}.
+ */
+export function castFlameChargeMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFlameChargeCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  if (!beginPlayerFlameCharge(sourceEntity, 1, sourceX, sourceY, targetX, targetY)) return false;
+  playerFlameChargeCooldown = PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/**
+ * Charged Flame Charge — 3 tiers: short roll → sustained comet → long inferno run with head bursts + side wisps.
+ */
+export function castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFlameChargeCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  if (!beginPlayerFlameCharge(sourceEntity, tier, sourceX, sourceY, targetX, targetY)) return false;
+  playerFlameChargeCooldown =
+    PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+function fireSpinAimUnit(sourceX, sourceY, targetX, targetY) {
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const len = Math.hypot(dx, dy) || 1;
+  return { nx: dx / len, ny: dy / len };
+}
+
+/** Fire Spin tap — small outward burst (tier 1). */
+export function castFireSpinMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFireSpinCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const ch = Number(sourceEntity.fireSpinChannelSec) || 0;
+  const cx = (sourceEntity.visualX ?? sourceEntity.x ?? sourceX) + 0.5;
+  const cy = (sourceEntity.visualY ?? sourceEntity.y ?? sourceY) + 0.5;
+  const { nx, ny } = fireSpinAimUnit(sourceX, sourceY, targetX, targetY);
+  spawnFireSpinReleaseBurst(pushProjectile, sourceEntity, cx, cy, nx, ny, 1, ch);
+  resetFireSpinChannel(sourceEntity);
+  playerFireSpinCooldown = PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/** Charged Fire Spin release — 3 tiers; burst size / send speed scale with channel time + tier. */
+export function castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFireSpinCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const tier = fireSpinTierFromCharge01(charge01);
+  const ch = Number(sourceEntity.fireSpinChannelSec) || 0;
+  const cx = (sourceEntity.visualX ?? sourceEntity.x ?? sourceX) + 0.5;
+  const cy = (sourceEntity.visualY ?? sourceEntity.y ?? sourceY) + 0.5;
+  const { nx, ny } = fireSpinAimUnit(sourceX, sourceY, targetX, targetY);
+  spawnFireSpinReleaseBurst(pushProjectile, sourceEntity, cx, cy, nx, ny, tier, ch);
+  resetFireSpinChannel(sourceEntity);
+  playerFireSpinCooldown =
+    PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
 export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerSilkShootCooldown > 0) return false;
   playerSilkShootCooldown = 0.72;
@@ -874,6 +1002,8 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'poisonPowder') {
     castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'fireBlast') {
+    castFireBlast(entity.x, entity.y, playerX, playerY, entity, { ...opts, tier: 2 });
   } else if (moveId === 'incinerate') {
     castIncinerate(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'silkShoot') {
@@ -917,6 +1047,24 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return 0.95;
     case 'incinerate':
       return 0.78;
+    case 'fireBlast':
+      return Math.max(
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'flameCharge':
+      return Math.max(
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'fireSpin':
+      return Math.max(
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[3]
+      );
     case 'silkShoot':
       return 0.72;
     case 'thunder':
@@ -975,6 +1123,12 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerPoisonPowderCooldown;
     case 'incinerate':
       return playerIncinerateCooldown;
+    case 'fireBlast':
+      return playerFireBlastCooldown;
+    case 'flameCharge':
+      return playerFlameChargeCooldown;
+    case 'fireSpin':
+      return playerFireSpinCooldown;
     case 'silkShoot':
       return playerSilkShootCooldown;
     case 'thunder':
@@ -1018,6 +1172,9 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
+  playerFireBlastCooldown = Math.max(0, playerFireBlastCooldown - dt);
+  playerFlameChargeCooldown = Math.max(0, playerFlameChargeCooldown - dt);
+  playerFireSpinCooldown = Math.max(0, playerFireSpinCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
@@ -1029,8 +1186,24 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
   // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
   // yellow ground strike + splash-damage nearby wild pokemon.
-  tickThunderStrikes(dt, wildList, data, wildSpatial);
+  tickThunderStrikes(dt, wildList, data, wildSpatial, (wx, wy) => {
+    pushParticle({
+      type: 'grassFire',
+      x: wx,
+      y: wy,
+      vx: 0,
+      vy: 0,
+      z: 0.06,
+      vz: 0,
+      life: GRASS_FIRE_PARTICLE_SEC,
+      maxLife: GRASS_FIRE_PARTICLE_SEC
+    });
+  });
   tickThunderboltChains(wildList, data, player);
+
+  if (player && data) {
+    tickPlayerFlameChargeDash(player, dt, data, pushParticle);
+  }
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];

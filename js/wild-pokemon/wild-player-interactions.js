@@ -150,6 +150,49 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
 }
 
 /**
+ * Melee hit along an arbitrary segment (e.g. Flame Charge dash path). Picks the nearest wild
+ * along \([ax,ay] \to [bx,by]\) like tackle.
+ * @returns {{ hit: boolean, dexId?: number }}
+ */
+export function tryPlayerFlameChargeHitWildAlongSegment(player, data, ax, ay, bx, by, opts = {}) {
+  if (!player || !data) return { hit: false };
+  const px = Number(ax);
+  const py = Number(ay);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return { hit: false };
+  const ex = Number(bx);
+  const ey = Number(by);
+  if (!Number.isFinite(ex) || !Number.isFinite(ey)) return { hit: false };
+  const pz = Number(player.z) || 0;
+
+  let best = null;
+  let bestT = Infinity;
+  for (const e of entitiesByKey.values()) {
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+    const dex = e.dexId ?? 1;
+    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
+    const r = getPokemonHurtboxRadiusTiles(dex) + PLAYER_TACKLE_WILD_SWEEP_RADIUS;
+    const t = segmentCircleFirstHitT(px, py, ex, ey, hx, hy, r);
+    if (t == null) continue;
+    if (t < bestT) {
+      bestT = t;
+      best = e;
+    }
+  }
+  if (!best) return { hit: false };
+
+  const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
+  const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
+  if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  applyMeleeHitStop(best);
+  setEmotion(best, 5, false, 'Pain');
+  applyWildKnockbackFromPoint(best, ex, ey, knockback);
+  pushRecentNearbyEvent(best, 'player_field_move', 1.18);
+  broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
+  return { hit: true, dexId: best.dexId };
+}
+
+/**
  * Same damage / knockback / feedback as `tryPlayerTackleHitWild`, from an arbitrary impact point (e.g. thrown rock).
  * @returns {boolean} true if the entity was valid and effects were applied
  */

@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab — 13 peças (máscara 3×3)</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --surface: #141820;
+        --text: #e8ecf4;
+        --muted: #8b95a8;
+        --accent: #e60012;
+        --land: #3d7a4a;
+        --void: #1a1f2e;
+        --cell: 14px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem 1rem 2rem;
+      }
+      .top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.75rem 1.25rem;
+        margin-bottom: 0.75rem;
+      }
+      .top a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .top a:hover {
+        color: var(--text);
+      }
+      .top h1 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+        flex: 1 1 auto;
+      }
+      .hint {
+        font-size: 0.82rem;
+        color: var(--muted);
+        line-height: 1.45;
+        margin-bottom: 1rem;
+      }
+      .hint code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.78em;
+        background: var(--surface);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+      .layout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+      .tray {
+        flex: 0 0 auto;
+        width: min(100%, 280px);
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 0.75rem;
+        border: 1px solid #2a3140;
+      }
+      .tray h2 {
+        margin: 0 0 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .tray-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        gap: 0.5rem;
+      }
+      .piece {
+        cursor: grab;
+        user-select: none;
+        border-radius: 6px;
+        border: 1px solid #2a3140;
+        padding: 4px;
+        background: #0a0c10;
+        transition: border-color 0.12s, box-shadow 0.12s;
+      }
+      .piece:hover {
+        border-color: var(--accent);
+      }
+      .piece:active {
+        cursor: grabbing;
+      }
+      .piece.is-selected {
+        border-color: #4a9eff;
+        box-shadow: 0 0 0 1px #4a9eff;
+      }
+      .piece-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.62rem;
+        color: var(--muted);
+        text-align: center;
+        margin-bottom: 4px;
+        line-height: 1.2;
+        word-break: break-all;
+      }
+      .mini-outer {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+      }
+      .mini {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        width: 100%;
+        height: 100%;
+      }
+      .mini-outer canvas.mini-sprite {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.5;
+        pointer-events: none;
+        z-index: 1;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      .mini span {
+        border-radius: 1px;
+        background: var(--void);
+      }
+      .mini span.on {
+        background: var(--land);
+      }
+      .board-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 10px;
+        border: 1px solid #2a3140;
+        overflow: auto;
+        max-height: calc(100vh - 200px);
+        position: relative;
+      }
+      #boardHoverOutline {
+        position: absolute;
+        pointer-events: none;
+        border: 2px solid #f5d656;
+        border-radius: 3px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+        z-index: 4;
+        display: none;
+      }
+      #board {
+        display: grid;
+        gap: 1px;
+        background: #2a3140;
+        width: fit-content;
+        margin: 0 auto;
+      }
+      #board .cell {
+        width: var(--cell);
+        height: var(--cell);
+        background: var(--void);
+        cursor: crosshair;
+      }
+      #board .cell.on {
+        background: var(--land);
+      }
+      #board .cell.has-piece {
+        cursor: grab;
+      }
+      #board .cell.has-piece:active {
+        cursor: grabbing;
+      }
+      #board .cell.drag-over {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+        z-index: 1;
+      }
+      #board .cell.snap-preview {
+        outline: 2px solid #4a9eff;
+        outline-offset: -1px;
+        z-index: 2;
+      }
+      #board .cell.snap-preview-invalid {
+        outline: 2px solid #e65555;
+        outline-offset: -1px;
+        z-index: 3;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+        margin-top: 0.75rem;
+      }
+      .toolbar button {
+        font-family: inherit;
+        font-size: 0.82rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 6px;
+        border: 1px solid #2a3140;
+        background: #1c2230;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        border-color: var(--accent);
+      }
+      .toolbar label {
+        font-size: 0.8rem;
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .status {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        color: var(--muted);
+        margin-top: 0.5rem;
+        min-height: 1.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="top">
+        <a href="index.html">← Início</a>
+        <h1>Lab — 13 peças (máscara 3×3 por papel)</h1>
+      </div>
+      <p class="hint">
+        Arrasta uma peça da bandeja para a grelha — o canto do carimbo 3×3 <strong>alinha às células</strong> (incl. nos
+        espaços de 1px entre células) e <strong>encosta à borda</strong> se o bloco saísse fora da grelha. Pré-visualização
+        azul durante o arrasto. <strong>Arrasta na grelha</strong> (a partir de uma célula com dono) para <strong>mover</strong> a
+        peça 3×3; ao passar o rato, a <strong>área da peça</strong> fica com contorno dourado e o nome aparece no estado.
+        As caixas 3×3 das peças <strong>não podem sobrepor-se</strong> (pré-visualização vermelha = inválido).
+        <strong>Clique</strong> numa peça da bandeja e depois <strong>clique</strong> na grelha para carimbar no
+        mesmo sítio (útil sem arrastar). <code>EDGE_E</code> está como espelho de <code>EDGE_W</code> (no teu texto os
+        dois blocos eram iguais). Para ver <strong>micro + macro</strong> como no gerador (grelha 32×32 micro), usa o
+        <a href="terrain-relief-lab.html" style="color: #9ad8ff">Lab — relevo 3D</a> — esta página é só células micro.
+        O botão <strong>Ver sprites</strong> abre um overlay com o mesmo autotile do jogo (<code>Palette base — rock</code>,
+        <code>getRoleForCell</code>) sobre a tua máscara; o canvas do preview fica a <strong>80% opacidade</strong>.
+        <strong>Relevo em Y</strong> repete o mesmo autotile <strong>3 vezes</strong> por célula, só deslocado para cima (sem faces 3D).
+        Na bandeja,
+        cada mini 3×3 tem o mesmo autotile em <strong>50% opacidade</strong> por cima da grelha de máscara (máscara isolada em vazio).
+      </p>
+      <div class="layout">
+        <aside class="tray" id="tray">
+          <h2>Bandeja</h2>
+          <div class="tray-grid" id="trayPieces"></div>
+        </aside>
+        <div class="board-wrap" id="boardWrap">
+          <div id="board" aria-label="Grelha de montagem"></div>
+          <div id="boardHoverOutline" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="btnSpriteOverlay">Ver sprites (overlay 80%)</button>
+        <button type="button" id="btnExtrudedOverlay">Relevo em Y (3× tile)</button>
+        <button type="button" id="btnClear">Limpar grelha</button>
+        <label>
+          <input type="checkbox" id="chkMerge" checked />
+          Unir com OR (1 prevalece); desliga para sobrescrever só o 3×3
+        </label>
+      </div>
+      <p class="status" id="status"></p>
+    </div>
+    <script>
+      /**
+       * Padrões 3×3: 1 = “terra” no teu desenho, 0 = vazio.
+       * EDGE_W / EDGE_E: espelho (borda exposta a W vs E).
+       */
+      const PIECES = {
+        OUT_NW: [
+          [0, 0, 0],
+          [0, 1, 1],
+          [0, 1, 1]
+        ],
+        EDGE_N: [
+          [0, 0, 0],
+          [1, 1, 1],
+          [1, 1, 1]
+        ],
+        OUT_NE: [
+          [0, 0, 0],
+          [1, 1, 0],
+          [1, 1, 0]
+        ],
+        EDGE_W: [
+          [0, 1, 1],
+          [0, 1, 1],
+          [0, 1, 1]
+        ],
+        CENTER: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1]
+        ],
+        EDGE_E: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [1, 1, 0]
+        ],
+        IN_SE: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 0]
+        ],
+        IN_SW: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [0, 1, 1]
+        ],
+        OUT_SW: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [0, 0, 0]
+        ],
+        EDGE_S: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [0, 0, 0]
+        ],
+        OUT_SE: [
+          [0, 1, 1],
+          [0, 1, 1],
+          [0, 0, 0]
+        ],
+        IN_NE: [
+          [1, 1, 0],
+          [1, 1, 1],
+          [1, 1, 1]
+        ],
+        IN_NW: [
+          [0, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1]
+        ]
+      };
+
+      const ROLE_ORDER = [
+        'OUT_NW',
+        'EDGE_N',
+        'OUT_NE',
+        'EDGE_W',
+        'CENTER',
+        'EDGE_E',
+        'IN_SE',
+        'IN_SW',
+        'OUT_SW',
+        'EDGE_S',
+        'OUT_SE',
+        'IN_NE',
+        'IN_NW'
+      ];
+
+      const GRID_W = 42;
+      const GRID_H = 28;
+
+      /** @type {Uint8Array} row-major */
+      const grid = new Uint8Array(GRID_W * GRID_H);
+      /** Última peça que “escreveu” 1 nesta célula (replay com OR / overwrite). */
+      const cellPieceId = new Uint32Array(GRID_W * GRID_H);
+      /** 1 se alguma peça cobre esta célula na sua caixa 3×3 (para cursor e arrasto mesmo em “buracos” da máscara). */
+      const cellGrabHint = new Uint8Array(GRID_W * GRID_H);
+
+      /** @type {{ id: number, role: string, ox: number, oy: number }[]} */
+      let placements = [];
+      let nextPlacementId = 1;
+
+      const boardEl = document.getElementById('board');
+      const boardWrap = document.getElementById('boardWrap');
+      const hoverOutlineEl = document.getElementById('boardHoverOutline');
+      const trayEl = document.getElementById('trayPieces');
+      const statusEl = document.getElementById('status');
+      const chkMerge = document.getElementById('chkMerge');
+
+      let selectedRole = null;
+      let dragRole = null;
+      /** @type {{ phase: 'pending', pid: number, cx: number, cy: number, fromIndex: number, saved: { id: number, role: string, ox: number, oy: number } } | { phase: 'dragging', fromIndex: number, saved: { id: number, role: string, ox: number, oy: number } } | null} */
+      let boardGrab = null;
+      let suppressNextCellClick = false;
+      let hoverPieceId = 0;
+
+      function idx(x, y) {
+        return y * GRID_W + x;
+      }
+
+      function setStatus(t) {
+        statusEl.textContent = t;
+      }
+
+      /** Canto sup-esquerdo do 3×3 para caber inteiro na grelha. */
+      function clampStampOrigin(ox, oy) {
+        return {
+          x: Math.max(0, Math.min(GRID_W - 3, ox)),
+          y: Math.max(0, Math.min(GRID_H - 3, oy))
+        };
+      }
+
+      /** Pixel do viewport → índice da célula micro (snap nos gaps da grelha). */
+      function clientToSnappedCell(clientX, clientY) {
+        const br = boardEl.getBoundingClientRect();
+        if (clientX < br.left || clientX >= br.right || clientY < br.top || clientY >= br.bottom) return null;
+        const relX = clientX - br.left;
+        const relY = clientY - br.top;
+        const cs = getComputedStyle(boardEl);
+        const gap = parseFloat(cs.columnGap || cs.gap || '1') || 1;
+        const first = boardEl.children[0];
+        const cellW = first ? first.getBoundingClientRect().width : 14;
+        const cellH = first ? first.getBoundingClientRect().height : 14;
+        const stepX = cellW + gap;
+        const stepY = cellH + gap;
+        let gx = Math.floor(relX / stepX);
+        let gy = Math.floor(relY / stepY);
+        const rx = relX - gx * stepX;
+        const ry = relY - gy * stepY;
+        if (rx >= cellW && gx + 1 < GRID_W) gx++;
+        if (ry >= cellH && gy + 1 < GRID_H) gy++;
+        gx = Math.max(0, Math.min(GRID_W - 1, gx));
+        gy = Math.max(0, Math.min(GRID_H - 1, gy));
+        return { x: gx, y: gy };
+      }
+
+      function clearSnapPreview() {
+        boardEl.querySelectorAll('.cell.snap-preview, .cell.snap-preview-invalid').forEach((el) => {
+          el.classList.remove('snap-preview', 'snap-preview-invalid');
+        });
+      }
+
+      /** Caixa 3×3 (células inclusivas) do carimbo com origem lógica (ox, oy), já encostada à grelha. */
+      function stampBBoxClamped(ox, oy) {
+        const o = clampStampOrigin(ox, oy);
+        return { x0: o.x, y0: o.y, x1: o.x + 2, y1: o.y + 2 };
+      }
+
+      function bboxesOverlap2D(a, b) {
+        return !(a.x1 < b.x0 || b.x1 < a.x0 || a.y1 < b.y0 || b.y1 < a.y0);
+      }
+
+      /**
+       * True se a caixa 3×3 em (ox, oy) intersecta a de outra peça já em `placements`.
+       * @param {number | null} excludePlacementId — ignorar esta id (ex.: ainda não usado; lista já sem a peça ao mover).
+       */
+      function stampBboxHitsOtherPlacement(ox, oy, excludePlacementId) {
+        const a = stampBBoxClamped(ox, oy);
+        for (const p of placements) {
+          if (excludePlacementId != null && p.id === excludePlacementId) continue;
+          const b = stampBBoxClamped(p.ox, p.oy);
+          if (bboxesOverlap2D(a, b)) return true;
+        }
+        return false;
+      }
+
+      /** @param {boolean} [invalid] — contorno vermelho em vez de azul */
+      function setSnapPreview(originX, originY, invalid) {
+        clearSnapPreview();
+        const o = clampStampOrigin(originX, originY);
+        const cls = invalid ? 'snap-preview-invalid' : 'snap-preview';
+        for (let dy = 0; dy < 3; dy++) {
+          for (let dx = 0; dx < 3; dx++) {
+            const cell = boardEl.children[idx(o.x + dx, o.y + dy)];
+            if (cell) cell.classList.add(cls);
+          }
+        }
+      }
+
+      function replayPlacements() {
+        grid.fill(0);
+        cellPieceId.fill(0);
+        const merge = chkMerge.checked;
+        for (const p of placements) {
+          const mat = PIECES[p.role];
+          if (!mat) continue;
+          const o = clampStampOrigin(p.ox, p.oy);
+          for (let dy = 0; dy < 3; dy++) {
+            for (let dx = 0; dx < 3; dx++) {
+              const gx = o.x + dx;
+              const gy = o.y + dy;
+              const v = mat[dy][dx];
+              const i = idx(gx, gy);
+              if (merge) {
+                if (v) {
+                  grid[i] |= 1;
+                  cellPieceId[i] = p.id;
+                }
+              } else {
+                if (v) {
+                  grid[i] = 1;
+                  cellPieceId[i] = p.id;
+                } else {
+                  grid[i] = 0;
+                  cellPieceId[i] = 0;
+                }
+              }
+            }
+          }
+        }
+        cellGrabHint.fill(0);
+        for (const p of placements) {
+          const o = clampStampOrigin(p.ox, p.oy);
+          for (let dy = 0; dy < 3; dy++) {
+            for (let dx = 0; dx < 3; dx++) {
+              cellGrabHint[idx(o.x + dx, o.y + dy)] = 1;
+            }
+          }
+        }
+        refreshCells();
+      }
+
+      /** Peça mais “por cima” cuja caixa 3×3 contém (gx, gy). */
+      function pickPlacementIdAtCell(gx, gy) {
+        for (let i = placements.length - 1; i >= 0; i--) {
+          const p = placements[i];
+          const o = clampStampOrigin(p.ox, p.oy);
+          if (gx >= o.x && gx <= o.x + 2 && gy >= o.y && gy <= o.y + 2) return p.id;
+        }
+        return 0;
+      }
+
+      function addPlacement(role, originX, originY) {
+        const mat = PIECES[role];
+        if (!mat) return false;
+        const o = clampStampOrigin(originX, originY);
+        if (stampBboxHitsOtherPlacement(o.x, o.y, null)) {
+          setStatus('Espaço ocupado: as caixas 3×3 das peças não podem sobrepor-se.');
+          return false;
+        }
+        placements.push({ id: nextPlacementId++, role, ox: o.x, oy: o.y });
+        replayPlacements();
+        clearSnapPreview();
+        const raw = `(${originX},${originY})`;
+        const snapped = o.x !== originX || o.y !== originY ? ` → encostado (${o.x},${o.y})` : '';
+        setStatus(`${role} @ ${raw}${snapped}`);
+        return true;
+      }
+
+      function refreshCells() {
+        for (let y = 0; y < GRID_H; y++) {
+          for (let x = 0; x < GRID_W; x++) {
+            const cell = boardEl.children[idx(x, y)];
+            if (!cell) continue;
+            const i = idx(x, y);
+            const on = grid[i] === 1;
+            cell.classList.toggle('on', on);
+            cell.classList.toggle('has-piece', cellGrabHint[i] === 1);
+          }
+        }
+      }
+
+      function findPlacementIndexById(id) {
+        return placements.findIndex((p) => p.id === id);
+      }
+
+      function hideHoverOutline() {
+        hoverPieceId = 0;
+        if (hoverOutlineEl) {
+          hoverOutlineEl.style.display = 'none';
+        }
+      }
+
+      function updateHoverOutlineForPiece(pieceId) {
+        if (!hoverOutlineEl || pieceId === 0) {
+          hideHoverOutline();
+          return;
+        }
+        const p = placements.find((pl) => pl.id === pieceId);
+        if (!p) {
+          hideHoverOutline();
+          return;
+        }
+        const o = clampStampOrigin(p.ox, p.oy);
+        const c00 = boardEl.children[idx(o.x, o.y)];
+        const c22 = boardEl.children[idx(o.x + 2, o.y + 2)];
+        if (!c00 || !c22) {
+          hideHoverOutline();
+          return;
+        }
+        const wr = boardWrap.getBoundingClientRect();
+        const a = c00.getBoundingClientRect();
+        const b = c22.getBoundingClientRect();
+        const left = a.left - wr.left + boardWrap.scrollLeft;
+        const top = a.top - wr.top + boardWrap.scrollTop;
+        const width = b.right - a.left;
+        const height = b.bottom - a.top;
+        hoverOutlineEl.style.left = `${left}px`;
+        hoverOutlineEl.style.top = `${top}px`;
+        hoverOutlineEl.style.width = `${width}px`;
+        hoverOutlineEl.style.height = `${height}px`;
+        hoverOutlineEl.style.display = 'block';
+        hoverPieceId = pieceId;
+        setStatus(`${p.role} — canto (${o.x}, ${o.y})`);
+      }
+
+      function syncHoverFromClient(clientX, clientY) {
+        if (boardGrab && boardGrab.phase === 'dragging') {
+          hideHoverOutline();
+          return;
+        }
+        const p = clientToSnappedCell(clientX, clientY);
+        if (!p) {
+          hideHoverOutline();
+          return;
+        }
+        const pid = pickPlacementIdAtCell(p.x, p.y);
+        if (!pid) {
+          hideHoverOutline();
+          return;
+        }
+        if (pid === hoverPieceId && hoverOutlineEl?.style.display === 'block') return;
+        updateHoverOutlineForPiece(pid);
+      }
+
+      function buildTray() {
+        trayEl.innerHTML = '';
+        for (const role of ROLE_ORDER) {
+          const mat = PIECES[role];
+          const wrap = document.createElement('div');
+          wrap.className = 'piece';
+          wrap.dataset.role = role;
+          wrap.draggable = true;
+          wrap.setAttribute('title', role);
+
+          const lab = document.createElement('div');
+          lab.className = 'piece-label';
+          lab.textContent = role;
+
+          const miniOuter = document.createElement('div');
+          miniOuter.className = 'mini-outer';
+          const mini = document.createElement('div');
+          mini.className = 'mini';
+          for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+              const s = document.createElement('span');
+              if (mat[r][c]) s.classList.add('on');
+              mini.appendChild(s);
+            }
+          }
+          const miniSprite = document.createElement('canvas');
+          miniSprite.className = 'mini-sprite';
+          miniSprite.setAttribute('aria-hidden', 'true');
+          miniOuter.appendChild(mini);
+          miniOuter.appendChild(miniSprite);
+
+          wrap.appendChild(lab);
+          wrap.appendChild(miniOuter);
+
+          wrap.addEventListener('click', () => {
+            document.querySelectorAll('.piece.is-selected').forEach((el) => el.classList.remove('is-selected'));
+            selectedRole = role;
+            wrap.classList.add('is-selected');
+            setStatus(`Selecionado: ${role} — clica na grelha para carimbar.`);
+          });
+
+          wrap.addEventListener('dragstart', (e) => {
+            dragRole = role;
+            e.dataTransfer.setData('text/plain', role);
+            e.dataTransfer.effectAllowed = 'copy';
+            try {
+              e.dataTransfer.setDragImage(wrap, 24, 24);
+            } catch {
+              /* ignore */
+            }
+          });
+
+          wrap.addEventListener('dragend', () => {
+            dragRole = null;
+            clearSnapPreview();
+          });
+
+          trayEl.appendChild(wrap);
+        }
+      }
+
+      function buildBoard() {
+        boardEl.style.gridTemplateColumns = `repeat(${GRID_W}, var(--cell))`;
+        boardEl.innerHTML = '';
+        for (let y = 0; y < GRID_H; y++) {
+          for (let x = 0; x < GRID_W; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.dataset.x = String(x);
+            cell.dataset.y = String(y);
+
+            cell.addEventListener('click', () => {
+              if (suppressNextCellClick) return;
+              if (!selectedRole) return;
+              const c = clampStampOrigin(x, y);
+              addPlacement(selectedRole, c.x, c.y);
+            });
+
+            boardEl.appendChild(cell);
+          }
+        }
+      }
+
+      document.getElementById('btnClear').addEventListener('click', () => {
+        clearSnapPreview();
+        placements = [];
+        nextPlacementId = 1;
+        replayPlacements();
+        hideHoverOutline();
+        setStatus('Grelha limpa.');
+      });
+
+      chkMerge.addEventListener('change', () => {
+        replayPlacements();
+        hideHoverOutline();
+      });
+
+      if (boardWrap) {
+        boardWrap.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          const p = clientToSnappedCell(e.clientX, e.clientY);
+          if (!p) {
+            e.dataTransfer.dropEffect = 'none';
+            clearSnapPreview();
+            return;
+          }
+          const o = clampStampOrigin(p.x, p.y);
+          const role = dragRole || e.dataTransfer.getData('text/plain');
+          const invalid = !!(role && PIECES[role] && stampBboxHitsOtherPlacement(o.x, o.y, null));
+          e.dataTransfer.dropEffect = invalid ? 'none' : 'copy';
+          setSnapPreview(p.x, p.y, invalid);
+        });
+
+        boardWrap.addEventListener('dragleave', (e) => {
+          const rt = e.relatedTarget;
+          if (!rt || !boardWrap.contains(rt)) clearSnapPreview();
+        });
+
+        boardWrap.addEventListener('drop', (e) => {
+          e.preventDefault();
+          clearSnapPreview();
+          const role = e.dataTransfer.getData('text/plain') || dragRole;
+          if (!role || !PIECES[role]) return;
+          const p = clientToSnappedCell(e.clientX, e.clientY);
+          if (!p) return;
+          const o = clampStampOrigin(p.x, p.y);
+          if (stampBboxHitsOtherPlacement(o.x, o.y, null)) {
+            setStatus('Largar aqui sobreporia outra peça (caixa 3×3).');
+            return;
+          }
+          addPlacement(role, o.x, o.y);
+        });
+
+        boardWrap.addEventListener('mousemove', (e) => {
+          syncHoverFromClient(e.clientX, e.clientY);
+          if (boardGrab && boardGrab.phase === 'dragging') {
+            const p = clientToSnappedCell(e.clientX, e.clientY);
+            if (!p) {
+              clearSnapPreview();
+              return;
+            }
+            const o = clampStampOrigin(p.x, p.y);
+            const invalid = stampBboxHitsOtherPlacement(o.x, o.y, null);
+            setSnapPreview(p.x, p.y, invalid);
+          }
+        });
+
+        boardWrap.addEventListener('mouseleave', () => {
+          if (!boardGrab || boardGrab.phase !== 'dragging') hideHoverOutline();
+        });
+
+        boardWrap.addEventListener('scroll', () => {
+          if (hoverPieceId) updateHoverOutlineForPiece(hoverPieceId);
+        });
+
+        boardWrap.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          const t = e.target;
+          if (!t || !t.classList || !t.classList.contains('cell')) return;
+          const gx = parseInt(t.dataset.x, 10);
+          const gy = parseInt(t.dataset.y, 10);
+          if (Number.isNaN(gx) || Number.isNaN(gy)) return;
+          const pid = pickPlacementIdAtCell(gx, gy);
+          if (!pid) return;
+          const fromIndex = findPlacementIndexById(pid);
+          if (fromIndex < 0) return;
+          const saved = { ...placements[fromIndex] };
+          boardGrab = {
+            phase: 'pending',
+            pid,
+            cx: e.clientX,
+            cy: e.clientY,
+            fromIndex,
+            saved
+          };
+        });
+      }
+
+      window.addEventListener('pointermove', (e) => {
+        if (!boardGrab || boardGrab.phase !== 'pending') return;
+        const dx = e.clientX - boardGrab.cx;
+        const dy = e.clientY - boardGrab.cy;
+        if (dx * dx + dy * dy < 36) return;
+        const { fromIndex, saved } = boardGrab;
+        placements.splice(fromIndex, 1);
+        replayPlacements();
+        boardGrab = { phase: 'dragging', fromIndex, saved };
+        suppressNextCellClick = true;
+        setSnapPreview(saved.ox, saved.oy);
+        const p = clientToSnappedCell(e.clientX, e.clientY);
+        if (p) {
+          const o = clampStampOrigin(p.x, p.y);
+          setSnapPreview(p.x, p.y, stampBboxHitsOtherPlacement(o.x, o.y, null));
+        }
+      });
+
+      window.addEventListener('pointerup', (e) => {
+        if (!boardGrab) return;
+        if (boardGrab.phase === 'pending') {
+          boardGrab = null;
+          return;
+        }
+        const { fromIndex, saved } = boardGrab;
+        boardGrab = null;
+        clearSnapPreview();
+        const br = boardWrap.getBoundingClientRect();
+        const inside =
+          e.clientX >= br.left &&
+          e.clientX < br.right &&
+          e.clientY >= br.top &&
+          e.clientY < br.bottom;
+        if (inside) {
+          const p = clientToSnappedCell(e.clientX, e.clientY);
+          if (p) {
+            const o = clampStampOrigin(p.x, p.y);
+            if (stampBboxHitsOtherPlacement(o.x, o.y, null)) {
+              placements.splice(fromIndex, 0, saved);
+              replayPlacements();
+              setStatus('Não podes sobrepor outra peça (caixa 3×3).');
+            } else {
+              placements.splice(fromIndex, 0, { id: saved.id, role: saved.role, ox: o.x, oy: o.y });
+              replayPlacements();
+              setStatus(`${saved.role} movido → (${o.x}, ${o.y})`);
+            }
+          } else {
+            placements.splice(fromIndex, 0, saved);
+            replayPlacements();
+            setStatus('Movimento cancelado.');
+          }
+        } else {
+          placements.splice(fromIndex, 0, saved);
+          replayPlacements();
+          setStatus('Movimento cancelado (largar fora da grelha).');
+        }
+        window.setTimeout(() => {
+          suppressNextCellClick = false;
+        }, 0);
+      });
+
+      window.addEventListener('pointercancel', () => {
+        if (!boardGrab || boardGrab.phase !== 'dragging') {
+          boardGrab = null;
+          return;
+        }
+        const { fromIndex, saved } = boardGrab;
+        boardGrab = null;
+        clearSnapPreview();
+        placements.splice(fromIndex, 0, saved);
+        replayPlacements();
+        suppressNextCellClick = false;
+        setStatus('Movimento cancelado.');
+      });
+
+      const btnSpriteOverlay = document.getElementById('btnSpriteOverlay');
+      if (btnSpriteOverlay) {
+        btnSpriteOverlay.addEventListener('click', async () => {
+          try {
+            setStatus('A carregar sprites…');
+            const mod = await import('./js/terrain-13-sprite-preview-overlay.js');
+            await mod.openSpriteOverlay(new Uint8Array(grid), GRID_W, GRID_H);
+            setStatus('Overlay fechado.');
+          } catch (err) {
+            setStatus('Sprites: ' + String(err?.message || err));
+          }
+        });
+      }
+
+      const btnExtrudedOverlay = document.getElementById('btnExtrudedOverlay');
+      if (btnExtrudedOverlay) {
+        btnExtrudedOverlay.addEventListener('click', async () => {
+          try {
+            setStatus('A carregar relevo em Y…');
+            const mod = await import('./js/terrain-13-extruded-preview-overlay.js');
+            await mod.openExtrudedTerrainOverlay(new Uint8Array(grid), GRID_W, GRID_H);
+            setStatus('Overlay relevo fechado.');
+          } catch (err) {
+            setStatus('Relevo em Y: ' + String(err?.message || err));
+          }
+        });
+      }
+
+      buildTray();
+      buildBoard();
+      setStatus(`${GRID_W}×${GRID_H} células — arrasta ou seleciona + clique.`);
+
+      import('./js/terrain-13-tray-piece-sprites.js')
+        .then((mod) => mod.hydrateTraySpriteOverlays(trayEl, PIECES))
+        .catch((err) => {
+          setStatus('Sprites na bandeja: ' + String(err?.message || err));
+        });
+    </script>
+  </body>
+</html>

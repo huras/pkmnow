@@ -151,6 +151,31 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
       ctx.arc(px, py, Math.max(4, tileW * 0.22) * a, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (p.type === 'flameChargeTrail' || p.type === 'flameChargeHead') {
+    const tier = Number(p.tier) || 2;
+    const head = p.type === 'flameChargeHead';
+    const r = (head ? tileW * 0.16 : tileW * 0.11) * (0.55 + 0.45 * a) * (tier === 3 ? 1.12 : tier === 2 ? 1.04 : 1);
+    const grd = ctx.createRadialGradient(px - r * 0.2, py - r * 0.25, r * 0.05, px, py, r);
+    grd.addColorStop(0, head ? 'rgba(255,255,220,0.95)' : 'rgba(255,240,180,0.88)');
+    grd.addColorStop(0.45, 'rgba(255,120,40,0.72)');
+    grd.addColorStop(1, 'rgba(180,20,0,0.08)');
+    ctx.fillStyle = grd;
+    ctx.globalAlpha = Math.min(1, a * (head ? 1.05 : 0.92));
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  } else if (p.type === 'fireSpinSpark') {
+    const s = Math.max(0.25, Math.min(1.2, Number(p.size01) || 0.6));
+    const r = Math.max(1.5, tileW * 0.07 * s) * (0.45 + 0.55 * a);
+    const grd = ctx.createRadialGradient(px - r * 0.15, py - r * 0.2, r * 0.04, px, py, r);
+    grd.addColorStop(0, `rgba(255,255,200,${0.55 * a})`);
+    grd.addColorStop(0.5, `rgba(255,140,40,${0.5 * a})`);
+    grd.addColorStop(1, `rgba(200,40,0,${0.08 * a})`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
   } else if (p.type === 'emberTrail') {
     ctx.fillStyle = '#ffa200';
     ctx.beginPath();

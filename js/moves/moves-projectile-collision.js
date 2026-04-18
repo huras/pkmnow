@@ -14,8 +14,11 @@ import { emitWorldReactionFromProjectile } from '../simulation/world-reactions.j
 const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set([
   'ember',
   'flamethrowerShot',
+  'fireSpinBurst',
   'incinerateShard',
-  'incinerateCore'
+  'incinerateCore',
+  'fireBlastCore',
+  'fireBlastShard'
 ]);
 
 /** XY overlap for damage: projectile circle vs target hurt radius (tiles), not walk collider. */
@@ -165,6 +168,36 @@ export function spawnIncinerateShards(proj, pushProjectileRef, effectZ) {
       radius: 0.2,
       timeToLive: 0.42 + Math.random() * 0.18,
       damage: (proj.splashDamage || 2) * 0.8,
+      sourceEntity: proj.sourceEntity,
+      fromWild: proj.fromWild,
+      hitsWild: proj.hitsWild,
+      hitsPlayer: proj.hitsPlayer,
+      trailAcc: EMBER_TRAIL_INTERVAL * (i / count)
+    });
+  }
+}
+
+/** Radial ember burst when a Fire Blast core detonates — scales with charge tier. */
+export function spawnFireBlastBurst(proj, pushProjectileRef, effectZ) {
+  const z0 = effectZ !== undefined && effectZ !== null ? Number(effectZ) || 0 : proj.z || 0;
+  const tier = Number(proj.blastTier) || 2;
+  const count = Math.max(8, Math.min(34, Number(proj.fireBlastBurstShards) || (tier === 3 ? 26 : tier === 2 ? 16 : 10)));
+  const baseDmg = (proj.splashDamage || 3) * (tier === 3 ? 0.68 : tier === 2 ? 0.74 : 0.82);
+  const speedLo = tier === 3 ? 10.2 : tier === 2 ? 9.2 : 8.4;
+  const speedHi = tier === 3 ? 13.4 : tier === 2 ? 11.8 : 10.6;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+    const speed = speedLo + Math.random() * (speedHi - speedLo);
+    pushProjectileRef({
+      type: 'fireBlastShard',
+      x: proj.x,
+      y: proj.y,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      z: z0,
+      radius: tier === 3 ? 0.28 : tier === 2 ? 0.24 : 0.22,
+      timeToLive: (tier === 3 ? 0.55 : tier === 2 ? 0.46 : 0.42) + Math.random() * 0.22,
+      damage: baseDmg * (0.88 + Math.random() * 0.22),
       sourceEntity: proj.sourceEntity,
       fromWild: proj.fromWild,
       hitsWild: proj.hitsWild,

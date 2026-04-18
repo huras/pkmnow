@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab — relevo 3D (autotile base)</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --surface: #141820;
+        --text: #e8ecf4;
+        --muted: #8b95a8;
+        --accent: #e60012;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .relief-page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.25rem 1rem 2rem;
+      }
+      .relief-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.75rem 1.25rem;
+        margin-bottom: 1rem;
+      }
+      .relief-top a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .relief-top a:hover {
+        color: var(--text);
+      }
+      .relief-top h1 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin: 0;
+        flex: 1 1 auto;
+      }
+      .relief-hint {
+        font-size: 0.85rem;
+        color: var(--muted);
+        line-height: 1.45;
+        margin-bottom: 0.75rem;
+      }
+      .relief-hint code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8em;
+        background: var(--surface);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+      .relief-status {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 0.5rem;
+        min-height: 1.25em;
+      }
+      .relief-canvas-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+      .relief-canvas-wrap {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 10px;
+        display: inline-block;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      .macro-preview-wrap {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 10px;
+        border: 1px solid #2a3140;
+        max-width: min(100%, 320px);
+      }
+      .macro-preview-wrap h2 {
+        margin: 0 0 0.35rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .macro-preview-wrap p {
+        margin: 0 0 0.5rem;
+        font-size: 0.72rem;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      #macroPreviewCanvas {
+        display: block;
+        image-rendering: pixelated;
+        border-radius: 4px;
+        border: 1px solid #2a3140;
+      }
+      #reliefCanvas {
+        display: block;
+        cursor: crosshair;
+        border-radius: 6px;
+        touch-action: none;
+      }
+      .relief-toolbar {
+        margin-top: 0.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        align-items: center;
+      }
+      .relief-toolbar label {
+        font-size: 0.85rem;
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .relief-toolbar button {
+        font-family: inherit;
+        font-size: 0.85rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #2a3140;
+        background: #1c2230;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .relief-toolbar button:hover {
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .relief-export-details {
+        margin-top: 0.75rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .relief-export-details summary {
+        cursor: pointer;
+        user-select: none;
+      }
+      #reliefExportBox {
+        width: 100%;
+        margin-top: 0.5rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        background: #0a0c10;
+        color: var(--text);
+        border: 1px solid #2a3140;
+        border-radius: 6px;
+        padding: 0.5rem;
+        resize: vertical;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="relief-page">
+      <div class="relief-top">
+        <a href="index.html">← Início</a>
+        <h1>Lab — relevo 3D (2 níveis, autotile <code>conc-conv-a</code>)</h1>
+      </div>
+      <p class="relief-hint">
+        Nível 0: plano todo em <code>CENTER</code>. Nível 1: <strong>clique esquerdo</strong> pinta
+        <strong>só aquele tile</strong> no nível 1; pode <strong>arrastar</strong> com o botão pressionado. <strong>Clique
+        direito</strong> apaga só o tile (volta ao nível 0). O autotile usa a mesma máscara que o jogo
+        (<code>getRoleForCell</code> + preenchimento de buracos minúsculos em <code>conc-conv-a</code>). Cada quadrado
+        no canvas = <strong>1 micro-tile</strong> (como no jogo). A grelha laranja marca blocos de
+        <strong>32×32 micro</strong> (<code>MACRO_TILE_STRIDE</code> em <code>chunking.js</code>). À direita: vista
+        <strong>macro</strong> (uma célula por bloco 32×32; verde se existir pelo menos um <code>1</code> no bloco).
+        Linhas de
+        <strong>1 tile</strong> de espessura caem no fallback <code>CENTER</code> sem bordas — usa
+        <strong>Corrigir máscara</strong> para engrossar o mínimo (fio vertical/horizontal, ilha 1×1, etc.) até o papel
+        deixar de ser <code>CENTER</code> ilegítimo.
+      </p>
+      <div class="relief-canvas-row">
+        <div class="relief-canvas-wrap">
+          <canvas id="reliefCanvas" width="1152" height="768" aria-label="Grelha de relevo (micro)"></canvas>
+        </div>
+        <aside class="macro-preview-wrap">
+          <h2>Vista macro</h2>
+          <p>
+            Cada célula = <code>32×32</code> micro-tiles (mesmo stride que o gerador). Verde = máscara de terraço em
+            algum micro desse bloco.
+          </p>
+          <canvas id="macroPreviewCanvas" width="2" height="1" aria-label="Pré-visualização macro"></canvas>
+        </aside>
+      </div>
+      <div class="relief-toolbar">
+        <button type="button" id="btnClearTerrace">Limpar terraços (só nível 0)</button>
+        <button type="button" id="btnExportJson">Copiar estado (JSON)</button>
+        <button type="button" id="btnImportJson">Importar JSON…</button>
+        <input type="file" id="fileImportRelief" class="hidden" accept=".json,application/json" />
+        <label>
+          <input type="checkbox" id="chkLift" checked />
+          Elevar desenho do nível 1 (relevo)
+        </label>
+        <button type="button" id="btnExpandMask">Corrigir máscara (autotile)</button>
+        <label>
+          <input type="checkbox" id="chkAutoExpand" checked />
+          Corrigir ao soltar o rato
+        </label>
+        <label>
+          <input type="checkbox" id="chkMacroOverlay" checked />
+          Linhas da grelha macro (32×32 micro)
+        </label>
+      </div>
+      <p class="relief-hint" style="margin-top: 0.5rem">
+        Para mostrar um exemplo aqui no Cursor: desenha no canvas → <strong>Copiar estado (JSON)</strong> → cola numa
+        mensagem em bloco de código (```json … ```). Eu consigo reproduzir com <strong>Importar JSON</strong> ou só
+        lendo o texto.
+      </p>
+      <details class="relief-export-details">
+        <summary>JSON (se o navegador não copiar)</summary>
+        <textarea id="reliefExportBox" readonly rows="4" spellcheck="false"></textarea>
+      </details>
+      <p class="relief-status" id="reliefStatus"></p>
+    </div>
+    <script type="module" src="js/terrain-relief-lab.js"></script>
+  </body>
+</html>

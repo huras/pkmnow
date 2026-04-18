@@ -207,6 +207,7 @@ export function collectRenderItems(options) {
     (borrowDiglettArt ? !!pDig : !!pDigSelf || isUndergroundBurrowerDex(playerDex));
   const combatShoot = (player.moveShootAnimSec || 0) > 0 && !!pShootSheet;
   const combatLmbAttack = (player.lmbAttackAnimSec || 0) > 0;
+  const flameChargeRoll = (player.flameChargeDashSec || 0) > 0.001 && !!pChargeSheet;
   const combatCharge =
     !player.digBurrowMode &&
     (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
@@ -232,6 +233,9 @@ export function collectRenderItems(options) {
       pSheet = isPlayerMoving ? pWalk : pIdle;
       pmdAnimSlice = isPlayerMoving ? 'walk' : 'idle';
     }
+  } else if (flameChargeRoll) {
+    pSheet = pChargeSheet;
+    pmdAnimSlice = 'charge';
   } else if (combatCharge) {
     pSheet = pChargeSheet;
     pmdAnimSlice = 'charge';
