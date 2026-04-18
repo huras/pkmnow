@@ -78,7 +78,7 @@ export function resumeSpatialAudioContext() {
 }
 
 /**
- * @typedef {{ panner: PannerNode, filter: BiquadFilterNode }} SpatialMediaGraph
+ * @typedef {{ panner: PannerNode, filter: BiquadFilterNode, fadeGain?: GainNode }} SpatialMediaGraph
  */
 
 /** @type {WeakMap<HTMLMediaElement, SpatialMediaGraph>} */
@@ -119,6 +119,46 @@ export function wireSpatialMediaElement(audio) {
   panner.connect(spatialMasterGain || ctx.destination);
 
   const g = { panner, filter };
+  mediaGraphs.set(audio, g);
+  return g;
+}
+
+/**
+ * Like {@link wireSpatialMediaElement}, but inserts a fade `GainNode` between filter and panner
+ * so callers can cross-fade looping sources (e.g. `Fire.ogg` burning loops) without touching
+ * `audio.volume` (which is per-element and non-rampable in Web Audio). Idempotent per element.
+ * @param {HTMLMediaElement} audio
+ * @returns {SpatialMediaGraph & { fadeGain: GainNode }}
+ */
+export function wireLoopingSpatialMediaElement(audio) {
+  const existing = /** @type {SpatialMediaGraph & { fadeGain?: GainNode }} */ (mediaGraphs.get(audio));
+  if (existing?.fadeGain) return /** @type {SpatialMediaGraph & { fadeGain: GainNode }} */ (existing);
+
+  const ctx = getSpatialAudioContext();
+  const source = ctx.createMediaElementSource(audio);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 20000;
+  filter.Q.value = 0.65;
+
+  const fadeGain = ctx.createGain();
+  fadeGain.gain.value = 0;
+
+  const panner = ctx.createPanner();
+  panner.panningModel = 'equalpower';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = 2.4;
+  panner.maxDistance = 1400;
+  panner.rolloffFactor = 0.24;
+  panner.coneInnerAngle = 360;
+  panner.coneOuterAngle = 360;
+
+  source.connect(filter);
+  filter.connect(fadeGain);
+  fadeGain.connect(panner);
+  panner.connect(spatialMasterGain || ctx.destination);
+
+  const g = { panner, filter, fadeGain };
   mediaGraphs.set(audio, g);
   return g;
 }

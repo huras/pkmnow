@@ -433,14 +433,17 @@ export function getFormalTreeTrunkCircle(rootX, my, data) {
 
 /**
  * World-space (micro tile coords, float): true if point lies inside a formal trunk circle.
+ * `radiusMult` scales the hit radius (defaults to 1 = physical collider). Pass
+ * {@link TREE_MOVE_HITBOX_RADIUS_MULT} from `scatter-collider-config.js` for move-impact checks.
  */
-export function formalTreeTrunkBlocksWorldPoint(wx, wy, data) {
+export function formalTreeTrunkBlocksWorldPoint(wx, wy, data, radiusMult = 1) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
 
   const ix = Math.floor(wx);
   const iy = Math.floor(wy);
+  const mult = Number.isFinite(radiusMult) && radiusMult > 0 ? radiusMult : 1;
 
   for (let my = iy - 1; my <= iy + 1; my++) {
     if (my < 0 || my >= microH) continue;
@@ -450,7 +453,8 @@ export function formalTreeTrunkBlocksWorldPoint(wx, wy, data) {
       if (!c) continue;
       const dx = wx - c.cx;
       const dy = wy - c.cy;
-      if (dx * dx + dy * dy <= c.r * c.r) return true;
+      const effR = c.r * mult;
+      if (dx * dx + dy * dy <= effR * effR) return true;
     }
   }
   return false;
@@ -638,7 +642,7 @@ export function getScatterNonTreeVegetationCircleWorldSpanIfOrigin(ox0, oy0, dat
 /**
  * @param {'tree' | 'nonTreeSolid' | 'any'} which
  */
-function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
+function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which, radiusMult = 1) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
@@ -646,6 +650,7 @@ function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
   const ix = Math.floor(wx);
   const iy = Math.floor(wy);
   const originMemo = new Map();
+  const mult = Number.isFinite(radiusMult) && radiusMult > 0 ? radiusMult : 1;
 
   for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
     for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
@@ -662,7 +667,8 @@ function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
       }
       const dx = wx - p.cx;
       const dy = wy - p.cy;
-      if (dx * dx + dy * dy <= p.radius * p.radius) return true;
+      const effR = p.radius * mult;
+      if (dx * dx + dy * dy <= effR * effR) return true;
     }
   }
   return false;
@@ -670,9 +676,11 @@ function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which) {
 
 /**
  * World-space: true if point lies inside a scatter trunk circle (any origin near sample).
+ * `radiusMult` scales the hit radius (defaults to 1 = physical collider). Pass
+ * {@link TREE_MOVE_HITBOX_RADIUS_MULT} from `scatter-collider-config.js` for move-impact checks.
  */
-export function scatterTreeTrunkBlocksWorldPoint(wx, wy, data) {
-  return scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, 'tree');
+export function scatterTreeTrunkBlocksWorldPoint(wx, wy, data, radiusMult = 1) {
+  return scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, 'tree', radiusMult);
 }
 
 /** World-space: point inside any non-tree solid scatter “trunk” circle (same scan window as trees). */

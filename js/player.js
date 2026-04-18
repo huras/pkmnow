@@ -40,6 +40,7 @@ import { advancePlayerSpeechBubble, setPlayerSpeechBubble } from './social/speec
 import { playJumpSfx } from './audio/jump-sfx.js';
 import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
 import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
+import { advanceRainFootstepFxForDistance } from './weather/rain-footstep-fx.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
@@ -832,6 +833,11 @@ export function updatePlayer(dt, data) {
   const wantFootFloorSfx =
     !!player.grounded && !isAirborne && !player.digBurrowMode && !playerBurrowWalkActive;
   advanceFootFloorStepsForDistance(player, movedWorldTiles, wantFootFloorSfx, player);
+
+  // Rain footprints: splashes dropped at the PMD feet anchor while walking during rain
+  // (the fx module itself gates on rain intensity, so off-weather is free here).
+  const feetForFx = worldFeetFromPivotCell(player.x, player.y, imageCache, player.dexId || 94, true);
+  advanceRainFootstepFxForDistance(player, movedWorldTiles, wantFootFloorSfx, feetForFx.x, feetForFx.y);
 
   // 3. Vertical — creative flight (Flying) or jump / gravity
   if (flightMove) {

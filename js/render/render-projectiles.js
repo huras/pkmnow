@@ -175,6 +175,79 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
     ctx.fillStyle = `rgba(255, 110, 195, ${0.45 * a})`;
     ctx.fillRect(-halfL, -th * 0.08, len, th * 0.16);
     ctx.restore();
+  } else if (p.type === 'thunderShockBeam') {
+    // Jagged yellow lightning arc between caster and aim point. The polyline is re-rolled
+    // every frame so the bolt crackles naturally; three passes (outer glow → warm body →
+    // hot white core) give depth without needing `ctx.shadowBlur` (too expensive when
+    // combined with `lighter` compositing). A second "fork" bolt lands next to the primary
+    // for that classic split-lightning look.
+    const x0 = snapPx(p.beamStartX * tileW);
+    const y0 = snapPx(p.beamStartY * tileH - (p.z || 0) * tileH);
+    const x1 = snapPx(p.beamEndX * tileW);
+    const y1 = snapPx(p.beamEndY * tileH - (p.z || 0) * tileH);
+    const maxT = p.beamTtlMax || 0.11;
+    const ttl = Math.max(0, p.timeToLive ?? maxT);
+    // Per-puff life envelope: snap bright right at spawn, soften as it ages. A single
+    // sine on top gives a subtle per-frame flicker on top of the age decay.
+    const lifeT = Math.max(0, Math.min(1, ttl / maxT));
+    const flicker = 0.72 + Math.sin(time * 58 + (p.jagSeed || 0)) * 0.28;
+    const a = Math.max(0.25, lifeT * 0.95 + 0.1) * flicker;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx);
+    // Segment count scales with length: short zaps stay snappy, long arcs get more jags.
+    const segments = Math.max(6, Math.min(18, Math.round(len / Math.max(8, tileW * 0.32))));
+    // Perpendicular jitter amplitude; scaled by tile size so it reads the same at any zoom.
+    const jagAmp = Math.max(1.6, tileH * 0.16);
+    ctx.save();
+    ctx.translate(x0, y0);
+    ctx.rotate(ang);
+    const drawBolt = (amp, extraBias) => {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      for (let i = 1; i < segments; i++) {
+        const tt = i / segments;
+        // Sine taper keeps the endpoints pinned and lets the middle wobble hardest.
+        const taper = Math.sin(tt * Math.PI);
+        // `Math.random()` is fine here — jag regenerates per frame, so any bias is
+        // invisible. Keeping it simple avoids the cost of a seeded PRNG.
+        const jag = (Math.random() - 0.5) * 2 * amp * taper + extraBias * taper;
+        ctx.lineTo(tt * len, jag);
+      }
+      ctx.lineTo(len, 0);
+      ctx.stroke();
+    };
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // 1. Outer amber halo (soft, wide). source-over so it reads on any background.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.32 * a;
+    ctx.strokeStyle = '#ffd24a';
+    ctx.lineWidth = Math.max(5, tileH * 0.22);
+    drawBolt(jagAmp * 1.15, 0);
+    // 2. Warm yellow body (additive). Slightly tighter jag amplitude so it doesn't
+    //    perfectly trace the halo — reads as volumetric rather than a single line.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.7 * a;
+    ctx.strokeStyle = '#ffe870';
+    ctx.lineWidth = Math.max(2.4, tileH * 0.1);
+    drawBolt(jagAmp * 0.85, 0);
+    // 3. Hot white core (additive), narrow, crisp.
+    ctx.globalAlpha = 0.95 * a;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.2, tileH * 0.045);
+    drawBolt(jagAmp * 0.55, 0);
+    // 4. Occasional fork — a second small bolt that branches beside the main one. Reads
+    //    as the classic lightning "splitter" without doubling the cost.
+    if ((p.jagSeed & 3) !== 0) {
+      ctx.globalAlpha = 0.55 * a;
+      ctx.strokeStyle = '#fff4a8';
+      ctx.lineWidth = Math.max(1.2, tileH * 0.05);
+      const forkOffset = (Math.random() - 0.5) * jagAmp * 1.8;
+      drawBolt(jagAmp * 0.9, forkOffset);
+    }
+    ctx.restore();
   } else if (p.type === 'prismaticShot') {
     const ang = Math.atan2(p.vy || 0, p.vx || 1);
     const hueBase = (Number(p.rainbowHue0) || 0) + time * 220;

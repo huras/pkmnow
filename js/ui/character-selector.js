@@ -10,7 +10,8 @@ import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import {
   getPlayerMoveCooldownRemaining,
-  getPlayerMoveCooldownUiMax
+  getPlayerMoveCooldownUiMax,
+  moveSupportsChargedRelease
 } from '../moves/moves-manager.js';
 import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
@@ -462,9 +463,14 @@ export class CharacterSelector {
     const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
     const [p1, p2, p3] = getChargeBarProgresses(p);
     const lvl = getChargeLevel(p);
-    const canChargeFieldSkill = skillId === 'tackle' || skillId === 'cut';
+    // Show the meter for melee field skills (tackle/cut) + any ranged move that has
+    // a dedicated charged release (ember, waterBurst, thunder). Streamed / tap-only
+    // moves still hide the meter.
+    const canChargeFieldSkill =
+      skillId === 'tackle' || skillId === 'cut' || moveSupportsChargedRelease(skillId);
     const shouldShow = canChargeFieldSkill && p > 0.005;
-    const moveLabel = skillId === 'cut' ? 'Cut' : 'Tackle';
+    const moveLabel =
+      skillId === 'cut' ? 'Cut' : skillId === 'tackle' ? 'Tackle' : getBindableMoveLabel(skillId);
     wrap.classList.toggle('hidden', !shouldShow);
     fill1.style.width = `${Math.round(p1 * 100)}%`;
     fill2.style.width = `${Math.round(p2 * 100)}%`;

@@ -10,6 +10,8 @@ import {
 } from '../wild-pokemon/index.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
+import { tickLightning } from '../weather/lightning.js';
+import { getWeatherRainIntensity } from './weather-state.js';
 import {
   updatePlayPointerCombat,
   handleFieldSkillHotkeyDown,
@@ -26,6 +28,8 @@ import {
 } from './play-crystal-tackle.js';
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
+import { syncWeatherAmbientAudio } from '../audio/weather-ambient-audio.js';
+import { syncFireLoopAudio } from '../audio/fire-loop-sfx.js';
 import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
@@ -164,8 +168,16 @@ export function createGameLoop(api) {
       const tGrassFire0 = performance.now();
       updateGrassFire(dt, currentData, pvx, pvy);
       updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
+      tickLightning(dt, {
+        rainIntensity: getWeatherRainIntensity(),
+        playerWorldX: pvx,
+        playerWorldY: pvy,
+        data: currentData
+      });
       const tBgm0 = performance.now();
       syncBiomeBgm(currentData, player);
+      syncWeatherAmbientAudio();
+      syncFireLoopAudio(currentData, player);
       updateBreakdown.updBgmMs = performance.now() - tBgm0;
       const tHud0 = performance.now();
       refreshPlayModeInfoBar();

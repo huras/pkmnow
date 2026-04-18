@@ -7,7 +7,7 @@ let playChunkUseTick = 1;
 let playChunkCacheRevision = 1;
 
 /** Soft safety cap to avoid unbounded memory growth in long sessions. */
-export const PLAY_CHUNK_CACHE_MAX_ENTRIES = 384;
+export const PLAY_CHUNK_CACHE_MAX_ENTRIES = 512;
 /** Keep a warm ring around current player chunk to reduce rebake thrash. */
 export const PLAY_CHUNK_CACHE_KEEP_RING_RADIUS = 10;
 
@@ -124,20 +124,26 @@ export function prunePlayChunkCache(opts = {}) {
 
 /**
  * Enfileira um chunk para bake em orçamento futuro de frame.
+ * @param {boolean} [forceRebake=false] se true, invalida cache e força re-geração.
+ * @param {boolean} [highPriority=false] se true, coloca no início da fila (para chunks visíveis).
  * @returns {boolean} true se foi enfileirado agora.
  */
-export function enqueuePlayChunkBake(cx, cy, forceRebake = false) {
+export function enqueuePlayChunkBake(cx, cy, forceRebake = false, highPriority = false) {
   const key = `${cx},${cy}`;
   const queuedForce = playChunkBakeQueuedByKey.get(key);
   if (queuedForce != null) {
-    if (forceRebake && !queuedForce) {
-      playChunkBakeQueuedByKey.set(key, true);
-      return true;
+    // Se já está na fila mas queremos aumentar prioridade ou forçar rebake
+    if ((forceRebake && !queuedForce) || (highPriority && !forceRebake)) {
+       // Simplificação: não movemos na fila se já está lá, mas o flag forceRebake no map
+       // guardará o estado mais agressivo solicitado.
+       if (forceRebake) playChunkBakeQueuedByKey.set(key, true);
+       return true;
     }
     return false;
   }
   if (!forceRebake && hasPlayChunk(key)) return false;
-  if (forceRebake) {
+  
+  if (forceRebake || highPriority) {
     playChunkBakeQueue.splice(playChunkBakeQueueHead, 0, key);
   } else {
     playChunkBakeQueue.push(key);

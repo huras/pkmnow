@@ -1,7 +1,7 @@
 import { getMicroTile } from './chunking.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
 import { playChunkMap } from './render/play-chunk-cache.js';
-import { isRainExtinguishing, FIRE_RAIN_EXTINGUISH_GRACE_SEC } from './main/weather-state.js';
+import { getRainFireSnuffSeconds } from './main/weather-state.js';
 
 /** Seconds active burn (orange fire look) before switching to charred black. */
 export const GRASS_FIRE_BURN_PHASE_SEC = 10;
@@ -14,10 +14,20 @@ export const GRASS_FIRE_REGROW_BLEND_SEC = 12;
 /** Max |z| (tiles) for projectile end to count as ground impact. */
 const GROUND_Z_MAX = 0.55;
 
-const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
+const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore', 'lightningStrike']);
 const WATER_PROJECTILE_TYPES = new Set(['waterShot', 'waterGunShot', 'bubbleShot']);
 
-/** @typedef {{ phase: 'burning', phaseEndAt: number, startedAtMs: number } | { phase: 'charred', startedAtMs: number }} GrassFireTileState */
+/**
+ * @typedef {{
+ *   phase: 'burning',
+ *   phaseEndAt: number,
+ *   startedAtMs: number,
+ *   ignitedByLightning: boolean
+ * } | { phase: 'charred', startedAtMs: number }} GrassFireTileState
+ *
+ * `ignitedByLightning` tiles ignore rain and run the full burn → char → regrow cycle,
+ * so storm strikes always leave visible scorch marks on grass.
+ */
 
 /** @type {Map<string, GrassFireTileState>} */
 const tileStates = new Map();
@@ -43,6 +53,25 @@ export function grassFireVisualPhaseAt(mx, my) {
 }
 
 /**
+ * Lists every grass tile currently in the 'burning' phase with its world-center position and
+ * the timestamp when it was ignited. Used by the looped fire SFX to assign audio voices.
+ * Cheap: O(tileStates.size). `tileStates` is bounded by active fires, so this stays small.
+ * @returns {Array<{ id: string, x: number, y: number, startedAtMs: number }>}
+ */
+export function listActiveGrassFireSources() {
+  const out = [];
+  for (const [k, st] of tileStates) {
+    if (st.phase !== 'burning') continue;
+    const c = k.indexOf(',');
+    const mx = Number(k.slice(0, c));
+    const my = Number(k.slice(c + 1));
+    if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
+    out.push({ id: `grass:${k}`, x: mx + 0.5, y: my + 0.5, startedAtMs: st.startedAtMs });
+  }
+  return out;
+}
+
+/**
  * During `charred`: 0 = solid black window, (0,1) = regrowth blend, 1 = fully restored (tile cleared next tick).
  * @returns {number | null} null if not charred
  */
@@ -60,24 +89,32 @@ function tileKey(mx, my) {
   return `${mx},${my}`;
 }
 
-function tryIgnite(mx, my, data) {
+function tryIgnite(mx, my, data, opts = {}) {
   const getTile = (x, y) => getMicroTile(x, y, data);
   if (!isPlayGrassFlammableInner(mx, my, data, getTile, playChunkMap)) return false;
 
   const now = performance.now();
   const k = tileKey(mx, my);
   const burnEnd = now + GRASS_FIRE_BURN_PHASE_SEC * 1000;
+  const ignitedByLightning = !!opts.ignitedByLightning;
   const existing = tileStates.get(k);
   if (existing?.phase === 'burning' && existing.phaseEndAt > now) {
-    // Preserve the original ignition time so rain's grace period stays honest on re-ignite.
+    // Preserve the original ignition time so rain's snuff window stays honest on re-ignite.
+    // Lightning immunity is sticky: once a tile is lightning-ignited it stays immune to rain.
     tileStates.set(k, {
       phase: 'burning',
       phaseEndAt: Math.max(existing.phaseEndAt, burnEnd),
-      startedAtMs: existing.startedAtMs
+      startedAtMs: existing.startedAtMs,
+      ignitedByLightning: !!existing.ignitedByLightning || ignitedByLightning
     });
     return false;
   }
-  tileStates.set(k, { phase: 'burning', phaseEndAt: burnEnd, startedAtMs: now });
+  tileStates.set(k, {
+    phase: 'burning',
+    phaseEndAt: burnEnd,
+    startedAtMs: now,
+    ignitedByLightning
+  });
   return true;
 }
 
@@ -95,7 +132,7 @@ export function grassFireTryIgniteAt(worldX, worldY, projZ, projType, data) {
   if (Math.abs(Number(projZ) || 0) > GROUND_Z_MAX) return false;
   const mx = Math.floor(worldX);
   const my = Math.floor(worldY);
-  return tryIgnite(mx, my, data);
+  return tryIgnite(mx, my, data, { ignitedByLightning: projType === 'lightningStrike' });
 }
 
 /**
@@ -121,15 +158,21 @@ export function grassFireTryExtinguishAt(worldX, worldY, projZ, projType, data) 
  */
 export function updateGrassFire(dt, _data, _playerX, _playerY) {
   const now = performance.now();
-  const isRaining = isRainExtinguishing();
 
   // Rain snuffing runs every frame so dousing feels responsive (not gated by the 120ms throttle).
-  if (isRaining && tileStates.size > 0) {
-    const graceMs = FIRE_RAIN_EXTINGUISH_GRACE_SEC * 1000;
-    for (const [k, st] of tileStates) {
-      if (st.phase !== 'burning') continue;
-      if (now - st.startedAtMs < graceMs) continue;
-      tileStates.set(k, { phase: 'charred', startedAtMs: now });
+  // Timing scales with rain intensity: weak rain drags out the burn, strong rain snuffs in ~1s.
+  // Rain-snuffed tiles skip the charred phase entirely (fire didn't have time to scorch the grass);
+  // only lightning-ignited fires or natural burnout still leave a charred patch.
+  if (tileStates.size > 0) {
+    const snuffSec = getRainFireSnuffSeconds();
+    if (Number.isFinite(snuffSec)) {
+      const snuffMs = snuffSec * 1000;
+      for (const [k, st] of tileStates) {
+        if (st.phase !== 'burning') continue;
+        if (st.ignitedByLightning) continue;
+        if (now - st.startedAtMs < snuffMs) continue;
+        tileStates.delete(k);
+      }
     }
   }
 

@@ -33,11 +33,12 @@ import {
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
-import { isChargeStrongAttackEligible, getWeakPartialChargeT } from '../main/play-charge-levels.js';
+import { isChargeStrongAttackEligible, getWeakPartialChargeT, getChargeLevel } from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
   grassFireTryIgniteAt,
+  grassFireVisualPhaseAt,
   GRASS_FIRE_PARTICLE_SEC
 } from '../play-grass-fire.js';
 import {
@@ -64,6 +65,9 @@ import {
   applySplashToWild
 } from './moves-projectile-collision.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
+import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
+import { castThundershock, THUNDERSHOCK_STREAM_INTERVAL_SEC } from './thunder-shock-move.js';
+import { castRainDance, castSunnyDay } from './weather-moves.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -98,6 +102,10 @@ let playerPrismaticLaserCooldown = 0;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
+let playerThunderCooldown = 0;
+let playerThundershockCooldown = 0;
+let playerRainDanceCooldown = 0;
+let playerSunnyDayCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.104;
@@ -112,6 +120,20 @@ const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
 const PRISMATIC_STREAM_INTERVAL = 0.076;
+
+/** Seconds between Thunder casts (covers cloud grow-in + bolt + settle). Default = Level 2 (tap / standard). */
+const PLAYER_THUNDER_COOLDOWN_SEC = 0.95;
+/**
+ * Per-charge-level cooldowns. L1 fires faster (weak zap), L3 is the punishing mega strike.
+ * Keys match the thunder-move.js level config; indices are (tap/L1), L2, L3.
+ * UI max uses the L3 value so the cooldown clock never overflows when the heaviest tier lands.
+ */
+const PLAYER_THUNDER_COOLDOWN_BY_LEVEL = { 1: 0.55, 2: 0.95, 3: 1.55 };
+
+/** Seconds between Rain Dance / Sunny Day casts. Long enough to make weather-swaps feel
+ *  committed (no strobing clouds), short enough to let the player course-correct in a
+ *  pinch — e.g. flipping to rain mid-fight to extinguish a spreading grass fire. */
+const PLAYER_WEATHER_SWAP_COOLDOWN_SEC = 4.5;
 
 function computeFlamethrowerStreamPressure01() {
   const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
@@ -294,12 +316,10 @@ function resolveMoveRuntimeAlias(moveId) {
       return 'psybeam';
     case 'surf':
       return 'waterGun';
-    case 'thunder':
     case 'thunderbolt':
+      return 'thunder';
     case 'triAttack':
       return 'prismaticLaser';
-    case 'thunderShock':
-      return 'psybeam';
     default:
       return String(moveId || '');
   }
@@ -320,6 +340,10 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'rainDance') return castRainDanceMove(sourceEntity);
+  if (moveId === 'sunnyDay') return castSunnyDayMove(sourceEntity);
   return false;
 }
 
@@ -330,7 +354,19 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   moveId = resolveMoveRuntimeAlias(moveId);
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * True when the given move has a dedicated charged variant (mirrors the `castMoveChargedById`
+ * dispatch). HUD uses this to decide whether to reveal the 3-segment charge meter while holding.
+ * Keep in sync with the dispatch above.
+ * @param {string} moveId
+ */
+export function moveSupportsChargedRelease(moveId) {
+  const resolved = resolveMoveRuntimeAlias(moveId);
+  return resolved === 'ember' || resolved === 'waterBurst' || resolved === 'thunder';
 }
 
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -492,6 +528,57 @@ export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourc
   return tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
+/**
+ * One Thundershock stream puff (hold / tap). Short cooldown so held input chains into a
+ * near-continuous crackling yellow arc between user and aim. Mirrors the flamethrower /
+ * prismatic-laser stream pattern.
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThundershockCooldown > 0) return false;
+  playerThundershockCooldown = THUNDERSHOCK_STREAM_INTERVAL_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThundershock(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+  return true;
+}
+
+export function castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * Rain Dance — instant-cast status move that queues a transition to the `rain` weather
+ * preset. No projectile, no aim; the smoothing pass in main.js handles the visual fade.
+ * Gated by its own cooldown so the player can't strobe weather on every frame.
+ */
+export function castRainDanceMove(sourceEntity = null) {
+  if (playerRainDanceCooldown > 0) return false;
+  playerRainDanceCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  // Share cooldown with Sunny Day so the pair feels like a single "weather swap" tool —
+  // spamming both back-to-back would otherwise bypass either's individual cooldown.
+  playerSunnyDayCooldown = Math.max(playerSunnyDayCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castRainDance();
+  return true;
+}
+
+/**
+ * Sunny Day — instant-cast status move that queues a transition to the `clear` weather
+ * preset at max intensity (clears the sky). Mirrors `castRainDanceMove` in cooldown
+ * behavior; they share the swap-cooldown to prevent ping-ponging.
+ */
+export function castSunnyDayMove(sourceEntity = null) {
+  if (playerSunnyDayCooldown > 0) return false;
+  playerSunnyDayCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  playerRainDanceCooldown = Math.max(playerRainDanceCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castSunnyDay();
+  return true;
+}
+
 export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerPoisonPowderCooldown > 0) return false;
   playerPoisonPowderCooldown = 0.95;
@@ -522,6 +609,41 @@ export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEnti
     fromWild: false,
     pushProjectile
   });
+  return true;
+}
+
+/**
+ * Thunder / Thunderbolt: summons a yellow storm cell at the cursor tile and drops a
+ * yellow lightning bolt a beat later. Visual + ignition reuse the rain lightning
+ * system; damage is applied when the bolt lands (see `thunder-move.js`).
+ */
+export function castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThunderCooldown > 0) return false;
+  // Tap (no charge) = weakest "zap" tier. Charged releases route through castThunderCharged.
+  playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  scheduleThunderStrike(targetX, targetY, sourceEntity, { fromWild: false, level: 1 });
+  return true;
+}
+
+/**
+ * Charged Thunder release. Maps `charge01` to one of three distinct takes:
+ *   - below first full bar → tier 1 (quick zap)
+ *   - first bar filled     → tier 2 (standard thunderbolt)
+ *   - second bar or more   → tier 3 (triple-fork mega strike)
+ */
+export function castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerThunderCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let level = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    // getChargeLevel returns 1|2|3 for eligible charges. Map directly to thunder tiers.
+    const cl = getChargeLevel(cp);
+    level = cl >= 3 ? 3 : cl >= 2 ? 2 : 2; // L1 charged-release still feels like tier 2
+  }
+  playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDER_COOLDOWN_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  scheduleThunderStrike(targetX, targetY, sourceEntity, { fromWild: false, level });
   return true;
 }
 
@@ -734,6 +856,14 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return 0.78;
     case 'silkShoot':
       return 0.72;
+    case 'thunder':
+      // Use heaviest tier so the HUD clock covers the max charged release.
+      return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
+    case 'thunderShock':
+      return THUNDERSHOCK_STREAM_INTERVAL_SEC;
+    case 'rainDance':
+    case 'sunnyDay':
+      return PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
     case 'ultimate':
       return 7.5;
     default:
@@ -776,6 +906,14 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerIncinerateCooldown;
     case 'silkShoot':
       return playerSilkShootCooldown;
+    case 'thunder':
+      return playerThunderCooldown;
+    case 'thunderShock':
+      return playerThundershockCooldown;
+    case 'rainDance':
+      return playerRainDanceCooldown;
+    case 'sunnyDay':
+      return playerSunnyDayCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -807,9 +945,17 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
+  playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
+  playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
+  playerRainDanceCooldown = Math.max(0, playerRainDanceCooldown - dt);
+  playerSunnyDayCooldown = Math.max(0, playerSunnyDayCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
   const wildSpatial = buildWildSpatialIndex(wildList);
+
+  // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
+  // yellow ground strike + splash-damage nearby wild pokemon.
+  tickThunderStrikes(dt, wildList, data, wildSpatial);
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];
@@ -819,6 +965,15 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       continue;
     }
     if (p.type === 'grassFire') {
+      // Flames die with their tile: if the tile is no longer in `burning` phase
+      // (extinguished by water or snuffed by rain), drop the particle immediately
+      // so visible flames clear within one frame instead of riding out their full life.
+      const mx = Math.floor(p.x);
+      const my = Math.floor(p.y);
+      if (grassFireVisualPhaseAt(mx, my) !== 'burning') {
+        activeParticles.splice(i, 1);
+        continue;
+      }
       p.z = 0.08;
       continue;
     }
@@ -826,7 +981,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutVineArc' ||
       p.type === 'fieldCutPsychicArc' ||
       p.type === 'fieldCutSlashArc' ||
-      p.type === 'fieldSpinAttack'
+      p.type === 'fieldSpinAttack' ||
+      p.type === 'rainFootSplash'
     ) {
       continue;
     }
@@ -850,7 +1006,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const proj = activeProjectiles[i];
 
-    if (proj.type === 'psybeamBeam') {
+    if (proj.type === 'psybeamBeam' || proj.type === 'thunderShockBeam') {
       proj.timeToLive -= dt;
       const sx0 = proj.beamStartX;
       const sy0 = proj.beamStartY;

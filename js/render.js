@@ -291,6 +291,20 @@ export function render(canvas, data, options = {}) {
         if (hasPlayChunk(key)) cachedVisibleChunks++;
         else {
           missingVisibleChunks++;
+          enqueuePlayChunkBake(cx, cy, false, true);
+        }
+      }
+    }
+
+    // --- PRE-BAKE NEARBY CHUNKS (PREDICTIVE CACHING) ---
+    // If the visible area is mostly baked, use some of the budget to bake nearby chunks
+    // that the player might move into soon. This reduces FPS drops during discovery.
+    const prebakeRadius = 1; 
+    for (let cy = cStartY - prebakeRadius; cy <= cEndY + prebakeRadius; cy++) {
+      for (let cx = cStartX - prebakeRadius; cx <= cEndX + prebakeRadius; cx++) {
+        if (cx < 0 || cy < 0 || cx > maxChunkXi || cy > maxChunkYi) continue;
+        const key = `${cx},${cy}`;
+        if (!visibleChunkKeys.has(key) && !hasPlayChunk(key)) {
           enqueuePlayChunkBake(cx, cy);
         }
       }
@@ -664,7 +678,7 @@ export function render(canvas, data, options = {}) {
       else if (item.type === 'digCompanion') { ctx.save(); drawDigCompanion(ctx, item, { snapPx, PMD_MON_SHEET }); ctx.restore(); }
       else if (item.type === 'playerAimIndicator') { ctx.save(); drawPlayerAimIndicator(ctx, item, { snapPx, player, flightHudActive, tileW, tileH, aimAtCursor }); ctx.restore(); }
       else if (item.type === 'strengthThrowAimPreview') { ctx.save(); drawStrengthThrowAimPreview(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
-      else if (item.type === 'psybeamChargeBall') { ctx.save(); drawPsybeamChargeBall(ctx, item, { snapPx, tileW }); ctx.restore(); }
+      else if (item.type === 'psybeamChargeBall') { ctx.save(); drawPsybeamChargeBall(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
       else if (
         item.type === 'formalTreeCanopyFall' ||
         item.type === 'scatterTreeCanopyFall' ||
@@ -757,8 +771,14 @@ export function render(canvas, data, options = {}) {
     
     drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
     const rainI = Number(options.settings?.weatherRainIntensity) || 0;
+    const cloudPresenceForShadowShift = Number(options.settings?.weatherCloudPresence) || 0;
     const splashTargets = [];
-    if (rainI > 0.02) {
+    // Simple sprite rects for the "cloud-shadow-on-entity" billboard shift pass.
+    // We only feed tall vertical billboards (player/wild) — trees/scatter are tied to ground and
+    // already read fine with the flat shadow, and reconstructing their sprites here would be noisy.
+    const entityShadowSprites = [];
+    const collectEntitySprites = cloudPresenceForShadowShift > 0.001;
+    if (rainI > 0.02 || collectEntitySprites) {
       for (const it of renderItems) {
         if (it.type !== 'player' && it.type !== 'wild') continue;
         const cx = it.cx;
@@ -766,7 +786,34 @@ export function render(canvas, data, options = {}) {
         const dh = it.dh;
         const dw = it.dw;
         if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(dh) || !Number.isFinite(dw)) continue;
-        splashTargets.push({ x: cx, yTop: cy - dh * 0.88, w: dw, h: dh });
+        if (rainI > 0.02) splashTargets.push({ x: cx, yTop: cy - dh * 0.88, w: dw, h: dh });
+        if (!collectEntitySprites) continue;
+        if (!it.sheet) continue;
+        let spawnYOffset = 0;
+        if (it.type === 'wild' && it.spawnPhase < 1) {
+          if (it.spawnType === 'sky') spawnYOffset = (1 - it.spawnPhase) * (-4 * tileH);
+          else if (it.spawnType === 'water') spawnYOffset = (1 - it.spawnPhase) * (0.8 * tileH);
+          else spawnYOffset = (1 - it.spawnPhase) * (0.2 * tileH);
+        }
+        const tackleOx = it.type === 'player' ? (it.tackleOffPx || 0) : 0;
+        const tackleOy = it.type === 'player' ? (it.tackleOffPy || 0) : 0;
+        const pxL = snapPx(cx - it.pivotX + tackleOx);
+        const pxT = snapPx(cy - it.pivotY + spawnYOffset + tackleOy);
+        const pxW = snapPx(dw);
+        const pxH = snapPx(dh);
+        const alphaIt = it.type === 'wild' ? it.spawnPhase : (it.drawAlpha ?? 1);
+        entityShadowSprites.push({
+          sheet: it.sheet,
+          sx: it.sx,
+          sy: it.sy,
+          sw: it.sw,
+          sh: it.sh,
+          pxL,
+          pxT,
+          pxW,
+          pxH,
+          alpha: Math.max(0, Math.min(1, alphaIt))
+        });
       }
     }
     drawEnvironmentalEffects(ctx, {
@@ -793,8 +840,11 @@ export function render(canvas, data, options = {}) {
       cloudMaxMul: options.settings?.weatherCloudMaxMul,
       cloudAlphaMul: options.settings?.weatherCloudAlphaMul,
       rainIntensity: rainI,
+      windIntensity: options.settings?.weatherWindIntensity ?? 0,
+      windDirRad: options.settings?.weatherWindDirRad ?? 0,
       screenTint: options.settings?.weatherScreenTint,
-      splashTargets
+      splashTargets,
+      entityShadowSprites
     });
 
     const minimapCanvas = document.getElementById('minimap');
