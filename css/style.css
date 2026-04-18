@@ -1476,6 +1476,29 @@ body.play-mode-active {
   margin: 0;
 }
 
+.play-weather-lightning {
+  margin-top: 4px;
+  padding: 5px 8px;
+  font-size: 0.7rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid #6a6a40;
+  background: linear-gradient(180deg, #2e2a1e 0%, #1f1c13 100%);
+  color: #ffe58a;
+  letter-spacing: 0.04em;
+}
+
+.play-weather-lightning:hover {
+  border-color: #ffe58a;
+  color: #fff6c8;
+  background: linear-gradient(180deg, #3a331f 0%, #27221a 100%);
+}
+
+.play-weather-lightning:active {
+  transform: translateY(1px);
+}
+
 /* MODAL DE CONFIGURAÇÕES */
 .modal {
   position: fixed;

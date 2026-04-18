@@ -30,7 +30,7 @@ async function preloadSpeechBubbleAssets(entity, segments) {
     if (s.kind === 'monsprite') needMon = true;
   }
   await Promise.all(jobs);
-  if (needMon) await ensurePokemonSheetsLoaded(dex);
+  if (needMon) await ensurePokemonSheetsLoaded(imageCache, dex);
 }
 
 /**

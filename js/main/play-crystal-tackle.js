@@ -109,7 +109,9 @@ const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   ember: 34,
   flamethrowerShot: 16,
   incinerateShard: 28,
-  incinerateCore: 54
+  incinerateCore: 54,
+  // Lightning is a finisher: instant ignition regardless of prior damage.
+  lightningStrike: 150
 });
 const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
 /** Strength-relocated rock: drop override + detail state after no hits / grabs (frees override map memory). */

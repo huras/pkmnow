@@ -153,13 +153,28 @@ export function drawScatter(ctx, item, options) {
         const dh = Math.ceil(tileH * 1.6);
         const fx0 = snapPx(originX * tileW + (cols * tileW) * 0.35);
         const fx1 = snapPx(originX * tileW + (cols * tileW) * 0.68);
-        const fy = snapPx((originY + rows - 0.45) * tileH);
-        const drawFlame = (px, frameOffset) => {
+        // Scatter base sprites are drawn at row `originY` only (footprint `rows`
+        // is just reserved space for the canopy above); anchor the base flame
+        // inside that single base row — not `originY + rows`, which for 3x3
+        // trees like savannah lands 2+ tiles south of the actual base.
+        const fyBase = snapPx((originY + 0.55) * tileH);
+        const drawFlame = (px, py, frameOffset) => {
           const fi = (flick + frameOffset) % BURN_START_FRAMES;
-          ctx.drawImage(fireImg, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, fy - dh * 0.5, dw, dh);
+          ctx.drawImage(fireImg, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, py - dh * 0.5, dw, dh);
         };
-        drawFlame(fx0, 0);
-        drawFlame(fx1, 2);
+        drawFlame(fx0, fyBase, 0);
+        drawFlame(fx1, fyBase, 2);
+        // Scatter-tree canopy extends upward from the base — not downward from
+        // the footprint bottom. The composite (see canopy-sway-cache.js) places
+        // canopy rows between y=(originY-topRows)*tileH and y=originY*tileH,
+        // so we put the upper flame pair near the middle of the canopy using
+        // the true canopy row count.
+        if (topPart && scatterItemKeyIsTree(itemKey)) {
+          const topRows = Math.max(1, Math.ceil(topPart.ids.length / Math.max(1, cols)));
+          const fyCanopy = snapPx((originY - topRows * 0.5) * tileH);
+          drawFlame(fx0, fyCanopy, 3);
+          drawFlame(fx1, fyCanopy, 1);
+        }
       }
     }
   }
@@ -233,13 +248,20 @@ export function drawTree(ctx, item, options) {
       const dh = Math.ceil(tileH * 1.6);
       const fx0 = snapPx(originX * tileW + tileW * 0.55);
       const fx1 = snapPx((originX + 1) * tileW + tileW * 0.45);
-      const fy = snapPx(originY * tileH + tileH * 0.58);
-      const drawFlame = (px, frameOffset) => {
+      // Base flames at the trunk where the fire "starts from the ground".
+      const fyBase = snapPx(originY * tileH + tileH * 0.58);
+      // Canopy-level flames — the tree's visible body is the canopy extending ~2 tiles
+      // up from the base, so base-only flames read as floating below the tree. A second
+      // pair up here makes the burning overlap the shape the player actually sees.
+      const fyCanopy = snapPx((originY - 0.4) * tileH);
+      const drawFlame = (px, py, frameOffset) => {
         const fi = (flick + frameOffset) % BURN_START_FRAMES;
-        ctx.drawImage(img, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, fy - dh * 0.5, dw, dh);
+        ctx.drawImage(img, 0, fi * BURN_START_FRAME, BURN_START_FRAME, BURN_START_FRAME, px - dw * 0.5, py - dh * 0.5, dw, dh);
       };
-      drawFlame(fx0, 0);
-      drawFlame(fx1, 2);
+      drawFlame(fx0, fyBase, 0);
+      drawFlame(fx1, fyBase, 2);
+      drawFlame(fx0, fyCanopy, 3);
+      drawFlame(fx1, fyCanopy, 1);
     }
   }
 

@@ -14,7 +14,7 @@ export const GRASS_FIRE_REGROW_BLEND_SEC = 12;
 /** Max |z| (tiles) for projectile end to count as ground impact. */
 const GROUND_Z_MAX = 0.55;
 
-const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore']);
+const FIRE_PROJECTILE_TYPES = new Set(['ember', 'flamethrowerShot', 'incinerateShard', 'incinerateCore', 'lightningStrike']);
 const WATER_PROJECTILE_TYPES = new Set(['waterShot', 'waterGunShot', 'bubbleShot']);
 
 /** @typedef {{ phase: 'burning', phaseEndAt: number, startedAtMs: number } | { phase: 'charred', startedAtMs: number }} GrassFireTileState */

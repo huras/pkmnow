@@ -16,10 +16,11 @@ import {
 } from './render-debug-overlays.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
+import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
-const CLOUD_ALPHA_GAIN = 2.75;
-const CLOUD_SHADOW_ALPHA_RATIO = 0.48;
+const CLOUD_ALPHA_GAIN = 1.95;
+const CLOUD_SHADOW_ALPHA_RATIO = 0.68;
 const CLOUD_SIZE_GAIN = 1.5;
 const CLOUD_SHADOW_OFFSET_MULT = 2.5;
 const CLOUD_SHADOW_OFFSET_BASE_X_TILES = 2.6;
@@ -53,6 +54,23 @@ const SNES_CLOUD_CLUSTERS = Object.freeze([
 
 let cloudSpriteCache = null;
 let ghostMistCache = null;
+// Offscreen buffers used by the "cloud-shadow-on-entity" billboard shift pass.
+// Sized to the viewport on demand. Re-used across frames.
+let entityMaskCanvas = null;
+let shiftedShadowCanvas = null;
+
+function ensureEntityShadowBuffers(cw, ch) {
+  if (!entityMaskCanvas || entityMaskCanvas.width !== cw || entityMaskCanvas.height !== ch) {
+    entityMaskCanvas = document.createElement('canvas');
+    entityMaskCanvas.width = cw;
+    entityMaskCanvas.height = ch;
+  }
+  if (!shiftedShadowCanvas || shiftedShadowCanvas.width !== cw || shiftedShadowCanvas.height !== ch) {
+    shiftedShadowCanvas = document.createElement('canvas');
+    shiftedShadowCanvas.width = cw;
+    shiftedShadowCanvas.height = ch;
+  }
+}
 
 function makeCloudSpriteFromPuffs(puffs, color) {
   const W = 320;
@@ -225,8 +243,12 @@ function drawSnesCloudParallax(ctx, options) {
     cloudThreshold: cloudThresholdOpt,
     cloudMinMul: cloudMinMulOpt,
     cloudMaxMul: cloudMaxMulOpt,
-    cloudAlphaMul: cloudAlphaMulOpt
+    cloudAlphaMul: cloudAlphaMulOpt,
+    cloudDarken01 = 0,
+    cw = 0,
+    entityShadowSprites = null
   } = options;
+  const darken = Math.max(0, Math.min(0.75, Number(cloudDarken01) || 0));
   const cloudPresence = Math.max(0, Math.min(1, Number(cloudPresenceRaw) || 0));
   const noiseSeed = (cloudNoiseSeed | 0) >>> 0;
   const variantCount = SNES_CLOUD_CLUSTERS.length;
@@ -267,9 +289,9 @@ function drawSnesCloudParallax(ctx, options) {
   const syMin = Math.floor((paddedStartY - windY - maxHalfTileH - jitterMargin) / step);
   const syMax = Math.ceil((paddedEndY - windY + maxHalfTileH + jitterMargin) / step);
 
-  const drawLayer = (isShadow) => {
-    const yNudge = isShadow ? shadowOffsetY : 0;
-    const xNudge = isShadow ? shadowOffsetX : 0;
+  const drawLayer = (isShadow, targetCtx = ctx, extraNudgeX = 0, extraNudgeY = 0) => {
+    const yNudge = (isShadow ? shadowOffsetY : 0) + extraNudgeY;
+    const xNudge = (isShadow ? shadowOffsetX : 0) + extraNudgeX;
     for (let sy = syMin; sy <= syMax; sy++) {
       for (let sx = sxMin; sx <= sxMax; sx++) {
         // Slot identity (stable across frames); noise sampled here → permanent size per slot.
@@ -307,8 +329,27 @@ function drawSnesCloudParallax(ctx, options) {
         }
 
         const alpha = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * alphaMul * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1);
-        ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-        ctx.drawImage(sprite, x, y, w, h);
+        const clampedAlpha = Math.max(0, Math.min(1, alpha));
+        targetCtx.globalAlpha = clampedAlpha;
+        targetCtx.drawImage(sprite, x, y, w, h);
+
+        // Re-draw the black (shadow) sprite on top of the white cloud to tint it gray during rain,
+        // and the white sprite again in `lighter` to brighten it during in-cloud lightning flashes.
+        // Both reuse the same puff mask, so they never spill outside the cloud shape.
+        if (!isShadow) {
+          const glow = getCloudSlotGlow(sx, sy);
+          const darkAlpha = darken * clampedAlpha * (1 - glow);
+          if (darkAlpha > 0.005) {
+            targetCtx.globalAlpha = Math.min(1, darkAlpha);
+            targetCtx.drawImage(spritePair.shadow, x, y, w, h);
+          }
+          if (glow > 0.01) {
+            targetCtx.globalCompositeOperation = 'lighter';
+            targetCtx.globalAlpha = Math.min(1, glow * clampedAlpha * 2.2);
+            targetCtx.drawImage(sprite, x, y, w, h);
+            targetCtx.globalCompositeOperation = 'source-over';
+          }
+        }
       }
     }
   };
@@ -318,6 +359,65 @@ function drawSnesCloudParallax(ctx, options) {
   ctx.imageSmoothingEnabled = false;
   if (cloudPresence > 0.001) {
     drawLayer(true);
+
+    // Billboard-shift pass: the same cloud shadows, but repositioned 1 tile back toward the cloud
+    // and clipped to entity alpha masks. Simulates a vertical "paper stand-up" receiving the
+    // shadow higher up on its body, so tall sprites read as standing in the world rather than
+    // being flat stickers. Cheap: one extra drawImage per slot into an offscreen buffer, then two
+    // composite ops. Skipped if there are no applicable entities on screen.
+    const entities = Array.isArray(entityShadowSprites) ? entityShadowSprites : null;
+    if (entities && entities.length > 0 && cw > 0 && ch > 0) {
+      const shLen = Math.hypot(shadowOffsetX, shadowOffsetY) || 1;
+      // One tile "up" along the shadow→cloud direction. Using tileH as the tile-length so the
+      // vertical component dominates (matches how tall sprites are measured in this engine).
+      const shiftMag = tileH;
+      const towardCloudX = -shadowOffsetX / shLen * shiftMag;
+      const towardCloudY = -shadowOffsetY / shLen * shiftMag;
+
+      ensureEntityShadowBuffers(cw, ch);
+      const maskCtx = entityMaskCanvas.getContext('2d');
+      const buffCtx = shiftedShadowCanvas.getContext('2d');
+
+      // Paint entity silhouettes into the mask. The buffers mirror the main ctx transform so
+      // world-space shadow coords land at the same screen pixels on all three canvases.
+      const worldTransform = ctx.getTransform();
+      maskCtx.setTransform(1, 0, 0, 1, 0, 0);
+      maskCtx.clearRect(0, 0, cw, ch);
+      maskCtx.setTransform(worldTransform);
+      maskCtx.globalCompositeOperation = 'source-over';
+      maskCtx.imageSmoothingEnabled = false;
+      for (const e of entities) {
+        if (!e || !e.sheet) continue;
+        maskCtx.globalAlpha = e.alpha ?? 1;
+        maskCtx.drawImage(e.sheet, e.sx, e.sy, e.sw, e.sh, e.pxL, e.pxT, e.pxW, e.pxH);
+      }
+      maskCtx.globalAlpha = 1;
+
+      // Draw the shifted shadows into the buffer, then clip them to the entity alpha mask.
+      buffCtx.setTransform(1, 0, 0, 1, 0, 0);
+      buffCtx.clearRect(0, 0, cw, ch);
+      buffCtx.setTransform(worldTransform);
+      buffCtx.imageSmoothingEnabled = false;
+      buffCtx.globalCompositeOperation = 'source-over';
+      drawLayer(true, buffCtx, towardCloudX, towardCloudY);
+      buffCtx.setTransform(1, 0, 0, 1, 0, 0);
+      buffCtx.globalAlpha = 1;
+      buffCtx.globalCompositeOperation = 'destination-in';
+      buffCtx.drawImage(entityMaskCanvas, 0, 0);
+      buffCtx.globalCompositeOperation = 'source-over';
+
+      // Blit the entity-clipped shifted shadows on top of the main world. The regular shadow pass
+      // already ran, so entities end up with both — that's intentional: the billboard edge closer
+      // to the light stays lit, and the side facing away darkens more, giving the 3D cue the user
+      // originally asked for, just approximated cheaply.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(shiftedShadowCanvas, 0, 0);
+      ctx.restore();
+    }
+
     drawLayer(false);
   }
   ctx.restore();
@@ -657,8 +757,12 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudAlphaMul,
     rainIntensity = 0,
     screenTint,
-    splashTargets
+    splashTargets,
+    entityShadowSprites
   } = options;
+  // Clouds go gray with rain. Scales 0..~0.55 so even light rain starts feeling overcast.
+  const rainI01 = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
+  const cloudDarken01 = rainI01 * 0.6;
 
   if (tint && typeof tint.r === 'number') {
     ctx.save();
@@ -683,8 +787,16 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudThreshold,
     cloudMinMul,
     cloudMaxMul,
-    cloudAlphaMul
+    cloudAlphaMul,
+    cloudDarken01,
+    cw,
+    ch,
+    entityShadowSprites
   });
+
+  // Lightning (both in-cloud flashes have already been baked into the clouds above,
+  // so this call only handles ground bolts + screen flash).
+  drawLightning(ctx, { cw, ch, tileW, tileH });
 
   if (mistTile?.biomeId === BIOMES.GHOST_WOODS.id) {
     drawGhostMistShaderLike(ctx, cw, ch, lodDetail, time);

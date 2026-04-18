@@ -10,6 +10,8 @@ import {
 } from '../wild-pokemon/index.js';
 import { updateMoves } from '../moves/moves-manager.js';
 import { updateGrassFire } from '../play-grass-fire.js';
+import { tickLightning } from '../weather/lightning.js';
+import { getWeatherRainIntensity } from './weather-state.js';
 import {
   updatePlayPointerCombat,
   handleFieldSkillHotkeyDown,
@@ -164,6 +166,12 @@ export function createGameLoop(api) {
       const tGrassFire0 = performance.now();
       updateGrassFire(dt, currentData, pvx, pvy);
       updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
+      tickLightning(dt, {
+        rainIntensity: getWeatherRainIntensity(),
+        playerWorldX: pvx,
+        playerWorldY: pvy,
+        data: currentData
+      });
       const tBgm0 = performance.now();
       syncBiomeBgm(currentData, player);
       updateBreakdown.updBgmMs = performance.now() - tBgm0;

@@ -30,6 +30,7 @@ import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { setWeatherRenderState } from './main/weather-state.js';
+import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
@@ -485,10 +486,25 @@ function getSettings() {
     clearPlayColliderOverlayCache();
   }
   const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
-  const dayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
+  const rawDayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
   const weatherCloudNoiseSeed =
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
+  // Rain dims the ambient day tint — overcast sky blocks daylight proportionally to intensity.
+  // R/G are dimmed more than B so heavy rain also pulls the scene slightly cool, not just dark.
+  const dayCycleTint =
+    rawDayCycleTint && weather.rainIntensity > 0.01
+      ? (() => {
+          const rain = Math.min(1, weather.rainIntensity);
+          const dim = 1 - rain * 0.38;
+          const dimBlue = 1 - rain * 0.28;
+          return {
+            r: Math.max(0, Math.round(rawDayCycleTint.r * dim)),
+            g: Math.max(0, Math.round(rawDayCycleTint.g * dim)),
+            b: Math.max(0, Math.round(rawDayCycleTint.b * dimBlue))
+          };
+        })()
+      : rawDayCycleTint;
   return {
     viewType,
     overlayPaths,
@@ -1116,6 +1132,14 @@ playWeatherIntensityEl?.addEventListener('input', () => {
   const v = Number(playWeatherIntensityEl.value);
   currentWeatherIntensity = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 100) / 100));
 });
+
+document.getElementById('play-weather-lightning')?.addEventListener('click', () => {
+  if (appMode !== 'play') return;
+  const pvx = player.visualX ?? player.x;
+  const pvy = player.visualY ?? player.y;
+  forceTriggerLightningNearPlayer(pvx, pvy, currentData);
+});
+
 syncWeatherUi();
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
