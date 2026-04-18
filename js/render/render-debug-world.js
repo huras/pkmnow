@@ -834,8 +834,11 @@ export function drawEnvironmentalEffects(ctx, options) {
 function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
   const time = Number.isFinite(timeSec) ? timeSec : 0;
   const area = cw * ch;
-  const baseCount = Math.round((area / 5200) * intensity);
-  const count = Math.max(40, Math.min(baseCount, 900));
+  // Density curve: stays light at low intensity, ramps up hard past ~0.6 so max rain reads
+  // as a proper downpour (1.8× streaks vs the previous cap, plus a heavier per-pixel rate).
+  const densityT = intensity * (1 + 0.55 * intensity);
+  const baseCount = Math.round((area / 3200) * densityT);
+  const count = Math.max(40, Math.min(baseCount, 1600));
   const tw = Math.max(1, Number(tileW) || 32);
 
   // Fall velocity (px/sec): vertical gravity + horizontal wind (same as clouds).
@@ -845,39 +848,54 @@ function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
   const dx = windPxSec / vecMag;
   const dy = gravityPxSec / vecMag;
 
-  const baseLen = 12 + 7 * intensity;
+  // Longer streaks at max; still short & wispy on trace rain.
+  const baseLen = 14 + 18 * intensity;
   const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(windPxSec) * 0.05;
   const spanW = cw + horizontalBleed * 2 + 30;
   const spanH = ch + baseLen * 2 + 30;
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = 0.22 + 0.35 * intensity;
-  ctx.strokeStyle = '#c8d7ec';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
 
-  for (let i = 0; i < count; i++) {
-    // Hash scatter; three independent hashes for X/Y anchors and per-streak speed.
-    const hx = hash01Cell(i, 7919, 1);
-    const hy = hash01Cell(i, 104729, 2);
-    const hs = hash01Cell(i, 31337, 3);
-    const hl = hash01Cell(i, 15485863, 4);
+  // Two passes: a wider, softer under-stroke (reads as far-away sheets of rain) and the
+  // normal crisp stroke on top. Only the second pass runs for light rain to keep it cheap.
+  const heavyPass = intensity > 0.35;
+  const passes = heavyPass ? 2 : 1;
+  for (let pass = 0; pass < passes; pass++) {
+    const isUnder = pass === 0 && heavyPass;
+    ctx.globalAlpha = isUnder
+      ? 0.14 + 0.22 * intensity
+      : 0.3 + 0.5 * intensity;
+    ctx.strokeStyle = isUnder ? '#b6c6e2' : '#d9e3f3';
+    ctx.lineWidth = isUnder
+      ? Math.max(1.4, 1.4 + 0.9 * intensity)
+      : Math.max(1, 1 + 0.8 * intensity);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
 
-    const streakSpeed = vecMag * (0.72 + hs * 0.56); // 0.72x..1.28x
-    const phase = time * streakSpeed;
+    for (let i = 0; i < count; i++) {
+      // Hash scatter; independent hashes for X/Y anchors, per-streak speed and length.
+      // `pass` is folded into the seed so the under-pass doesn't perfectly trace the top one.
+      const hx = hash01Cell(i, 7919, 1 + pass * 11);
+      const hy = hash01Cell(i, 104729, 2 + pass * 11);
+      const hs = hash01Cell(i, 31337, 3 + pass * 11);
+      const hl = hash01Cell(i, 15485863, 4 + pass * 11);
 
-    // Anchor + drift along velocity; wrap each axis independently.
-    const rawX = hx * spanW + dx * phase;
-    const rawY = hy * spanH + dy * phase;
-    const px = ((rawX % spanW) + spanW) % spanW - horizontalBleed - 15;
-    const py = ((rawY % spanH) + spanH) % spanH - baseLen - 15;
+      const streakSpeed = vecMag * (0.72 + hs * 0.56); // 0.72x..1.28x
+      const phase = time * streakSpeed;
 
-    const len = baseLen * (0.8 + hl * 0.45);
-    ctx.moveTo(px, py);
-    ctx.lineTo(px - dx * len, py - dy * len);
+      // Anchor + drift along velocity; wrap each axis independently.
+      const rawX = hx * spanW + dx * phase;
+      const rawY = hy * spanH + dy * phase;
+      const px = ((rawX % spanW) + spanW) % spanW - horizontalBleed - 15;
+      const py = ((rawY % spanH) + spanH) % spanH - baseLen - 15;
+
+      const len = baseLen * (0.8 + hl * 0.45);
+      ctx.moveTo(px, py);
+      ctx.lineTo(px - dx * len, py - dy * len);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
   ctx.restore();
 }
 

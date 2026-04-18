@@ -33,7 +33,7 @@ import {
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
 import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
-import { isChargeStrongAttackEligible, getWeakPartialChargeT } from '../main/play-charge-levels.js';
+import { isChargeStrongAttackEligible, getWeakPartialChargeT, getChargeLevel } from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
@@ -65,6 +65,7 @@ import {
   applySplashToWild
 } from './moves-projectile-collision.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
+import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -99,6 +100,7 @@ let playerPrismaticLaserCooldown = 0;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
+let playerThunderCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.104;
@@ -113,6 +115,15 @@ const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
 const PRISMATIC_STREAM_INTERVAL = 0.076;
+
+/** Seconds between Thunder casts (covers cloud grow-in + bolt + settle). Default = Level 2 (tap / standard). */
+const PLAYER_THUNDER_COOLDOWN_SEC = 0.95;
+/**
+ * Per-charge-level cooldowns. L1 fires faster (weak zap), L3 is the punishing mega strike.
+ * Keys match the thunder-move.js level config; indices are (tap/L1), L2, L3.
+ * UI max uses the L3 value so the cooldown clock never overflows when the heaviest tier lands.
+ */
+const PLAYER_THUNDER_COOLDOWN_BY_LEVEL = { 1: 0.55, 2: 0.95, 3: 1.55 };
 
 function computeFlamethrowerStreamPressure01() {
   const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
@@ -295,8 +306,8 @@ function resolveMoveRuntimeAlias(moveId) {
       return 'psybeam';
     case 'surf':
       return 'waterGun';
-    case 'thunder':
     case 'thunderbolt':
+      return 'thunder';
     case 'triAttack':
       return 'prismaticLaser';
     case 'thunderShock':
@@ -321,6 +332,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   return false;
 }
 
@@ -331,7 +343,19 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   moveId = resolveMoveRuntimeAlias(moveId);
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * True when the given move has a dedicated charged variant (mirrors the `castMoveChargedById`
+ * dispatch). HUD uses this to decide whether to reveal the 3-segment charge meter while holding.
+ * Keep in sync with the dispatch above.
+ * @param {string} moveId
+ */
+export function moveSupportsChargedRelease(moveId) {
+  const resolved = resolveMoveRuntimeAlias(moveId);
+  return resolved === 'ember' || resolved === 'waterBurst' || resolved === 'thunder';
 }
 
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -523,6 +547,41 @@ export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEnti
     fromWild: false,
     pushProjectile
   });
+  return true;
+}
+
+/**
+ * Thunder / Thunderbolt: summons a yellow storm cell at the cursor tile and drops a
+ * yellow lightning bolt a beat later. Visual + ignition reuse the rain lightning
+ * system; damage is applied when the bolt lands (see `thunder-move.js`).
+ */
+export function castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThunderCooldown > 0) return false;
+  // Tap (no charge) = weakest "zap" tier. Charged releases route through castThunderCharged.
+  playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  scheduleThunderStrike(targetX, targetY, sourceEntity, { fromWild: false, level: 1 });
+  return true;
+}
+
+/**
+ * Charged Thunder release. Maps `charge01` to one of three distinct takes:
+ *   - below first full bar → tier 1 (quick zap)
+ *   - first bar filled     → tier 2 (standard thunderbolt)
+ *   - second bar or more   → tier 3 (triple-fork mega strike)
+ */
+export function castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerThunderCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let level = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    // getChargeLevel returns 1|2|3 for eligible charges. Map directly to thunder tiers.
+    const cl = getChargeLevel(cp);
+    level = cl >= 3 ? 3 : cl >= 2 ? 2 : 2; // L1 charged-release still feels like tier 2
+  }
+  playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDER_COOLDOWN_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  scheduleThunderStrike(targetX, targetY, sourceEntity, { fromWild: false, level });
   return true;
 }
 
@@ -735,6 +794,9 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return 0.78;
     case 'silkShoot':
       return 0.72;
+    case 'thunder':
+      // Use heaviest tier so the HUD clock covers the max charged release.
+      return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
     case 'ultimate':
       return 7.5;
     default:
@@ -777,6 +839,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerIncinerateCooldown;
     case 'silkShoot':
       return playerSilkShootCooldown;
+    case 'thunder':
+      return playerThunderCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -808,9 +872,14 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
+  playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
   const wildSpatial = buildWildSpatialIndex(wildList);
+
+  // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
+  // yellow ground strike + splash-damage nearby wild pokemon.
+  tickThunderStrikes(dt, wildList, data, wildSpatial);
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];
@@ -836,7 +905,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutVineArc' ||
       p.type === 'fieldCutPsychicArc' ||
       p.type === 'fieldCutSlashArc' ||
-      p.type === 'fieldSpinAttack'
+      p.type === 'fieldSpinAttack' ||
+      p.type === 'rainFootSplash'
     ) {
       continue;
     }

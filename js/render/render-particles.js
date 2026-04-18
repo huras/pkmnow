@@ -89,6 +89,25 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
     ctx.fill();
+  } else if (p.type === 'rainFootSplash') {
+    // Growing upward-opening crown (matches debug rain-splash look). Stays in place;
+    // no motion is applied to this type in `moves-manager`'s particle tick.
+    const t01 = Math.max(0, Math.min(1, 1 - a));
+    const r = Math.max(1.2, tileW * 0.08) + t01 * Math.max(2, tileW * 0.18);
+    ctx.globalAlpha = Math.max(0, (1 - t01) * 0.9);
+    ctx.strokeStyle = '#eaf0ff';
+    ctx.lineWidth = Math.max(1, tileW * 0.04);
+    ctx.beginPath();
+    ctx.arc(px, py, r, Math.PI, Math.PI * 2, false);
+    ctx.stroke();
+    if (p.variant !== 2) {
+      ctx.fillStyle = '#eaf0ff';
+      ctx.fillRect(Math.round(px - r - 0.5), Math.round(py - 0.5), 1, 1);
+      ctx.fillRect(Math.round(px + r - 0.5), Math.round(py - 0.5), 1, 1);
+      if (p.variant === 1 && r > Math.max(2.5, tileW * 0.12)) {
+        ctx.fillRect(Math.round(px - 0.5), Math.round(py - r - 0.5), 1, 1);
+      }
+    }
   } else if (p.type === 'psyTrail') {
     ctx.fillStyle = '#d892ff';
     ctx.beginPath();

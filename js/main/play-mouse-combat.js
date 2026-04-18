@@ -764,8 +764,6 @@ function isHoldStreamMoveId(moveId) {
     moveId === 'prismaticLaser' ||
     moveId === 'solarBeam' ||
     moveId === 'hyperBeam' ||
-    moveId === 'thunder' ||
-    moveId === 'thunderbolt' ||
     moveId === 'triAttack'
   );
 }
@@ -872,8 +870,6 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     moveId === 'prismaticLaser' ||
     moveId === 'solarBeam' ||
     moveId === 'hyperBeam' ||
-    moveId === 'thunder' ||
-    moveId === 'thunderbolt' ||
     moveId === 'triAttack'
   ) {
     if (!prismatic) {
@@ -985,8 +981,6 @@ export function updatePlayPointerCombat(dt, player, data) {
     (lmb === 'prismaticLaser' ||
       lmb === 'solarBeam' ||
       lmb === 'hyperBeam' ||
-      lmb === 'thunder' ||
-      lmb === 'thunderbolt' ||
       lmb === 'triAttack')
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1011,8 +1005,6 @@ export function updatePlayPointerCombat(dt, player, data) {
     (rmb === 'prismaticLaser' ||
       rmb === 'solarBeam' ||
       rmb === 'hyperBeam' ||
-      rmb === 'thunder' ||
-      rmb === 'thunderbolt' ||
       rmb === 'triAttack')
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1037,8 +1029,6 @@ export function updatePlayPointerCombat(dt, player, data) {
     (mmb === 'prismaticLaser' ||
       mmb === 'solarBeam' ||
       mmb === 'hyperBeam' ||
-      mmb === 'thunder' ||
-      mmb === 'thunderbolt' ||
       mmb === 'triAttack')
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
