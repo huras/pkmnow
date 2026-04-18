@@ -67,6 +67,7 @@ import {
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
 import { castThundershock, THUNDERSHOCK_STREAM_INTERVAL_SEC } from './thunder-shock-move.js';
+import { castRainDance, castSunnyDay } from './weather-moves.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -103,6 +104,8 @@ let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
+let playerRainDanceCooldown = 0;
+let playerSunnyDayCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.104;
@@ -126,6 +129,11 @@ const PLAYER_THUNDER_COOLDOWN_SEC = 0.95;
  * UI max uses the L3 value so the cooldown clock never overflows when the heaviest tier lands.
  */
 const PLAYER_THUNDER_COOLDOWN_BY_LEVEL = { 1: 0.55, 2: 0.95, 3: 1.55 };
+
+/** Seconds between Rain Dance / Sunny Day casts. Long enough to make weather-swaps feel
+ *  committed (no strobing clouds), short enough to let the player course-correct in a
+ *  pinch — e.g. flipping to rain mid-fight to extinguish a spreading grass fire. */
+const PLAYER_WEATHER_SWAP_COOLDOWN_SEC = 4.5;
 
 function computeFlamethrowerStreamPressure01() {
   const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
@@ -334,6 +342,8 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'rainDance') return castRainDanceMove(sourceEntity);
+  if (moveId === 'sunnyDay') return castSunnyDayMove(sourceEntity);
   return false;
 }
 
@@ -537,6 +547,36 @@ export function tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, t
 
 export function castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   return tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * Rain Dance — instant-cast status move that queues a transition to the `rain` weather
+ * preset. No projectile, no aim; the smoothing pass in main.js handles the visual fade.
+ * Gated by its own cooldown so the player can't strobe weather on every frame.
+ */
+export function castRainDanceMove(sourceEntity = null) {
+  if (playerRainDanceCooldown > 0) return false;
+  playerRainDanceCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  // Share cooldown with Sunny Day so the pair feels like a single "weather swap" tool —
+  // spamming both back-to-back would otherwise bypass either's individual cooldown.
+  playerSunnyDayCooldown = Math.max(playerSunnyDayCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castRainDance();
+  return true;
+}
+
+/**
+ * Sunny Day — instant-cast status move that queues a transition to the `clear` weather
+ * preset at max intensity (clears the sky). Mirrors `castRainDanceMove` in cooldown
+ * behavior; they share the swap-cooldown to prevent ping-ponging.
+ */
+export function castSunnyDayMove(sourceEntity = null) {
+  if (playerSunnyDayCooldown > 0) return false;
+  playerSunnyDayCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  playerRainDanceCooldown = Math.max(playerRainDanceCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castSunnyDay();
+  return true;
 }
 
 export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -821,6 +861,9 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
     case 'thunderShock':
       return THUNDERSHOCK_STREAM_INTERVAL_SEC;
+    case 'rainDance':
+    case 'sunnyDay':
+      return PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
     case 'ultimate':
       return 7.5;
     default:
@@ -867,6 +910,10 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerThunderCooldown;
     case 'thunderShock':
       return playerThundershockCooldown;
+    case 'rainDance':
+      return playerRainDanceCooldown;
+    case 'sunnyDay':
+      return playerSunnyDayCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -900,6 +947,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
+  playerRainDanceCooldown = Math.max(0, playerRainDanceCooldown - dt);
+  playerSunnyDayCooldown = Math.max(0, playerSunnyDayCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
   const wildSpatial = buildWildSpatialIndex(wildList);

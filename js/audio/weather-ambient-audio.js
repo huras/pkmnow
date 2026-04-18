@@ -19,11 +19,8 @@
 
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
 import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
-import {
-  getWeatherRainIntensity,
-  getWeatherWindBaseIntensity,
-  getWeatherWindGust
-} from '../main/weather-state.js';
+import { getWeatherRainIntensity } from '../main/weather-state.js';
+import { getWindBaseIntensity, getWindGust } from '../main/wind-state.js';
 
 const TUNING = {
   /** Fade window when a layer starts playing (0 → target). */
@@ -247,8 +244,8 @@ export function syncWeatherAmbientAudio() {
   // Wind layer: gain follows the already gust-modulated "felt" intensity coming from
   // main.js (base × slow-sine gust). Because `main.js` pulses the gust envelope ~0.15..1,
   // the layer naturally fades in and out with different volumes without any extra LFO here.
-  const windBase = clamp01(getWeatherWindBaseIntensity());
-  const windGust = clamp01(getWeatherWindGust());
+  const windBase = clamp01(getWindBaseIntensity());
+  const windGust = clamp01(getWindGust());
   const windFelt = windBase * windGust;
   const windSpan = Math.max(0.001, 1 - TUNING.windMinIntensity);
   const windUnit =

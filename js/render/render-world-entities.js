@@ -713,11 +713,16 @@ export function drawStrengthThrowAimPreview(ctx, item, options) {
  */
 export function drawPsybeamChargeBall(ctx, item, options) {
   const { snapPx, tileW, tileH } = options;
+  if (!tileW || !tileH) return;
   const px = snapPx(item.bx * tileW);
   const py = snapPx(item.by * tileH - item.bz * tileH);
+  if (!isFinite(px) || !isFinite(py)) return;
+  
   const pulse = item.pulse || 0;
   const scale = 1 + Math.sin(pulse) * 0.26;
   const r = Math.max(12, tileW * 0.3) * scale;
+  if (!isFinite(r) || r <= 0) return;
+
   const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
   grd.addColorStop(0, 'rgba(255,210,245,0.95)');
   grd.addColorStop(0.18, 'rgba(255,150,215,0.98)');

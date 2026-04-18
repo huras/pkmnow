@@ -66,6 +66,12 @@ export const BIOME_VEGETATION = {
     'red-broadleaf-2 [3x2]', 'orange-broadleaf-2 [3x2]', 'yellow-broadleaf-2 [3x2]',
     'fern [1x1]', 'mushroom-1 [1x1]'
   ],
+  [BIOMES.TUNDRA.id]: [
+    'blue-lily [1x1]', 'purple-lily [1x1]', 'blue-daisy [1x1]', 
+    'blue-coreopsis [1x1]', 'purple-coreopsis [1x1]', 
+    'small-blue-crystal [1x1]', 'small-purple-crystal [1x1]', 
+    'snow-grass [1x1]', 'baby-pine-tree-full-snow [1x1]'
+  ],
 };
 
 /**
@@ -255,6 +261,9 @@ export function getGrassParams(biomeId) {
   } else if (biomeId === BIOMES.DESERT.id) {
     scale = 0.15;    // Frequência menor no deserto (campos de cacto maiores)
     threshold = 0.35;
+  } else if (biomeId === BIOMES.TUNDRA.id) {
+    scale = 0.25;     // Menos itens, mas bem distribuídos
+    threshold = 0.55;  // Densidade moderada para as flores/detalhes
   }
 
   return { scale, threshold };

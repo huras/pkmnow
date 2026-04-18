@@ -45,6 +45,7 @@ import {
   CHARGE_FIELD_RELEASE_MIN_01
 } from './play-charge-levels.js';
 import { playLinkSuperSwordSfx } from '../audio/link-super-sword-sfx.js';
+import { attackWheel } from '../ui/attack-wheel.js';
 
 const TAP_MS = 220;
 const CHARGE_TIME_MULT = 3;
@@ -71,7 +72,7 @@ const FIELD_SKILL_LABEL = {
 };
 
 /** Hold digit 1–5 briefly to open the bind wheel for LMB / RMB / MMB / wheel↑ / wheel↓. */
-const BIND_SLOT_WHEEL_HOLD_MS = 170;
+const BIND_SLOT_WHEEL_HOLD_MS = 250;
 /** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
 
 function getMoveTypeClass(moveId) {
@@ -81,6 +82,7 @@ function getMoveTypeClass(moveId) {
     case 'fireSpin':
     case 'flamethrower':
     case 'incinerate':
+    case 'sunnyDay':
       return 'type-fire';
     case 'absorb':
     case 'megaDrain':
@@ -93,6 +95,7 @@ function getMoveTypeClass(moveId) {
     case 'bubbleBeam':
     case 'hydroPump':
     case 'surf':
+    case 'rainDance':
       return 'type-water';
     case 'acid':
     case 'sludge':
@@ -182,8 +185,7 @@ let lastScrollBindCastMs = 0;
 let bindingWheelSlotIdx = -1;
 let bindingWheelHoldStartMs = 0;
 let bindingWheelArmed = false;
-let bindingWheelOpen = false;
-let bindingWheelHoverIndex = 0;
+
 /** @type {HTMLDivElement | null} */
 let bindingWheelRoot = null;
 
@@ -215,142 +217,26 @@ export function syncSelectedSpecialAttackForDex(dexId) {
 }
 
 function ensureBindWheelDom() {
-  if (bindingWheelRoot) return bindingWheelRoot;
-  const root = document.createElement('div');
-  root.id = 'play-move-bind-wheel';
-  root.className = 'play-field-skill-wheel play-field-skill-wheel--special hidden';
-  root.setAttribute('aria-hidden', 'true');
-  const count = Math.max(1, PLAYER_BINDABLE_MOVE_IDS.length);
-  const startDeg = -90;
-  const ringCounts =
-    count <= 14
-      ? [count]
-      : count <= 30
-        ? [Math.ceil(count / 2), Math.floor(count / 2)]
-        : (() => {
-            const outer = Math.ceil(count / 3);
-            const left = count - outer;
-            const mid = Math.ceil(left / 2);
-            const inner = left - mid;
-            return [outer, mid, inner];
-          })();
-  const ringRadiusPct = [45, 33, 23];
-  /** @type {Array<{ id: string, ringIdx: number, slotIdx: number, ringCount: number }>} */
-  const wheelEntries = [];
-  let moveCursor = 0;
-  for (let ringIdx = 0; ringIdx < ringCounts.length; ringIdx++) {
-    const ringCount = Math.max(0, ringCounts[ringIdx] || 0);
-    for (let slotIdx = 0; slotIdx < ringCount && moveCursor < count; slotIdx++) {
-      wheelEntries.push({
-        id: PLAYER_BINDABLE_MOVE_IDS[moveCursor],
-        ringIdx,
-        slotIdx,
-        ringCount
-      });
-      moveCursor++;
-    }
-  }
-  const buttons = wheelEntries
-    .map(({ id, ringIdx, slotIdx, ringCount }) => {
-      const offset = ringIdx * (360 / Math.max(3, ringCount)) * 0.23;
-      const a = (startDeg + offset + (360 * slotIdx) / Math.max(1, ringCount)) * (Math.PI / 180);
-      const radiusPct = ringRadiusPct[ringIdx] ?? ringRadiusPct[ringRadiusPct.length - 1];
-      const left = 50 + Math.cos(a) * radiusPct;
-      const top = 50 + Math.sin(a) * radiusPct;
-      return `<button type="button" class="play-field-skill-wheel__item type-icon ${getMoveTypeClass(id)}" data-move="${id}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${getBindableMoveLabel(id)}</button>`;
-    })
-    .join('');
-  root.innerHTML = `
-    <div class="play-field-skill-wheel__ring">
-      <div class="play-field-skill-wheel__hint" id="play-move-bind-wheel__hint">Hold 1–5 · pick move for slot</div>
-      ${buttons}
-    </div>
-  `;
-  document.body.appendChild(root);
-  bindingWheelRoot = root;
-  syncBindWheelDom();
-  return root;
+  return attackWheel.ensureDom();
 }
 
 function syncBindWheelDom() {
-  if (!bindingWheelRoot) return;
-  bindingWheelRoot.classList.toggle('hidden', !bindingWheelOpen);
-  bindingWheelRoot.setAttribute('aria-hidden', bindingWheelOpen ? 'false' : 'true');
-  const hint = bindingWheelRoot.querySelector('#play-move-bind-wheel__hint');
-  if (hint instanceof HTMLElement && bindingWheelSlotIdx >= 0) {
-    const n = bindingWheelSlotIdx + 1;
-    hint.textContent = `Hold ${n} · release — move for ${slotIndexToUiHotkey(bindingWheelSlotIdx)}`;
-  }
-  const hoverMove = PLAYER_BINDABLE_MOVE_IDS[bindingWheelHoverIndex] || 'tackle';
-  const dex = Math.floor(Number(player?.dexId) || 0);
-  const slotId = bindingWheelSlotIdx >= 0 ? getInputSlotId(bindingWheelSlotIdx) : 'lmb';
-  const b = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
-  const selectedMove = b[slotId] ?? b.lmb;
-  for (const el of bindingWheelRoot.querySelectorAll('.play-field-skill-wheel__item')) {
-    const moveId = String(el.getAttribute('data-move') || '');
-    el.classList.toggle('is-hover', bindingWheelOpen && moveId === hoverMove);
-    el.classList.toggle('is-selected', moveId === selectedMove);
-  }
+  // Logic moved to AttackWheel component
 }
 
 function openBindWheel() {
-  bindingWheelOpen = true;
-  ensureBindWheelDom();
-  syncBindWheelDom();
+  const dex = Math.floor(Number(player?.dexId) || 0);
+  attackWheel.open(bindingWheelSlotIdx, dex >= 1 ? dex : 1);
 }
 
 function closeBindWheel() {
-  bindingWheelOpen = false;
-  syncBindWheelDom();
-}
-
-function normalizeAngleSigned(rad) {
-  let a = Number(rad) || 0;
-  while (a <= -Math.PI) a += Math.PI * 2;
-  while (a > Math.PI) a -= Math.PI * 2;
-  return a;
-}
-
-function resolveBindWheelHoverFromScreenAngle() {
-  if (!bindingWheelRoot) return bindingWheelHoverIndex;
-  const ring = bindingWheelRoot.querySelector('.play-field-skill-wheel__ring');
-  if (!(ring instanceof HTMLElement)) return bindingWheelHoverIndex;
-  const ringRect = ring.getBoundingClientRect();
-  const cx = ringRect.left + ringRect.width * 0.5;
-  const cy = ringRect.top + ringRect.height * 0.5;
-  const dx = fieldWheelMouseClientX - cx;
-  const dy = fieldWheelMouseClientY - cy;
-  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 14) {
-    return bindingWheelHoverIndex;
-  }
-  const mouseAngle = Math.atan2(dy, dx);
-  let bestIdx = bindingWheelHoverIndex;
-  let bestDelta = Infinity;
-  for (let i = 0; i < PLAYER_BINDABLE_MOVE_IDS.length; i++) {
-    const moveId = PLAYER_BINDABLE_MOVE_IDS[i];
-    const item = bindingWheelRoot.querySelector(`.play-field-skill-wheel__item[data-move="${moveId}"]`);
-    if (!(item instanceof HTMLElement)) continue;
-    const ir = item.getBoundingClientRect();
-    const ix = ir.left + ir.width * 0.5;
-    const iy = ir.top + ir.height * 0.5;
-    const itemAngle = Math.atan2(iy - cy, ix - cx);
-    const d = Math.abs(normalizeAngleSigned(mouseAngle - itemAngle));
-    if (d < bestDelta) {
-      bestDelta = d;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
+  attackWheel.close();
 }
 
 function updateBindWheelHover(p) {
   void p;
-  if (!bindingWheelOpen) return;
-  const idx = resolveBindWheelHoverFromScreenAngle();
-  if (idx !== bindingWheelHoverIndex) {
-    bindingWheelHoverIndex = idx;
-    syncBindWheelDom();
-  }
+  if (!attackWheel.isOpen) return;
+  attackWheel.updateMouse(fieldWheelMouseClientX, fieldWheelMouseClientY);
 }
 
 export function handleBindSlotHotkeyDown(code) {
@@ -358,13 +244,7 @@ export function handleBindSlotHotkeyDown(code) {
   if (idx < 0) return false;
   bindingWheelSlotIdx = idx;
   bindingWheelArmed = true;
-  bindingWheelOpen = false;
   bindingWheelHoldStartMs = performance.now();
-  const dex = Math.floor(Number(player?.dexId) || 0);
-  const slotId = getInputSlotId(idx);
-  const cur = (dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1))[slotId];
-  bindingWheelHoverIndex = Math.max(0, PLAYER_BINDABLE_MOVE_IDS.indexOf(cur));
-  syncBindWheelDom();
   return true;
 }
 
@@ -372,12 +252,12 @@ export function handleBindSlotHotkeyUp(code, pl) {
   const idx = digitToBindingSlotIndex(code);
   if (idx < 0) return false;
   if (idx !== bindingWheelSlotIdx) return false;
-  if (!bindingWheelArmed && !bindingWheelOpen) return false;
+  if (!bindingWheelArmed && !attackWheel.isOpen) return false;
   const dex = Math.floor(Number(pl?.dexId) || 0);
   const b0 = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
   const slotId = getInputSlotId(idx);
-  const pick = bindingWheelOpen
-    ? PLAYER_BINDABLE_MOVE_IDS[bindingWheelHoverIndex] || b0[slotId]
+  const pick = attackWheel.isOpen
+    ? attackWheel.getSelectedMove()
     : b0[slotId];
   if (dex >= 1) {
     setPlayerInputBinding(dex, idx, pick);
@@ -934,7 +814,7 @@ export function updatePlayPointerCombat(dt, player, data) {
     fieldCutComboTimerSec = Math.max(0, fieldCutComboTimerSec - dt);
     if (fieldCutComboTimerSec <= 0) fieldCutComboStep = 0;
   }
-  if (bindingWheelArmed && !bindingWheelOpen && bindingWheelSlotIdx >= 0) {
+  if (bindingWheelArmed && !attackWheel.isOpen && bindingWheelSlotIdx >= 0) {
     if (performance.now() - bindingWheelHoldStartMs >= BIND_SLOT_WHEEL_HOLD_MS) {
       openBindWheel();
     }
@@ -1105,7 +985,7 @@ export function installPlayPointerCombat(deps) {
       fieldWheelMouseClientX = Number(e.clientX) || 0;
       fieldWheelMouseClientY = Number(e.clientY) || 0;
       const p = getPlayer();
-      if (bindingWheelOpen) updateBindWheelHover(p);
+      if (attackWheel.isOpen) updateBindWheelHover(p);
     },
     true
   );
@@ -1232,9 +1112,6 @@ export function installPlayPointerCombat(deps) {
     leftShiftAtDown = false;
     rightHeld = false;
     middleHeld = false;
-    bindingWheelArmed = false;
-    bindingWheelSlotIdx = -1;
-    closeBindWheel();
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
     playInputState.chargeMmb01 = 0;
@@ -1244,5 +1121,11 @@ export function installPlayPointerCombat(deps) {
     playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
     for (const ownerId of THUNDER_PREVIEW_OWNER_IDS) withdrawThunderChargePreview(ownerId);
+  });
+
+  window.addEventListener('blur', () => {
+    bindingWheelArmed = false;
+    bindingWheelSlotIdx = -1;
+    closeBindWheel();
   });
 }

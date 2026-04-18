@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'ember'|'fireBlast'|'fireSpin'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'ember'|'fireBlast'|'fireSpin'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
@@ -23,11 +23,13 @@ export const MOVE_LABELS = Object.freeze({
   petalDance: 'Petal Dance',
   psychic: 'Psychic',
   psywave: 'Psywave',
+  rainDance: 'Rain Dance',
   razorWind: 'Razor Wind',
   sludge: 'Sludge',
   smog: 'Smog',
   solarBeam: 'Solar Beam',
   sonicBoom: 'Sonic Boom',
+  sunnyDay: 'Sunny Day',
   surf: 'Surf',
   swift: 'Swift',
   thunder: 'Thunder',
@@ -70,11 +72,13 @@ export const PLAYER_PROJECTILE_MOVE_IDS = Object.freeze(
     'petalDance',
     'psychic',
     'psywave',
+    'rainDance',
     'razorWind',
     'sludge',
     'smog',
     'solarBeam',
     'sonicBoom',
+    'sunnyDay',
     'surf',
     'swift',
     'thunder',

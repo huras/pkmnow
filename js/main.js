@@ -29,11 +29,16 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
+import { WEATHER_PRESET_LABELS } from './main/weather-presets.js';
 import {
-  setWeatherRenderState,
-  getWeatherWindDirectionRad,
-  getWeatherWindFeltIntensity
-} from './main/weather-state.js';
+  initWeatherSystem,
+  tickWeather,
+  getWeatherTarget,
+  setWeatherTarget,
+  getActiveWeatherParams,
+  addWeatherTargetChangeListener
+} from './main/weather-system.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
@@ -203,20 +208,10 @@ let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
 let worldTimeRunning = true;
-/** @type {'clear' | 'cloudy' | 'rain'} */
-let currentWeatherPreset = 'cloudy';
-/** 0..1 intensity scalar (UI slider target). */
-let currentWeatherIntensity = 0.75;
-/** Currently-displayed weather params (smoothly eased toward the target preset+intensity). */
-let activeWeatherParams = null;
-/** Time constant (seconds) for exponential smoothing of weather transitions. */
-const WEATHER_SMOOTH_TAU_SEC = 1.2;
-/**
- * Base wind direction in radians (0 = east, +π/2 = south). Roughly matches the cloud drift
- * vector used in {@link drawSnesCloudParallax} (vx=0.32, vy=0.09 → atan2 ≈ 0.274 rad).
- * A slow wobble is added per frame so tree sway and particles don't feel locked to a grid.
- */
-const WIND_BASE_DIR_RAD = 0.274;
+// Weather engine state lives in `./main/weather-system.js` — this file only wires the
+// DOM panel + the tick call. Initial seed here so the first `getActiveWeatherParams()`
+// read (during `getSettings()` before the first tick) returns the correct shape.
+initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -512,6 +507,7 @@ function getSettings() {
   const weatherCloudNoiseSeed =
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
+  const weatherTarget = getWeatherTarget();
 
   // Rain dims the ambient day tint — overcast sky blocks daylight proportionally to intensity.
   // R/G are dimmed more than B so heavy rain also pulls the scene slightly cool, not just dark.
@@ -542,8 +538,8 @@ function getSettings() {
     dayPhase,
     worldHours: hoursWrapped,
     dayCycleTint,
-    weatherPreset: currentWeatherPreset,
-    weatherIntensity: currentWeatherIntensity,
+    weatherPreset: weatherTarget.preset,
+    weatherIntensity: weatherTarget.intensity01,
     weatherCloudPresence: weather.cloudPresence,
     weatherCloudThreshold: weather.cloudThreshold,
     weatherCloudMinMul: weather.cloudMinMul,
@@ -552,157 +548,34 @@ function getSettings() {
     weatherRainIntensity: weather.rainIntensity,
     weatherScreenTint: weather.screenTint,
     weatherCloudNoiseSeed,
-    weatherWindIntensity: getWeatherWindFeltIntensity(),
-    weatherWindDirRad: getWeatherWindDirectionRad()
+    weatherWindIntensity: getWindFeltIntensity(),
+    weatherWindDirRad: getWindDirectionRad()
   };
 }
 
-function cloneWeatherParams(src) {
-  return {
-    cloudPresence: src.cloudPresence,
-    cloudThreshold: src.cloudThreshold,
-    cloudMinMul: src.cloudMinMul,
-    cloudMaxMul: src.cloudMaxMul,
-    cloudAlphaMul: src.cloudAlphaMul,
-    rainIntensity: src.rainIntensity,
-    screenTint: src.screenTint ? { ...src.screenTint } : null
-  };
-}
-
-function getActiveWeatherParams() {
-  if (!activeWeatherParams) {
-    activeWeatherParams = cloneWeatherParams(
-      resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity)
-    );
-  }
-  return activeWeatherParams;
-}
-
 /**
- * Exponentially eases the currently displayed weather params toward the target preset.
- * Called from the game loop's per-tick hook with `dt` in seconds.
- */
-function tickWeatherSmoothing(dt) {
-  if (!Number.isFinite(dt) || dt <= 0) return;
-  const target = resolveWeatherParams(currentWeatherPreset, currentWeatherIntensity);
-  const active = getActiveWeatherParams();
-  const k = 1 - Math.exp(-dt / Math.max(0.05, WEATHER_SMOOTH_TAU_SEC));
-  const lerpN = (a, b) => a + (b - a) * k;
-
-  active.cloudPresence = lerpN(active.cloudPresence, target.cloudPresence);
-  active.cloudThreshold = lerpN(active.cloudThreshold, target.cloudThreshold);
-  active.cloudMinMul = lerpN(active.cloudMinMul, target.cloudMinMul);
-  active.cloudMaxMul = lerpN(active.cloudMaxMul, target.cloudMaxMul);
-  active.cloudAlphaMul = lerpN(active.cloudAlphaMul, target.cloudAlphaMul);
-  active.rainIntensity = lerpN(active.rainIntensity, target.rainIntensity);
-
-  // Tint blends via alpha so `null` targets smoothly fade out instead of popping.
-  const curT = active.screenTint;
-  const tgtT = target.screenTint;
-  if (!curT && !tgtT) {
-    active.screenTint = null;
-  } else {
-    const cur = curT || { r: tgtT.r, g: tgtT.g, b: tgtT.b, a: 0 };
-    const tgt = tgtT || { r: cur.r, g: cur.g, b: cur.b, a: 0 };
-    const blended = {
-      r: lerpN(cur.r, tgt.r),
-      g: lerpN(cur.g, tgt.g),
-      b: lerpN(cur.b, tgt.b),
-      a: lerpN(cur.a, tgt.a)
-    };
-    active.screenTint = blended.a > 0.002 ? blended : null;
-  }
-
-  // Share smoothed rain intensity + evolving wind with gameplay / render / audio systems.
-  const wind = computeLiveWindState(gameTime, currentWeatherPreset, active.rainIntensity);
-  setWeatherRenderState({
-    rainIntensity: active.rainIntensity,
-    preset: currentWeatherPreset,
-    windBaseIntensity: wind.baseIntensity,
-    windDirRad: wind.dirRad,
-    windGust: wind.gust
-  });
-}
-
-/**
- * Evolves the live wind envelope each tick. The *base* intensity is preset-dependent (clear ≈
- * silent, cloudy has a low steady breeze, rain scales strongly with rainIntensity). On top of
- * that we layer a slow two-sinusoid gust envelope so both the on-screen particles and the
- * `Wind.ogg` ambient loop pulse naturally instead of reading as a flat hum.
+ * DOM panel sync for the weather engine. Registered as a listener so moves / programmatic
+ * `setWeatherTarget` calls keep the UI in lockstep without scattering `syncWeatherUi()`
+ * calls throughout the file.
  *
- * Direction wobbles gently around {@link WIND_BASE_DIR_RAD} so streamlines don't look rigid.
- * @param {number} time world time seconds
- * @param {'clear' | 'cloudy' | 'rain'} preset
- * @param {number} rainIntensity01
- * @returns {{ baseIntensity: number, dirRad: number, gust: number }}
+ * The `ui` source is skipped for the slider because the user is actively dragging it —
+ * writing back would fight their input and cause jitter on some browsers.
+ * @param {{ preset: import('./main/weather-presets.js').WeatherPresetId, intensity01: number, source: string }} [ev]
  */
-function computeLiveWindState(time, preset, rainIntensity01) {
-  const rain = Math.max(0, Math.min(1, Number(rainIntensity01) || 0));
-  const baseByPreset =
-    preset === 'rain' ? 0.25 + 0.55 * rain : preset === 'cloudy' ? 0.3 : 0.08;
-  const baseIntensity = Math.max(0, Math.min(1, baseByPreset));
-  // Two-sine gust envelope (period ≈ 6–16 s), biased so average sits near ~0.7.
-  const g1 = Math.sin(time * 0.38);
-  const g2 = Math.sin(time * 0.11 + 1.7);
-  const gust = Math.max(0.15, Math.min(1, 0.55 + 0.3 * g1 + 0.2 * g2));
-  const dirRad = WIND_BASE_DIR_RAD + Math.sin(time * 0.07) * 0.22;
-  return { baseIntensity, dirRad, gust };
-}
-
-/**
- * Maps a weather preset + 0..1 intensity to cloud/rain render params.
- * Kept in main.js so both UI sync and `getSettings` share the same contract.
- */
-function resolveWeatherParams(preset, intensity01) {
-  const t = Math.max(0, Math.min(1, Number(intensity01) || 0));
-  const lerp = (a, b) => a + (b - a) * t;
-  switch (preset) {
-    case 'rain':
-      return {
-        cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.02),
-        cloudMinMul: lerp(0.45, 0.7),
-        cloudMaxMul: lerp(1.55, 1.95),
-        cloudAlphaMul: lerp(1, 1.25),
-        rainIntensity: t,
-        screenTint: t > 0 ? { r: 110, g: 120, b: 145, a: lerp(0, 0.28) } : null
-      };
-    case 'cloudy':
-      return {
-        cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.22),
-        cloudMinMul: 0.45,
-        cloudMaxMul: lerp(1.55, 1.7),
-        cloudAlphaMul: 1,
-        rainIntensity: 0,
-        screenTint: null
-      };
-    case 'clear':
-    default:
-      return {
-        cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.78),
-        cloudMinMul: 0.4,
-        cloudMaxMul: lerp(1.55, 1.1),
-        cloudAlphaMul: lerp(1, 0.75),
-        rainIntensity: 0,
-        screenTint: null
-      };
-  }
-}
-
-function syncWeatherUi() {
+function syncWeatherUi(ev) {
+  const { preset, intensity01 } = ev ?? getWeatherTarget();
   for (const btn of playWeatherPresetBtns) {
-    btn.classList.toggle('is-active', btn.dataset.weather === currentWeatherPreset);
+    btn.classList.toggle('is-active', btn.dataset.weather === preset);
   }
   if (playWeatherCurrentEl) {
-    const label = { clear: 'Clear', cloudy: 'Cloudy', rain: 'Rain' }[currentWeatherPreset] || '—';
-    playWeatherCurrentEl.textContent = label;
+    playWeatherCurrentEl.textContent = WEATHER_PRESET_LABELS[preset] || '—';
   }
-  if (playWeatherIntensityEl) {
-    playWeatherIntensityEl.value = String(Math.round(currentWeatherIntensity * 100));
+  if (playWeatherIntensityEl && ev?.source !== 'ui') {
+    playWeatherIntensityEl.value = String(Math.round(intensity01 * 100));
   }
 }
+
+addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
   refreshPlayPointerWorldFromLastClientIfHovering();
@@ -724,7 +597,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
-    tickWeatherSmoothing(dt);
+    tickWeather(dt, gameTime);
   },
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
@@ -1181,14 +1054,12 @@ wireWorldTimePreset('play-world-preset-night', PRESET_HOUR.night);
 for (const btn of playWeatherPresetBtns) {
   btn.addEventListener('click', () => {
     const next = btn.dataset.weather;
-    if (next !== 'clear' && next !== 'cloudy' && next !== 'rain') return;
-    currentWeatherPreset = next;
-    syncWeatherUi();
+    setWeatherTarget({ preset: next }, 'ui');
   });
 }
 playWeatherIntensityEl?.addEventListener('input', () => {
   const v = Number(playWeatherIntensityEl.value);
-  currentWeatherIntensity = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 100) / 100));
+  setWeatherTarget({ intensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui');
 });
 
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {

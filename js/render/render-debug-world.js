@@ -52,7 +52,31 @@ const CLOUD_WIND_BASELINE_DIR_RAD = 0.28;
 let cloudDriftXTiles = 0;
 let cloudDriftYTiles = 0;
 let cloudDriftLastTimeSec = -1;
-/** Per-slot position jitter (as a fraction of slot step) so the grid doesn't read as a grid. */
+
+/**
+ * Calculates the final wind velocity (tiles/sec) and orientation (rad) by blending
+ * the live wind input with the atmospheric baseline. This ensures all environmental
+ * effects (clouds, streamlines, etc.) share the exact same movement vector.
+ */
+function getEffectiveWindState(intensity, liveDir) {
+  const windI01 = Math.max(0, Math.min(1, Number(intensity) || 0));
+  const dir = Number.isFinite(liveDir) ? liveDir : CLOUD_WIND_BASELINE_DIR_RAD;
+  const speedTilesPerSec = CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC;
+
+  const baselineWeight = 1 - windI01;
+  const liveWeight = 0.3 + 0.7 * windI01;
+
+  const vx = speedTilesPerSec * (baselineWeight * Math.cos(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.cos(dir));
+  const vy = speedTilesPerSec * (baselineWeight * Math.sin(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.sin(dir));
+
+  return {
+    vx,
+    vy,
+    speed: Math.hypot(vx, vy),
+    effectiveDirRad: Math.atan2(vy, vx)
+  };
+}
+
 const CLOUD_SLOT_JITTER_FRAC = 1.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
   { seedX: 0.07, seedY: 0.12, scale: 1.14, speed: 0.020, speedY: 0.010, alpha: 0.26, puffs: [[-0.9, 0.06, 0.84], [-0.15, -0.02, 1.0], [0.72, 0.08, 0.86]] },
@@ -292,19 +316,9 @@ function drawSnesCloudParallax(ctx, options) {
   // Integrate cloud drift in world-tile space so changes to live wind never snap the field.
   // When wind is weak we still advect slowly along a hard-coded baseline direction so clear
   // skies don't look frozen; as wind ramps up we blend the direction toward the live vector.
-  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
-  const liveDir = Number.isFinite(windDirRad) ? windDirRad : CLOUD_WIND_BASELINE_DIR_RAD;
-  const speedTilesPerSec =
-    CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC;
-  // Baseline carries the "clear weather drift"; it fades out as the live wind takes over.
-  const baselineWeight = 1 - windI01;
-  const liveWeight = 0.3 + 0.7 * windI01;
-  const velXTiles =
-    speedTilesPerSec *
-    (baselineWeight * Math.cos(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.cos(liveDir));
-  const velYTiles =
-    speedTilesPerSec *
-    (baselineWeight * Math.sin(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.sin(liveDir));
+  const windState = getEffectiveWindState(windIntensity, windDirRad);
+  const velXTiles = windState.vx;
+  const velYTiles = windState.vy;
   const dtRaw = cloudDriftLastTimeSec >= 0 ? time - cloudDriftLastTimeSec : 0;
   // Pause/tab-switch/seek guard: drop dt outside a sane per-frame range so clouds don't teleport.
   const driftDt = !Number.isFinite(dtRaw) || dtRaw < 0 || dtRaw > 0.25 ? 0 : dtRaw;
@@ -352,7 +366,7 @@ function drawSnesCloudParallax(ctx, options) {
   const drawLayer = (isShadow, targetCtx = ctx, extraNudgeX = 0, extraNudgeY = 0) => {
     const yNudge = (isShadow ? shadowOffsetY : 0) + extraNudgeY;
     const xNudge = (isShadow ? shadowOffsetX : 0) + extraNudgeX;
-    
+
     for (const slot of visibleSlots) {
       const { sx, sy, variantIdx, c, sizeMul, jitterX, jitterY, bob, identityX, identityY } = slot;
       const spritePair = getCloudSpritePairForCluster(variantIdx);
@@ -605,7 +619,7 @@ export function drawWorldColliderOverlay(ctx, options) {
       const oy0 = Math.max(startY, cy - COLL_OVERLAY_RAD);
       const oy1 = Math.min(endY, cy + COLL_OVERLAY_RAD + 1);
       const overlayFeetDex = player.dexId || 94;
-      
+
       for (let my = oy0; my < oy1; my++) {
         for (let mx = ox0; mx < ox1; mx++) {
           const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, isPlayerWalkingAnim);
@@ -633,7 +647,7 @@ export function drawWorldColliderOverlay(ctx, options) {
           ctx.stroke();
         }
       }
-      
+
       const scatterPhyMemo = new Map();
       for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
         if (oxS < 0 || oxS >= data.width * MACRO_TILE_STRIDE) continue;
@@ -854,7 +868,7 @@ export function drawEnvironmentalEffects(ctx, options) {
   }
 
   if (windI01 > 0.02) {
-    drawWindStreamlines(ctx, cw, ch, time, windI01, windDir);
+    drawWindStreamlines(ctx, cw, ch, time, windI01, windDir, tileW, tileH, startX, startY, endX, endY);
   }
 
   if (screenTint && typeof screenTint.r === 'number' && (screenTint.a ?? 1) > 0.001) {
@@ -1005,106 +1019,126 @@ function ensureWindHashCache() {
  * lifecycle (`fade-in → hold → fade-out → respawn`) desynced by a hash, which gives the
  * field that "wind gusts wandering through" energy Wind Waker does so well.
  */
-function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad) {
+function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad, tileW, tileH, startX, startY, endX, endY) {
   const time = Number.isFinite(timeSec) ? timeSec : 0;
-  const area = cw * ch;
 
-  // Fewer, longer, bolder strokes than the old "lots of short wisps" look: each stroke
-  // should read clearly on its own so the wind direction is unmistakable.
-  const densityT = intensity * (0.35 + 1.0 * intensity);
-  const baseCount = Math.round((area / 48000) * densityT);
-  const count = Math.max(10, Math.min(baseCount, 140));
-
-  const dirX = Math.cos(dirRad);
-  const dirY = Math.sin(dirRad);
+  // Use the exact same effective wind state as the clouds to guarantee synchronization.
+  const windState = getEffectiveWindState(intensity, dirRad);
+  const dirX = Math.cos(windState.effectiveDirRad);
+  const dirY = Math.sin(windState.effectiveDirRad);
   const perpX = -dirY;
   const perpY = dirX;
 
-  // Per-streamline lifecycle seconds. Gusts coming and going look more alive than a static
-  // field of lines; fade window is generous so transitions never pop.
-  const lifeSec = 2.8 + 2.4 * intensity;
-  const fadeSec = 0.55;
+  // Sync with cloud drift (calculated in drawSnesCloudParallax).
+  // We scale the influence by 10x for the particles to make them feel like fast gusts.
+  const windInfluenceMul = 35;
+  const windX = cloudDriftXTiles * windInfluenceMul;
+  const windY = cloudDriftYTiles * windInfluenceMul;
+
+  // Use a slot-based grid in world tiles.
+  const step = 14;
+  const jitterMargin = step * 1.2;
+  const baseLen = 9 * (tileW || 32);
+  const halfLenTiles = (baseLen / (tileW || 32)) * 0.5;
+
+  // Visible slot range in world tiles, with a margin for trail length and jitter.
+  const sxMin = Math.floor((startX - windX - halfLenTiles - jitterMargin) / step);
+  const sxMax = Math.ceil((endX - windX + halfLenTiles + jitterMargin) / step);
+  const syMin = Math.floor((startY - windY - halfLenTiles - jitterMargin) / step);
+  const syMax = Math.ceil((endY - windY + halfLenTiles + jitterMargin) / step);
+
+  // Lifecycle constants.
+  const lifeSec = 2.4 + 2.0 * intensity;
+  const fadeSec = 0.5;
   const fadeT = fadeSec / lifeSec;
 
-  // Flow speed (screen px/sec): slower baseline than before so the eye can track individual
-  // strokes as they glide across — Wind-Waker lines read because they're readable, not racey.
-  const flowPxSec = 85 + 180 * intensity;
-
-  // Geometry: long strokes, generous swirl amplitude so the curve visibly swings.
-  const segments = 22;
-  const baseLen = 150 + 230 * intensity;
-  const swirlAmp = 16 + 26 * intensity;
-
-  // Bleed so a stroke whose anchor is off-screen still has its body inside the canvas,
-  // and wrap-around happens fully off-view.
-  const margin = baseLen * 0.6 + swirlAmp * 2 + 30;
-  const spanW = cw + margin * 2;
-  const spanH = ch + margin * 2;
+  // Geometry.
+  const segments = 24;
+  const swirlAmp = 18 + 24 * intensity;
+  const baseHalfWidth = 1.2 + 2.4 * intensity;
 
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  // We do NOT call setTransform here; we stay in world-pixel space (camera-translated).
+  ctx.imageSmoothingEnabled = false;
 
-  ensureWindHashCache();
-  for (let i = 0; i < count; i++) {
-    const h = WIND_HASH_CACHE[i];
-    const { hx, hy, hs, hp, hSpawn, hSide, hSwirl } = h;
+  for (let sy = syMin; sy <= syMax; sy++) {
+    for (let sx = sxMin; sx <= sxMax; sx++) {
+      // Density control: only some slots produce a streamline.
+      const hExist = hash01Cell(sx, sy, 0x1234);
+      if (hExist > 0.15 + intensity * 0.45) continue;
 
-    // Lifecycle fade envelope: ramps 0→1 over `fadeSec`, holds, then ramps 1→0.
-    // `hSpawn` desyncs streamlines so they don't all pop at once.
-    const rawLife = (time / lifeSec + hSpawn) % 1;
-    let fade;
-    if (rawLife < fadeT) fade = rawLife / fadeT;
-    else if (rawLife > 1 - fadeT) fade = (1 - rawLife) / fadeT;
-    else fade = 1;
-    if (fade < 0.03) continue;
+      const hSpawn = hash01Cell(sx, sy, 0x5678);
+      const rawLife = (time / lifeSec + hSpawn) % 1;
+      let fade;
+      if (rawLife < fadeT) fade = rawLife / fadeT;
+      else if (rawLife > 1 - fadeT) fade = (1 - rawLife) / fadeT;
+      else fade = 1;
+      if (fade < 0.02) continue;
 
-    // Per-stream drift speed: small hash variance avoids a rigid "all moving as one block" feel.
-    const streamSpeed = flowPxSec * (0.85 + hs * 0.45);
-    const phase = time * streamSpeed;
-    const rawX = hx * spanW + dirX * phase;
-    const rawY = hy * spanH + dirY * phase;
-    const ax = ((rawX % spanW) + spanW) % spanW - margin;
-    const ay = ((rawY % spanH) + spanH) % spanH - margin;
+      const hJitterX = hash01Cell(sx, sy, 0x9abc);
+      const hJitterY = hash01Cell(sx, sy, 0xdef0);
+      const jitterX = (hJitterX - 0.5) * step * 1.2;
+      const jitterY = (hJitterY - 0.5) * step * 1.2;
 
-    const len = baseLen * (0.85 + hs * 0.4);
-    const amp = swirlAmp * (0.75 + hSwirl * 0.8);
-    const side = hSide < 0.5 ? -1 : 1;
-    const phA = hp * Math.PI * 2;
-    const phB = hp * 3.1 + 0.7;
+      // Anchor in world-tiles.
+      const worldXTiles = sx * step + windX + jitterX;
+      const worldYTiles = sy * step + windY + jitterY;
 
-    // Build the path once — both passes re-use it.
-    ctx.beginPath();
-    for (let s = 0; s <= segments; s++) {
-      const tt = s / segments;
-      // Sine taper → zero amplitude at the tips, full swirl in the middle.
-      const taper = Math.sin(tt * Math.PI);
-      // Two harmonics: primary arc (one full sine across the stroke, picks a side) +
-      // a faster second harmonic for that organic "calligraphy brush wobble".
-      const primary = taper * amp * side * Math.sin(tt * Math.PI * 2 + phA);
-      const secondary = taper * amp * 0.4 * Math.sin(tt * Math.PI * 4 + phB);
-      const along = (tt - 0.5) * len;
-      const perp = primary + secondary;
-      const x = ax + dirX * along + perpX * perp;
-      const y = ay + dirY * along + perpY * perp;
-      if (s === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      // Anchor in world-pixels.
+      const ax = worldXTiles * tileW;
+      const ay = worldYTiles * tileH;
+
+      const hs = hash01Cell(sx, sy, 0x1357);
+      const hSwirl = hash01Cell(sx, sy, 0x2468);
+      const hSide = hash01Cell(sx, sy, 0x369c);
+
+      const len = baseLen * (0.9 + hs * 0.25);
+      const amp = swirlAmp * 0.3 * (0.7 + hSwirl * 0.8);
+      const side = hSide < 0.5 ? -1 : 1;
+      const phA = hs * Math.PI * 2;
+      const phB = hSwirl * 3.1 + 0.7;
+
+      const leftSide = [];
+      const rightSide = [];
+      const waveSpeed = 1.2 + hs * 0.8;
+
+      for (let s = 0; s <= segments; s++) {
+        const tt = s / segments;
+        const along = (tt - 0.5) * len;
+
+        const primary = amp * side * Math.sin(tt * Math.PI * 0.8 + phA - time * waveSpeed);
+        const secondary = amp * 0.3 * Math.sin(tt * Math.PI * 2 + phB + time * waveSpeed * 1.4);
+        const perp = primary + secondary;
+
+        const cx = ax + dirX * along + perpX * perp;
+        const cy = ay + dirY * along + perpY * perp;
+
+        let widthTaper = Math.pow(tt, 1.2);
+        if (tt > 0.96) {
+          widthTaper = 1.0 - (tt - 0.96) * 2;
+        }
+
+        const hw = baseHalfWidth * widthTaper;
+        leftSide.push({ x: cx + perpX * hw, y: cy + perpY * hw });
+        rightSide.push({ x: cx - perpX * hw, y: cy - perpY * hw });
+      }
+
+      const drawTrailPoly = (color, alphaMult) => {
+        ctx.globalAlpha = fade * alphaMult;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(leftSide[0].x, leftSide[0].y);
+        for (let j = 1; j < leftSide.length; j++) ctx.lineTo(leftSide[j].x, leftSide[j].y);
+        for (let j = rightSide.length - 1; j >= 0; j--) ctx.lineTo(rightSide[j].x, rightSide[j].y);
+        ctx.closePath();
+        ctx.fill();
+      };
+
+      ctx.globalCompositeOperation = 'source-over';
+      drawTrailPoly('#c9d8f2', 0.45 + 0.3 * intensity);
+      ctx.globalCompositeOperation = 'lighter';
+      drawTrailPoly('#ffffff', 0.6 + 0.3 * intensity);
     }
-
-    // Halo: wide, soft, bluish — gives the stroke body at a glance.
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = fade * (0.36 + 0.4 * intensity);
-    ctx.strokeStyle = '#c9d8f2';
-    ctx.lineWidth = 3.4 + 2.2 * intensity;
-    ctx.stroke();
-
-    // Core: narrow, bright, additive — snaps the shape forward from the halo.
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = fade * (0.55 + 0.35 * intensity);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.3 + 0.8 * intensity;
-    ctx.stroke();
   }
   ctx.restore();
 }

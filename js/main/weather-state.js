@@ -3,18 +3,14 @@
  * without importing main.js or touching the render layer.
  *
  * `main.js` writes the smoothed render state every tick; fire systems read it here.
+ *
+ * Wind lives in its own module — see `./wind-state.js`. This file is deliberately kept
+ * to rain + preset so neither concern grows a tangled API surface.
  */
 
 let rainIntensity01 = 0;
 /** @type {'clear' | 'cloudy' | 'rain'} */
 let presetName = 'clear';
-
-/** Base wind strength (0..1) before gust modulation. Fed by {@link setWeatherRenderState}. */
-let windBaseIntensity01 = 0;
-/** Wind direction as radians (screen-space: 0 = east, +pi/2 = south, matches draw code). */
-let windDirectionRad = 0;
-/** Slow gust envelope (0..1). Multiplied into base intensity for audible/visible gusts. */
-let windGust01 = 1;
 
 /** Minimum rain to meaningfully dampen / put out fires. Avoids trace rain ruining gameplay. */
 export const RAIN_EXTINGUISH_THRESHOLD = 0.25;
@@ -31,22 +27,10 @@ export const FIRE_RAIN_EXTINGUISH_STRONG_SEC = 1;
 export const FIRE_RAIN_EXTINGUISH_WEAK_SEC = 6;
 export const FIRE_RAIN_EXTINGUISH_GRACE_SEC = FIRE_RAIN_EXTINGUISH_STRONG_SEC;
 
-export function setWeatherRenderState({
-  rainIntensity = 0,
-  preset = 'clear',
-  windBaseIntensity = 0,
-  windDirRad = 0,
-  windGust = 1
-} = {}) {
+export function setWeatherRenderState({ rainIntensity = 0, preset = 'clear' } = {}) {
   const r = Number(rainIntensity);
   rainIntensity01 = Math.max(0, Math.min(1, Number.isFinite(r) ? r : 0));
   if (preset === 'clear' || preset === 'cloudy' || preset === 'rain') presetName = preset;
-  const wb = Number(windBaseIntensity);
-  windBaseIntensity01 = Math.max(0, Math.min(1, Number.isFinite(wb) ? wb : 0));
-  const wd = Number(windDirRad);
-  windDirectionRad = Number.isFinite(wd) ? wd : 0;
-  const wg = Number(windGust);
-  windGust01 = Math.max(0, Math.min(1, Number.isFinite(wg) ? wg : 1));
 }
 
 export function getWeatherRainIntensity() {
@@ -55,26 +39,6 @@ export function getWeatherRainIntensity() {
 
 export function getWeatherPreset() {
   return presetName;
-}
-
-/** Base wind intensity (0..1) before gust modulation — stable target envelope. */
-export function getWeatherWindBaseIntensity() {
-  return windBaseIntensity01;
-}
-
-/** Wind direction in radians; matches screen-space convention used by the renderer. */
-export function getWeatherWindDirectionRad() {
-  return windDirectionRad;
-}
-
-/** Slow gust modulation 0..1. Multiply with base intensity for felt/heard gusts. */
-export function getWeatherWindGust() {
-  return windGust01;
-}
-
-/** Convenience: base intensity × gust envelope. Ready-to-use "felt" intensity. */
-export function getWeatherWindFeltIntensity() {
-  return windBaseIntensity01 * windGust01;
 }
 
 export function isRainExtinguishing() {
