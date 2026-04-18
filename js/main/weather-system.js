@@ -23,6 +23,7 @@ import { consumeWeatherChangeRequest } from './weather-control.js';
 import { setWeatherRenderState } from './weather-state.js';
 import { computeLiveWindState, setWindState } from './wind-state.js';
 import {
+  WEATHER_PRESETS,
   cloneWeatherParams,
   isWeatherPreset,
   resolveWeatherParams
@@ -47,6 +48,13 @@ let targetPreset = 'cloudy';
 let targetIntensity01 = 0.75;
 /** @type {WeatherRenderParams | null} — smoothed display state; lazily allocated. */
 let activeParams = null;
+/** Smoothed categorical blend (one-hot target eased over time) used by systems with discrete behavior. */
+const activePresetBlend = {
+  clear: 0,
+  cloudy: 0,
+  rain: 0,
+  blizzard: 0
+};
 
 /** @type {Set<(ev: { preset: WeatherPresetId, intensity01: number, source: WeatherTargetChangeSource }) => void>} */
 const targetChangeListeners = new Set();
@@ -67,6 +75,9 @@ export function initWeatherSystem(opts = {}) {
     if (Number.isFinite(n)) targetIntensity01 = Math.max(0, Math.min(1, n));
   }
   activeParams = cloneWeatherParams(resolveWeatherParams(targetPreset, targetIntensity01));
+  for (const id of WEATHER_PRESETS) {
+    activePresetBlend[id] = id === targetPreset ? 1 : 0;
+  }
   emitTargetChanged('init');
 }
 
@@ -172,10 +183,49 @@ export function tickWeather(dt, gameTime) {
     active.screenTint = blended.a > TINT_ALPHA_EPSILON ? blended : null;
   }
 
+  // 2b. Smooth categorical preset blend (needed for systems that branch by preset id).
+  let presetSum = 0;
+  for (const id of WEATHER_PRESETS) {
+    const targetW = id === targetPreset ? 1 : 0;
+    const nextW = lerpN(activePresetBlend[id] || 0, targetW);
+    activePresetBlend[id] = Math.max(0, Math.min(1, nextW));
+    presetSum += activePresetBlend[id];
+  }
+  if (presetSum > 1e-6) {
+    for (const id of WEATHER_PRESETS) activePresetBlend[id] /= presetSum;
+  }
+
   // 3. Publish to shared read-only state modules (rain → weather-state; wind → wind-state).
   //    Everything else (audio, fire snuff, render) reads from there, not from this engine.
-  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: targetPreset });
-  setWindState(computeLiveWindState(gameTime, targetPreset, active.rainIntensity));
+  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: getActiveWeatherPreset() });
+  setWindState(computeLiveWindState(gameTime, targetPreset, active.rainIntensity, activePresetBlend));
+}
+
+/**
+ * Dominant smoothed preset id (argmax over {@link activePresetBlend}).
+ * Useful for systems that still need a single enum while transitioning.
+ * @returns {WeatherPresetId}
+ */
+export function getActiveWeatherPreset() {
+  let bestId = /** @type {WeatherPresetId} */ ('clear');
+  let bestW = -1;
+  for (const id of WEATHER_PRESETS) {
+    const w = Number(activePresetBlend[id]) || 0;
+    if (w > bestW) {
+      bestW = w;
+      bestId = /** @type {WeatherPresetId} */ (id);
+    }
+  }
+  return bestId;
+}
+
+/**
+ * Smoothed 0..1 weight for a specific preset id.
+ * Lets render/audio crossfade preset-specific behavior instead of hard-switching.
+ * @param {WeatherPresetId} preset
+ */
+export function getActiveWeatherPresetBlend(preset) {
+  return Math.max(0, Math.min(1, Number(activePresetBlend[preset]) || 0));
 }
 
 /** @param {WeatherTargetChangeSource} source */

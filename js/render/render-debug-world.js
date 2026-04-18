@@ -49,6 +49,11 @@ let cloudDriftLastTimeSec = -1;
 let rainStreakScrollPxX = 0;
 let rainStreakScrollPxY = 0;
 let rainStreakScrollLastSec = -1;
+/** Smoothed wind snapshot shared by precipitation / streamlines to avoid abrupt direction jumps. */
+let envWindSmoothIntensity01 = 0;
+let envWindSmoothDirX = Math.cos(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
+let envWindSmoothDirY = Math.sin(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
+let envWindSmoothLastSec = -1;
 
 const CLOUD_SLOT_JITTER_FRAC = 1.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
@@ -144,6 +149,35 @@ function hash01Cell(ix, iy, iz) {
 function smoothstep01(t) {
   const u = Math.max(0, Math.min(1, t));
   return u * u * (3 - 2 * u);
+}
+
+function sampleSmoothedEnvWind(timeSec, intensityRaw, dirRaw) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const rawI = Math.max(0, Math.min(1, Number(intensityRaw) || 0));
+  const rawDir = Number.isFinite(dirRaw) ? dirRaw : WIND_CLOUD_BLEND_BASELINE_DIR_RAD;
+  const rawX = Math.cos(rawDir);
+  const rawY = Math.sin(rawDir);
+  const dtRaw = envWindSmoothLastSec >= 0 ? time - envWindSmoothLastSec : 0;
+  const dt = !Number.isFinite(dtRaw) || dtRaw < 0 || dtRaw > 0.25 ? 0 : dtRaw;
+  envWindSmoothLastSec = time;
+  const k = 1 - Math.exp(-dt / 0.45);
+  const kk = dt > 0 ? Math.max(0, Math.min(1, k)) : 1;
+
+  envWindSmoothIntensity01 += (rawI - envWindSmoothIntensity01) * kk;
+  envWindSmoothDirX += (rawX - envWindSmoothDirX) * kk;
+  envWindSmoothDirY += (rawY - envWindSmoothDirY) * kk;
+  const mag = Math.hypot(envWindSmoothDirX, envWindSmoothDirY);
+  if (mag > 1e-6) {
+    envWindSmoothDirX /= mag;
+    envWindSmoothDirY /= mag;
+  } else {
+    envWindSmoothDirX = Math.cos(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
+    envWindSmoothDirY = Math.sin(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
+  }
+  return {
+    intensity01: Math.max(0, Math.min(1, envWindSmoothIntensity01)),
+    dirRad: Math.atan2(envWindSmoothDirY, envWindSmoothDirX)
+  };
 }
 
 let cloudSizeField = null;
@@ -750,6 +784,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (drives streamline density/brightness).
  * @param {number} [options.windDirRad=0] — wind direction in radians (0 = east, +π/2 = south).
  * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | string} [options.weatherPreset='clear'] — current weather preset id.
+ * @param {number} [options.weatherBlizzardBlend01=0] — smoothed 0..1 blend into blizzard precipitation.
  * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
@@ -775,6 +810,7 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudMaxMul,
     cloudAlphaMul,
     weatherPreset = 'clear',
+    weatherBlizzardBlend01 = 0,
     rainIntensity = 0,
     windIntensity = 0,
     windDirRad = 0,
@@ -795,8 +831,9 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.restore();
   }
 
-  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
-  const windDir = Number(windDirRad) || 0;
+  const smoothWind = sampleSmoothedEnvWind(time, windIntensity, windDirRad);
+  const windI01 = smoothWind.intensity01;
+  const windDir = smoothWind.dirRad;
 
   drawSnesCloudParallax(ctx, {
     ch,
@@ -830,23 +867,32 @@ export function drawEnvironmentalEffects(ctx, options) {
   }
 
   const rainI = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
-  const isBlizzard = weatherPreset === 'blizzard';
+  const blendRaw = Number(weatherBlizzardBlend01);
+  const blizzardBlend = Math.max(
+    0,
+    Math.min(1, Number.isFinite(blendRaw) ? blendRaw : (weatherPreset === 'blizzard' ? 1 : 0))
+  );
+  const rainShare = 1 - blizzardBlend;
+  const rainVisualI = rainI * rainShare;
+  const snowVisualI = rainI * blizzardBlend;
   if (rainI > 0.001) {
-    if (isBlizzard) {
+    if (snowVisualI > 0.001) {
       // Blizzard precipitation: dense, wind-drifted flakes (not rain splashes/streak lines).
+      drawBlizzardSnowflakes(ctx, time, snowVisualI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
+    }
+    if (rainVisualI > 0.001) {
+      // World-space splashes on entities (ctx transform = camera world pixels).
+      tickAndDrawRainSplashes(ctx, time, rainVisualI, splashTargets);
+      // World-space streaks (same ctx transform as splashes / entities) so slant matches puddles.
+      drawRainStreaks(ctx, time, rainVisualI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
+    } else {
       rainSplashes.length = 0;
       rainSplashSpawnDebt = 0;
       rainLastTimeSec = -1;
       rainStreakScrollLastSec = -1;
       rainStreakScrollPxX = 0;
       rainStreakScrollPxY = 0;
-      drawBlizzardSnowflakes(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
-    } else {
-      // World-space splashes on entities (ctx transform = camera world pixels).
-      tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
-      // World-space streaks (same ctx transform as splashes / entities) so slant matches puddles.
-      drawRainStreaks(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
-    }
+    }  
   } else {
     rainSplashes.length = 0;
     rainSplashSpawnDebt = 0;

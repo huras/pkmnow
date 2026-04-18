@@ -37,6 +37,7 @@ import {
   getWeatherTarget,
   setWeatherTarget,
   getActiveWeatherParams,
+  getActiveWeatherPresetBlend,
   addWeatherTargetChangeListener
 } from './main/weather-system.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
@@ -552,6 +553,7 @@ function getSettings() {
     weatherCloudAlphaMul: weather.cloudAlphaMul,
     weatherRainIntensity: weather.rainIntensity,
     weatherScreenTint: weather.screenTint,
+    weatherBlizzardBlend01: getActiveWeatherPresetBlend('blizzard'),
     weatherCloudNoiseSeed,
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad()
@@ -1034,7 +1036,6 @@ playWorldTimeSlider?.addEventListener('input', () => {
   const v = parseFloat(playWorldTimeSlider.value);
   if (!Number.isFinite(v)) return;
   worldHours = wrapHours(v);
-  snapDayCycleTintSmoothToHours(worldHours);
   lastWorldTimePanelPhase = null;
   syncPlayWorldTimePanel();
   updateView();
@@ -1047,7 +1048,6 @@ playWorldTimeRun?.addEventListener('change', () => {
 function wireWorldTimePreset(id, hour) {
   document.getElementById(id)?.addEventListener('click', () => {
     worldHours = wrapHours(hour);
-    snapDayCycleTintSmoothToHours(worldHours);
     lastWorldTimePanelPhase = null;
     syncPlayWorldTimePanel();
     updateView();
