@@ -291,6 +291,20 @@ export function render(canvas, data, options = {}) {
         if (hasPlayChunk(key)) cachedVisibleChunks++;
         else {
           missingVisibleChunks++;
+          enqueuePlayChunkBake(cx, cy, false, true);
+        }
+      }
+    }
+
+    // --- PRE-BAKE NEARBY CHUNKS (PREDICTIVE CACHING) ---
+    // If the visible area is mostly baked, use some of the budget to bake nearby chunks
+    // that the player might move into soon. This reduces FPS drops during discovery.
+    const prebakeRadius = 1; 
+    for (let cy = cStartY - prebakeRadius; cy <= cEndY + prebakeRadius; cy++) {
+      for (let cx = cStartX - prebakeRadius; cx <= cEndX + prebakeRadius; cx++) {
+        if (cx < 0 || cy < 0 || cx > maxChunkXi || cy > maxChunkYi) continue;
+        const key = `${cx},${cy}`;
+        if (!visibleChunkKeys.has(key) && !hasPlayChunk(key)) {
           enqueuePlayChunkBake(cx, cy);
         }
       }

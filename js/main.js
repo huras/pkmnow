@@ -181,6 +181,13 @@ const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
+const chkRotas = document.getElementById('chkRotas');
+const chkGrafo = document.getElementById('chkGrafo');
+const chkCurvas = document.getElementById('chkCurvas');
+const chkPlayColliders = document.getElementById('chkPlayColliders');
+const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
+const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
+const inputViewTypeTerrain = document.querySelector('input[name="viewType"][value="terrain"]');
 let playSocialOverlay = {
   flashAction: () => {},
   clearActive: () => {},
@@ -486,37 +493,40 @@ function syncPlayBgmNowPlayingPanel() {
 
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
-  const overlayPaths = document.getElementById('chkRotas')?.checked ?? true;
-  const overlayGraph = document.getElementById('chkGrafo')?.checked ?? true;
-  const overlayContours = document.getElementById('chkCurvas')?.checked ?? false;
-  const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
-  const showWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay')?.checked ?? false;
+  const overlayPaths = chkRotas?.checked ?? true;
+  const overlayGraph = chkGrafo?.checked ?? true;
+  const overlayContours = chkCurvas?.checked ?? false;
+  const showPlayColliders = chkPlayColliders?.checked ?? false;
+  const showWorldReactionsOverlay = chkWorldReactionsOverlay?.checked ?? false;
   const collidersOn = showPlayColliders || window.debugColliders;
+
   if (appMode === 'play' && currentData && collidersOn) {
     ensurePlayColliderOverlayCache(currentData, player, imageCache, collidersOn);
   } else {
     clearPlayColliderOverlayCache();
   }
-  const dayPhase = getDayPhaseFromHours(wrapHours(worldHours));
+
+  const hoursWrapped = wrapHours(worldHours);
+  const dayPhase = getDayPhaseFromHours(hoursWrapped);
   const rawDayCycleTint = appMode === 'play' ? getSmoothedDayCycleTintForRender() : null;
   const weatherCloudNoiseSeed =
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
+
   // Rain dims the ambient day tint — overcast sky blocks daylight proportionally to intensity.
   // R/G are dimmed more than B so heavy rain also pulls the scene slightly cool, not just dark.
-  const dayCycleTint =
-    rawDayCycleTint && weather.rainIntensity > 0.01
-      ? (() => {
-          const rain = Math.min(1, weather.rainIntensity);
-          const dim = 1 - rain * 0.38;
-          const dimBlue = 1 - rain * 0.28;
-          return {
-            r: Math.max(0, Math.round(rawDayCycleTint.r * dim)),
-            g: Math.max(0, Math.round(rawDayCycleTint.g * dim)),
-            b: Math.max(0, Math.round(rawDayCycleTint.b * dimBlue))
-          };
-        })()
-      : rawDayCycleTint;
+  let dayCycleTint = rawDayCycleTint;
+  if (rawDayCycleTint && weather.rainIntensity > 0.01) {
+    const rain = Math.min(1, weather.rainIntensity);
+    const dim = 1 - rain * 0.38;
+    const dimBlue = 1 - rain * 0.28;
+    dayCycleTint = {
+      r: Math.max(0, Math.round(rawDayCycleTint.r * dim)),
+      g: Math.max(0, Math.round(rawDayCycleTint.g * dim)),
+      b: Math.max(0, Math.round(rawDayCycleTint.b * dimBlue))
+    };
+  }
+
   return {
     viewType,
     overlayPaths,
@@ -530,7 +540,7 @@ function getSettings() {
     player,
     time: gameTime,
     dayPhase,
-    worldHours: wrapHours(worldHours),
+    worldHours: hoursWrapped,
     dayCycleTint,
     weatherPreset: currentWeatherPreset,
     weatherIntensity: currentWeatherIntensity,
