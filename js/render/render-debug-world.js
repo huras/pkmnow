@@ -731,6 +731,8 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {number} [options.cloudMinMul] / @param {number} [options.cloudMaxMul] — cloud size range.
  * @param {number} [options.cloudAlphaMul] — extra cloud alpha multiplier.
  * @param {number} [options.rainIntensity=0] — 0..1 rain VFX intensity.
+ * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (drives streamline density/brightness).
+ * @param {number} [options.windDirRad=0] — wind direction in radians (0 = east, +π/2 = south).
  * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
@@ -756,6 +758,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudMaxMul,
     cloudAlphaMul,
     rainIntensity = 0,
+    windIntensity = 0,
+    windDirRad = 0,
     screenTint,
     splashTargets,
     entityShadowSprites
@@ -812,6 +816,11 @@ export function drawEnvironmentalEffects(ctx, options) {
     rainSplashes.length = 0;
     rainSplashSpawnDebt = 0;
     rainLastTimeSec = -1;
+  }
+
+  const windI = Math.max(0, Math.min(1, Number(windIntensity) || 0));
+  if (windI > 0.02) {
+    drawWindStreamlines(ctx, cw, ch, time, windI, Number(windDirRad) || 0);
   }
 
   if (screenTint && typeof screenTint.r === 'number' && (screenTint.a ?? 1) > 0.001) {
@@ -894,6 +903,130 @@ function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
       ctx.moveTo(px, py);
       ctx.lineTo(px - dx * len, py - dy * len);
     }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Screen-space wind visualization with a Wind-Waker calligraphy feel: long, clearly-
+ * forward-going swooshes that drift along the wind vector, curve with a two-harmonic
+ * swirl (suggesting a gust rolling through), and fade in / out over their lifetime.
+ *
+ * Per streamline we draw the same polyline twice:
+ *   1. a soft wide halo (`source-over`, pale blue) — gives body / glow,
+ *   2. a bright narrow core (`lighter`, white) — snappy center line.
+ * Doing both `stroke()` calls against the same cached path means the path-construction
+ * cost (the inner `segments` loop) is paid only once per streamline.
+ *
+ * Anchors advance in world-space at `flowPxSec × dir` and wrap around a bleed-padded
+ * span, so strokes never pop at the viewport edge. Each streamline has a per-instance
+ * lifecycle (`fade-in → hold → fade-out → respawn`) desynced by a hash, which gives the
+ * field that "wind gusts wandering through" energy Wind Waker does so well.
+ */
+function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const area = cw * ch;
+
+  // Fewer, longer, bolder strokes than the old "lots of short wisps" look: each stroke
+  // should read clearly on its own so the wind direction is unmistakable.
+  const densityT = intensity * (0.35 + 1.0 * intensity);
+  const baseCount = Math.round((area / 48000) * densityT);
+  const count = Math.max(10, Math.min(baseCount, 140));
+
+  const dirX = Math.cos(dirRad);
+  const dirY = Math.sin(dirRad);
+  const perpX = -dirY;
+  const perpY = dirX;
+
+  // Per-streamline lifecycle seconds. Gusts coming and going look more alive than a static
+  // field of lines; fade window is generous so transitions never pop.
+  const lifeSec = 2.8 + 2.4 * intensity;
+  const fadeSec = 0.55;
+  const fadeT = fadeSec / lifeSec;
+
+  // Flow speed (screen px/sec): slower baseline than before so the eye can track individual
+  // strokes as they glide across — Wind-Waker lines read because they're readable, not racey.
+  const flowPxSec = 85 + 180 * intensity;
+
+  // Geometry: long strokes, generous swirl amplitude so the curve visibly swings.
+  const segments = 22;
+  const baseLen = 150 + 230 * intensity;
+  const swirlAmp = 16 + 26 * intensity;
+
+  // Bleed so a stroke whose anchor is off-screen still has its body inside the canvas,
+  // and wrap-around happens fully off-view.
+  const margin = baseLen * 0.6 + swirlAmp * 2 + 30;
+  const spanW = cw + margin * 2;
+  const spanH = ch + margin * 2;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (let i = 0; i < count; i++) {
+    const hx = hash01Cell(i, 2017, 1);
+    const hy = hash01Cell(i, 7321, 2);
+    const hs = hash01Cell(i, 4091, 3);
+    const hp = hash01Cell(i, 50021, 4);
+    const hSpawn = hash01Cell(i, 8111, 5);
+    const hSide = hash01Cell(i, 13411, 6);
+    const hSwirl = hash01Cell(i, 26371, 7);
+
+    // Lifecycle fade envelope: ramps 0→1 over `fadeSec`, holds, then ramps 1→0.
+    // `hSpawn` desyncs streamlines so they don't all pop at once.
+    const rawLife = (time / lifeSec + hSpawn) % 1;
+    let fade;
+    if (rawLife < fadeT) fade = rawLife / fadeT;
+    else if (rawLife > 1 - fadeT) fade = (1 - rawLife) / fadeT;
+    else fade = 1;
+    if (fade < 0.03) continue;
+
+    // Per-stream drift speed: small hash variance avoids a rigid "all moving as one block" feel.
+    const streamSpeed = flowPxSec * (0.85 + hs * 0.45);
+    const phase = time * streamSpeed;
+    const rawX = hx * spanW + dirX * phase;
+    const rawY = hy * spanH + dirY * phase;
+    const ax = ((rawX % spanW) + spanW) % spanW - margin;
+    const ay = ((rawY % spanH) + spanH) % spanH - margin;
+
+    const len = baseLen * (0.85 + hs * 0.4);
+    const amp = swirlAmp * (0.75 + hSwirl * 0.8);
+    const side = hSide < 0.5 ? -1 : 1;
+    const phA = hp * Math.PI * 2;
+    const phB = hp * 3.1 + 0.7;
+
+    // Build the path once — both passes re-use it.
+    ctx.beginPath();
+    for (let s = 0; s <= segments; s++) {
+      const tt = s / segments;
+      // Sine taper → zero amplitude at the tips, full swirl in the middle.
+      const taper = Math.sin(tt * Math.PI);
+      // Two harmonics: primary arc (one full sine across the stroke, picks a side) +
+      // a faster second harmonic for that organic "calligraphy brush wobble".
+      const primary = taper * amp * side * Math.sin(tt * Math.PI * 2 + phA);
+      const secondary = taper * amp * 0.4 * Math.sin(tt * Math.PI * 4 + phB);
+      const along = (tt - 0.5) * len;
+      const perp = primary + secondary;
+      const x = ax + dirX * along + perpX * perp;
+      const y = ay + dirY * along + perpY * perp;
+      if (s === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+
+    // Halo: wide, soft, bluish — gives the stroke body at a glance.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = fade * (0.36 + 0.4 * intensity);
+    ctx.strokeStyle = '#c9d8f2';
+    ctx.lineWidth = 3.4 + 2.2 * intensity;
+    ctx.stroke();
+
+    // Core: narrow, bright, additive — snaps the shape forward from the halo.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = fade * (0.55 + 0.35 * intensity);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.3 + 0.8 * intensity;
     ctx.stroke();
   }
   ctx.restore();

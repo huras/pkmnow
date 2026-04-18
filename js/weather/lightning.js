@@ -54,6 +54,35 @@ const summonedStormCells = [];
 /** slotKey `sx,sy` -> startedAtMs */
 const cloudFlashes = new Map();
 
+/**
+ * Preview storm cells shown *while the player is charging a Thunder cast past the first bar*.
+ * Unlike {@link summonedStormCells}, these have no fixed lifetime — they live as long as the
+ * holder keeps calling {@link setChargingThunderPreview}. When the holder releases (charged
+ * cast) or moves out of range, {@link clearChargingThunderPreview} flags them to fade out
+ * over {@link PREVIEW_FADE_OUT_MS} and the pruner removes them after the tail.
+ *
+ * Level 1 Thunder (tap / pre-first-bar) intentionally leaves this empty so that variant
+ * keeps its "stealth" feel; only L2 + L3 preview on-screen.
+ *
+ * Keyed by an opaque `ownerId` (button: `'lmb'|'rmb'|'mmb'`) so the three pointer buttons
+ * can't collide.
+ * @type {Map<string, {
+ *   worldX: number,
+ *   worldY: number,
+ *   charge01: number,
+ *   chargeLevel: 2 | 3,
+ *   color: BoltColorId,
+ *   lastUpdateMs: number,
+ *   fadingOutAtMs: number | null
+ * }>}
+ */
+const chargingPreviewCells = new Map();
+
+/** If we haven't seen an update in this many ms, start auto-fading (player stopped publishing). */
+const PREVIEW_STALE_MS = 140;
+/** Fade tail length once the preview is flagged to disappear. */
+const PREVIEW_FADE_OUT_MS = 180;
+
 let screenFlashStartMs = 0;
 let screenFlashUntilMs = 0;
 
@@ -84,6 +113,16 @@ function pruneExpired(now) {
     now - summonedStormCells[0].createdAtMs > summonedStormCells[0].durationMs
   ) {
     summonedStormCells.shift();
+  }
+  if (chargingPreviewCells.size > 0) {
+    for (const [ownerId, cell] of chargingPreviewCells) {
+      if (cell.fadingOutAtMs != null) {
+        if (now - cell.fadingOutAtMs > PREVIEW_FADE_OUT_MS) chargingPreviewCells.delete(ownerId);
+      } else if (now - cell.lastUpdateMs > PREVIEW_STALE_MS + PREVIEW_FADE_OUT_MS) {
+        // No setter in ~stale+fade ms: assume the holder vanished silently, drop it.
+        chargingPreviewCells.delete(ownerId);
+      }
+    }
   }
 }
 
@@ -176,6 +215,47 @@ export function spawnSummonedThunderCloudAt(worldX, worldY, opts = {}) {
 
 /** Exported so move-side code (e.g. Thunder) keeps its bolt delay in sync with the cloud visual. */
 export const SUMMONED_THUNDER_BOLT_DELAY_MS = SUMMONED_CLOUD_BOLT_DELAY_MS;
+
+/**
+ * Publish / refresh a charging-Thunder preview cloud. Call every frame with the current aim
+ * while the player is holding a Thunder button past the first charge bar; the renderer uses
+ * the freshest world position so the cloud + shadow follow the cursor.
+ *
+ * The preview is meant for L2 + L3 only (L1 is "stealth"); callers should avoid publishing
+ * until the charge is eligible for the strong variant.
+ * @param {string} ownerId  opaque owner key (one active preview per key)
+ * @param {{ worldX: number, worldY: number, charge01: number, chargeLevel?: 2 | 3, color?: BoltColorId }} opts
+ */
+export function setChargingThunderPreview(ownerId, opts) {
+  if (!ownerId) return;
+  const worldX = Number(opts?.worldX);
+  const worldY = Number(opts?.worldY);
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return;
+  const charge01 = Math.max(0, Math.min(1, Number(opts?.charge01) || 0));
+  const chargeLevel = opts?.chargeLevel === 3 ? 3 : 2;
+  const color = opts?.color === 'yellow' ? 'yellow' : 'default';
+  // Re-publishing revives a fading cell so a brief miss-frame doesn't pop the cloud off.
+  chargingPreviewCells.set(ownerId, {
+    worldX,
+    worldY,
+    charge01,
+    chargeLevel,
+    color,
+    lastUpdateMs: performance.now(),
+    fadingOutAtMs: null
+  });
+}
+
+/**
+ * Flag an owner's preview cell to fade out over {@link PREVIEW_FADE_OUT_MS}, then be pruned.
+ * Safe to call multiple times / with unknown ids.
+ */
+export function clearChargingThunderPreview(ownerId) {
+  if (!ownerId) return;
+  const cell = chargingPreviewCells.get(ownerId);
+  if (!cell) return;
+  if (cell.fadingOutAtMs == null) cell.fadingOutAtMs = performance.now();
+}
 
 /**
  * Pick a target near the player and ground-strike it.
@@ -310,12 +390,99 @@ function drawSummonedStormCell(ctx, cell, now, tileW, tileH) {
 }
 
 /**
+ * Charging Thunder preview: a half-formed storm cell tracked to the player's aim, with a
+ * dark disc shadow on the ground directly underneath the bolt's future impact and an inner
+ * electric glimmer that pulses stronger as charge climbs. Sold separately from the final
+ * "boom" so the payoff still lands — this is the *tell* that trades surprise for strength.
+ */
+function drawChargingPreviewCell(ctx, cell, now, tileW, tileH) {
+  let livenessT = 1;
+  if (cell.fadingOutAtMs != null) {
+    livenessT = Math.max(0, 1 - (now - cell.fadingOutAtMs) / PREVIEW_FADE_OUT_MS);
+  } else if (now - cell.lastUpdateMs > PREVIEW_STALE_MS) {
+    livenessT = Math.max(0, 1 - (now - cell.lastUpdateMs - PREVIEW_STALE_MS) / PREVIEW_FADE_OUT_MS);
+  }
+  if (livenessT <= 0.01) return;
+
+  // Growth curve matched to the charge system: 0 at the L2 threshold (1/3 charge01),
+  // 1 at max charge. Cloud scale lerps from the L2 cloud (1.0x) up to the L3 cloud (1.55x)
+  // so the on-screen size "signals" the tier the strike will commit to on release.
+  const charge01 = cell.charge01;
+  const t = Math.max(0, Math.min(1, (charge01 - 1 / 3) / (2 / 3)));
+  const scale = 1.0 + (1.55 - 1.0) * t;
+  const baseRadiusPx = Math.max(10, tileW * 0.95) * scale;
+  const cx = cell.worldX * tileW;
+  const cy = (cell.worldY - 0.8) * tileH;
+  const impactX = cell.worldX * tileW;
+  const impactY = cell.worldY * tileH;
+  const pal = BOLT_PALETTES[cell.color] || BOLT_PALETTES.default;
+
+  ctx.save();
+
+  // Ground shadow disc marks where the bolt lands. Dark, soft-edged, elongated on Y so it
+  // reads as a surface shadow rather than a geometric ring.
+  const shadowR = baseRadiusPx * 0.62;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 0.4 * livenessT;
+  ctx.fillStyle = '#05070c';
+  ctx.beginPath();
+  ctx.ellipse(impactX, impactY, shadowR, shadowR * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cloud puff — overlapping dark ellipses, gently swirling so the cell looks alive.
+  const swirl = (now / 1000) * 0.9;
+  const puffs = 5;
+  for (let i = 0; i < puffs; i++) {
+    const ang = (i / puffs) * Math.PI * 2 + swirl * 0.2;
+    const ox = Math.cos(ang) * baseRadiusPx * 0.55;
+    const oy = Math.sin(ang) * baseRadiusPx * 0.28 - baseRadiusPx * 0.04;
+    const r = baseRadiusPx * (0.55 + 0.18 * Math.sin(ang * 1.7 + swirl));
+    ctx.globalAlpha = 0.55 * livenessT;
+    ctx.fillStyle = '#1a1f2a';
+    ctx.beginPath();
+    ctx.ellipse(cx + ox, cy + oy, r, r * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.35 * livenessT;
+  ctx.fillStyle = '#3c4458';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - baseRadiusPx * 0.1, baseRadiusPx * 0.9, baseRadiusPx * 0.42, 0, Math.PI, 0);
+  ctx.fill();
+
+  // Inner glimmer — electricity visibly building up. Two-sin product so flashes feel
+  // irregular, and the amplitude grows with `t` so L3 charges look more dangerous.
+  const glimmerPhase = (now / 1000) * 3.2 + cell.worldX * 0.73 + cell.worldY * 0.91;
+  const glimmer = Math.max(0, Math.sin(glimmerPhase) * Math.sin(glimmerPhase * 0.77 + 1.3));
+  const glimmerT = glimmer * (0.35 + 0.65 * t);
+  if (glimmerT > 0.08) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = glimmerT * livenessT * 0.85;
+    const glowR = baseRadiusPx * (0.45 + 0.25 * glimmerT);
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+    grad.addColorStop(0, `${pal.impact0}0.9)`);
+    grad.addColorStop(0.55, `${pal.impact1}0.35)`);
+    grad.addColorStop(1, `${pal.impact2}0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
  * Draw all active lightning: bolts in world pixels, screen flash in screen pixels.
  * Call with the same ctx used for env effects (camera transform already applied).
  */
 export function drawLightning(ctx, opts) {
   const { cw, ch, tileW, tileH } = opts;
   const now = performance.now();
+
+  // Preview cells render first so the actual bolt/impact glow can overdraw them cleanly.
+  for (const cell of chargingPreviewCells.values()) {
+    drawChargingPreviewCell(ctx, cell, now, tileW, tileH);
+  }
 
   for (const cell of summonedStormCells) {
     drawSummonedStormCell(ctx, cell, now, tileW, tileH);
@@ -397,6 +564,7 @@ export function clearLightningState() {
   groundBolts.length = 0;
   cloudFlashes.clear();
   summonedStormCells.length = 0;
+  chargingPreviewCells.clear();
   screenFlashStartMs = 0;
   screenFlashUntilMs = 0;
   autoSpawnCooldownSec = 3;

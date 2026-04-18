@@ -10,6 +10,17 @@ export const TRUNK_STRIP_WIDTH_FRAC = 0.25;
 /** Formal broadleaf trunk span on X (micro tiles) × {@link TRUNK_STRIP_WIDTH_FRAC}. */
 export const FORMAL_TRUNK_BASE_WIDTH_TILES = 2;
 
+/**
+ * Move-detection hitbox multiplier for trees. Moves (Thunder splash, Flamethrower, Cut sweep,
+ * lightning tree-ignition, etc.) test against a **bigger circle** than the physical trunk
+ * collider, so area / splash attacks feel generous on the tree canopy without making the tree
+ * block walking more aggressively. Same center; only the radius is scaled.
+ *
+ * Physics colliders (walkability, projectile-vs-tree blocking for non-move physics) still use
+ * the unscaled `radius`; only move-impact checks multiply by this.
+ */
+export const TREE_MOVE_HITBOX_RADIUS_MULT = 2.15;
+
 /** Non-tree solid scatter only: multiply stem circle radius when the prop is a crystal. */
 export const SCATTER_CRYSTAL_RADIUS_MULTIPLIER = 2;
 

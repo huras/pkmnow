@@ -24,6 +24,10 @@ import {
   getInputSlotId,
   slotIndexToUiHotkey
 } from './player-input-slots.js';
+import {
+  publishThunderChargePreview,
+  withdrawThunderChargePreview
+} from '../moves/thunder-move.js';
 import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
 import { beginStrengthThrowFromPointer } from './thrown-map-detail-entities.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/index.js';
@@ -753,6 +757,14 @@ function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, mel
   tryBreakCrystalOnPlayerTackle(player, data, null);
 }
 
+/** True when this bound id maps to the Thunder move (covers the `thunderbolt` alias too). */
+function moveIdIsThunder(moveId) {
+  return moveId === 'thunder' || moveId === 'thunderbolt';
+}
+
+/** Ids used for Thunder preview ownership so each button has its own cell slot. */
+const THUNDER_PREVIEW_OWNER_IDS = ['lmb', 'rmb', 'mmb'];
+
 function isHoldStreamMoveId(moveId) {
   return (
     moveId === 'flamethrower' ||
@@ -832,6 +844,10 @@ function castScrollSlotMove(moveId, pl, data) {
  * @param {'l' | 'r' | 'm'} which
  */
 function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
+  // Withdraw the Thunder charging-cloud preview tied to *this* button before any cast
+  // side-effects run. Cheap no-op when the bind wasn't Thunder; guarantees the preview
+  // can't overlap the real summoned cell for even a single frame on release.
+  withdrawThunderChargePreview(which === 'l' ? 'lmb' : which === 'r' ? 'rmb' : 'mmb');
   const chargeLevel = getChargeLevel(charge01);
   if (isMeleeTackleOrCut(moveId)) {
     const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= CHARGE_FIELD_RELEASE_MIN_01;
@@ -1034,6 +1050,22 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) middlePrismaticStreamedThisPress = true;
   }
+
+  // Thunder charge preview: while a held button is bound to Thunder and the charge has
+  // passed the first bar, broadcast a "charging storm cell" + ground-shadow at the live
+  // cursor. The publisher gates on L2+ internally so Level 1 tap stays stealth.
+  const thunderHolders = [
+    { held: leftHeld && !mod && !player._strengthCarry, moveId: lmb, ownerId: 'lmb', charge01: playInputState.chargeLeft01 || 0 },
+    { held: rightHeld && !mod, moveId: rmb, ownerId: 'rmb', charge01: playInputState.chargeRight01 || 0 },
+    { held: middleHeld && !mod, moveId: mmb, ownerId: 'mmb', charge01: playInputState.chargeMmb01 || 0 }
+  ];
+  for (const { held, moveId, ownerId, charge01 } of thunderHolders) {
+    if (held && moveIdIsThunder(moveId)) {
+      publishThunderChargePreview(ownerId, { worldX: tx, worldY: ty, charge01 });
+    } else {
+      withdrawThunderChargePreview(ownerId);
+    }
+  }
 }
 
 /**
@@ -1185,5 +1217,6 @@ export function installPlayPointerCombat(deps) {
     playInputState.psybeamMiddleHold = null;
     playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
+    for (const ownerId of THUNDER_PREVIEW_OWNER_IDS) withdrawThunderChargePreview(ownerId);
   });
 }

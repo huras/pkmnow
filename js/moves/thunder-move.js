@@ -20,9 +20,12 @@
 import {
   spawnSummonedThunderCloudAt,
   spawnGroundStrikeAt,
-  SUMMONED_THUNDER_BOLT_DELAY_MS
+  SUMMONED_THUNDER_BOLT_DELAY_MS,
+  setChargingThunderPreview,
+  clearChargingThunderPreview
 } from '../weather/lightning.js';
 import { applySplashToWild } from './moves-projectile-collision.js';
+import { getChargeLevel, isChargeStrongAttackEligible } from '../main/play-charge-levels.js';
 
 /** @typedef {1 | 2 | 3} ThunderLevel */
 
@@ -152,4 +155,38 @@ export function tickThunderStrikes(_dt, wildList, data, wildSpatial = null) {
 /** Drop any queued strikes (map transitions / reset). */
 export function clearPendingThunderStrikes() {
   pendingStrikes.length = 0;
+}
+
+/**
+ * While the player holds a Thunder-bound button, publish (or refresh) the charging cloud
+ * at the current aim so the cell grows in and glimmers before the release. Level 1 tap
+ * stays silent on purpose — {@link isChargeStrongAttackEligible} gates the preview on
+ * reaching the first full bar, and we pick {@linkcode chargeLevel} 2 or 3 from the same
+ * `getChargeLevel` ladder the release uses. This is the "stealth → tell" trade-off:
+ * stronger strikes broadcast themselves, tap zaps still surprise.
+ * @param {string} ownerId           per-input key (e.g. `'lmb'` / `'rmb'` / `'mmb'`)
+ * @param {{ worldX: number, worldY: number, charge01: number }} opts
+ */
+export function publishThunderChargePreview(ownerId, opts) {
+  const charge01 = Math.max(0, Math.min(1, Number(opts?.charge01) || 0));
+  if (!isChargeStrongAttackEligible(charge01)) {
+    clearChargingThunderPreview(ownerId);
+    return;
+  }
+  const cl = getChargeLevel(charge01);
+  const chargeLevel = cl >= 3 ? 3 : 2;
+  setChargingThunderPreview(ownerId, {
+    worldX: opts?.worldX,
+    worldY: opts?.worldY,
+    charge01,
+    chargeLevel,
+    color: 'yellow'
+  });
+}
+
+/**
+ * Withdraw an owner's preview (release / cancel / button swap). No-op on unknown ids.
+ */
+export function withdrawThunderChargePreview(ownerId) {
+  clearChargingThunderPreview(ownerId);
 }

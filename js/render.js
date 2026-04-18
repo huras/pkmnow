@@ -826,6 +826,8 @@ export function render(canvas, data, options = {}) {
       cloudMaxMul: options.settings?.weatherCloudMaxMul,
       cloudAlphaMul: options.settings?.weatherCloudAlphaMul,
       rainIntensity: rainI,
+      windIntensity: options.settings?.weatherWindIntensity ?? 0,
+      windDirRad: options.settings?.weatherWindDirRad ?? 0,
       screenTint: options.settings?.weatherScreenTint,
       splashTargets,
       entityShadowSprites

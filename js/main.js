@@ -29,7 +29,11 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
-import { setWeatherRenderState } from './main/weather-state.js';
+import {
+  setWeatherRenderState,
+  getWeatherWindDirectionRad,
+  getWeatherWindFeltIntensity
+} from './main/weather-state.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
@@ -53,6 +57,8 @@ import { OBJECT_SETS } from './tessellation-data.js';
 import { parseShape } from './tessellation-logic.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
+import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
+import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
@@ -198,6 +204,12 @@ let currentWeatherIntensity = 0.75;
 let activeWeatherParams = null;
 /** Time constant (seconds) for exponential smoothing of weather transitions. */
 const WEATHER_SMOOTH_TAU_SEC = 1.2;
+/**
+ * Base wind direction in radians (0 = east, +π/2 = south). Roughly matches the cloud drift
+ * vector used in {@link drawSnesCloudParallax} (vx=0.32, vy=0.09 → atan2 ≈ 0.274 rad).
+ * A slow wobble is added per frame so tree sway and particles don't feel locked to a grid.
+ */
+const WIND_BASE_DIR_RAD = 0.274;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -529,7 +541,9 @@ function getSettings() {
     weatherCloudAlphaMul: weather.cloudAlphaMul,
     weatherRainIntensity: weather.rainIntensity,
     weatherScreenTint: weather.screenTint,
-    weatherCloudNoiseSeed
+    weatherCloudNoiseSeed,
+    weatherWindIntensity: getWeatherWindFeltIntensity(),
+    weatherWindDirRad: getWeatherWindDirectionRad()
   };
 }
 
@@ -589,8 +603,40 @@ function tickWeatherSmoothing(dt) {
     active.screenTint = blended.a > 0.002 ? blended : null;
   }
 
-  // Share smoothed rain intensity with gameplay systems (fire extinguishing, etc.).
-  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: currentWeatherPreset });
+  // Share smoothed rain intensity + evolving wind with gameplay / render / audio systems.
+  const wind = computeLiveWindState(gameTime, currentWeatherPreset, active.rainIntensity);
+  setWeatherRenderState({
+    rainIntensity: active.rainIntensity,
+    preset: currentWeatherPreset,
+    windBaseIntensity: wind.baseIntensity,
+    windDirRad: wind.dirRad,
+    windGust: wind.gust
+  });
+}
+
+/**
+ * Evolves the live wind envelope each tick. The *base* intensity is preset-dependent (clear ≈
+ * silent, cloudy has a low steady breeze, rain scales strongly with rainIntensity). On top of
+ * that we layer a slow two-sinusoid gust envelope so both the on-screen particles and the
+ * `Wind.ogg` ambient loop pulse naturally instead of reading as a flat hum.
+ *
+ * Direction wobbles gently around {@link WIND_BASE_DIR_RAD} so streamlines don't look rigid.
+ * @param {number} time world time seconds
+ * @param {'clear' | 'cloudy' | 'rain'} preset
+ * @param {number} rainIntensity01
+ * @returns {{ baseIntensity: number, dirRad: number, gust: number }}
+ */
+function computeLiveWindState(time, preset, rainIntensity01) {
+  const rain = Math.max(0, Math.min(1, Number(rainIntensity01) || 0));
+  const baseByPreset =
+    preset === 'rain' ? 0.25 + 0.55 * rain : preset === 'cloudy' ? 0.3 : 0.08;
+  const baseIntensity = Math.max(0, Math.min(1, baseByPreset));
+  // Two-sine gust envelope (period ≈ 6–16 s), biased so average sits near ~0.7.
+  const g1 = Math.sin(time * 0.38);
+  const g2 = Math.sin(time * 0.11 + 1.7);
+  const gust = Math.max(0.15, Math.min(1, 0.55 + 0.3 * g1 + 0.2 * g2));
+  const dirRad = WIND_BASE_DIR_RAD + Math.sin(time * 0.07) * 0.22;
+  return { baseIntensity, dirRad, gust };
 }
 
 /**
@@ -874,6 +920,8 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   stopBiomeBgm();
+  stopWeatherAmbientAudio();
+  stopFireLoopAudio();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
   appMode = 'map';

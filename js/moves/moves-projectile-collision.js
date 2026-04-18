@@ -8,6 +8,7 @@ import {
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
+import { TREE_MOVE_HITBOX_RADIUS_MULT } from '../scatter-collider-config.js';
 import { emitWorldReactionFromProjectile } from '../simulation/world-reactions.js';
 
 const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set([
@@ -117,7 +118,12 @@ export function isProjectileBlockedByTree(proj, data) {
   if (!TREE_BLOCKING_FIRE_PROJECTILE_TYPES.has(proj.type)) return false;
   const z = Number(proj.z) || 0;
   if (Math.abs(z) > 1.35) return false;
-  return formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data) || scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data);
+  // Move-vs-tree detection: test against the expanded move hitbox so splash / thin projectiles
+  // "clip" the canopy instead of requiring a dead-center trunk hit.
+  return (
+    formalTreeTrunkBlocksWorldPoint(proj.x, proj.y, data, TREE_MOVE_HITBOX_RADIUS_MULT) ||
+    scatterTreeTrunkBlocksWorldPoint(proj.x, proj.y, data, TREE_MOVE_HITBOX_RADIUS_MULT)
+  );
 }
 
 export function emitProjectileWorldReactionOnce(proj, data, x, y) {

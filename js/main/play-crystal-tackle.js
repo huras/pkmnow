@@ -14,9 +14,9 @@ import {
   clearScatterItemKeyOverrides,
   SCATTER_ITEM_KEY_OVERRIDE_EMPTY
 } from './scatter-item-override.js';
-import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC } from '../scatter-collider-config.js';
+import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC, TREE_MOVE_HITBOX_RADIUS_MULT } from '../scatter-collider-config.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
-import { isRainExtinguishing, FIRE_RAIN_EXTINGUISH_GRACE_SEC } from './weather-state.js';
+import { getRainFireSnuffSeconds } from './weather-state.js';
 import {
   pushVegetationDissolveFromSt,
   pushFormalTreeTopFall,
@@ -103,7 +103,8 @@ export const VEG_REGROW_FADE_IN_SEC = 0.48;
 const FORMAL_TREE_BURN_METER_MAX = 100;
 const FORMAL_TREE_BURN_METER_DECAY_PER_SEC = 4.5;
 const FORMAL_TREE_BURN_GROUND_Z_MAX = 0.55;
-const FORMAL_TREE_BURN_IMPACT_RADIUS_TILES = 0.3;
+// Fire-impact radius on trees is now unified with Cut / Thunder / etc. via
+// `TREE_MOVE_HITBOX_RADIUS_MULT` — see `scatter-collider-config.js`.
 const FORMAL_TREE_BURNING_VISUAL_SEC = 5;
 const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   ember: 34,
@@ -241,6 +242,54 @@ export function isPlayScatterTreeOriginCharred(ox, oy) {
 
 export function isPlayScatterTreeOriginBurnedHarvested(ox, oy) {
   return harvestedBurnedScatterTreeOrigins.has(`${ox},${oy}`);
+}
+
+/**
+ * Lists every currently-burning tree (formal + scatter) with its world-center position and
+ * ignition time. Used by the looped fire SFX to assign audio voices on tree torches.
+ *
+ * `burnEnd` is the wall-clock second when the visual burn phase ends (charred marker appears);
+ * we derive `startedAtMs` by subtracting the known burn duration so loops fade in from the
+ * moment of ignition, not from re-broadcast.
+ * @param {object} data
+ * @returns {Array<{ id: string, x: number, y: number, startedAtMs: number }>}
+ */
+export function listActiveBurningTreeSources(data) {
+  const out = [];
+  if (!data) return out;
+  const burnMs = FORMAL_TREE_BURNING_VISUAL_SEC * 1000;
+  for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot) {
+    if (!Number.isFinite(burnEnd)) continue;
+    const [sx, sy] = key.split(',');
+    const rootX = Number(sx);
+    const my = Number(sy);
+    if (!Number.isFinite(rootX) || !Number.isFinite(my)) continue;
+    const trunk = getFormalTreeTrunkCircle(rootX, my, data);
+    if (!trunk) continue;
+    out.push({
+      id: `tree:f:${key}`,
+      x: trunk.cx,
+      y: trunk.cy,
+      startedAtMs: burnEnd * 1000 - burnMs
+    });
+  }
+  const scatterMemo = new Map();
+  for (const [key, burnEnd] of burningScatterTreeEndsAtSecByOrigin) {
+    if (!Number.isFinite(burnEnd)) continue;
+    const [sx, sy] = key.split(',');
+    const ox = Number(sx);
+    const oy = Number(sy);
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue;
+    const spec = scatterTreeSpecAtOrigin(ox, oy, data, null, scatterMemo);
+    if (!spec) continue;
+    out.push({
+      id: `tree:s:${key}`,
+      x: spec.cx,
+      y: spec.cy,
+      startedAtMs: burnEnd * 1000 - burnMs
+    });
+  }
+  return out;
 }
 
 /** True if this origin can be Strength-lifted as a non-destroyed rock/crystal (including damaged HP). */
@@ -445,7 +494,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
       if (!didFormalTreeSpawnAtRoot(rootX, my, data)) continue;
       const trunk = getFormalTreeTrunkCircle(rootX, my, data);
       if (!trunk) continue;
-      const rr = trunk.r + FORMAL_TREE_BURN_IMPACT_RADIUS_TILES;
+      const rr = trunk.r * TREE_MOVE_HITBOX_RADIUS_MULT;
       const dx = worldX - trunk.cx;
       const dy = worldY - trunk.cy;
       if (dx * dx + dy * dy > rr * rr) continue;
@@ -458,7 +507,7 @@ export function tryApplyFireHitToFormalTreesAt(worldX, worldY, projZ, projType, 
     for (let ox = ix - 2; ox <= ix + 2; ox++) {
       const spec = scatterTreeSpecAtOrigin(ox, oy, data, null, scatterOriginMemo);
       if (!spec) continue;
-      const rr = spec.r + FORMAL_TREE_BURN_IMPACT_RADIUS_TILES;
+      const rr = spec.r * TREE_MOVE_HITBOX_RADIUS_MULT;
       const dx = worldX - spec.cx;
       const dy = worldY - spec.cy;
       if (dx * dx + dy * dy > rr * rr) continue;
@@ -1090,7 +1139,8 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         if (isPlayScatterTreeOriginCharred(ox, oy)) {
           const spec = scatterTreeSpecAtOrigin(ox, oy, data, getTileCached, originMemo);
           if (spec) {
-            const detailR = Math.max(0.01, spec.r * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+            // Trees share a single "move hitbox" multiplier across Cut / fire / lightning.
+            const detailR = Math.max(0.01, spec.r * TREE_MOVE_HITBOX_RADIUS_MULT);
             const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
             const ht = segmentCircleFirstHitT(px, py, ex, ey, spec.cx, spec.cy, rr);
             if (ht != null) {
@@ -1129,7 +1179,8 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
           const stump = trunk || (charred ? formalTreeStumpCircleAtRoot(ox, oy) : null);
           const target = trunk || stump;
           if (target) {
-            const detailR = Math.max(0.01, target.r * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+            // Trees share a single "move hitbox" multiplier across Cut / fire / lightning.
+            const detailR = Math.max(0.01, target.r * TREE_MOVE_HITBOX_RADIUS_MULT);
             const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
             const ht = segmentCircleFirstHitT(px, py, ex, ey, target.cx, target.cy, rr);
             if (ht != null) {
@@ -1399,17 +1450,20 @@ export function updateBreakableDetailRegeneration(dt, data) {
   pruneTreeTopFalls(performance.now() * 0.001);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
-    const rainSnuffing = isRainExtinguishing();
+    // Rain-scaled snuff: weak rain drags the burn out, strong rain snuffs almost instantly.
+    // Returns Infinity when rain is below the extinguish threshold (no dampening at all).
+    const rainSnuffSec = getRainFireSnuffSeconds();
+    const rainSnuffing = Number.isFinite(rainSnuffSec);
     for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot.entries()) {
       if (!Number.isFinite(burnEnd)) {
         burningFormalTreeEndsAtSecByRoot.delete(key);
         continue;
       }
-      // Rain puts out trees that have been on fire for at least the grace period,
-      // sparing them from becoming burned stumps.
+      // Rain puts out trees once they've been burning long enough for the current rain
+      // intensity, sparing them from becoming burned stumps.
       if (rainSnuffing) {
         const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
-        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+        if (nowSec - startedSec >= rainSnuffSec) {
           burningFormalTreeEndsAtSecByRoot.delete(key);
           formalTreeBurnMeterByRoot.delete(key);
           continue;
@@ -1439,7 +1493,8 @@ export function updateBreakableDetailRegeneration(dt, data) {
   }
   if (burningScatterTreeEndsAtSecByOrigin.size > 0) {
     const nowSec = performance.now() * 0.001;
-    const rainSnuffing = isRainExtinguishing();
+    const rainSnuffSec = getRainFireSnuffSeconds();
+    const rainSnuffing = Number.isFinite(rainSnuffSec);
     for (const [key, burnEnd] of burningScatterTreeEndsAtSecByOrigin.entries()) {
       if (!Number.isFinite(burnEnd)) {
         burningScatterTreeEndsAtSecByOrigin.delete(key);
@@ -1447,7 +1502,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
       }
       if (rainSnuffing) {
         const startedSec = burnEnd - FORMAL_TREE_BURNING_VISUAL_SEC;
-        if (nowSec - startedSec >= FIRE_RAIN_EXTINGUISH_GRACE_SEC) {
+        if (nowSec - startedSec >= rainSnuffSec) {
           burningScatterTreeEndsAtSecByOrigin.delete(key);
           scatterTreeBurnMeterByOrigin.delete(key);
           continue;
