@@ -36,9 +36,22 @@ const CLOUD_SIZE_SKIP_THRESHOLD = 0.42;
 /** Cloud size multiplier range, scaled from (noise - threshold)/(1 - threshold). */
 const CLOUD_SIZE_MIN_MUL = 0.45;
 const CLOUD_SIZE_MAX_MUL = 1.55;
-/** Global wind drift applied to the whole cloud field (tiles per second). */
-const CLOUD_WIND_VX_TILES_PER_SEC = 0.32;
-const CLOUD_WIND_VY_TILES_PER_SEC = 0.09;
+/**
+ * Cloud wind: baseline drift at zero wind (so a clear sky still reads as alive) plus extra
+ * drift that scales with the live `windIntensity` coming from weather-state. Values are in
+ * world-tiles/sec of motion; the vector is rotated by `windDirRad` every frame.
+ *
+ * We integrate position in `cloudDriftXTiles` / `cloudDriftYTiles` rather than multiplying
+ * `time × speed` directly, because the live wind speed/direction change smoothly over time
+ * and naive `time × speed` would snap the entire cloud field when those change.
+ */
+const CLOUD_WIND_BASELINE_TILES_PER_SEC = 0.22;
+const CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC = 0.65;
+/** Baseline direction used when wind intensity is near zero (mostly east, slightly south). */
+const CLOUD_WIND_BASELINE_DIR_RAD = 0.28;
+let cloudDriftXTiles = 0;
+let cloudDriftYTiles = 0;
+let cloudDriftLastTimeSec = -1;
 /** Per-slot position jitter (as a fraction of slot step) so the grid doesn't read as a grid. */
 const CLOUD_SLOT_JITTER_FRAC = 1.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
@@ -245,6 +258,8 @@ function drawSnesCloudParallax(ctx, options) {
     cloudMaxMul: cloudMaxMulOpt,
     cloudAlphaMul: cloudAlphaMulOpt,
     cloudDarken01 = 0,
+    windDirRad = 0,
+    windIntensity = 0,
     cw = 0,
     entityShadowSprites = null
   } = options;
@@ -274,8 +289,31 @@ function drawSnesCloudParallax(ctx, options) {
 
   // One slot grid drives the whole sky. Noise determines whether a cloud exists and its size.
   const step = CLOUD_SLOT_STEP_WORLD_TILES;
-  const windX = time * CLOUD_WIND_VX_TILES_PER_SEC;
-  const windY = time * CLOUD_WIND_VY_TILES_PER_SEC;
+
+  // Integrate cloud drift in world-tile space so changes to live wind never snap the field.
+  // When wind is weak we still advect slowly along a hard-coded baseline direction so clear
+  // skies don't look frozen; as wind ramps up we blend the direction toward the live vector.
+  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
+  const liveDir = Number.isFinite(windDirRad) ? windDirRad : CLOUD_WIND_BASELINE_DIR_RAD;
+  const speedTilesPerSec =
+    CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC;
+  // Baseline carries the "clear weather drift"; it fades out as the live wind takes over.
+  const baselineWeight = 1 - windI01;
+  const liveWeight = 0.3 + 0.7 * windI01;
+  const velXTiles =
+    speedTilesPerSec *
+    (baselineWeight * Math.cos(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.cos(liveDir));
+  const velYTiles =
+    speedTilesPerSec *
+    (baselineWeight * Math.sin(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.sin(liveDir));
+  const dtRaw = cloudDriftLastTimeSec >= 0 ? time - cloudDriftLastTimeSec : 0;
+  // Pause/tab-switch/seek guard: drop dt outside a sane per-frame range so clouds don't teleport.
+  const driftDt = !Number.isFinite(dtRaw) || dtRaw < 0 || dtRaw > 0.25 ? 0 : dtRaw;
+  cloudDriftXTiles += velXTiles * driftDt;
+  cloudDriftYTiles += velYTiles * driftDt;
+  cloudDriftLastTimeSec = time;
+  const windX = cloudDriftXTiles;
+  const windY = cloudDriftYTiles;
 
   // Visible slot range (add a margin big enough for the max-size cloud so none pop at edges).
   const maxClusterScale = 1.28;
@@ -777,6 +815,9 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.restore();
   }
 
+  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
+  const windDir = Number(windDirRad) || 0;
+
   drawSnesCloudParallax(ctx, {
     ch,
     timeSec: time,
@@ -793,6 +834,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     cloudMaxMul,
     cloudAlphaMul,
     cloudDarken01,
+    windDirRad: windDir,
+    windIntensity: windI01,
     cw,
     ch,
     entityShadowSprites
@@ -810,17 +853,17 @@ export function drawEnvironmentalEffects(ctx, options) {
   if (rainI > 0.001) {
     // World-space splashes on entities (ctx transform = camera world pixels).
     tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
-    // Screen-space streaks; wind direction mirrors the cloud wind so rain and clouds move together.
-    drawRainStreaks(ctx, cw, ch, time, rainI, tileW);
+    // Screen-space streaks; wind direction/intensity mirror the cloud wind so rain and
+    // clouds visibly share the same wind vector.
+    drawRainStreaks(ctx, cw, ch, time, rainI, tileW, windDir, windI01);
   } else {
     rainSplashes.length = 0;
     rainSplashSpawnDebt = 0;
     rainLastTimeSec = -1;
   }
 
-  const windI = Math.max(0, Math.min(1, Number(windIntensity) || 0));
-  if (windI > 0.02) {
-    drawWindStreamlines(ctx, cw, ch, time, windI, Number(windDirRad) || 0);
+  if (windI01 > 0.02) {
+    drawWindStreamlines(ctx, cw, ch, time, windI01, windDir);
   }
 
   if (screenTint && typeof screenTint.r === 'number' && (screenTint.a ?? 1) > 0.001) {
@@ -836,11 +879,15 @@ export function drawEnvironmentalEffects(ctx, options) {
 
 /**
  * Cheap screen-space rain.
- * - Direction follows the cloud wind (px/sec) so rain and clouds visibly share a wind.
+ * - Direction is gravity (down) + the horizontal component of the live wind vector, so the
+ *   rain slant visibly follows whatever the wind is doing (and shares direction with cloud
+ *   drift, which reads as "the same wind" to the player).
+ * - Vertical wind component augments or reduces gravity, so an upward gust can actually
+ *   make rain slant slightly back upward at the tip, which reads as a strong updraft.
  * - Per-streak hash scatter + per-streak speed/length variation → no visible grid.
  * Path draw is a single `stroke()` call, so cost is roughly count × (moveTo+lineTo).
  */
-function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
+function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW, windDirRad, windIntensity) {
   const time = Number.isFinite(timeSec) ? timeSec : 0;
   const area = cw * ch;
   // Density curve: stays light at low intensity, ramps up hard past ~0.6 so max rain reads
@@ -850,16 +897,24 @@ function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW) {
   const count = Math.max(40, Math.min(baseCount, 1600));
   const tw = Math.max(1, Number(tileW) || 32);
 
-  // Fall velocity (px/sec): vertical gravity + horizontal wind (same as clouds).
+  // Fall velocity (px/sec) = gravity + live-wind vector. `tw * 38` converts the tiles/sec
+  // cloud baseline into a meaningful horizontal slant at the rain layer's scale.
   const gravityPxSec = 850 + 520 * intensity;
-  const windPxSec = CLOUD_WIND_VX_TILES_PER_SEC * tw * 38; // amplify tiny cloud drift into a visible rain slant
-  const vecMag = Math.sqrt(gravityPxSec * gravityPxSec + windPxSec * windPxSec);
-  const dx = windPxSec / vecMag;
-  const dy = gravityPxSec / vecMag;
+  const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
+  const liveDir = Number.isFinite(windDirRad) ? windDirRad : CLOUD_WIND_BASELINE_DIR_RAD;
+  const windSpeedPxSec =
+    (CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC) * tw * 38;
+  const windVx = Math.cos(liveDir) * windSpeedPxSec;
+  const windVy = Math.sin(liveDir) * windSpeedPxSec;
+  const vx = windVx;
+  const vy = gravityPxSec + windVy;
+  const vecMag = Math.sqrt(vx * vx + vy * vy);
+  const dx = vx / vecMag;
+  const dy = vy / vecMag;
 
   // Longer streaks at max; still short & wispy on trace rain.
   const baseLen = 14 + 18 * intensity;
-  const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(windPxSec) * 0.05;
+  const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(windVx) * 0.05;
   const spanW = cw + horizontalBleed * 2 + 30;
   const spanH = ch + baseLen * 2 + 30;
 

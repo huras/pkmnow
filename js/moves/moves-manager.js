@@ -66,6 +66,7 @@ import {
 } from './moves-projectile-collision.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
+import { castThundershock, THUNDERSHOCK_STREAM_INTERVAL_SEC } from './thunder-shock-move.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
@@ -101,6 +102,7 @@ let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
+let playerThundershockCooldown = 0;
 
 /** Seconds between player flamethrower stream puffs (hold-to-spray). */
 const FLAMETHROWER_STREAM_INTERVAL = 0.104;
@@ -310,8 +312,6 @@ function resolveMoveRuntimeAlias(moveId) {
       return 'thunder';
     case 'triAttack':
       return 'prismaticLaser';
-    case 'thunderShock':
-      return 'psybeam';
     default:
       return String(moveId || '');
   }
@@ -333,6 +333,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   return false;
 }
 
@@ -515,6 +516,27 @@ export function tryReleasePlayerPsybeam(sourceX, sourceY, targetX, targetY, sour
 
 export function castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   return tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/**
+ * One Thundershock stream puff (hold / tap). Short cooldown so held input chains into a
+ * near-continuous crackling yellow arc between user and aim. Mirrors the flamethrower /
+ * prismatic-laser stream pattern.
+ * @returns {boolean} true when a puff was spawned
+ */
+export function tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThundershockCooldown > 0) return false;
+  playerThundershockCooldown = THUNDERSHOCK_STREAM_INTERVAL_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThundershock(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile
+  });
+  return true;
+}
+
+export function castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerThundershockStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -797,6 +819,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
     case 'thunder':
       // Use heaviest tier so the HUD clock covers the max charged release.
       return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
+    case 'thunderShock':
+      return THUNDERSHOCK_STREAM_INTERVAL_SEC;
     case 'ultimate':
       return 7.5;
     default:
@@ -841,6 +865,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerSilkShootCooldown;
     case 'thunder':
       return playerThunderCooldown;
+    case 'thunderShock':
+      return playerThundershockCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -873,6 +899,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
+  playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
   const wildSpatial = buildWildSpatialIndex(wildList);
@@ -930,7 +957,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const proj = activeProjectiles[i];
 
-    if (proj.type === 'psybeamBeam') {
+    if (proj.type === 'psybeamBeam' || proj.type === 'thunderShockBeam') {
       proj.timeToLive -= dt;
       const sx0 = proj.beamStartX;
       const sy0 = proj.beamStartY;

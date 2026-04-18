@@ -12,6 +12,7 @@ import {
   tryCastPlayerWaterGunStreamPuff,
   tryCastPlayerBubbleBeamStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
+  tryCastPlayerThundershockStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
 import {
@@ -156,16 +157,19 @@ let rightWaterStreamedThisPress = false;
 let rightBubbleBeamStreamedThisPress = false;
 /** True after at least one prismatic laser stream puff this RMB press. */
 let rightPrismaticStreamedThisPress = false;
+let rightThundershockStreamedThisPress = false;
 let leftFlameStreamedThisPress = false;
 let leftWaterStreamedThisPress = false;
 let leftBubbleBeamStreamedThisPress = false;
 let leftPrismaticStreamedThisPress = false;
+let leftThundershockStreamedThisPress = false;
 let middleHeld = false;
 let middleDownAt = 0;
 let middleFlameStreamedThisPress = false;
 let middleWaterStreamedThisPress = false;
 let middleBubbleBeamStreamedThisPress = false;
 let middlePrismaticStreamedThisPress = false;
+let middleThundershockStreamedThisPress = false;
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
 let lastComboDexId = 0;
@@ -776,7 +780,8 @@ function isHoldStreamMoveId(moveId) {
     moveId === 'prismaticLaser' ||
     moveId === 'solarBeam' ||
     moveId === 'hyperBeam' ||
-    moveId === 'triAttack'
+    moveId === 'triAttack' ||
+    moveId === 'thunderShock'
   );
 }
 
@@ -866,6 +871,7 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
   const water = which === 'l' ? leftWaterStreamedThisPress : which === 'm' ? middleWaterStreamedThisPress : rightWaterStreamedThisPress;
   const bubble = which === 'l' ? leftBubbleBeamStreamedThisPress : which === 'm' ? middleBubbleBeamStreamedThisPress : rightBubbleBeamStreamedThisPress;
   const prismatic = which === 'l' ? leftPrismaticStreamedThisPress : which === 'm' ? middlePrismaticStreamedThisPress : rightPrismaticStreamedThisPress;
+  const tshock = which === 'l' ? leftThundershockStreamedThisPress : which === 'm' ? middleThundershockStreamedThisPress : rightThundershockStreamedThisPress;
 
   if (moveId === 'flamethrower' || moveId === 'fireSpin') {
     if (!flame) {
@@ -891,6 +897,11 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     if (!prismatic) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
       tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'thunderShock') {
+    if (!tshock) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, pl);
     }
   } else if (moveId === 'psybeam') {
     applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
@@ -1002,6 +1013,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) leftPrismaticStreamedThisPress = true;
   }
+  if (leftHeld && !mod && lmb === 'thunderShock') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) leftThundershockStreamedThisPress = true;
+  }
 
   if (rightHeld && !mod && (rmb === 'flamethrower' || rmb === 'fireSpin')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1026,6 +1041,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
   }
+  if (rightHeld && !mod && rmb === 'thunderShock') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) rightThundershockStreamedThisPress = true;
+  }
 
   if (middleHeld && !mod && (mmb === 'flamethrower' || mmb === 'fireSpin')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1049,6 +1068,10 @@ export function updatePlayPointerCombat(dt, player, data) {
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) middlePrismaticStreamedThisPress = true;
+  }
+  if (middleHeld && !mod && mmb === 'thunderShock') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) middleThundershockStreamedThisPress = true;
   }
 
   // Thunder charge preview: while a held button is bound to Thunder and the charge has
@@ -1130,6 +1153,7 @@ export function installPlayPointerCombat(deps) {
         leftWaterStreamedThisPress = false;
         leftBubbleBeamStreamedThisPress = false;
         leftPrismaticStreamedThisPress = false;
+        leftThundershockStreamedThisPress = false;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
         e.preventDefault();
@@ -1139,6 +1163,7 @@ export function installPlayPointerCombat(deps) {
         rightWaterStreamedThisPress = false;
         rightBubbleBeamStreamedThisPress = false;
         rightPrismaticStreamedThisPress = false;
+        rightThundershockStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 1) {
@@ -1149,6 +1174,7 @@ export function installPlayPointerCombat(deps) {
         middleWaterStreamedThisPress = false;
         middleBubbleBeamStreamedThisPress = false;
         middlePrismaticStreamedThisPress = false;
+        middleThundershockStreamedThisPress = false;
         playInputState.chargeMmb01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
       }
