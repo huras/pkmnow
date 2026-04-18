@@ -549,7 +549,9 @@ button.btn-secondary:hover {
   display: block;
 }
 
-.minimap-audio-popover {
+.minimap-audio-popover,
+.minimap-time-weather-popover,
+.minimap-social-popover {
   position: absolute;
   right: 0;
   bottom: calc(100% + 6px);
@@ -557,7 +559,7 @@ button.btn-secondary:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: min(268px, calc(100vw - 32px));
+  width: min(300px, calc(100vw - 32px));
   padding: 10px 12px 12px;
   box-sizing: border-box;
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -568,6 +570,11 @@ button.btn-secondary:hover {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.minimap-social-popover {
+  width: min(380px, calc(100vw - 32px));
 }
 
 .minimap-audio-popover__row {
@@ -658,7 +665,9 @@ button.btn-secondary:hover {
 
 /* Zoom + help — same shape as music / back buttons */
 .minimap-panel__zoom-btn,
-.minimap-panel__help-btn {
+.minimap-panel__help-btn,
+.minimap-panel__time-btn,
+.minimap-panel__social-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -676,26 +685,33 @@ button.btn-secondary:hover {
 }
 
 .minimap-panel__zoom-btn:hover,
-.minimap-panel__help-btn:hover {
+.minimap-panel__help-btn:hover,
+.minimap-panel__time-btn:hover,
+.minimap-panel__social-btn:hover {
   background: rgba(154, 216, 255, 0.14);
   border-color: rgba(154, 216, 255, 0.3);
   color: #fff;
 }
 
+.minimap-panel__time-btn[aria-pressed="true"],
+.minimap-panel__social-btn[aria-pressed="true"] {
+  background: rgba(154, 216, 255, 0.18);
+  border-color: rgba(154, 216, 255, 0.4);
+  color: #fff;
+}
+
 .minimap-panel__zoom-btn:focus-visible,
-.minimap-panel__help-btn:focus-visible {
+.minimap-panel__help-btn:focus-visible,
+.minimap-panel__time-btn:focus-visible,
+.minimap-panel__social-btn:focus-visible {
   outline: 2px solid rgba(154, 216, 255, 0.85);
   outline-offset: 1px;
 }
 
-.minimap-panel__help-btn[aria-pressed="true"] {
-  background: rgba(255, 236, 144, 0.14);
-  border-color: rgba(255, 236, 144, 0.35);
-  color: #fff7cb;
-}
-
 .minimap-panel__zoom-icon,
-.minimap-panel__help-icon {
+.minimap-panel__help-icon,
+.minimap-panel__time-icon,
+.minimap-panel__social-icon {
   width: 14px;
   height: 14px;
   display: block;
@@ -1211,29 +1227,22 @@ body.play-mode-active {
 
 /* World time of day — play mode only, bottom-left (minimap is bottom-right) */
 .play-world-time {
-  display: none;
-  position: absolute;
-  left: 10px;
-  top: calc(0.6rem + 0.6rem + 40px + 8px);
-  bottom: auto;
-  z-index: 1201;
-  width: min(460px, calc(100vw - 160px));
-  padding: 10px 12px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  color: #e8e8ec;
-  background: rgba(0, 0, 0, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
   pointer-events: auto;
 }
 
-.app.play-mode-active .map-wrap .play-world-time {
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-  align-items: stretch;
+.play-world-time .play-world-time__section + .play-world-time__section {
+  padding-left: 0;
+  padding-top: 10px;
+  border-left: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .play-world-time__section {
@@ -1250,30 +1259,22 @@ body.play-mode-active {
 }
 
 .play-social-overlay {
-  display: none;
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 900;
-  width: min(420px, calc(100vw - 160px));
-  padding: 8px 10px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
-  color: #e8e8ec;
-  background: rgba(0, 0, 0, 0.64);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-  pointer-events: none;
-  opacity: 0.72;
-  transition: opacity 0.2s ease;
-}
-
-.play-social-overlay.is-active {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
   opacity: 1;
+  pointer-events: auto;
 }
 
-.app.play-mode-active .map-wrap .play-social-overlay {
+.play-social-overlay--panel {
+  display: none;
+}
+
+.play-social-overlay--popover {
   display: block;
 }
 

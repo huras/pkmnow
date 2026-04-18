@@ -40,7 +40,7 @@ import {
   BURN_START_FRAMES
 } from './moves/move-constants.js';
 
-import { drawBatchedProjectile } from './render/render-projectiles.js';
+import { drawBatchedProjectile, drawPrismaticStreamGradientBeam } from './render/render-projectiles.js';
 import { drawBatchedParticle } from './render/render-particles.js';
 import {
   drawPlayEntityFootAndAirCollider,
@@ -118,7 +118,7 @@ import {
   speciesHasFlyingType,
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
-import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
+import { activeProjectiles, activeParticles, getPlayerPrismaticMergedBeamVisual } from './moves/moves-manager.js';
 import {
   activeCrystalShards,
   activeSpawnedSmallCrystals,
@@ -700,8 +700,12 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    if (batchedEffects.length > 0) {
+    const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
+    if (batchedEffects.length > 0 || mergedPrismaticBeam) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      if (mergedPrismaticBeam) {
+        drawPrismaticStreamGradientBeam(ctx, mergedPrismaticBeam, tileW, tileH, snapPx, time);
+      }
       for (const be of batchedEffects) {
         if (be.kind === 'projectile') drawBatchedProjectile(ctx, be.proj, tileW, tileH, snapPx, time);
         else drawBatchedParticle(ctx, be.part, tileW, tileH, snapPx);

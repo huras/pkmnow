@@ -112,7 +112,9 @@ const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   incinerateShard: 28,
   incinerateCore: 54,
   // Lightning is a finisher: instant ignition regardless of prior damage.
-  lightningStrike: 150
+  lightningStrike: 150,
+  /** Prismatic Laser: same meter as fire, but completion skips the torch “burning” phase (see add*BurnMeter). */
+  prismaticShot: 20
 });
 const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
 /** Strength-relocated rock: drop override + detail state after no hits / grabs (frees override map memory). */
@@ -442,7 +444,11 @@ function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data
 
   if (next >= FORMAL_TREE_BURN_METER_MAX) {
     formalTreeBurnMeterByRoot.delete(key);
-    burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+    if (projType === 'prismaticShot') {
+      registerDestroyedFormalTreeRoot(rootX, my, nowSec, 'burned', data);
+    } else {
+      burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+    }
     return true;
   }
   formalTreeBurnMeterByRoot.set(key, next);
@@ -467,9 +473,13 @@ function addScatterTreeBurnMeterAndMaybeDestroy(ox, oy, projType, nowSec, data) 
 
   if (next >= FORMAL_TREE_BURN_METER_MAX) {
     scatterTreeBurnMeterByOrigin.delete(key);
-    burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
-    burnedScatterTreeOrigins.delete(key);
-    harvestedBurnedScatterTreeOrigins.delete(key);
+    if (projType === 'prismaticShot') {
+      markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data);
+    } else {
+      burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+      burnedScatterTreeOrigins.delete(key);
+      harvestedBurnedScatterTreeOrigins.delete(key);
+    }
     return true;
   }
   scatterTreeBurnMeterByOrigin.set(key, next);
@@ -992,7 +1002,9 @@ function detailChargeBonusHits(hitSource, detailCharge01) {
   if (detailCharge01 == null || !Number.isFinite(detailCharge01)) return 0;
   const p = Math.max(0, Math.min(1, detailCharge01));
   if (p < 0.16) return 0;
-  return Math.max(0, getChargeLevel(p) - 1);
+  // With 4 charge bars `getChargeLevel` can reach 4; cap bonus hits so crystal detail
+  // scaling stays in the same band as the original 3-bar design (+0 / +1 / +2).
+  return Math.min(2, Math.max(0, getChargeLevel(p) - 1));
 }
 
 /**

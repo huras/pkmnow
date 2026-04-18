@@ -12,6 +12,7 @@ import {
   tryCastPlayerWaterGunStreamPuff,
   tryCastPlayerBubbleBeamStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
+  updatePlayerPrismaticMergedBeamVisual,
   tryCastPlayerThundershockStreamPuff,
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
@@ -641,9 +642,11 @@ function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, mel
   tryBreakCrystalOnPlayerTackle(player, data, null);
 }
 
-/** True when this bound id maps to the Thunder move (covers the `thunderbolt` alias too). */
+/** True when this bound id maps to the (charge-tiered) Thunder move. Thunderbolt is
+ *  separate: it uses the same 4-segment charge meter but skips the storm-cell *preview*
+ *  (no dark cloud over aim while charging — only the HUD fills). */
 function moveIdIsThunder(moveId) {
-  return moveId === 'thunder' || moveId === 'thunderbolt';
+  return moveId === 'thunder';
 }
 
 /** Ids used for Thunder preview ownership so each button has its own cell slot. */
@@ -954,6 +957,12 @@ export function updatePlayPointerCombat(dt, player, data) {
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) middleThundershockStreamedThisPress = true;
   }
 
+  const prismaticLaserStreamHeld =
+    !!(leftHeld && !mod && lmb === 'prismaticLaser') ||
+    !!(rightHeld && !mod && rmb === 'prismaticLaser') ||
+    !!(middleHeld && !mod && mmb === 'prismaticLaser');
+  updatePlayerPrismaticMergedBeamVisual(prismaticLaserStreamHeld, sx, sy, tx, ty, player);
+
   // Thunder charge preview: while a held button is bound to Thunder and the charge has
   // passed the first bar, broadcast a "charging storm cell" + ground-shadow at the live
   // cursor. The publisher gates on L2+ internally so Level 1 tap stays stealth.
@@ -1121,6 +1130,7 @@ export function installPlayPointerCombat(deps) {
     playInputState.strengthCarryLmbAim = false;
     playInputState.mouseValid = false;
     for (const ownerId of THUNDER_PREVIEW_OWNER_IDS) withdrawThunderChargePreview(ownerId);
+    updatePlayerPrismaticMergedBeamVisual(false, 0, 0, 0, 0, null);
   });
 
   window.addEventListener('blur', () => {

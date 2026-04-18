@@ -203,7 +203,7 @@ export function sampleWorldDangerEscapeAngle(x, y, data) {
 
 const FIRE_PROJECTILES = new Set(['ember', 'flamethrowerShot', 'incinerateCore', 'incinerateShard']);
 const WATER_PROJECTILES = new Set(['waterShot', 'waterGunShot', 'bubbleShot', 'bubbleBeamShot', 'waterBurstShot']);
-const ELECTRIC_PROJECTILES = new Set(['prismaticShot']);
+const ELECTRIC_PROJECTILES = new Set(['prismaticShot', 'thunderBoltArc']);
 
 export function emitWorldReactionFromProjectile(proj, data, x, y) {
   if (!EXPERIMENT_WORLD_REACTIONS_V1 || !proj || !data) return;

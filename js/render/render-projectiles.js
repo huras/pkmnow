@@ -2,6 +2,70 @@ import { imageCache } from '../image-cache.js';
 import { FIRE_FRAME_W, FIRE_FRAME_H } from '../moves/move-constants.js';
 
 /**
+ * Full-length Prismatic Laser stream gradient (mouth → aim). Used by merged hold-beam and per-projectile fallback.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ laserBeamSx: number, laserBeamSy: number, laserBeamSz?: number, laserBeamEx: number, laserBeamEy: number, laserBeamEz?: number, rainbowHue0?: number }} beam
+ */
+export function drawPrismaticStreamGradientBeam(ctx, beam, tileW, tileH, snapPx, time) {
+  const sx = Number(beam.laserBeamSx);
+  const sy = Number(beam.laserBeamSy);
+  const sz = Number(beam.laserBeamSz) || 0;
+  const ex = Number(beam.laserBeamEx);
+  const ey = Number(beam.laserBeamEy);
+  const ez = Number(beam.laserBeamEz) || 0;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
+
+  const hueBase = (Number(beam.rainbowHue0) || 0) + time * 220;
+  const h0 = hueBase % 360;
+  const h1 = (hueBase + 72) % 360;
+  const h2 = (hueBase + 144) % 360;
+  const h3 = (hueBase + 216) % 360;
+
+  const x0 = snapPx(sx * tileW);
+  const y0 = snapPx(sy * tileH - sz * tileH);
+  const x1 = snapPx(ex * tileW);
+  const y1 = snapPx(ey * tileH - ez * tileH);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenPx = Math.max(10, Math.hypot(dx, dy));
+  const midX = (x0 + x1) * 0.5;
+  const midY = (y0 + y1) * 0.5;
+  const beamAng = Math.atan2(dy, dx);
+  const th = Math.max(3, tileH * 0.072);
+  const halfLen = lenPx * 0.5;
+
+  const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+  grd.addColorStop(0, `hsla(${h0}, 100%, 62%, 0.28)`);
+  grd.addColorStop(0.28, `hsla(${h1}, 100%, 56%, 0.95)`);
+  grd.addColorStop(0.52, `hsla(${h2}, 100%, 60%, 0.98)`);
+  grd.addColorStop(0.76, `hsla(${h3}, 100%, 58%, 0.92)`);
+  grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.26)`);
+
+  ctx.save();
+  ctx.translate(midX, midY);
+  ctx.rotate(beamAng);
+  ctx.fillStyle = `hsla(${(h1 + 40) % 360}, 100%, 60%, 0.16)`;
+  ctx.fillRect(-halfLen, -th * 0.92, lenPx, th * 1.84);
+  ctx.fillStyle = grd;
+  ctx.fillRect(-halfLen, -th * 0.5, lenPx, th);
+  ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.5)`;
+  ctx.lineWidth = Math.max(1.1, tileW * 0.02);
+  ctx.strokeRect(-halfLen, -th * 0.5, lenPx, th);
+  // Hot white core in the middle of the rainbow — strobes on/off (irregular gate + smooth bursts).
+  const gate =
+    0.5 * Math.sin(time * 44 + midX * 0.05 + midY * 0.04) +
+    0.35 * Math.sin(time * 71 + lenPx * 0.015);
+  const strobe = (Math.floor(time * 13.7 + midX * 0.08) & 1) === 0;
+  const on = strobe && gate > -0.08;
+  const burst = Math.max(0, Math.sin(time * 88 + midY * 0.06)) ** 3;
+  const whiteA = on ? Math.min(0.97, 0.58 + 0.38 * burst + 0.12 * Math.max(0, gate)) : 0.02 + 0.04 * burst;
+  const coreH = th * (on ? 0.18 + 0.12 * burst : 0.09);
+  ctx.fillStyle = `rgba(255,255,255,${whiteA})`;
+  ctx.fillRect(-halfLen, -coreH * 0.5, lenPx, coreH);
+  ctx.restore();
+}
+
+/**
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} p
  */
@@ -248,31 +312,162 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       drawBolt(jagAmp * 0.9, forkOffset);
     }
     ctx.restore();
+  } else if (p.type === 'thunderBoltArc') {
+    // Yellow lightning bolt drawn along a parabolic air path between caster and target.
+    // The arc is sampled into N points via a quadratic curve (endpoints on the ground
+    // plane, mid control point lifted by `arcPeakZ`), then each segment gets its own
+    // jagged perpendicular jitter. Like `thunderShockBeam`, the path is rerolled every
+    // frame (seeded on `jagSeed`) so the bolt crackles instead of sitting static.
+    //
+    // The draw is done in *screen space* (not rotated-to-chord like Thundershock) because
+    // the arc's curvature needs true world-Y for the peak; we pre-project each sample to
+    // screen XY and stroke the polyline directly.
+    const maxT = p.beamTtlMax || 0.22;
+    const ttl = Math.max(0, p.timeToLive ?? maxT);
+    const lifeT = Math.max(0, Math.min(1, ttl / maxT));
+    // Per-frame flicker keeps the bolt "alive" for its whole (short) lifetime; the
+    // envelope holds near-full brightness most of the TTL and then drops off fast so
+    // the trailing frames don't look like a dead stroke lingering on screen.
+    const flicker = 0.72 + Math.sin(time * 72 + (p.jagSeed || 0)) * 0.28;
+    const a = Math.max(0.2, Math.min(1, lifeT * 1.1)) * flicker;
+    const sxw = p.beamStartX;
+    const syw = p.beamStartY;
+    const exw = p.beamEndX;
+    const eyw = p.beamEndY;
+    const szw = p.beamStartZ || 0;
+    const peakZ = Math.max(0.2, p.arcPeakZ || 1);
+    const chord = Math.hypot(exw - sxw, eyw - syw) || 1;
+    // Segment count scales with chord length so long bolts get more wiggle than short
+    // ones, but we cap the range so very-close casts stay crisp and very-far casts don't
+    // pay for unused subdivisions (the arc's curvature eats high-frequency detail anyway).
+    const segments = Math.max(10, Math.min(26, Math.round(chord * 2.4)));
+    // Perpendicular jag amplitude in screen pixels. Kept a touch tighter than Thundershock's
+    // because the arc's macro shape already provides visual interest — too much jitter
+    // flattens the parabola into noise.
+    const jagAmp = Math.max(1.3, tileH * 0.12);
+    /** Pre-compute sample points along the quadratic Bezier with midpoint lift. */
+    const points = new Array(segments + 1);
+    for (let i = 0; i <= segments; i++) {
+      const tt = i / segments;
+      const wx = sxw + (exw - sxw) * tt;
+      const wy = syw + (eyw - syw) * tt;
+      // Quadratic ease with ends pinned to start/end elevation (`szw` → 0), midpoint
+      // lifted by `peakZ`. The `4 * tt * (1 - tt)` term gives a clean parabola (0→1→0).
+      const arc = 4 * tt * (1 - tt);
+      const wz = szw * (1 - tt) + arc * peakZ;
+      points[i] = {
+        sx: snapPx(wx * tileW),
+        sy: snapPx(wy * tileH - wz * tileH)
+      };
+    }
+    /**
+     * Stroke the arc with per-segment jitter. `extraBias` shifts the whole polyline by a
+     * perpendicular-to-chord offset so the forks land *beside* the main bolt without
+     * manually rotating.
+     */
+    const drawArc = (amp, extraBias) => {
+      ctx.beginPath();
+      ctx.moveTo(points[0].sx, points[0].sy);
+      for (let i = 1; i < segments; i++) {
+        const a0 = points[i - 1];
+        const a1 = points[i];
+        // Perpendicular unit vector (screen space), used to push jitter off the tangent
+        // so the wiggle reads perpendicular to the arc's local heading.
+        const tx = a1.sx - a0.sx;
+        const ty = a1.sy - a0.sy;
+        const segLen = Math.hypot(tx, ty) || 1;
+        const nxs = -ty / segLen;
+        const nys = tx / segLen;
+        // Sine taper pins the endpoints (0 and N) and maximises jitter near the middle.
+        const tt = i / segments;
+        const taper = Math.sin(tt * Math.PI);
+        const off = ((Math.random() - 0.5) * 2 * amp + extraBias) * taper;
+        ctx.lineTo(a1.sx + nxs * off, a1.sy + nys * off);
+      }
+      const last = points[segments];
+      ctx.lineTo(last.sx, last.sy);
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // 1. Outer amber halo — source-over so the bolt reads on bright or dark backgrounds.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.34 * a;
+    ctx.strokeStyle = '#ffc63a';
+    ctx.lineWidth = Math.max(5.5, tileH * 0.24);
+    drawArc(jagAmp * 1.1, 0);
+    // 2. Warm yellow body (additive). Thinner jag than the halo so the two strokes don't
+    //    perfectly overlap — reads as volumetric rather than a single fat line.
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.78 * a;
+    ctx.strokeStyle = '#ffe460';
+    ctx.lineWidth = Math.max(2.6, tileH * 0.11);
+    drawArc(jagAmp * 0.8, 0);
+    // 3. Hot white core — narrow, crisp, makes the bolt pop through its own halo.
+    ctx.globalAlpha = 0.95 * a;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.3, tileH * 0.05);
+    drawArc(jagAmp * 0.5, 0);
+    // 4. Optional fork — a thin secondary bolt offset to one side. Gated on `jagSeed`
+    //    so roughly 75% of frames get a fork (the dry frame keeps it from reading too
+    //    "busy", like real photographed lightning).
+    if ((p.jagSeed & 3) !== 0) {
+      ctx.globalAlpha = 0.5 * a;
+      ctx.strokeStyle = '#fff1a0';
+      ctx.lineWidth = Math.max(1.3, tileH * 0.055);
+      const forkOffset = (Math.random() - 0.5) * jagAmp * 1.7;
+      drawArc(jagAmp * 0.85, forkOffset);
+    }
+    ctx.restore();
   } else if (p.type === 'prismaticShot') {
     const ang = Math.atan2(p.vy || 0, p.vx || 1);
-    const hueBase = (Number(p.rainbowHue0) || 0) + time * 220;
     if (p.laserStream) {
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(ang);
-      const len = Math.max(10, tileW * 0.62);
-      const th = Math.max(2.2, tileH * 0.055);
-      const h0 = hueBase % 360;
-      const h1 = (hueBase + 72) % 360;
-      const h2 = (hueBase + 144) % 360;
-      const grd = ctx.createLinearGradient(-len * 0.5, 0, len * 0.5, 0);
-      grd.addColorStop(0, `hsla(${h0}, 100%, 62%, 0.25)`);
-      grd.addColorStop(0.35, `hsla(${h1}, 100%, 56%, 0.92)`);
-      grd.addColorStop(0.65, `hsla(${h2}, 100%, 64%, 0.92)`);
-      grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.22)`);
-      ctx.fillStyle = `hsla(${(h1 + 40) % 360}, 100%, 60%, 0.18)`;
-      ctx.fillRect(-len * 0.5, -th * 0.85, len, th * 1.7);
-      ctx.fillStyle = grd;
-      ctx.fillRect(-len * 0.5, -th * 0.5, len, th);
-      ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.55)`;
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(-len * 0.5, -th * 0.5, len, th);
-      ctx.restore();
+      if (!p.laserStreamHidePerProjectileBeam) {
+        if (p.laserBeamGradient) {
+          drawPrismaticStreamGradientBeam(ctx, p, tileW, tileH, snapPx, time);
+        } else {
+        const speed = Math.hypot(p.vx || 0, p.vy || 0);
+        const lenPx = Math.max(14, Math.min(tileW * 2.35, tileW * (0.72 + speed * 0.028)));
+        const th = Math.max(2.2, tileH * 0.055);
+        const halfLen = lenPx * 0.5;
+        const hueBase = (Number(p.rainbowHue0) || 0) + time * 220;
+        const h0 = hueBase % 360;
+        const h1 = (hueBase + 72) % 360;
+        const h2 = (hueBase + 144) % 360;
+        const h3 = (hueBase + 216) % 360;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(ang);
+        const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+        grd.addColorStop(0, `hsla(${h0}, 100%, 62%, 0.28)`);
+        grd.addColorStop(0.28, `hsla(${h1}, 100%, 56%, 0.95)`);
+        grd.addColorStop(0.52, `hsla(${h2}, 100%, 60%, 0.98)`);
+        grd.addColorStop(0.76, `hsla(${h3}, 100%, 58%, 0.92)`);
+        grd.addColorStop(1, `hsla(${(h0 + 200) % 360}, 95%, 58%, 0.26)`);
+        ctx.fillStyle = `hsla(${(h1 + 40) % 360}, 100%, 60%, 0.16)`;
+        ctx.fillRect(-halfLen, -th * 0.92, lenPx, th * 1.84);
+        ctx.fillStyle = grd;
+        ctx.fillRect(-halfLen, -th * 0.5, lenPx, th);
+        ctx.strokeStyle = `hsla(${(h2 + 30) % 360}, 100%, 78%, 0.5)`;
+        ctx.lineWidth = Math.max(1.1, tileW * 0.02);
+        ctx.strokeRect(-halfLen, -th * 0.5, lenPx, th);
+        const midPx = px;
+        const midPy = py;
+        const lenP2 = lenPx;
+        const gate2 =
+          0.5 * Math.sin(time * 44 + midPx * 0.05 + midPy * 0.04) +
+          0.35 * Math.sin(time * 71 + lenP2 * 0.015);
+        const strobe2 = (Math.floor(time * 13.7 + midPx * 0.08) & 1) === 0;
+        const on2 = strobe2 && gate2 > -0.08;
+        const burst2 = Math.max(0, Math.sin(time * 88 + midPy * 0.06)) ** 3;
+        const whiteA2 = on2 ? Math.min(0.97, 0.58 + 0.38 * burst2 + 0.12 * Math.max(0, gate2)) : 0.02 + 0.04 * burst2;
+        const coreH2 = th * (on2 ? 0.18 + 0.12 * burst2 : 0.09);
+        ctx.fillStyle = `rgba(255,255,255,${whiteA2})`;
+        ctx.fillRect(-halfLen, -coreH2 * 0.5, lenPx, coreH2);
+        ctx.restore();
+        }
+      }
     } else {
       const colors = ['#ff1744', '#ff9100', '#ffee58', '#40c4ff', '#7c4dff'];
       const idx = Math.floor(((time * 25 + (p.rainbowHue0 || 0)) % colors.length + colors.length) % colors.length);

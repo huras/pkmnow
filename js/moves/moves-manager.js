@@ -23,6 +23,7 @@ import {
   castBubbleBeam,
   castPsybeam,
   castPrismaticLaser,
+  computePrismaticPlayerStreamGeometry,
   castPoisonPowder,
   castIncinerate,
   castSilkShoot
@@ -67,10 +68,18 @@ import {
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
 import { castThundershock, THUNDERSHOCK_STREAM_INTERVAL_SEC } from './thunder-shock-move.js';
+import {
+  castThunderboltAtLevel,
+  tickThunderboltChains,
+  PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL
+} from './thunderbolt-move.js';
 import { castRainDance, castSunnyDay } from './weather-moves.js';
 
 /** Visual window for optional `shoot` PMD slice after a successful player cast. */
 const MOVE_CAST_VIS_SEC = 0.48;
+
+/** Latest `data` from `updateMoves` — used when enqueuing Thunderbolt L4 chain hops (tree search). */
+let lastMovesTickData = null;
 
 function bumpPlayerMoveCastVisual(sourceEntity) {
   if (sourceEntity && sourceEntity.dexId != null) {
@@ -99,11 +108,14 @@ let playerWaterGunCooldown = 0;
 let playerBubbleBeamCooldown = 0;
 let playerPsybeamCooldown = 0;
 let playerPrismaticLaserCooldown = 0;
+/** Single merged gradient beam while Prismatic Laser is held (see `updatePlayerPrismaticMergedBeamVisual`). */
+let playerPrismaticMergedBeam = null;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
+let playerThunderboltCooldown = 0;
 let playerRainDanceCooldown = 0;
 let playerSunnyDayCooldown = 0;
 
@@ -119,7 +131,9 @@ const WATER_GUN_STREAM_INTERVAL = 0.074;
 const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
 
 /** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
-const PRISMATIC_STREAM_INTERVAL = 0.076;
+const PRISMATIC_STREAM_INTERVAL = 0.25;
+/** Min seconds between stream segment damage ticks to the same wild (puffs overlap in time). */
+const PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC = 0.3;
 
 /** Seconds between Thunder casts (covers cloud grow-in + bolt + settle). Default = Level 2 (tap / standard). */
 const PLAYER_THUNDER_COOLDOWN_SEC = 0.95;
@@ -316,8 +330,6 @@ function resolveMoveRuntimeAlias(moveId) {
       return 'psybeam';
     case 'surf':
       return 'waterGun';
-    case 'thunderbolt':
-      return 'thunder';
     case 'triAttack':
       return 'prismaticLaser';
     default:
@@ -342,6 +354,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunderbolt') return castThunderboltMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'rainDance') return castRainDanceMove(sourceEntity);
   if (moveId === 'sunnyDay') return castSunnyDayMove(sourceEntity);
   return false;
@@ -355,18 +368,24 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'thunderbolt') return castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 /**
  * True when the given move has a dedicated charged variant (mirrors the `castMoveChargedById`
- * dispatch). HUD uses this to decide whether to reveal the 3-segment charge meter while holding.
+ * dispatch). HUD uses this to decide whether to reveal the 4-segment charge meter while holding.
  * Keep in sync with the dispatch above.
  * @param {string} moveId
  */
 export function moveSupportsChargedRelease(moveId) {
   const resolved = resolveMoveRuntimeAlias(moveId);
-  return resolved === 'ember' || resolved === 'waterBurst' || resolved === 'thunder';
+  return (
+    resolved === 'ember' ||
+    resolved === 'waterBurst' ||
+    resolved === 'thunder' ||
+    resolved === 'thunderbolt'
+  );
 }
 
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -427,6 +446,42 @@ export function tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, t
 }
 
 /**
+ * Updates the one merged Prismatic Laser beam visual (cursor → mouth) while `active`.
+ * Clears when the player releases the bound button or switches away.
+ */
+export function updatePlayerPrismaticMergedBeamVisual(
+  active,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourceEntity = null
+) {
+  if (!active) {
+    playerPrismaticMergedBeam = null;
+    return;
+  }
+  const geo = computePrismaticPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const prevHue = playerPrismaticMergedBeam?.rainbowHue0;
+  const rainbowHue0 = Number.isFinite(prevHue) ? prevHue : (sourceX * 17 + sourceY * 13) % 360;
+  const { sp, aimX, aimY } = geo;
+  playerPrismaticMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0,
+    rainbowHue0
+  };
+}
+
+/** @returns {null | { laserBeamSx: number, laserBeamSy: number, laserBeamSz: number, laserBeamEx: number, laserBeamEy: number, laserBeamEz: number, rainbowHue0: number }} */
+export function getPlayerPrismaticMergedBeamVisual() {
+  return playerPrismaticMergedBeam;
+}
+
+/**
  * One prismatic laser stream puff (hold / hotkey). Same idea as flamethrower stream.
  * @returns {boolean} true when a puff was spawned
  */
@@ -437,6 +492,7 @@ export function tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targ
   castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
+    pushParticle,
     streamPuff: true
   });
   return true;
@@ -550,6 +606,49 @@ export function castThundershockMove(sourceX, sourceY, targetX, targetY, sourceE
 }
 
 /**
+ * Thunderbolt tap — tier **1** (short arc). Charged releases use {@link castThunderboltCharged}.
+ */
+export function castThunderboltMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThunderboltCooldown > 0) return false;
+  playerThunderboltCooldown = PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThunderboltAtLevel(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    level: 1,
+    fromWild: false,
+    pushProjectile,
+    data: lastMovesTickData
+  });
+  return true;
+}
+
+/**
+ * Charged Thunderbolt — maps the 4-segment meter to tiers **2–4** (see `thunderbolt-move.js`).
+ * Weak partial charge (held but below first bar) bumps toward tier 2 like ember/water.
+ */
+export function castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerThunderboltCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let level = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    level = getChargeLevel(cp);
+  } else {
+    const w = getWeakPartialChargeT(cp, 0);
+    level = w >= 0.5 ? 2 : 1;
+  }
+  level = Math.max(1, Math.min(4, level));
+  playerThunderboltCooldown =
+    PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThunderboltAtLevel(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    level,
+    fromWild: false,
+    pushProjectile,
+    data: lastMovesTickData
+  });
+  return true;
+}
+
+/**
  * Rain Dance — instant-cast status move that queues a transition to the `rain` weather
  * preset. No projectile, no aim; the smoothing pass in main.js handles the visual fade.
  * Gated by its own cooldown so the player can't strobe weather on every frame.
@@ -613,7 +712,7 @@ export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEnti
 }
 
 /**
- * Thunder / Thunderbolt: summons a yellow storm cell at the cursor tile and drops a
+ * Thunder: summons a yellow storm cell at the cursor tile and drops a
  * yellow lightning bolt a beat later. Visual + ignition reuse the rain lightning
  * system; damage is applied when the bolt lands (see `thunder-move.js`).
  */
@@ -637,9 +736,10 @@ export function castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEnt
   const cp = Math.max(0, Math.min(1, charge01 || 0));
   let level = 1;
   if (isChargeStrongAttackEligible(cp)) {
-    // getChargeLevel returns 1|2|3 for eligible charges. Map directly to thunder tiers.
+    // 4 global charge bars → `getChargeLevel` is 2..4 when past the first full segment.
+    // Thunder stays a 3-tier move: map the top two segments to the heaviest storm strike.
     const cl = getChargeLevel(cp);
-    level = cl >= 3 ? 3 : cl >= 2 ? 2 : 2; // L1 charged-release still feels like tier 2
+    level = cl >= 3 ? 3 : 2;
   }
   playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDER_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
@@ -792,7 +892,7 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
   if (entity.wildMoveCd > 0) return;
 
   const moveId = resolveWildMoveIdForDex(entity.dexId ?? 1);
-  const opts = { fromWild: true, pushProjectile };
+  const opts = { fromWild: true, pushProjectile, pushParticle };
   if (moveId === 'ember') {
     castEmberVolley(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'waterBurst') {
@@ -861,6 +961,13 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
     case 'thunderShock':
       return THUNDERSHOCK_STREAM_INTERVAL_SEC;
+    case 'thunderbolt':
+      return Math.max(
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[1],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[2],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[3],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[4]
+      );
     case 'rainDance':
     case 'sunnyDay':
       return PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
@@ -910,6 +1017,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerThunderCooldown;
     case 'thunderShock':
       return playerThundershockCooldown;
+    case 'thunderbolt':
+      return playerThunderboltCooldown;
     case 'rainDance':
       return playerRainDanceCooldown;
     case 'sunnyDay':
@@ -928,6 +1037,7 @@ export function getPlayerMoveCooldownRemaining(moveId) {
  * @param {import('../player.js').player} player
  */
 export function updateMoves(dt, wildPokemonList, data, player) {
+  lastMovesTickData = data;
   updatePlayerCombatTimers(dt);
   playerEmberCooldown = Math.max(0, playerEmberCooldown - dt);
   playerWaterCooldown = Math.max(0, playerWaterCooldown - dt);
@@ -947,6 +1057,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
+  playerThunderboltCooldown = Math.max(0, playerThunderboltCooldown - dt);
   playerRainDanceCooldown = Math.max(0, playerRainDanceCooldown - dt);
   playerSunnyDayCooldown = Math.max(0, playerSunnyDayCooldown - dt);
 
@@ -956,6 +1067,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
   // yellow ground strike + splash-damage nearby wild pokemon.
   tickThunderStrikes(dt, wildList, data, wildSpatial);
+  tickThunderboltChains(wildList, data, player);
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];
@@ -982,7 +1094,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutPsychicArc' ||
       p.type === 'fieldCutSlashArc' ||
       p.type === 'fieldSpinAttack' ||
-      p.type === 'rainFootSplash'
+      p.type === 'rainFootSplash' ||
+      p.type === 'prismaticWindArc'
     ) {
       continue;
     }
@@ -1006,7 +1119,11 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const proj = activeProjectiles[i];
 
-    if (proj.type === 'psybeamBeam' || proj.type === 'thunderShockBeam') {
+    if (
+      proj.type === 'psybeamBeam' ||
+      proj.type === 'thunderShockBeam' ||
+      proj.type === 'thunderBoltArc'
+    ) {
       proj.timeToLive -= dt;
       const sx0 = proj.beamStartX;
       const sy0 = proj.beamStartY;
@@ -1073,6 +1190,150 @@ export function updateMoves(dt, wildPokemonList, data, player) {
 
       if (proj.timeToLive <= 0) {
         emitProjectileWorldReactionOnce(proj, data, (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5);
+        activeProjectiles.splice(i, 1);
+      }
+      continue;
+    }
+
+    if (
+      proj.type === 'prismaticShot' &&
+      proj.laserStream &&
+      Number.isFinite(proj.laserHitEx) &&
+      Number.isFinite(proj.laserHitSx)
+    ) {
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      if (Number.isFinite(proj.vz)) {
+        const zPrev = Number(proj.z) || 0;
+        proj.z += proj.vz * dt;
+        if (zPrev > 0.006 && proj.z <= 0) {
+          playFloorHit2Sfx({ x: proj.x, y: proj.y, z: 0 });
+          proj.z = 0;
+          proj.vz = 0;
+        }
+      }
+
+      proj.timeToLive -= dt;
+
+      const sx0 = proj.laserHitSx;
+      const sy0 = proj.laserHitSy;
+      const sx1 = proj.laserHitEx;
+      const sy1 = proj.laserHitEy;
+      const halfW = proj.laserHitHalfWidth ?? 0.28;
+      const szA = Number(proj.laserHitSz) || 0;
+      const szB = Number(proj.laserHitEz) || 0;
+      const zDet = (szA + szB) * 0.5;
+
+      if (proj.trailAcc != null) {
+        proj.trailAcc += dt;
+        let trailBudget = 2;
+        while (proj.trailAcc >= LASER_TRAIL_INTERVAL && trailBudget-- > 0) {
+          proj.trailAcc -= LASER_TRAIL_INTERVAL;
+          spawnTrailParticle(proj.x, proj.y, 'laserTrail', proj.z);
+        }
+        if (trailBudget <= 0 && proj.trailAcc > LASER_TRAIL_INTERVAL * 3) {
+          proj.trailAcc = LASER_TRAIL_INTERVAL * 3;
+        }
+      }
+
+      if (proj.hitsPlayer && !proj.playerBeamHitDone) {
+        const px = player.visualX ?? player.x;
+        const py = player.visualY ?? player.y;
+        const dex = player.dexId ?? 1;
+        const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
+        const dax = sx1 - sx0;
+        const day = sy1 - sy0;
+        const len2 = dax * dax + day * day;
+        let t = 0.5;
+        if (len2 >= 1e-12) {
+          t = ((hx - sx0) * dax + (hy - sy0) * day) / len2;
+          t = Math.max(0, Math.min(1, t));
+        }
+        const zAt = szA + (szB - szA) * t;
+        if (projectileZInPokemonHurtbox(zAt, dex, player.z ?? 0)) {
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
+            const poison = false;
+            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
+              spawnHitParticles(hx, hy, player.z ?? 0);
+            }
+            proj.playerBeamHitDone = true;
+          }
+        }
+      }
+
+      if (proj.hitsWild) {
+        const set = proj.psyHitWild instanceof Set ? proj.psyHitWild : (proj.psyHitWild = new Set());
+        const pad = COLLISION_BROAD_PHASE_TILES + 1.2;
+        const minX = Math.min(sx0, sx1) - pad;
+        const maxX = Math.max(sx0, sx1) + pad;
+        const minY = Math.min(sy0, sy1) - pad;
+        const maxY = Math.max(sy0, sy1) + pad;
+        const dax = sx1 - sx0;
+        const day = sy1 - sy0;
+        const len2 = dax * dax + day * day;
+        const nowSecWild = performance.now() * 0.001;
+        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+          if (wild === proj.sourceEntity) return;
+          if (set.has(wild)) return;
+          let t = 0.5;
+          if (len2 >= 1e-12) {
+            t = ((hx - sx0) * dax + (hy - sy0) * day) / len2;
+            t = Math.max(0, Math.min(1, t));
+          }
+          const zAt = szA + (szB - szA) * t;
+          if (!projectileZInPokemonHurtbox(zAt, dex, z)) return;
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
+          const lastDmg = wild._prismaticStreamDmgSec;
+          if (Number.isFinite(lastDmg) && nowSecWild - lastDmg < PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC) return;
+          if (wild.takeDamage) wild.takeDamage(proj.damage);
+          wild._prismaticStreamDmgSec = nowSecWild;
+          if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
+          spawnHitParticles(hx, hy, z);
+          set.add(wild);
+        });
+      }
+
+      if (proj.hasTackleTrait && data) {
+        const detailSet =
+          proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {
+          worldHitOnceSet: detailSet,
+          hitSource: 'tackle',
+          pz: zDet
+        });
+      }
+
+      if (proj.timeToLive <= 0) {
+        const mix = (sx0 + sx1) * 0.5;
+        const miy = (sy0 + sy1) * 0.5;
+        emitProjectileWorldReactionOnce(proj, data, mix, miy);
+        if (data) {
+          const zz = Math.max(0, Number(proj.z) || 0);
+          const us = [0, 0.5, 1];
+          for (let ui = 0; ui < us.length; ui++) {
+            const u = us[ui];
+            const tx = sx0 + (sx1 - sx0) * u;
+            const ty = sy0 + (sy1 - sy0) * u;
+            const tz = szA + (szB - szA) * u;
+            tryApplyFireHitToFormalTreesAt(tx, ty, tz, proj.type, data);
+          }
+          if (grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
+            pushParticle({
+              type: 'grassFire',
+              x: proj.x,
+              y: proj.y,
+              vx: 0,
+              vy: 0,
+              z: 0.06,
+              vz: 0,
+              life: GRASS_FIRE_PARTICLE_SEC,
+              maxLife: GRASS_FIRE_PARTICLE_SEC
+            });
+          }
+          grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
+        }
         activeProjectiles.splice(i, 1);
       }
       continue;

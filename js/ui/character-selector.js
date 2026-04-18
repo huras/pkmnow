@@ -344,17 +344,16 @@ export class CharacterSelector {
               <div class="player-field-charge__segment player-field-charge__segment--3">
                 <div class="player-field-charge__fill player-field-charge__fill--3" id="player-field-charge-fill-3"></div>
               </div>
+              <div class="player-field-charge__segment player-field-charge__segment--4">
+                <div class="player-field-charge__fill player-field-charge__fill--4" id="player-field-charge-fill-4"></div>
+              </div>
             </div>
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
         </div>
 
-        <div
-          id="character-social-numpad"
-          class="play-social-overlay play-social-overlay--panel social-numpad-box"
-          aria-label="Social interactions via numpad"
-        ></div>
+
 
         <div class="search-container">
           <span class="search-icon">🔍</span>
@@ -451,21 +450,23 @@ export class CharacterSelector {
     const fill1 = this.container?.querySelector('#player-field-charge-fill-1');
     const fill2 = this.container?.querySelector('#player-field-charge-fill-2');
     const fill3 = this.container?.querySelector('#player-field-charge-fill-3');
+    const fill4 = this.container?.querySelector('#player-field-charge-fill-4');
     const label = this.container?.querySelector('#player-field-charge-label');
     if (
       !(wrap instanceof HTMLElement) ||
       !(fill1 instanceof HTMLElement) ||
       !(fill2 instanceof HTMLElement) ||
       !(fill3 instanceof HTMLElement) ||
+      !(fill4 instanceof HTMLElement) ||
       !(label instanceof HTMLElement)
     ) return;
     const skillId = getPlayerInputBindings(player.dexId).lmb;
     const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-    const [p1, p2, p3] = getChargeBarProgresses(p);
+    const [p1, p2, p3, p4] = getChargeBarProgresses(p);
     const lvl = getChargeLevel(p);
     // Show the meter for melee field skills (tackle/cut) + any ranged move that has
-    // a dedicated charged release (ember, waterBurst, thunder). Streamed / tap-only
-    // moves still hide the meter.
+    // a dedicated charged release (ember, waterBurst, thunder, thunderbolt). Streamed /
+    // tap-only moves still hide the meter.
     const canChargeFieldSkill =
       skillId === 'tackle' || skillId === 'cut' || moveSupportsChargedRelease(skillId);
     const shouldShow = canChargeFieldSkill && p > 0.005;
@@ -475,6 +476,7 @@ export class CharacterSelector {
     fill1.style.width = `${Math.round(p1 * 100)}%`;
     fill2.style.width = `${Math.round(p2 * 100)}%`;
     fill3.style.width = `${Math.round(p3 * 100)}%`;
+    fill4.style.width = `${Math.round(p4 * 100)}%`;
     label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
 
     const FULL = 0.994;
@@ -487,6 +489,7 @@ export class CharacterSelector {
     setBarFullGlow(fill1, p1);
     setBarFullGlow(fill2, p2);
     setBarFullGlow(fill3, p3);
+    setBarFullGlow(fill4, p4);
   }
 
   syncPlayPointerModeRadios() {
@@ -498,9 +501,7 @@ export class CharacterSelector {
     }
   }
 
-  getSocialOverlayElement() {
-    return this.container?.querySelector('#character-social-numpad') || null;
-  }
+
 
   async showResults(query) {
     const resultsList = this.container.querySelector('#search-results');

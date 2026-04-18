@@ -78,6 +78,7 @@ import {
   tickDayCycleTintSmooth,
   wrapHours
 } from './main/world-time-of-day.js';
+import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
 
 if (isPlayShell()) {
   setPlayPointerMode('game');
@@ -289,8 +290,12 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
+const minimapHudPopovers = installMinimapHudPopovers();
 installPlayHelpWikiModal({
-  forceCloseMinimapAudioPopover: minimapAudioUi.forceCloseMinimapAudioPopover
+  forceCloseMinimapAudioPopover: () => {
+    minimapAudioUi.forceCloseMinimapAudioPopover();
+    minimapHudPopovers.forceCloseAllPopovers();
+  }
 });
 
 let lastHudTileKey = '';
@@ -773,6 +778,7 @@ function enterPlayMode(gx, gy) {
   else minimap?.classList.remove('hidden');
   syncMinimapZoomBadge();
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapHudPopovers.forceCloseAllPopovers();
   infoBar.innerHTML =
     "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Golpes: 5 entradas — clique esquerdo, direito, meio da rolagem, rolagem para cima, rolagem para baixo — cada uma dispara o golpe que você amarrou nela. Segure 1–5 um instante para abrir a roda e escolher o golpe daquele botão (qualquer golpe da lista). Tackle/Cut no clique esquerdo: combo do Cut e carregar soltando como antes. Carregar pedra: E; com pedra, soltar LMB arremessa na mira. Social: Numpad 1–9. Debug: Ctrl+clique direito.</span>";
   playFpsSampleTimes.length = 0;
@@ -813,6 +819,7 @@ btnBackToMap?.addEventListener('click', () => {
   if (minimapPanel) minimapPanel.classList.add('hidden');
   else minimap?.classList.add('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapHudPopovers.forceCloseAllPopovers();
   infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
   playDetailColliderHighlight = null;
 
@@ -1103,7 +1110,7 @@ loadTilesetImages().then(async () => {
     getAppMode: () => appMode,
     defaultPlayImmersiveChrome: document.documentElement?.dataset?.appShell === 'play'
   });
-  playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
+  playSocialOverlay = createPlaySocialOverlay(document.getElementById('character-social-numpad'));
   void playSocialOverlay.refreshPortraits(player.dexId);
   window.addEventListener('pkmn-player-species-changed', () => {
     void playSocialOverlay.refreshPortraits(player.dexId);

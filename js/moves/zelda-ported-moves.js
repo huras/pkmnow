@@ -11,6 +11,7 @@ import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
+import { spawnPrismaticLaserStreamFx } from './prismatic-laser-fx.js';
 
 function pushLinearProjectile(pushProjectile, spec) {
   pushProjectile(spec);
@@ -319,60 +320,97 @@ export function castPsybeam(sourceX, sourceY, targetX, targetY, sourceEntity, op
 
 /**
  * Rainbow laser: player hold-stream uses `streamPuff` (short bursts like flamethrower); wild = wide volley.
- * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ * @param {{
+ *   fromWild?: boolean,
+ *   pushProjectile: (p: object) => void,
+ *   pushParticle?: (p: object) => void,
+ *   streamPuff?: boolean
+ * }} opts
  */
+/**
+ * Player prismatic stream: shared mouth→aim geometry for cast + merged beam visual.
+ * @returns {{ aimX: number, aimY: number, dist0: number, sp: { startX: number, startY: number, startZ: number }, maxHorizForTtl: number }}
+ */
+export function computePrismaticPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity) {
+  const maxR = 10;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const aimX = base.aimX;
+  const aimY = base.aimY;
+  const dist0 = base.dist0;
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.42);
+  const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
+  return { aimX, aimY, dist0, sp, maxHorizForTtl };
+}
+
 export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
-  const { fromWild = false, pushProjectile, streamPuff = false } = opts;
+  const { fromWild = false, pushProjectile, pushParticle, streamPuff = false } = opts;
   const maxR = fromWild ? 12 : streamPuff ? 10 : 15;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
 
   if (streamPuff && !fromWild) {
-    const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
-    const baseA = Math.atan2(base.aimY - sourceY, base.aimX - sourceX);
-    const count = 5;
-    const spreadMag = 0.11;
-    const dmg = 2.35;
-    for (let i = 0; i < count; i++) {
-      const spread = (Math.random() - 0.5) * spreadMag;
-      const a = baseA + spread;
-      const dist = Math.max(0.15, base.dist0) * (0.9 + Math.random() * 0.2);
-      const rawTx = sourceX + Math.cos(a) * dist;
-      const rawTy = sourceY + Math.sin(a) * dist;
-      const { aimX, aimY, dist0 } = clampFloorAimToMaxRange(sourceX, sourceY, rawTx, rawTy, maxR);
-      const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
-      const speed = 19 + Math.random() * 2.8;
-      const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.42);
-      const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
-        sp.startX,
-        sp.startY,
-        sp.startZ,
-        aimX,
-        aimY,
-        sourceX,
-        sourceY,
-        speed,
-        maxHorizForTtl,
-        { ttlMargin: 1.05, ttlPad: 0.08 }
-      );
-      pushLinearProjectile(pushProjectile, {
-        type: 'prismaticShot',
-        x: sp.startX,
-        y: sp.startY,
-        vx,
-        vy,
-        vz,
-        z: sp.startZ,
-        radius: 0.18,
-        timeToLive,
-        damage: dmg,
-        sourceEntity,
-        fromWild,
-        hitsWild: !fromWild,
-        hitsPlayer: !!fromWild,
-        trailAcc: LASER_TRAIL_INTERVAL * (i / count),
-        laserStream: true,
-        rainbowHue0: (i * 61 + sourceX * 17 + sourceY * 13) % 360
-      });
+    const geo = computePrismaticPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+    const { aimX, aimY, sp, maxHorizForTtl } = geo;
+    const cx = Number(sourceEntity?.visualX ?? sourceEntity?.x) + 0.5;
+    const cy = Number(sourceEntity?.visualY ?? sourceEntity?.y) + 0.5;
+    const cz = Math.max(0, Number(sourceEntity?.z) || 0);
+    const speed = 19 + Math.random() * 2.8;
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      aimX,
+      aimY,
+      sourceX,
+      sourceY,
+      speed,
+      maxHorizForTtl,
+      { ttlMargin: 1.05, ttlPad: 0.08 }
+    );
+    // One puff = one hitbox; visuals are a single full-length gradient beam (not stacked segments).
+    const dmg = 2.35 * 5;
+    pushLinearProjectile(pushProjectile, {
+      type: 'prismaticShot',
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
+      radius: 0.2,
+      timeToLive,
+      damage: dmg,
+      sourceEntity,
+      fromWild,
+      hitsWild: !fromWild,
+      hitsPlayer: !!fromWild,
+      trailAcc: 0,
+      laserStream: true,
+      laserBeamGradient: true,
+      laserStreamHidePerProjectileBeam: true,
+      laserBeamSx: sp.startX,
+      laserBeamSy: sp.startY,
+      laserBeamSz: sp.startZ,
+      laserBeamEx: aimX,
+      laserBeamEy: aimY,
+      laserBeamEz: 0,
+      laserHitSx: cx,
+      laserHitSy: cy,
+      laserHitSz: cz,
+      laserHitEx: aimX,
+      laserHitEy: aimY,
+      laserHitEz: 0,
+      laserHitHalfWidth: 0.28,
+      hasTackleTrait: true,
+      tackleKnockback: 3.25,
+      tackleKnockbackLockSec: 0.32,
+      psyHitWild: new Set(),
+      psyHitDetails: new Set(),
+      playerBeamHitDone: false,
+      rainbowHue0: (sourceX * 17 + sourceY * 13) % 360
+    });
+    if (pushParticle) {
+      spawnPrismaticLaserStreamFx(pushParticle, sp.startX, sp.startY, aimX, aimY, sp.startZ);
     }
     return;
   }

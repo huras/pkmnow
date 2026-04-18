@@ -17,6 +17,7 @@ import {
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
+import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '../main/wind-state.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 1.25;
@@ -37,45 +38,17 @@ const CLOUD_SIZE_SKIP_THRESHOLD = 0.42;
 const CLOUD_SIZE_MIN_MUL = 0.45;
 const CLOUD_SIZE_MAX_MUL = 1.55;
 /**
- * Cloud wind: baseline drift at zero wind (so a clear sky still reads as alive) plus extra
- * drift that scales with the live `windIntensity` coming from weather-state. Values are in
- * world-tiles/sec of motion; the vector is rotated by `windDirRad` every frame.
- *
- * We integrate position in `cloudDriftXTiles` / `cloudDriftYTiles` rather than multiplying
- * `time × speed` directly, because the live wind speed/direction change smoothly over time
- * and naive `time × speed` would snap the entire cloud field when those change.
+ * Cloud drift is integrated in `cloudDriftXTiles` / `cloudDriftYTiles` using
+ * {@link getWindVelocityTilesPerSec} from `wind-state.js` (same helper as rain + streamlines).
  */
-const CLOUD_WIND_BASELINE_TILES_PER_SEC = 0.22;
-const CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC = 0.65;
-/** Baseline direction used when wind intensity is near zero (mostly east, slightly south). */
-const CLOUD_WIND_BASELINE_DIR_RAD = 0.28;
 let cloudDriftXTiles = 0;
 let cloudDriftYTiles = 0;
 let cloudDriftLastTimeSec = -1;
 
-/**
- * Calculates the final wind velocity (tiles/sec) and orientation (rad) by blending
- * the live wind input with the atmospheric baseline. This ensures all environmental
- * effects (clouds, streamlines, etc.) share the exact same movement vector.
- */
-function getEffectiveWindState(intensity, liveDir) {
-  const windI01 = Math.max(0, Math.min(1, Number(intensity) || 0));
-  const dir = Number.isFinite(liveDir) ? liveDir : CLOUD_WIND_BASELINE_DIR_RAD;
-  const speedTilesPerSec = CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC;
-
-  const baselineWeight = 1 - windI01;
-  const liveWeight = 0.3 + 0.7 * windI01;
-
-  const vx = speedTilesPerSec * (baselineWeight * Math.cos(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.cos(dir));
-  const vy = speedTilesPerSec * (baselineWeight * Math.sin(CLOUD_WIND_BASELINE_DIR_RAD) + liveWeight * Math.sin(dir));
-
-  return {
-    vx,
-    vy,
-    speed: Math.hypot(vx, vy),
-    effectiveDirRad: Math.atan2(vy, vx)
-  };
-}
+/** World-pixel scroll for tiled rain — integrated like cloud drift so slant stays locked to wind. */
+let rainStreakScrollPxX = 0;
+let rainStreakScrollPxY = 0;
+let rainStreakScrollLastSec = -1;
 
 const CLOUD_SLOT_JITTER_FRAC = 1.55;
 const SNES_CLOUD_CLUSTERS = Object.freeze([
@@ -316,7 +289,7 @@ function drawSnesCloudParallax(ctx, options) {
   // Integrate cloud drift in world-tile space so changes to live wind never snap the field.
   // When wind is weak we still advect slowly along a hard-coded baseline direction so clear
   // skies don't look frozen; as wind ramps up we blend the direction toward the live vector.
-  const windState = getEffectiveWindState(windIntensity, windDirRad);
+  const windState = getWindVelocityTilesPerSec(windIntensity, windDirRad);
   const velXTiles = windState.vx;
   const velYTiles = windState.vy;
   const dtRaw = cloudDriftLastTimeSec >= 0 ? time - cloudDriftLastTimeSec : 0;
@@ -858,13 +831,15 @@ export function drawEnvironmentalEffects(ctx, options) {
   if (rainI > 0.001) {
     // World-space splashes on entities (ctx transform = camera world pixels).
     tickAndDrawRainSplashes(ctx, time, rainI, splashTargets);
-    // Screen-space streaks; wind direction/intensity mirror the cloud wind so rain and
-    // clouds visibly share the same wind vector.
-    drawRainStreaks(ctx, cw, ch, time, rainI, tileW, windDir, windI01);
+    // World-space streaks (same ctx transform as splashes / entities) so slant matches puddles.
+    drawRainStreaks(ctx, time, rainI, tileW, tileH, windDir, windI01, startX, startY, endX, endY, lodDetail);
   } else {
     rainSplashes.length = 0;
     rainSplashSpawnDebt = 0;
     rainLastTimeSec = -1;
+    rainStreakScrollLastSec = -1;
+    rainStreakScrollPxX = 0;
+    rainStreakScrollPxY = 0;
   }
 
   if (windI01 > 0.02) {
@@ -883,7 +858,16 @@ export function drawEnvironmentalEffects(ctx, options) {
 }
 
 const RAIN_HASH_CACHE = [];
-const RAIN_MAX_STREAKS = 1600;
+/** Precomputed hash slots for rain streaks baked into the repeating tile. */
+const RAIN_MAX_STREAKS = 900;
+
+/** World-pixel period for tiled rain (one offscreen bake; viewport = many cheap `drawImage`). */
+const RAIN_TILE_PX = 384;
+
+let rainTileCanvas = null;
+let rainTileCtx = null;
+/** Rebuild offscreen tile when wind / intensity / LOD / tile scale bucket changes. */
+let rainTileCacheKey = '';
 
 function ensureRainHashCache() {
   if (RAIN_HASH_CACHE.length >= RAIN_MAX_STREAKS) return;
@@ -902,85 +886,187 @@ function ensureRainHashCache() {
   }
 }
 
-/**
- * Cheap screen-space rain.
- * - Direction is gravity (down) + the horizontal component of the live wind vector, so the
- *   rain slant visibly follows whatever the wind is doing (and shares direction with cloud
- *   drift, which reads as "the same wind" to the player).
- * - Vertical wind component augments or reduces gravity, so an upward gust can actually
- *   make rain slant slightly back upward at the tip, which reads as a strong updraft.
- * - Per-streak hash scatter + per-streak speed/length variation → no visible grid.
- * Path draw is a single `stroke()` call, so cost is roughly count × (moveTo+lineTo).
- */
-function drawRainStreaks(ctx, cw, ch, timeSec, intensity, tileW, windDirRad, windIntensity) {
-  const time = Number.isFinite(timeSec) ? timeSec : 0;
-  const area = cw * ch;
-  // Density curve: stays light at low intensity, ramps up hard past ~0.6 so max rain reads
-  // as a proper downpour (1.8× streaks vs the previous cap, plus a heavier per-pixel rate).
-  const densityT = intensity * (1 + 0.55 * intensity);
-  const baseCount = Math.round((area / 3200) * densityT);
-  const count = Math.max(40, Math.min(baseCount, 1600));
-  const tw = Math.max(1, Number(tileW) || 32);
+function ensureRainTileCanvas() {
+  if (typeof document === 'undefined') return;
+  if (rainTileCanvas && rainTileCanvas.width === RAIN_TILE_PX) return;
+  rainTileCanvas = document.createElement('canvas');
+  rainTileCanvas.width = RAIN_TILE_PX;
+  rainTileCanvas.height = RAIN_TILE_PX;
+  rainTileCtx = rainTileCanvas.getContext('2d');
+  if (rainTileCtx) {
+    rainTileCtx.imageSmoothingEnabled = false;
+  }
+}
 
-  // Fall velocity (px/sec) = gravity + live-wind vector. `tw * 38` converts the tiles/sec
-  // cloud baseline into a meaningful horizontal slant at the rain layer's scale.
+/**
+ * Bakes a toroidal rain streak field into {@link rainTileCanvas}. Motion comes later from
+ * scrolling tile placement (same slant vector as live wind + gravity).
+ */
+function rebuildRainTileIfStale(cacheKey, spec) {
+  ensureRainTileCanvas();
+  if (!rainTileCtx || cacheKey === rainTileCacheKey) return;
+  rainTileCacheKey = cacheKey;
+
+  const {
+    intensity,
+    dx,
+    dy,
+    vecMag,
+    baseLen,
+    horizontalBleed,
+    passes,
+    heavyPass,
+    streakCount
+  } = spec;
+
+  const CW = RAIN_TILE_PX;
+  const CH = RAIN_TILE_PX;
+  const spanW = CW + horizontalBleed * 2 + 30;
+  const spanH = CH + baseLen * 2 + 30;
+  const wx0 = 0;
+  const wy0 = 0;
+
+  const tctx = rainTileCtx;
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, CW, CH);
+  tctx.save();
+  tctx.beginPath();
+  tctx.rect(0, 0, CW, CH);
+  tctx.clip();
+
+  ensureRainHashCache();
+  const count = Math.max(24, Math.min(streakCount, RAIN_MAX_STREAKS));
+
+  for (let pass = 0; pass < passes; pass++) {
+    const isUnder = pass === 0 && heavyPass;
+    tctx.globalAlpha = isUnder ? 0.14 + 0.22 * intensity : 0.3 + 0.5 * intensity;
+    tctx.strokeStyle = isUnder ? '#b6c6e2' : '#d9e3f3';
+    tctx.lineWidth = isUnder
+      ? Math.max(1.4, 1.4 + 0.9 * intensity)
+      : Math.max(1, 1 + 0.8 * intensity);
+    tctx.lineCap = 'round';
+    tctx.beginPath();
+
+    for (let i = 0; i < count; i++) {
+      const h = RAIN_HASH_CACHE[i][pass];
+      const { hx, hy, hl } = h;
+      const rawX = hx * spanW;
+      const rawY = hy * spanH;
+      const px = wx0 + ((rawX % spanW) + spanW) % spanW - horizontalBleed - 15;
+      const py = wy0 + ((rawY % spanH) + spanH) % spanH - baseLen - 15;
+      const len = baseLen * (0.8 + hl * 0.45);
+      tctx.moveTo(px, py);
+      tctx.lineTo(px - dx * len, py - dy * len);
+    }
+    tctx.stroke();
+  }
+
+  tctx.restore();
+}
+
+/**
+ * Rain streaks in **world pixel space** (camera-translated ctx), matching splashes / wind.
+ * Uses a **repeating offscreen tile**: expensive `stroke()` only when the look-bucket changes;
+ * each frame we `drawImage` a small grid of tiles with a scroll offset (same motion as before).
+ */
+function drawRainStreaks(
+  ctx,
+  timeSec,
+  intensity,
+  tileW,
+  tileH,
+  windDirRad,
+  windIntensity,
+  startX,
+  startY,
+  endX,
+  endY,
+  lodDetail = 0
+) {
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const tw = Math.max(1, Number(tileW) || 32);
+  const th = Math.max(1, Number(tileH) || tw);
+  const wx0 = Number(startX) * tw;
+  const wy0 = Number(startY) * th;
+  const worldW = Math.max(1, (Number(endX) - Number(startX)) * tw);
+  const worldH = Math.max(1, (Number(endY) - Number(startY)) * th);
+
+  const densityT = intensity * (1 + 0.55 * intensity);
+  const lod = Number(lodDetail) || 0;
+  const streakInTile = lod >= 2 ? 120 : lod >= 1 ? 200 : 280;
+
   const gravityPxSec = 850 + 520 * intensity;
   const windI01 = Math.max(0, Math.min(1, Number(windIntensity) || 0));
-  const liveDir = Number.isFinite(windDirRad) ? windDirRad : CLOUD_WIND_BASELINE_DIR_RAD;
-  const windSpeedPxSec =
-    (CLOUD_WIND_BASELINE_TILES_PER_SEC + windI01 * CLOUD_WIND_MAX_EXTRA_TILES_PER_SEC) * tw * 38;
-  const windVx = Math.cos(liveDir) * windSpeedPxSec;
-  const windVy = Math.sin(liveDir) * windSpeedPxSec;
-  const vx = windVx;
-  const vy = gravityPxSec + windVy;
+  const liveDir = Number.isFinite(windDirRad) ? windDirRad : WIND_CLOUD_BLEND_BASELINE_DIR_RAD;
+  const wTiles = getWindVelocityTilesPerSec(windI01, liveDir);
+  const k = 38;
+  const windVxPxSec = wTiles.vx * tw * k;
+  const windVyPxSec = wTiles.vy * th * k;
+  const vx = windVxPxSec;
+  const vy = Math.max(gravityPxSec * 0.2, gravityPxSec + windVyPxSec);
   const vecMag = Math.sqrt(vx * vx + vy * vy);
   const dx = vx / vecMag;
   const dy = vy / vecMag;
 
-  // Longer streaks at max; still short & wispy on trace rain.
   const baseLen = 14 + 18 * intensity;
-  const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(windVx) * 0.05;
-  const spanW = cw + horizontalBleed * 2 + 30;
-  const spanH = ch + baseLen * 2 + 30;
+  const horizontalBleed = Math.abs(dx) * baseLen + Math.abs(vx) * 0.05;
+  const heavyPass = intensity > 0.52 && lod < 2;
+  const passes = heavyPass ? 2 : 1;
+
+  const iBucket = Math.round(intensity * 14);
+  const wBucket = Math.round(windI01 * 9);
+  const dirBucket = Math.round(liveDir * 12);
+  const twBucket = Math.round(tw);
+  const cacheKey = `${lod}|${iBucket}|${wBucket}|${dirBucket}|${twBucket}|${passes}|${streakInTile}`;
+
+  rebuildRainTileIfStale(cacheKey, {
+    intensity,
+    dx,
+    dy,
+    vecMag,
+    baseLen,
+    horizontalBleed,
+    passes,
+    heavyPass,
+    streakCount: Math.min(
+      RAIN_MAX_STREAKS,
+      Math.round(streakInTile * Math.min(1.55, Math.max(0.75, densityT)))
+    )
+  });
+
+  if (!rainTileCanvas) {
+    return;
+  }
+
+  const CW = RAIN_TILE_PX;
+  const CH = RAIN_TILE_PX;
+
+  const margin = CW + horizontalBleed + baseLen;
+  const xMin = wx0 - margin;
+  const xMax = wx0 + worldW + margin;
+  const yMin = wy0 - margin;
+  const yMax = wy0 + worldH + margin;
+
+  const dtRaw = rainStreakScrollLastSec >= 0 ? time - rainStreakScrollLastSec : 0;
+  const driftDt = !Number.isFinite(dtRaw) || dtRaw < 0 || dtRaw > 0.25 ? 0 : dtRaw;
+  rainStreakScrollLastSec = time;
+  const scrollMul = 0.82;
+  rainStreakScrollPxX += vx * driftDt * scrollMul;
+  rainStreakScrollPxY += vy * driftDt * scrollMul;
+
+  const ox = rainStreakScrollPxX;
+  const oy = rainStreakScrollPxY;
+  const startI = Math.floor((xMin - ox) / CW);
+  const endI = Math.ceil((xMax - ox) / CW);
+  const startJ = Math.floor((yMin - oy) / CH);
+  const endJ = Math.ceil((yMax - oy) / CH);
 
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-  // Two passes: a wider, softer under-stroke (reads as far-away sheets of rain) and the
-  // normal crisp stroke on top. Only the second pass runs for light rain to keep it cheap.
-  const heavyPass = intensity > 0.35;
-  const passes = heavyPass ? 2 : 1;
-  for (let pass = 0; pass < passes; pass++) {
-    const isUnder = pass === 0 && heavyPass;
-    ctx.globalAlpha = isUnder
-      ? 0.14 + 0.22 * intensity
-      : 0.3 + 0.5 * intensity;
-    ctx.strokeStyle = isUnder ? '#b6c6e2' : '#d9e3f3';
-    ctx.lineWidth = isUnder
-      ? Math.max(1.4, 1.4 + 0.9 * intensity)
-      : Math.max(1, 1 + 0.8 * intensity);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-
-    ensureRainHashCache();
-    for (let i = 0; i < count; i++) {
-      const h = RAIN_HASH_CACHE[i][pass];
-      const { hx, hy, hs, hl } = h;
-
-      const streakSpeed = vecMag * (0.72 + hs * 0.56); // 0.72x..1.28x
-      const phase = time * streakSpeed;
-
-      // Anchor + drift along velocity; wrap each axis independently.
-      const rawX = hx * spanW + dx * phase;
-      const rawY = hy * spanH + dy * phase;
-      const px = ((rawX % spanW) + spanW) % spanW - horizontalBleed - 15;
-      const py = ((rawY % spanH) + spanH) % spanH - baseLen - 15;
-
-      const len = baseLen * (0.8 + hl * 0.45);
-      ctx.moveTo(px, py);
-      ctx.lineTo(px - dx * len, py - dy * len);
+  ctx.imageSmoothingEnabled = false;
+  for (let j = startJ; j <= endJ; j++) {
+    for (let i = startI; i <= endI; i++) {
+      ctx.drawImage(rainTileCanvas, i * CW + ox, j * CH + oy);
     }
-    ctx.stroke();
   }
   ctx.restore();
 }
@@ -1023,7 +1109,7 @@ function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad, tileW, til
   const time = Number.isFinite(timeSec) ? timeSec : 0;
 
   // Use the exact same effective wind state as the clouds to guarantee synchronization.
-  const windState = getEffectiveWindState(intensity, dirRad);
+  const windState = getWindVelocityTilesPerSec(intensity, dirRad);
   const dirX = Math.cos(windState.effectiveDirRad);
   const dirY = Math.sin(windState.effectiveDirRad);
   const perpX = -dirY;
