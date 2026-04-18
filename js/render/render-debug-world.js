@@ -19,7 +19,7 @@ import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
-const CLOUD_ALPHA_GAIN = 1.95;
+const CLOUD_ALPHA_GAIN = 1.25;
 const CLOUD_SHADOW_ALPHA_RATIO = 0.68;
 const CLOUD_SIZE_GAIN = 1.5;
 const CLOUD_SHADOW_OFFSET_MULT = 2.5;
