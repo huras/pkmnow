@@ -26,6 +26,7 @@ import {
 } from '../weather/lightning.js';
 import { applySplashToWild } from './moves-projectile-collision.js';
 import { getChargeLevel, isChargeStrongAttackEligible } from '../main/play-charge-levels.js';
+import { playThunderStrikeSfx } from '../audio/thunder-strike-sfx.js';
 
 /** @typedef {1 | 2 | 3} ThunderLevel */
 
@@ -133,6 +134,7 @@ export function tickThunderStrikes(_dt, wildList, data, wildSpatial = null) {
       color: 'yellow',
       flashCloudSlot: false
     });
+    playThunderStrikeSfx({ x: strike.worldX, y: strike.worldY, z: 0 });
     // Reuse the projectile splash helper via a minimal duck-typed object (no projectile
     // actually travels — the bolt is instant by design, matching the rain lightning).
     applySplashToWild(

@@ -27,6 +27,7 @@
         <button type="button" id="generate">Gerar</button>
         <button type="button" id="btnSettings" title="Configurações de Ruído" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">⚙️</button>
         <button type="button" id="btnBiomes" title="Explorador de Biomas" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">📊</button>
+        <a href="play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Modo jogar</a>
         <a href="pokemon-anim-lab.html" style="display:inline-flex; align-items:center; padding:0.45rem 0.8rem; text-decoration:none; border-radius:6px; border:1px solid #4a4a52; background:transparent; color:var(--text); font-size:0.8rem; font-weight:600;">PMD lab</a>
         <a href="index.html" style="display:inline-flex; align-items:center; padding:0.45rem 0.8rem; text-decoration:none; border-radius:6px; border:1px solid #4a4a52; background:transparent; color:var(--text); font-size:0.8rem; font-weight:600;">Início</a>
       </div>
@@ -112,6 +113,34 @@
               </button>
               <button
                 type="button"
+                id="minimap-time-weather-toggle"
+                class="minimap-panel__time-btn"
+                title="World time and weather"
+                aria-label="World time and weather"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__time-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                id="minimap-social-toggle"
+                class="minimap-panel__social-btn"
+                title="Social actions (numpad)"
+                aria-label="Social actions (numpad)"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__social-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-audio-toggle"
                 class="minimap-panel__music-btn"
                 title="Volume BGM e gritos"
@@ -161,6 +190,45 @@
             </div>
           </header>
           <canvas id="minimap" width="192" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+
+          <div id="minimap-time-weather-popover" class="minimap-time-weather-popover hidden" role="dialog" aria-label="Tempo e clima">
+            <div id="play-world-time" class="play-world-time" aria-label="World time and weather">
+              <div class="play-world-time__section">
+                <div class="play-world-time-title">World time</div>
+                <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
+                <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
+                <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
+                <div class="play-world-time-presets">
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
+                </div>
+                <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
+                <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
+              </div>
+              <div id="play-weather" class="play-world-time__section play-weather" aria-label="Weather controls">
+                <div class="play-weather-title">Weather</div>
+                <div id="play-weather-current" class="play-weather-current">Clear</div>
+                <div class="play-weather-presets">
+                  <button type="button" class="play-weather-preset is-active" data-weather="clear">Clear</button>
+                  <button type="button" class="play-weather-preset" data-weather="cloudy">Cloudy</button>
+                  <button type="button" class="play-weather-preset" data-weather="rain">Rain</button>
+                  <button type="button" class="play-weather-preset" data-weather="blizzard">Blizzard</button>
+                </div>
+                <label class="play-weather-row">Intensity
+                  <input type="range" id="play-weather-intensity" min="0" max="100" step="1" value="100" />
+                </label>
+                <button type="button" id="play-weather-lightning" class="play-weather-lightning" title="Force-trigger a ground lightning strike near you">
+                  Strike now
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="minimap-social-popover" class="minimap-social-popover hidden" role="dialog" aria-label="Ações sociais">
+            <div id="character-social-numpad" class="play-social-overlay play-social-overlay--popover social-numpad-box"></div>
+          </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
         <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">
@@ -175,38 +243,6 @@
           </div>
           <div id="play-bgm-toast-track" class="play-bgm-toast-track"></div>
           <div id="play-bgm-toast-status" class="play-bgm-toast-status"></div>
-        </div>
-        <div id="play-world-time" class="play-world-time" aria-label="World time and weather (test)">
-          <div class="play-world-time__section">
-            <div class="play-world-time-title">World time</div>
-            <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
-            <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
-            <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
-            <div class="play-world-time-presets">
-              <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
-              <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
-              <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
-              <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
-            </div>
-            <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
-            <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
-          </div>
-          <div id="play-weather" class="play-world-time__section play-weather" aria-label="Weather controls (test)">
-            <div class="play-weather-title">Weather</div>
-            <div id="play-weather-current" class="play-weather-current">Clear</div>
-            <div class="play-weather-presets">
-              <button type="button" class="play-weather-preset is-active" data-weather="clear">Clear</button>
-              <button type="button" class="play-weather-preset" data-weather="cloudy">Cloudy</button>
-              <button type="button" class="play-weather-preset" data-weather="rain">Rain</button>
-              <button type="button" class="play-weather-preset" data-weather="blizzard">Blizzard</button>
-            </div>
-            <label class="play-weather-row">Intensity
-              <input type="range" id="play-weather-intensity" min="0" max="100" step="1" value="100" />
-            </label>
-            <button type="button" id="play-weather-lightning" class="play-weather-lightning" title="Force-trigger a ground lightning strike near you">
-              Strike now
-            </button>
-          </div>
         </div>
       </div>
     </div>

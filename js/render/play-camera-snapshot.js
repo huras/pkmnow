@@ -30,6 +30,27 @@ export function clearPlayCameraSnapshot() {
 }
 
 /**
+ * Whether a world point (continuous tile coords, same as lightning impact / `player.visualX`)
+ * lies inside the last play canvas bounds. Uses the same mapping as
+ * {@link playScreenPixelsToWorldTileCoords} with `worldTile = mouseWorld + 0.5`.
+ *
+ * @param {number} worldX
+ * @param {number} worldY
+ * @returns {boolean | null} `true` / `false` if snapshot matches; `null` if no snapshot.
+ */
+export function isWorldTileOnPlayCanvas(worldX, worldY) {
+  const snap = lastSnapshot;
+  if (!snap || !Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
+  const { effTileW: W, effTileH: H, currentTransX: tx, currentTransY: ty, cw, ch } = snap;
+  if (!(W > 0) || !(H > 0) || !(cw > 0) || !(ch > 0)) return null;
+  const minX = (0 - tx) / W;
+  const maxX = (cw - tx) / W;
+  const minY = (0 - ty) / H;
+  const maxY = (ch - ty) / H;
+  return worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY;
+}
+
+/**
  * Same inverse as render play pass: canvas pixel → continuous world tile coords (ground plane).
  * Prefers the snapshot from the last `render()` play frame; falls back if missing/size mismatch.
  */

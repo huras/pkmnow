@@ -11,6 +11,8 @@
 
 import { grassFireTryIgniteAt } from '../play-grass-fire.js';
 import { tryApplyFireHitToFormalTreesAt } from '../main/play-crystal-tackle.js';
+import { isWorldTileOnPlayCanvas } from '../render/play-camera-snapshot.js';
+import { playFarRainLightningSfx, playNearRainLightningSfx } from '../audio/rain-lightning-sfx.js';
 
 /** Must match CLOUD_SLOT_STEP_WORLD_TILES in render-debug-world.js (duplicated to avoid import cycles). */
 const CLOUD_SLOT_STEP_WORLD_TILES = 10;
@@ -181,6 +183,13 @@ export function spawnGroundStrikeAt(worldX, worldY, data, opts = {}) {
     const sxTop = clampSlot(startWorldX / step);
     const syTop = clampSlot(startWorldY / step);
     cloudFlashes.set(`${sxTop},${syTop}`, now);
+  }
+
+  // Rain ground strikes (default palette) — far rumble if impact is off the play canvas.
+  if (color === 'default') {
+    const onCanvas = isWorldTileOnPlayCanvas(worldX, worldY);
+    if (onCanvas === false) playFarRainLightningSfx();
+    else playNearRainLightningSfx({ x: worldX, y: worldY, z: 0 });
   }
 
   // Ignition. Both helpers short-circuit when projType isn't recognized,

@@ -17,7 +17,6 @@ import {
   tryReleasePlayerPsybeam
 } from '../moves/moves-manager.js';
 import {
-  PLAYER_BINDABLE_MOVE_IDS,
   digitToBindingSlotIndex,
   getBindableMoveLabel,
   getPlayerInputBindings,
@@ -73,7 +72,6 @@ const FIELD_SKILL_LABEL = {
 };
 
 /** Hold digit 1–5 briefly to open the bind wheel for LMB / RMB / MMB / wheel↑ / wheel↓. */
-const BIND_SLOT_WHEEL_HOLD_MS = 250;
 /** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
 
 function getMoveTypeClass(moveId) {
@@ -184,7 +182,6 @@ let lastScrollBindCastMs = 0;
 
 /** 0..4 = Digit1..Digit5 slot being edited, or -1. */
 let bindingWheelSlotIdx = -1;
-let bindingWheelHoldStartMs = 0;
 let bindingWheelArmed = false;
 
 /** @type {HTMLDivElement | null} */
@@ -243,36 +240,59 @@ function updateBindWheelHover(p) {
 export function handleBindSlotHotkeyDown(code) {
   const idx = digitToBindingSlotIndex(code);
   if (idx < 0) return false;
+  if (attackWheel.isOpen && attackWheel.getPendingSlotIdx() === idx) {
+    closeBindWheel();
+    bindingWheelSlotIdx = -1;
+    bindingWheelArmed = false;
+    return true;
+  }
   bindingWheelSlotIdx = idx;
   bindingWheelArmed = true;
-  bindingWheelHoldStartMs = performance.now();
+  openBindWheel();
+  return true;
+}
+
+/**
+ * @param {import('../player.js').player | null | undefined} pl
+ * @param {string} [forcedMoveId]
+ */
+function applyAttackWheelMoveBind(pl, forcedMoveId) {
+  if (!attackWheel.isOpen || attackWheel.getPhase() !== 'move') return;
+  const pick = forcedMoveId || attackWheel.getSelectedMove();
+  if (!pick) return;
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  const slotIdx = attackWheel.getPendingSlotIdx();
+  if (dex < 1 || slotIdx < 0) {
+    attackWheel.dismissWithoutSaving();
+    bindingWheelSlotIdx = -1;
+    bindingWheelArmed = false;
+    return;
+  }
+  setPlayerInputBinding(dex, slotIdx, pick);
+  dispatchPlayerInputBindingsChanged(dex);
+  window.dispatchEvent(
+    new CustomEvent('play-field-skill-change', {
+      detail: { dexId: dex, skillId: getSelectedFieldSkillForDex(dex) }
+    })
+  );
+  closeBindWheel();
+  bindingWheelSlotIdx = -1;
+  bindingWheelArmed = false;
+}
+
+/** @returns {boolean} true if a wheel session was dismissed */
+export function dismissAttackWheelIfOpen() {
+  if (!attackWheel.isOpen) return false;
+  attackWheel.dismissWithoutSaving();
+  bindingWheelArmed = false;
+  bindingWheelSlotIdx = -1;
   return true;
 }
 
 export function handleBindSlotHotkeyUp(code, pl) {
-  const idx = digitToBindingSlotIndex(code);
-  if (idx < 0) return false;
-  if (idx !== bindingWheelSlotIdx) return false;
-  if (!bindingWheelArmed && !attackWheel.isOpen) return false;
-  const dex = Math.floor(Number(pl?.dexId) || 0);
-  const b0 = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
-  const slotId = getInputSlotId(idx);
-  const pick = attackWheel.isOpen
-    ? attackWheel.getSelectedMove()
-    : b0[slotId];
-  if (dex >= 1) {
-    setPlayerInputBinding(dex, idx, pick);
-    dispatchPlayerInputBindingsChanged(dex);
-    window.dispatchEvent(
-      new CustomEvent('play-field-skill-change', {
-        detail: { dexId: dex, skillId: getSelectedFieldSkillForDex(dex) }
-      })
-    );
-  }
-  bindingWheelArmed = false;
-  bindingWheelSlotIdx = -1;
-  closeBindWheel();
-  return true;
+  void code;
+  void pl;
+  return false;
 }
 
 export function handleFieldSkillHotkeyDown(code) {
@@ -817,11 +837,6 @@ export function updatePlayPointerCombat(dt, player, data) {
     fieldCutComboTimerSec = Math.max(0, fieldCutComboTimerSec - dt);
     if (fieldCutComboTimerSec <= 0) fieldCutComboStep = 0;
   }
-  if (bindingWheelArmed && !attackWheel.isOpen && bindingWheelSlotIdx >= 0) {
-    if (performance.now() - bindingWheelHoldStartMs >= BIND_SLOT_WHEEL_HOLD_MS) {
-      openBindWheel();
-    }
-  }
   updateBindWheelHover(player);
 
   const b = getBindingsOrDefault(player);
@@ -987,6 +1002,19 @@ export function installPlayPointerCombat(deps) {
   const { canvas, getAppMode, getPlayer, getCurrentData } = deps;
   fieldWheelMouseClientX = window.innerWidth * 0.5;
   fieldWheelMouseClientY = window.innerHeight * 0.5;
+
+  window.addEventListener('attack-wheel-confirm-bind', (ev) => {
+    if (getAppMode() !== 'play') return;
+    const moveId =
+      ev instanceof CustomEvent && ev.detail && typeof ev.detail.moveId === 'string' ? ev.detail.moveId : null;
+    if (!moveId) return;
+    applyAttackWheelMoveBind(getPlayer(), moveId);
+  });
+
+  window.addEventListener('attack-wheel-dismiss', () => {
+    if (getAppMode() !== 'play') return;
+    dismissAttackWheelIfOpen();
+  });
 
   window.addEventListener(
     'pointermove',
