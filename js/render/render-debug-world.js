@@ -37,6 +37,8 @@ const CLOUD_SIZE_SKIP_THRESHOLD = 0.42;
 /** Cloud size multiplier range, scaled from (noise - threshold)/(1 - threshold). */
 const CLOUD_SIZE_MIN_MUL = 0.45;
 const CLOUD_SIZE_MAX_MUL = 1.55;
+/** White cloud sprites: full strength from this world-tile altitude upward (0 at ground). */
+export const CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES = 8.3;
 /**
  * Cloud drift is integrated in `cloudDriftXTiles` / `cloudDriftYTiles` using
  * {@link getWindVelocityTilesPerSec} from `wind-state.js` (same helper as rain + streamlines).
@@ -292,7 +294,9 @@ function drawSnesCloudParallax(ctx, options) {
     windDirRad = 0,
     windIntensity = 0,
     cw = 0,
-    entityShadowSprites = null
+    entityShadowSprites = null,
+    /** 0..1 scales white cloud pass (shadows ignore this). Default 1 = editor / non-play. */
+    whiteLayerAlphaMul = 1
   } = options;
   const darken = Math.max(0, Math.min(0.75, Number(cloudDarken01) || 0));
   const cloudPresence = Math.max(0, Math.min(1, Number(cloudPresenceRaw) || 0));
@@ -370,9 +374,10 @@ function drawSnesCloudParallax(ctx, options) {
     }
   }
 
-  const drawLayer = (isShadow, targetCtx = ctx, extraNudgeX = 0, extraNudgeY = 0) => {
+  const drawLayer = (isShadow, targetCtx = ctx, extraNudgeX = 0, extraNudgeY = 0, whiteAlphaMul = 1) => {
     const yNudge = (isShadow ? shadowOffsetY : 0) + extraNudgeY;
     const xNudge = (isShadow ? shadowOffsetX : 0) + extraNudgeX;
+    const wMul = isShadow ? 1 : Math.max(0, Math.min(1, Number(whiteAlphaMul) || 0));
 
     for (const slot of visibleSlots) {
       const { sx, sy, variantIdx, c, sizeMul, jitterX, jitterY, bob, identityX, identityY } = slot;
@@ -395,7 +400,8 @@ function drawSnesCloudParallax(ctx, options) {
         continue;
       }
 
-      const alpha = c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * alphaMul * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1);
+      const alpha =
+        c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * alphaMul * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * wMul;
       const clampedAlpha = Math.max(0, Math.min(1, alpha));
       targetCtx.globalAlpha = clampedAlpha;
       targetCtx.drawImage(sprite, x, y, w, h);
@@ -468,7 +474,9 @@ function drawSnesCloudParallax(ctx, options) {
       ctx.restore();
     }
 
-    drawLayer(false);
+    if (whiteLayerAlphaMul > 0.002) {
+      drawLayer(false, ctx, 0, 0, whiteLayerAlphaMul);
+    }
   }
   ctx.restore();
 }
@@ -789,6 +797,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
  * @param {number} [options.earthquakeVisual01=0] — smoothed 0..1 ground-shake layer (independent of sky weather).
+ * @param {number} [options.cloudWhiteLayerAlphaMul=1] — 0..1 scales procedural *white* clouds (shadows unchanged). Play passes altitude ramp from `render.js`.
  */
 export function drawEnvironmentalEffects(ctx, options) {
   const {
@@ -818,7 +827,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     screenTint,
     splashTargets,
     entityShadowSprites,
-    earthquakeVisual01 = 0
+    earthquakeVisual01 = 0,
+    cloudWhiteLayerAlphaMul = 1
   } = options;
   // Clouds go gray with rain. Scales 0..~0.55 so even light rain starts feeling overcast.
   const rainI01 = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
@@ -857,7 +867,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     windIntensity: windI01,
     cw,
     ch,
-    entityShadowSprites
+    entityShadowSprites,
+    whiteLayerAlphaMul: cloudWhiteLayerAlphaMul
   });
 
   // Lightning (both in-cloud flashes have already been baked into the clouds above,

@@ -40,7 +40,11 @@ import {
   BURN_START_FRAMES
 } from './moves/move-constants.js';
 
-import { drawBatchedProjectile, drawPrismaticStreamGradientBeam } from './render/render-projectiles.js';
+import {
+  drawBatchedProjectile,
+  drawPrismaticStreamGradientBeam,
+  drawSteelStreamGradientBeam
+} from './render/render-projectiles.js';
 import { drawBatchedParticle } from './render/render-particles.js';
 import {
   drawPlayEntityFootAndAirCollider,
@@ -103,7 +107,8 @@ import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
   drawEnvironmentalEffects,
-  drawDigChargeBar
+  drawDigChargeBar,
+  CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
 
 import './render/render-debug-hotkeys.js';
@@ -118,7 +123,12 @@ import {
   speciesHasFlyingType,
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
-import { activeProjectiles, activeParticles, getPlayerPrismaticMergedBeamVisual } from './moves/moves-manager.js';
+import {
+  activeProjectiles,
+  activeParticles,
+  getPlayerPrismaticMergedBeamVisual,
+  getPlayerSteelBeamMergedBeamVisual
+} from './moves/moves-manager.js';
 import {
   activeCrystalShards,
   activeSpawnedSmallCrystals,
@@ -266,6 +276,15 @@ export function render(canvas, data, options = {}) {
     applyPlayPointerWithPlayCam(canvas, playCam, earthquakeShakePx);
     const smoothLev = player.flightLevelVisual ?? (player.z || 0);
     const flightHudActive = speciesHasFlyingType(playerDexForCam) && player.flightActive;
+    const zCloudTiles = Math.max(0, Number(smoothLev) || 0);
+    const cloudWhiteSkyContext =
+      speciesHasFlyingType(playerDexForCam) &&
+      (flightHudActive || (!player.jumping && zCloudTiles > 0.02));
+    const cloudWhiteRampT = Math.min(1, zCloudTiles / CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES);
+    const cloudWhiteRampU = Math.max(0, Math.min(1, cloudWhiteRampT));
+    const cloudWhiteLayerAlphaMul = cloudWhiteSkyContext
+      ? cloudWhiteRampU * cloudWhiteRampU * (3 - 2 * cloudWhiteRampU)
+      : 0;
     const isPlayerWalkingAnim =
       (!!player.grounded &&
         (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 || !!player.digActive)) ||
@@ -715,10 +734,14 @@ export function render(canvas, data, options = {}) {
     }
 
     const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
-    if (batchedEffects.length > 0 || mergedPrismaticBeam) {
+    const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
+    if (batchedEffects.length > 0 || mergedPrismaticBeam || mergedSteelBeam) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       if (mergedPrismaticBeam) {
         drawPrismaticStreamGradientBeam(ctx, mergedPrismaticBeam, tileW, tileH, snapPx, time);
+      }
+      if (mergedSteelBeam) {
+        drawSteelStreamGradientBeam(ctx, mergedSteelBeam, tileW, tileH, snapPx, time);
       }
       for (const be of batchedEffects) {
         if (be.kind === 'projectile') drawBatchedProjectile(ctx, be.proj, tileW, tileH, snapPx, time);
@@ -865,7 +888,8 @@ export function render(canvas, data, options = {}) {
       screenTint: options.settings?.weatherScreenTint,
       splashTargets,
       entityShadowSprites,
-      earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0
+      earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
+      cloudWhiteLayerAlphaMul
     });
 
     const minimapCanvas = document.getElementById('minimap');

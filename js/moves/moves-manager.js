@@ -19,6 +19,8 @@ import {
   castPsybeam,
   castPrismaticLaser,
   computePrismaticPlayerStreamGeometry,
+  castSteelBeam,
+  computeSteelBeamPlayerStreamGeometry,
   castPoisonPowder,
   castIncinerate,
   castSilkShoot
@@ -78,6 +80,7 @@ import {
   WATER_GUN_STREAM_INTERVAL,
   BUBBLE_BEAM_STREAM_INTERVAL,
   PRISMATIC_STREAM_INTERVAL,
+  STEEL_BEAM_STREAM_INTERVAL,
   PLAYER_THUNDER_COOLDOWN_SEC,
   PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
@@ -125,6 +128,9 @@ let playerPsybeamCooldown = 0;
 let playerPrismaticLaserCooldown = 0;
 /** Single merged gradient beam while Prismatic Laser is held (see `updatePlayerPrismaticMergedBeamVisual`). */
 let playerPrismaticMergedBeam = null;
+let playerSteelBeamCooldown = 0;
+/** Merged hold beam for Steel Beam (silver). */
+let playerSteelBeamMergedBeam = null;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerFireBlastCooldown = 0;
@@ -331,6 +337,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'bubbleBeam') return castBubbleBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'steelBeam') return castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -478,6 +485,30 @@ export function getPlayerPrismaticMergedBeamVisual() {
 }
 
 /**
+ * Updates merged Steel Beam preview while the bound mouse button is held.
+ */
+export function updatePlayerSteelBeamMergedBeamVisual(active, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (!active) {
+    playerSteelBeamMergedBeam = null;
+    return;
+  }
+  const geo = computeSteelBeamPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const { sp, aimX, aimY } = geo;
+  playerSteelBeamMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0
+  };
+}
+
+export function getPlayerSteelBeamMergedBeamVisual() {
+  return playerSteelBeamMergedBeam;
+}
+
+/**
  * One prismatic laser stream puff (hold / hotkey). Same idea as flamethrower stream.
  * @returns {boolean} true when a puff was spawned
  */
@@ -492,6 +523,24 @@ export function tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targ
     streamPuff: true
   });
   return true;
+}
+
+/** @returns {boolean} true when a puff was spawned */
+export function tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerSteelBeamCooldown > 0) return false;
+  playerSteelBeamCooldown = STEEL_BEAM_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castSteelBeam(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    pushParticle,
+    streamPuff: true
+  });
+  return true;
+}
+
+export function castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -1052,6 +1101,8 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castPsybeam(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'prismaticLaser') {
     castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'steelBeam') {
+    castSteelBeam(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'poisonPowder') {
     castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'fireBlast') {
@@ -1095,6 +1146,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return 0.75;
     case 'prismaticLaser':
       return PRISMATIC_STREAM_INTERVAL;
+    case 'steelBeam':
+      return STEEL_BEAM_STREAM_INTERVAL;
     case 'poisonPowder':
       return 0.95;
     case 'incinerate':
@@ -1178,6 +1231,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerPsybeamCooldown;
     case 'prismaticLaser':
       return playerPrismaticLaserCooldown;
+    case 'steelBeam':
+      return playerSteelBeamCooldown;
     case 'poisonPowder':
       return playerPoisonPowderCooldown;
     case 'incinerate':
@@ -1231,6 +1286,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerBubbleBeamCooldown = Math.max(0, playerBubbleBeamCooldown - dt);
   playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
+  playerSteelBeamCooldown = Math.max(0, playerSteelBeamCooldown - dt);
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
   playerFireBlastCooldown = Math.max(0, playerFireBlastCooldown - dt);
@@ -1293,7 +1349,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutSlashArc' ||
       p.type === 'fieldSpinAttack' ||
       p.type === 'rainFootSplash' ||
-      p.type === 'prismaticWindArc'
+      p.type === 'prismaticWindArc' ||
+      p.type === 'steelWindArc'
     ) {
       continue;
     }

@@ -14,6 +14,8 @@ import {
   tryCastPlayerBubbleBeamStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
   updatePlayerPrismaticMergedBeamVisual,
+  tryCastPlayerSteelBeamStreamPuff,
+  updatePlayerSteelBeamMergedBeamVisual,
   tryCastPlayerThundershockStreamPuff,
   tryReleasePlayerPsybeam,
   castFireSpinMove,
@@ -126,6 +128,8 @@ function getMoveTypeClass(moveId) {
     case 'psybeam':
     case 'prismaticLaser':
       return 'type-psychic';
+    case 'steelBeam':
+      return 'type-steel';
     case 'dragonRage':
       return 'type-dragon';
     case 'nightShade':
@@ -181,6 +185,9 @@ let middleFlameStreamedThisPress = false;
 let middleWaterStreamedThisPress = false;
 let middleBubbleBeamStreamedThisPress = false;
 let middlePrismaticStreamedThisPress = false;
+let rightSteelBeamStreamedThisPress = false;
+let leftSteelBeamStreamedThisPress = false;
+let middleSteelBeamStreamedThisPress = false;
 let middleThundershockStreamedThisPress = false;
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
@@ -690,6 +697,7 @@ function isHoldStreamMoveId(moveId) {
     moveId === 'bubbleBeam' ||
     moveId === 'surf' ||
     moveId === 'prismaticLaser' ||
+    moveId === 'steelBeam' ||
     moveId === 'solarBeam' ||
     moveId === 'hyperBeam' ||
     moveId === 'triAttack' ||
@@ -800,6 +808,7 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
   const water = which === 'l' ? leftWaterStreamedThisPress : which === 'm' ? middleWaterStreamedThisPress : rightWaterStreamedThisPress;
   const bubble = which === 'l' ? leftBubbleBeamStreamedThisPress : which === 'm' ? middleBubbleBeamStreamedThisPress : rightBubbleBeamStreamedThisPress;
   const prismatic = which === 'l' ? leftPrismaticStreamedThisPress : which === 'm' ? middlePrismaticStreamedThisPress : rightPrismaticStreamedThisPress;
+  const steel = which === 'l' ? leftSteelBeamStreamedThisPress : which === 'm' ? middleSteelBeamStreamedThisPress : rightSteelBeamStreamedThisPress;
   const tshock = which === 'l' ? leftThundershockStreamedThisPress : which === 'm' ? middleThundershockStreamedThisPress : rightThundershockStreamedThisPress;
 
   if (moveId === 'flamethrower') {
@@ -826,6 +835,11 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     if (!prismatic) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
       tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'steelBeam') {
+    if (!steel) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, pl);
     }
   } else if (moveId === 'thunderShock') {
     if (!tshock) {
@@ -941,6 +955,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) leftPrismaticStreamedThisPress = true;
   }
+  if (leftHeld && !mod && lmb === 'steelBeam') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, player)) leftSteelBeamStreamedThisPress = true;
+  }
   if (leftHeld && !mod && lmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) leftThundershockStreamedThisPress = true;
@@ -972,6 +990,10 @@ export function updatePlayPointerCombat(dt, player, data) {
   ) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
+  }
+  if (rightHeld && !mod && rmb === 'steelBeam') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, player)) rightSteelBeamStreamedThisPress = true;
   }
   if (rightHeld && !mod && rmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1005,6 +1027,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) middlePrismaticStreamedThisPress = true;
   }
+  if (middleHeld && !mod && mmb === 'steelBeam') {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, player)) middleSteelBeamStreamedThisPress = true;
+  }
   if (middleHeld && !mod && mmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) middleThundershockStreamedThisPress = true;
@@ -1015,6 +1041,12 @@ export function updatePlayPointerCombat(dt, player, data) {
     !!(rightHeld && !mod && rmb === 'prismaticLaser') ||
     !!(middleHeld && !mod && mmb === 'prismaticLaser');
   updatePlayerPrismaticMergedBeamVisual(prismaticLaserStreamHeld, sx, sy, tx, ty, player);
+
+  const steelBeamStreamHeld =
+    !!(leftHeld && !mod && lmb === 'steelBeam') ||
+    !!(rightHeld && !mod && rmb === 'steelBeam') ||
+    !!(middleHeld && !mod && mmb === 'steelBeam');
+  updatePlayerSteelBeamMergedBeamVisual(steelBeamStreamHeld, sx, sy, tx, ty, player);
 
   // Thunder charge preview: while a held button is bound to Thunder and the charge has
   // passed the first bar, broadcast a "charging storm cell" + ground-shadow at the live
@@ -1108,6 +1140,7 @@ export function installPlayPointerCombat(deps) {
         leftWaterStreamedThisPress = false;
         leftBubbleBeamStreamedThisPress = false;
         leftPrismaticStreamedThisPress = false;
+        leftSteelBeamStreamedThisPress = false;
         leftThundershockStreamedThisPress = false;
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
@@ -1118,6 +1151,7 @@ export function installPlayPointerCombat(deps) {
         rightWaterStreamedThisPress = false;
         rightBubbleBeamStreamedThisPress = false;
         rightPrismaticStreamedThisPress = false;
+        rightSteelBeamStreamedThisPress = false;
         rightThundershockStreamedThisPress = false;
         playInputState.chargeRight01 = 0;
         canvas.setPointerCapture?.(e.pointerId);
@@ -1129,6 +1163,7 @@ export function installPlayPointerCombat(deps) {
         middleWaterStreamedThisPress = false;
         middleBubbleBeamStreamedThisPress = false;
         middlePrismaticStreamedThisPress = false;
+        middleSteelBeamStreamedThisPress = false;
         middleThundershockStreamedThisPress = false;
         playInputState.chargeMmb01 = 0;
         canvas.setPointerCapture?.(e.pointerId);

@@ -6,6 +6,74 @@ import { FIRE_FRAME_W, FIRE_FRAME_H } from '../moves/move-constants.js';
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ laserBeamSx: number, laserBeamSy: number, laserBeamSz?: number, laserBeamEx: number, laserBeamEy: number, laserBeamEz?: number, rainbowHue0?: number }} beam
  */
+/**
+ * Thick silver optic-beam (Steel Beam hold stream). Same geometry contract as {@link drawPrismaticStreamGradientBeam}.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ laserBeamSx: number, laserBeamSy: number, laserBeamSz?: number, laserBeamEx: number, laserBeamEy: number, laserBeamEz?: number }} beam
+ */
+export function drawSteelStreamGradientBeam(ctx, beam, tileW, tileH, snapPx, time) {
+  const sx = Number(beam.laserBeamSx);
+  const sy = Number(beam.laserBeamSy);
+  const sz = Number(beam.laserBeamSz) || 0;
+  const ex = Number(beam.laserBeamEx);
+  const ey = Number(beam.laserBeamEy);
+  const ez = Number(beam.laserBeamEz) || 0;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
+
+  const x0 = snapPx(sx * tileW);
+  const y0 = snapPx(sy * tileH - sz * tileH);
+  const x1 = snapPx(ex * tileW);
+  const y1 = snapPx(ey * tileH - ez * tileH);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenPx = Math.max(10, Math.hypot(dx, dy));
+  const midX = (x0 + x1) * 0.5;
+  const midY = (y0 + y1) * 0.5;
+  const beamAng = Math.atan2(dy, dx);
+  const th = Math.max(5, tileH * 0.11) * 7;
+  const halfLen = lenPx * 0.5;
+  const pulse = 0.5 + 0.5 * Math.sin(time * 38 + midX * 0.04);
+
+  const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+  grd.addColorStop(0, `rgba(200,210,225,${0.22 + 0.12 * pulse})`);
+  grd.addColorStop(0.22, 'rgba(230,236,245,0.92)');
+  grd.addColorStop(0.5, 'rgba(255,255,255,0.98)');
+  grd.addColorStop(0.78, 'rgba(185,198,214,0.9)');
+  grd.addColorStop(1, `rgba(160,175,195,${0.2 + 0.1 * pulse})`);
+
+  /** Beam along +x in local space; origin at -halfLen gets a round cap (mouth side). */
+  const steelBeamRoundOriginPath = (halfH, arcR) => {
+    ctx.beginPath();
+    ctx.moveTo(-halfLen, -halfH);
+    ctx.arc(-halfLen, 0, arcR, -Math.PI / 2, Math.PI / 2, true);
+    ctx.lineTo(halfLen, halfH);
+    ctx.lineTo(halfLen, -halfH);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  ctx.translate(midX, midY);
+  ctx.rotate(beamAng);
+  const halfHalo = th * 1.05;
+  ctx.fillStyle = 'rgba(140,155,175,0.22)';
+  steelBeamRoundOriginPath(halfHalo, halfHalo);
+  ctx.fill();
+  const halfBody = th * 0.52;
+  ctx.fillStyle = grd;
+  steelBeamRoundOriginPath(halfBody, halfBody);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(240,248,255,${0.35 + 0.25 * pulse})`;
+  ctx.lineWidth = Math.max(4, tileW * 0.09);
+  steelBeamRoundOriginPath(halfBody, halfBody);
+  ctx.stroke();
+  const coreH = th * (0.22 + 0.1 * pulse);
+  const halfCore = coreH * 0.5;
+  ctx.fillStyle = `rgba(255,255,255,${0.55 + 0.35 * pulse})`;
+  steelBeamRoundOriginPath(halfCore, halfCore);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawPrismaticStreamGradientBeam(ctx, beam, tileW, tileH, snapPx, time) {
   const sx = Number(beam.laserBeamSx);
   const sy = Number(beam.laserBeamSy);
@@ -473,6 +541,48 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       drawArc(jagAmp * 0.85, forkOffset);
     }
     ctx.restore();
+  } else if (p.type === 'steelBeamShot') {
+    const ang = Math.atan2(p.vy || 0, p.vx || 1);
+    if (p.laserStream) {
+      if (!p.laserStreamHidePerProjectileBeam) {
+        if (p.laserBeamGradient) {
+          drawSteelStreamGradientBeam(ctx, p, tileW, tileH, snapPx, time);
+        } else {
+        const speed = Math.hypot(p.vx || 0, p.vy || 0);
+        const lenPx = Math.max(16, Math.min(tileW * 2.55, tileW * (0.78 + speed * 0.03)));
+        const th = Math.max(3.2, tileH * 0.085) * 7;
+        const halfLen = lenPx * 0.5;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(ang);
+        const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+        grd.addColorStop(0, 'rgba(190,200,215,0.35)');
+        grd.addColorStop(0.5, 'rgba(255,255,255,0.9)');
+        grd.addColorStop(1, 'rgba(165,180,200,0.32)');
+        const roundSteel = (halfH, arcR) => {
+          ctx.beginPath();
+          ctx.moveTo(-halfLen, -halfH);
+          ctx.arc(-halfLen, 0, arcR, -Math.PI / 2, Math.PI / 2, true);
+          ctx.lineTo(halfLen, halfH);
+          ctx.lineTo(halfLen, -halfH);
+          ctx.closePath();
+        };
+        const hh = th * 0.95;
+        ctx.fillStyle = 'rgba(130,145,165,0.2)';
+        roundSteel(hh, hh);
+        ctx.fill();
+        ctx.fillStyle = grd;
+        roundSteel(th * 0.5, th * 0.5);
+        ctx.fill();
+        ctx.restore();
+        }
+      }
+    } else {
+      ctx.fillStyle = 'rgba(230,238,248,0.95)';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(3.2, tileW * 0.13), 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (p.type === 'prismaticShot') {
     const ang = Math.atan2(p.vy || 0, p.vx || 1);
     if (p.laserStream) {

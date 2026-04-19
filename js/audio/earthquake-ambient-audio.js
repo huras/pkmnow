@@ -1,35 +1,37 @@
 /**
- * Procedural earthquake bed: low sine rumble + filtered noise crackle tied to shake intensity.
+ * Earthquake ground-shake bed: loops `audio/sfx/Earthquake.mp3`, gain follows shake intensity.
  * Separate from sky weather ambient (`weather-ambient-audio.js`). Uses the same BGM user gain.
  */
 
-import { getSpatialAudioContext } from './spatial-audio.js';
+import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
 import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
 import { getEarthquakeActiveIntensity01, getEarthquakeShakePx } from '../main/earthquake-layer.js';
+
+const EARTHQUAKE_MP3_URL = new URL('../../audio/sfx/Earthquake.mp3', import.meta.url).href;
 
 const TUNING = {
   fadeInSec: 0.5,
   fadeOutSec: 0.55,
   frameGlideSec: 0.1,
-  rumbleMasterLinearGain: 0.34,
-  crackleMasterLinearGain: 0.26,
+  bedMasterLinearGain: 0.48,
   minIntensity: 0.025,
-  crackleBurstCooldownSec: 0.055,
-  crackleBurstMul: 2.4
+  pauseBufferMs: 60
 };
 
-/** @type {{
+/**
+ * @typedef {{
  *   ctx: AudioContext,
- *   rumbleOsc: OscillatorNode,
- *   rumbleGain: GainNode,
- *   noiseSrc: AudioBufferSourceNode,
- *   crackleFilter: BiquadFilterNode,
- *   crackleGain: GainNode,
+ *   audio: HTMLAudioElement,
+ *   bedGain: GainNode,
  *   userGain: GainNode,
  *   wantOn: boolean,
- *   lastCrackleBurstT: number,
- *   lastShakeMag: number
- * } | null} */
+ *   isPlaying: boolean,
+ *   startPromise: Promise<void> | null,
+ *   pauseAtMs: number
+ * }} EarthquakeBedGraph
+ */
+
+/** @type {EarthquakeBedGraph | null} */
 let graph = null;
 
 function clamp01(v) {
@@ -52,69 +54,62 @@ function rampTo(gainNode, to, durationSec) {
   }
 }
 
-function makeWhiteNoiseBuffer(ctx, seconds) {
-  const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  return buf;
-}
-
 function ensureGraph() {
   if (graph) return;
   const ctx = getSpatialAudioContext();
 
-  const rumbleOsc = ctx.createOscillator();
-  rumbleOsc.type = 'sine';
-  rumbleOsc.frequency.value = 52;
-  const rumbleGain = ctx.createGain();
-  rumbleGain.gain.value = 0;
-  rumbleOsc.connect(rumbleGain);
+  const audio = new Audio();
+  audio.loop = true;
+  audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
+  audio.src = EARTHQUAKE_MP3_URL;
 
-  const noiseBuf = makeWhiteNoiseBuffer(ctx, 1.2);
-  const noiseSrc = ctx.createBufferSource();
-  noiseSrc.buffer = noiseBuf;
-  noiseSrc.loop = true;
-
-  const crackleFilter = ctx.createBiquadFilter();
-  crackleFilter.type = 'bandpass';
-  crackleFilter.frequency.value = 1400;
-  crackleFilter.Q.value = 1.2;
-  noiseSrc.connect(crackleFilter);
-
-  const crackleGain = ctx.createGain();
-  crackleGain.gain.value = 0;
-  crackleFilter.connect(crackleGain);
-
+  const source = ctx.createMediaElementSource(audio);
+  const bedGain = ctx.createGain();
+  bedGain.gain.value = 0;
   const userGain = ctx.createGain();
   userGain.gain.value = getEffectiveBgmMix01();
-  rumbleGain.connect(userGain);
-  crackleGain.connect(userGain);
+  source.connect(bedGain);
+  bedGain.connect(userGain);
   userGain.connect(ctx.destination);
-
-  try {
-    rumbleOsc.start(0);
-  } catch {
-    /* ignore */
-  }
-  try {
-    noiseSrc.start(0);
-  } catch {
-    /* ignore */
-  }
 
   graph = {
     ctx,
-    rumbleOsc,
-    rumbleGain,
-    noiseSrc,
-    crackleFilter,
-    crackleGain,
+    audio,
+    bedGain,
     userGain,
     wantOn: false,
-    lastCrackleBurstT: 0,
-    lastShakeMag: 0
+    isPlaying: false,
+    startPromise: null,
+    pauseAtMs: 0
   };
+}
+
+function startBedIfNeeded() {
+  const g = graph;
+  if (!g || g.isPlaying || g.startPromise) return;
+  g.startPromise = resumeSpatialAudioContext()
+    .then(() => g.audio.play())
+    .then(() => {
+      g.isPlaying = true;
+      g.startPromise = null;
+    })
+    .catch(() => {
+      g.isPlaying = false;
+      g.startPromise = null;
+    });
+}
+
+function pauseBedNow() {
+  const g = graph;
+  if (!g) return;
+  try {
+    g.audio.pause();
+  } catch {
+    /* ignore */
+  }
+  g.isPlaying = false;
+  g.pauseAtMs = 0;
 }
 
 /**
@@ -130,7 +125,7 @@ export function applyEarthquakeAmbientUserMixFromStorage() {
 }
 
 /**
- * @param {number} gameTimeSec world / render time seconds (keeps crackle aligned with visible shake).
+ * @param {number} gameTimeSec world / render time seconds (keeps gain aligned with visible shake).
  */
 export function syncEarthquakeAmbientAudio(gameTimeSec) {
   ensureGraph();
@@ -145,60 +140,41 @@ export function syncEarthquakeAmbientAudio(gameTimeSec) {
   const mag = Math.hypot(shake.x, shake.y);
   const wantOn = active > TUNING.minIntensity;
 
+  const dynamic = 0.55 + 0.45 * clamp01(mag / 12);
+  const targetLinear = active * active * TUNING.bedMasterLinearGain * dynamic;
+  const now = performance.now();
+
   if (wantOn && !g.wantOn) {
     g.wantOn = true;
-    rampTo(g.rumbleGain, 0, 0);
-    rampTo(g.crackleGain, 0, 0);
-    rampTo(g.rumbleGain, active * active * TUNING.rumbleMasterLinearGain, TUNING.fadeInSec);
-    rampTo(g.crackleGain, active * TUNING.crackleMasterLinearGain * 0.5, TUNING.fadeInSec);
+    g.pauseAtMs = 0;
+    rampTo(g.bedGain, 0, 0);
+    startBedIfNeeded();
+    rampTo(g.bedGain, targetLinear, TUNING.fadeInSec);
   } else if (!wantOn && g.wantOn) {
     g.wantOn = false;
-    rampTo(g.rumbleGain, 0, TUNING.fadeOutSec);
-    rampTo(g.crackleGain, 0, TUNING.fadeOutSec);
+    rampTo(g.bedGain, 0, TUNING.fadeOutSec);
+    g.pauseAtMs = now + TUNING.fadeOutSec * 1000 + TUNING.pauseBufferMs;
+  } else if (wantOn) {
+    rampTo(g.bedGain, targetLinear, TUNING.frameGlideSec);
+    if (!g.isPlaying && !g.startPromise) startBedIfNeeded();
   }
 
   if (!wantOn && active < 0.005) {
-    g.lastShakeMag = 0;
     return;
   }
 
-  const t = g.ctx.currentTime;
-  const rumbleTarget =
-    active * active * TUNING.rumbleMasterLinearGain * (0.55 + 0.45 * clamp01(mag / 12));
-  rampTo(g.rumbleGain, rumbleTarget, TUNING.frameGlideSec);
-
-  const slow = Math.sin(timeSec * 1.85) * 6 + Math.sin(timeSec * 0.41) * 3;
-  try {
-    g.rumbleOsc.frequency.cancelScheduledValues(t);
-    g.rumbleOsc.frequency.setValueAtTime(g.rumbleOsc.frequency.value, t);
-    g.rumbleOsc.frequency.linearRampToValueAtTime(48 + active * 16 + slow, t + TUNING.frameGlideSec);
-  } catch {
-    g.rumbleOsc.frequency.value = 52 + slow;
+  if (!g.wantOn && g.isPlaying && g.pauseAtMs && now >= g.pauseAtMs) {
+    pauseBedNow();
   }
-
-  let crackleTarget = active * TUNING.crackleMasterLinearGain * (0.35 + 0.65 * clamp01(mag / 10));
-  const rising = mag > g.lastShakeMag + 0.45 && timeSec - g.lastCrackleBurstT > TUNING.crackleBurstCooldownSec;
-  if (rising && active > 0.08) {
-    g.lastCrackleBurstT = timeSec;
-    crackleTarget *= TUNING.crackleBurstMul;
-  }
-  g.lastShakeMag = mag;
-
-  try {
-    g.crackleFilter.frequency.cancelScheduledValues(t);
-    g.crackleFilter.frequency.setValueAtTime(g.crackleFilter.frequency.value, t);
-    const fq = 900 + active * 2200 + (mag % 7) * 40;
-    g.crackleFilter.frequency.linearRampToValueAtTime(fq, t + TUNING.frameGlideSec);
-  } catch {
-    /* ignore */
-  }
-
-  rampTo(g.crackleGain, Math.min(0.95, crackleTarget), TUNING.frameGlideSec);
 }
 
 export function stopEarthquakeAmbientAudio() {
   if (!graph) return;
   graph.wantOn = false;
-  rampTo(graph.rumbleGain, 0, TUNING.fadeOutSec);
-  rampTo(graph.crackleGain, 0, TUNING.fadeOutSec);
+  rampTo(graph.bedGain, 0, TUNING.fadeOutSec);
+  const pauseAt = performance.now() + TUNING.fadeOutSec * 1000 + TUNING.pauseBufferMs;
+  graph.pauseAtMs = pauseAt;
+  setTimeout(() => {
+    if (graph && graph.isPlaying && !graph.wantOn) pauseBedNow();
+  }, TUNING.fadeOutSec * 1000 + TUNING.pauseBufferMs);
 }

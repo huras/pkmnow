@@ -100,6 +100,9 @@ const harvestedBurnedScatterTreeOrigins = new Set();
 const detailBreakStateByOrigin = new Map();
 let detailBreakSweepIter = null;
 let detailBreakSweepCooldownSec = 0;
+/** After a wild Pokémon spawns from tree tackle, block another for this many seconds. */
+const TREE_TACKLE_WILD_SPAWN_COOLDOWN_SEC = 5;
+let treeTackleWildSpawnBlockedUntilSec = 0;
 const DETAIL_REGEN_AFTER_BREAK_SEC = 80;
 const FORMAL_TREE_REGEN_AFTER_BREAK_SEC = 80;
 /** Formal + scatter tree trunk/canopy and grass regrow use the same short alpha ramp (cheap quad easing in callers). */
@@ -123,7 +126,8 @@ const FORMAL_TREE_BURN_ADD_BY_PROJECTILE = Object.freeze({
   thunderShockBeam: 38,
   thunderBoltArc: 46,
   /** Prismatic Laser: same meter as fire, but completion skips the torch “burning” phase (see add*BurnMeter). */
-  prismaticShot: 20
+  prismaticShot: 20,
+  steelBeamShot: 18
 });
 const DETAIL_PARTIAL_DAMAGE_FORGET_SEC = 22;
 /** Strength-relocated rock: drop override + detail state after no hits / grabs (frees override map memory). */
@@ -331,6 +335,7 @@ export function clearPlayCrystalTackleState() {
   detailBreakStateByOrigin.clear();
   detailBreakSweepIter = null;
   detailBreakSweepCooldownSec = 0;
+  treeTackleWildSpawnBlockedUntilSec = 0;
   detailHitHpBars.clear();
   detailHitShakeAtSec.clear();
   activeDetailHitPulses.length = 0;
@@ -453,7 +458,7 @@ function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data
 
   if (next >= FORMAL_TREE_BURN_METER_MAX) {
     formalTreeBurnMeterByRoot.delete(key);
-    if (projType === 'prismaticShot') {
+    if (projType === 'prismaticShot' || projType === 'steelBeamShot') {
       registerDestroyedFormalTreeRoot(rootX, my, nowSec, 'burned', data);
     } else {
       burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
@@ -482,7 +487,7 @@ function addScatterTreeBurnMeterAndMaybeDestroy(ox, oy, projType, nowSec, data) 
 
   if (next >= FORMAL_TREE_BURN_METER_MAX) {
     scatterTreeBurnMeterByOrigin.delete(key);
-    if (projType === 'prismaticShot') {
+    if (projType === 'prismaticShot' || projType === 'steelBeamShot') {
       markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data);
     } else {
       burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
@@ -1068,14 +1073,18 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
   const salt = Math.floor((seed ?? 0) + biomeId * 131 + cx * 17 + cy * 23);
   const branch = seededHash(Math.floor(cx * 10), Math.floor(cy * 10), salt + 77111);
   if (branch < 0.07) {
-    const pool = getEncounters(biomeId);
-    if (pool?.length) {
-      const pick = pool[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77133) * pool.length)];
-      const dex = encounterNameToDex(pick);
-      if (dex != null) {
-        void import('../wild-pokemon/index.js').then((m) => {
-          if (m?.summonDebugWildPokemon) m.summonDebugWildPokemon(dex, data, cx, cy);
-        });
+    const nowSec = performance.now() * 0.001;
+    if (nowSec >= treeTackleWildSpawnBlockedUntilSec) {
+      const pool = getEncounters(biomeId);
+      if (pool?.length) {
+        const pick = pool[Math.floor(seededHash(Math.floor(cx), Math.floor(cy), salt + 77133) * pool.length)];
+        const dex = encounterNameToDex(pick);
+        if (dex != null) {
+          treeTackleWildSpawnBlockedUntilSec = nowSec + TREE_TACKLE_WILD_SPAWN_COOLDOWN_SEC;
+          void import('../wild-pokemon/index.js').then((m) => {
+            if (m?.summonDebugWildPokemon) m.summonDebugWildPokemon(dex, data, cx, cy);
+          });
+        }
       }
     }
     return;

@@ -179,7 +179,7 @@ export function tickActiveProjectiles(ctx) {
     }
 
     if (
-      proj.type === 'prismaticShot' &&
+      (proj.type === 'prismaticShot' || proj.type === 'steelBeamShot') &&
       proj.laserStream &&
       Number.isFinite(proj.laserHitEx) &&
       Number.isFinite(proj.laserHitSx)
@@ -384,6 +384,8 @@ export function tickActiveProjectiles(ctx) {
                 ? 'psyTrail'
                 : proj.type === 'prismaticShot'
                   ? 'laserTrail'
+                  : proj.type === 'steelBeamShot'
+                    ? 'steelLaserTrail'
                   : proj.type === 'flamethrowerShot' ||
                       proj.type === 'fireBlastCore' ||
                       proj.type === 'fireSpinBurst'
@@ -400,7 +402,7 @@ export function tickActiveProjectiles(ctx) {
               ? POWDER_TRAIL_INTERVAL
               : trailType === 'silkTrail'
                 ? SILK_TRAIL_INTERVAL
-                : trailType === 'laserTrail'
+                : trailType === 'laserTrail' || trailType === 'steelLaserTrail'
                   ? LASER_TRAIL_INTERVAL
                   : EMBER_TRAIL_INTERVAL;
       const effectiveInterval =

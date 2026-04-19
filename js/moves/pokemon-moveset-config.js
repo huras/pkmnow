@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
@@ -30,6 +30,7 @@ export const MOVE_LABELS = Object.freeze({
   sludge: 'Sludge',
   smog: 'Smog',
   solarBeam: 'Solar Beam',
+  steelBeam: 'Steel Beam',
   sonicBoom: 'Sonic Boom',
   sunnyDay: 'Sunny Day',
   surf: 'Surf',
@@ -81,6 +82,7 @@ export const PLAYER_PROJECTILE_MOVE_IDS = Object.freeze(
     'sludge',
     'smog',
     'solarBeam',
+    'steelBeam',
     'sonicBoom',
     'sunnyDay',
     'surf',
@@ -128,7 +130,7 @@ const TYPE_PRESETS = Object.freeze({
   dragon: /** @type {MoveId[]} */ (['flamethrower', 'waterGun', 'psybeam', 'prismaticLaser']),
   ice: /** @type {MoveId[]} */ (['waterGun', 'bubble', 'psybeam', 'confusion']),
   dark: /** @type {MoveId[]} */ (['confusion', 'prismaticLaser', 'poisonSting', 'nightShade']),
-  steel: /** @type {MoveId[]} */ (['incinerate', 'waterBurst', 'psybeam', 'poisonPowder']),
+  steel: /** @type {MoveId[]} */ (['steelBeam', 'incinerate', 'waterBurst', 'psybeam']),
   fairy: /** @type {MoveId[]} */ (['bubble', 'psybeam', 'confusion', 'poisonPowder'])
 });
 

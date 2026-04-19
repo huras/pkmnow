@@ -21,6 +21,8 @@ export const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
 
 // --- Prismatic Laser (hold stream) ---
 export const PRISMATIC_STREAM_INTERVAL = 0.25;
+// --- Steel Beam (hold stream; thick silver beam) ---
+export const STEEL_BEAM_STREAM_INTERVAL = 0.22;
 /** Min seconds between stream segment damage ticks to the same wild (overlapping puffs). */
 export const PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC = 0.3;
 

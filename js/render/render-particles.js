@@ -29,6 +29,49 @@ function queueFieldSpinWindTextureLoad() {
  * @param {number} tileH
  * @param {(n: number) => number} snapPx
  */
+function drawSteelWindArcParticle(ctx, p, tileW, tileH, snapPx) {
+  const elapsed = p.maxLife - p.life;
+  const tipXw = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * elapsed;
+  const tipYw = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * elapsed;
+  const cx = snapPx(p.centerX * tileW);
+  const cy = snapPx(p.centerY * tileH - (p.z || 0) * tileH);
+  const tx = snapPx(tipXw * tileW);
+  const ty = snapPx(tipYw * tileH - (p.z || 0) * tileH);
+  const fade = Math.max(0, p.life / Math.max(1e-4, p.maxLife));
+  const lineA = fade * (p.lineAlphaMul ?? 0.78);
+  const ellA = fade * (p.ellipseAlpha ?? 0.5);
+  const r = p.ellipseRPx ?? 6;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(220,228,238,${ellA})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, r, r * 0.88, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const midX = (cx + tx) * 0.5;
+  const midY = (cy + ty) * 0.5;
+  const perp = p.arcAngle + Math.PI / 2;
+  const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3);
+  const ctrlX = midX + Math.cos(perp) * curvePx;
+  const ctrlY = midY + Math.sin(perp) * curvePx;
+
+  ctx.strokeStyle = `rgba(235,242,252,${lineA})`;
+  ctx.lineWidth = p.lineWidth ?? 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  const segments = 8;
+  for (let i = 1; i <= segments; i++) {
+    const t = i / segments;
+    const x = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * ctrlX + t * t * tx;
+    const y = (1 - t) * (1 - t) * cy + 2 * (1 - t) * t * ctrlY + t * t * ty;
+    ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawPrismaticWindArcParticle(ctx, p, tileW, tileH, snapPx) {
   const elapsed = p.maxLife - p.life;
   const tipXw = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * elapsed;
@@ -88,8 +131,29 @@ function psychicCutAlternatingPalette(p) {
  * @param {object} p
  */
 export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
+  if (p.type === 'steelWindArc') {
+    drawSteelWindArcParticle(ctx, p, tileW, tileH, snapPx);
+    ctx.globalAlpha = 1;
+    return;
+  }
   if (p.type === 'prismaticWindArc') {
     drawPrismaticWindArcParticle(ctx, p, tileW, tileH, snapPx);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.type === 'steelLaserSpark') {
+    const px = snapPx(p.x * tileW);
+    const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+    const a = Math.max(0, p.life / p.maxLife);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a * 0.88;
+    const tint = String(p.tint || '#e8eef5');
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.075) * (0.35 + 0.65 * a), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     ctx.globalAlpha = 1;
     return;
   }
@@ -225,6 +289,12 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.fillStyle = `hsla(${hue}, 92%, 68%, ${0.35 + 0.55 * a})`;
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'steelLaserTrail') {
+    const glint = 0.4 + 0.6 * Math.sin(performance.now() * 0.004 + (p.x + p.y) * 6);
+    ctx.fillStyle = `rgba(220,232,248,${(0.32 + 0.48 * a) * glint})`;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2.2, tileW * 0.1) * a, 0, Math.PI * 2);
     ctx.fill();
   } else if (p.type === 'fieldCutVineArc') {
     const t = 1 - a;
