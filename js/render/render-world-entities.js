@@ -445,11 +445,9 @@ export function drawStrengthThrowFaintedWild(ctx, item, options) {
   let sh;
   let animCols;
   if (isRolling && wTumble && sheet === wTumble) {
-    const walkMeta = getDexAnimSlice(dex, 'walk');
-    const frameW = Math.max(1, Number(walkMeta?.frameWidth) || 32);
-    animCols = Math.max(1, Math.floor((sheet.naturalWidth || frameW) / frameW));
-    sw = Math.max(1, Math.floor((sheet.naturalWidth || frameW * animCols) / animCols));
-    sh = Math.max(1, Number(sheet.naturalHeight) || Number(walkMeta?.frameHeight) || 40);
+    const tumbleMeta = getDexAnimSlice(dex, 'tumble');
+    const specSlice = tumbleMeta ? 'tumble' : 'walk';
+    ({ sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, specSlice));
   } else {
     ({ sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, animSlice));
   }
@@ -462,7 +460,14 @@ export function drawStrengthThrowFaintedWild(ctx, item, options) {
   let frame = 0;
   if (isRolling) {
     if (wTumble && sheet === wTumble) {
-      frame = Math.floor((Number(item.rollAge) || 0) * 18) % Math.max(1, animCols);
+      const tumbleSeq = getDexAnimSlice(dex, 'tumble')?.durations;
+      if (tumbleSeq?.length) {
+        const total = tumbleSeq.reduce((a, b) => a + b, 0);
+        const tick = ((Number(item.rollAge) || 0) * 60 * 1.9) % Math.max(1, total);
+        frame = pickAnimFrame(tumbleSeq, tick);
+      } else {
+        frame = Math.floor((Number(item.rollAge) || 0) * 18) % Math.max(1, animCols);
+      }
     } else {
       const seq = getDexAnimSlice(dex, 'walk')?.durations || [8, 10, 8, 10];
       const total = seq.reduce((a, b) => a + b, 0);

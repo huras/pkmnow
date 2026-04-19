@@ -139,6 +139,7 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   const charge = `tilesets/pokemon/${id}_charge.png`;
   const shoot = `tilesets/pokemon/${id}_shoot.png`;
   const attack = `tilesets/pokemon/${id}_attack.png`;
+  const tumbleLocal = `tilesets/pokemon/${id}_tumble.png`;
   const tasks = [
     loadOne(imageCache, walk, FALLBACK_WALK),
     loadOne(imageCache, idle, FALLBACK_IDLE)
@@ -165,9 +166,16 @@ export function ensurePokemonSheetsLoaded(imageCache, dexId) {
     tasks.push(loadOptionalSheet(imageCache, attack));
   }
   tasks.push(
-    probeSpriteCollabTumblePath(dexId).then((src) => {
-      if (!src) return;
-      return loadOptionalSheet(imageCache, src);
+    loadOptionalSheet(imageCache, tumbleLocal).then(() => {
+      const local = imageCache.get(tumbleLocal);
+      if (local && ((local.naturalWidth || local.width) > 0)) {
+        tumblePathByDex.set(id, tumbleLocal);
+        return;
+      }
+      return probeSpriteCollabTumblePath(dexId).then((src) => {
+        if (!src) return;
+        return loadOptionalSheet(imageCache, src);
+      });
     })
   );
   return Promise.all(tasks);

@@ -3,6 +3,7 @@
 param(
   [string]$SpriteCollabRoot = "H:\cursor\Youtube\SpriteCollab",
   [string]$OutputDir = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\tilesets\pokemon",
+  [string]$TumbleOutputDir = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\tilesets\spritecollab-sprite",
   [string]$MetadataOutput = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\js\pokemon\pmd-anim-metadata.js",
   [int]$MaxDex = 493
 )
@@ -141,67 +142,32 @@ function Read-AnimMetadata {
     }
   }
 
-  $idleInfo = if ($byName.ContainsKey("Idle")) { $byName["Idle"] } else { $null }
-  $walkInfo = if ($byName.ContainsKey("Walk")) { $byName["Walk"] } else { $null }
-  $digInfo = if ($byName.ContainsKey("Dig")) { $byName["Dig"] } else { $null }
-  $hurtInfo = if ($byName.ContainsKey("Hurt")) { $byName["Hurt"] } else { $null }
-  $sleepInfo = if ($byName.ContainsKey("Sleep")) { $byName["Sleep"] } else { $null }
-  $faintInfo = if ($byName.ContainsKey("Faint")) { $byName["Faint"] } else { $null }
-
-  if (
-    $null -eq $idleInfo -and
-    $null -eq $walkInfo -and
-    $null -eq $digInfo -and
-    $null -eq $hurtInfo -and
-    $null -eq $sleepInfo -and
-    $null -eq $faintInfo
-  ) {
-    return $null
-  }
+  $implementedAnimMeta = @(
+    @{ key = "idle"; sourceName = "Idle" },
+    @{ key = "walk"; sourceName = "Walk" },
+    @{ key = "dig"; sourceName = "Dig" },
+    @{ key = "hurt"; sourceName = "Hurt" },
+    @{ key = "sleep"; sourceName = "Sleep" },
+    @{ key = "faint"; sourceName = "Faint" },
+    @{ key = "charge"; sourceName = "Charge" },
+    @{ key = "shoot"; sourceName = "Shoot" },
+    @{ key = "attack"; sourceName = "Attack" },
+    @{ key = "tumble"; sourceName = "Tumble" }
+  )
 
   $out = @{}
-  if ($null -ne $idleInfo) {
-    $out.idle = @{
-      frameWidth = $idleInfo.frameWidth
-      frameHeight = $idleInfo.frameHeight
-      durations = $idleInfo.durations
+  foreach ($entry in $implementedAnimMeta) {
+    $srcName = [string]$entry.sourceName
+    if (-not $byName.ContainsKey($srcName)) { continue }
+    $info = $byName[$srcName]
+    if ($null -eq $info) { continue }
+    $out[[string]$entry.key] = @{
+      frameWidth = $info.frameWidth
+      frameHeight = $info.frameHeight
+      durations = $info.durations
     }
   }
-  if ($null -ne $walkInfo) {
-    $out.walk = @{
-      frameWidth = $walkInfo.frameWidth
-      frameHeight = $walkInfo.frameHeight
-      durations = $walkInfo.durations
-    }
-  }
-  if ($null -ne $digInfo) {
-    $out.dig = @{
-      frameWidth = $digInfo.frameWidth
-      frameHeight = $digInfo.frameHeight
-      durations = $digInfo.durations
-    }
-  }
-  if ($null -ne $hurtInfo) {
-    $out.hurt = @{
-      frameWidth = $hurtInfo.frameWidth
-      frameHeight = $hurtInfo.frameHeight
-      durations = $hurtInfo.durations
-    }
-  }
-  if ($null -ne $sleepInfo) {
-    $out.sleep = @{
-      frameWidth = $sleepInfo.frameWidth
-      frameHeight = $sleepInfo.frameHeight
-      durations = $sleepInfo.durations
-    }
-  }
-  if ($null -ne $faintInfo) {
-    $out.faint = @{
-      frameWidth = $faintInfo.frameWidth
-      frameHeight = $faintInfo.frameHeight
-      durations = $faintInfo.durations
-    }
-  }
+  if ($out.Keys.Count -eq 0) { return $null }
   return $out
 }
 
@@ -211,6 +177,10 @@ if (-not (Test-Path $SpriteCollabRoot -PathType Container)) {
 
 if (-not (Test-Path $OutputDir -PathType Container)) {
   New-Item -ItemType Directory -Path $OutputDir | Out-Null
+}
+
+if (-not (Test-Path $TumbleOutputDir -PathType Container)) {
+  New-Item -ItemType Directory -Path $TumbleOutputDir | Out-Null
 }
 
 $spriteRoot = Join-Path $SpriteCollabRoot "sprite"
@@ -234,36 +204,32 @@ for ($dex = 1; $dex -le $maxDex; $dex++) {
     continue
   }
 
-  $walkSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Walk-Anim.png",
-    "Walk.png"
-  )
-  $idleSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Idle-Anim.png",
-    "Idle.png"
-  )
-  $digSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Dig-Anim.png",
-    "Dig.png"
-  )
-  $hurtSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Hurt-Anim.png",
-    "Hurt.png"
-  )
-  $sleepSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Sleep-Anim.png",
-    "Sleep.png"
-  )
-  $faintSource = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates @(
-    "Faint-Anim.png",
-    "Faint.png"
-  )
+  $implementedAnimFiles = [ordered]@{
+    walk   = @("Walk-Anim.png", "Walk.png")
+    idle   = @("Idle-Anim.png", "Idle.png")
+    dig    = @("Dig-Anim.png", "Dig.png")
+    hurt   = @("Hurt-Anim.png", "Hurt.png")
+    sleep  = @("Sleep-Anim.png", "Sleep.png")
+    faint  = @("Faint-Anim.png", "Faint.png")
+    charge = @("Charge-Anim.png", "Charge.png")
+    shoot  = @("Shoot-Anim.png", "Shoot.png")
+    attack = @("Attack-Anim.png", "Attack.png")
+    tumble = @("Tumble-Anim.png", "Tumble.png")
+  }
+  $animSourceByKey = @{}
+  foreach ($entry in $implementedAnimFiles.GetEnumerator()) {
+    $animSourceByKey[$entry.Key] = Resolve-AnimFileCandidates -SpeciesRoot $speciesRoot -Candidates $entry.Value
+  }
+  $walkSource = $animSourceByKey["walk"]
+  $idleSource = $animSourceByKey["idle"]
   # Muitas espécies só têm Walk-Anim.png; no AnimData o Idle é <CopyOf>Walk</CopyOf> — usa a mesma folha.
   if ($walkSource -and -not $idleSource) {
     $idleSource = $walkSource
+    $animSourceByKey["idle"] = $walkSource
   }
   elseif ($idleSource -and -not $walkSource) {
     $walkSource = $idleSource
+    $animSourceByKey["walk"] = $idleSource
   }
   $animDataPath = Join-Path $speciesRoot "AnimData.xml"
   $animMeta = Read-AnimMetadata -AnimDataPath $animDataPath
@@ -273,19 +239,21 @@ for ($dex = 1; $dex -le $maxDex; $dex++) {
     continue
   }
 
-  $walkDest = Join-Path $OutputDir "${dex3}_walk.png"
-  $idleDest = Join-Path $OutputDir "${dex3}_idle.png"
-  $digDest = Join-Path $OutputDir "${dex3}_dig.png"
-  $hurtDest = Join-Path $OutputDir "${dex3}_hurt.png"
-  $sleepDest = Join-Path $OutputDir "${dex3}_sleep.png"
-  $faintDest = Join-Path $OutputDir "${dex3}_faint.png"
-
-  Copy-Item -Path $walkSource -Destination $walkDest -Force
-  Copy-Item -Path $idleSource -Destination $idleDest -Force
-  if ($digSource) { Copy-Item -Path $digSource -Destination $digDest -Force }
-  if ($hurtSource) { Copy-Item -Path $hurtSource -Destination $hurtDest -Force }
-  if ($sleepSource) { Copy-Item -Path $sleepSource -Destination $sleepDest -Force }
-  if ($faintSource) { Copy-Item -Path $faintSource -Destination $faintDest -Force }
+  foreach ($entry in $implementedAnimFiles.GetEnumerator()) {
+    $k = [string]$entry.Key
+    $source = $animSourceByKey[$k]
+    if (-not $source) { continue }
+    $dest = Join-Path $OutputDir "${dex3}_${k}.png"
+    Copy-Item -Path $source -Destination $dest -Force
+  }
+  $tumbleSource = $animSourceByKey["tumble"]
+  if ($tumbleSource) {
+    $tumbleSpeciesDir = Join-Path $TumbleOutputDir $dex4
+    if (-not (Test-Path $tumbleSpeciesDir -PathType Container)) {
+      New-Item -ItemType Directory -Path $tumbleSpeciesDir | Out-Null
+    }
+    Copy-Item -Path $tumbleSource -Destination (Join-Path $tumbleSpeciesDir "Tumble-Anim.png") -Force
+  }
   if ($null -ne $animMeta) {
     $metaByDex[$dex3] = $animMeta
   }
@@ -311,7 +279,7 @@ export function getDexAnimMeta(dexId) {
   return PMD_ANIM_METADATA[key] || null;
 }
 
-/** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'|'attack'} kind */
+/** @param {'idle'|'walk'|'dig'|'hurt'|'sleep'|'faint'|'charge'|'shoot'|'attack'|'tumble'} kind */
 export function getDexAnimSlice(dexId, kind) {
   const m = getDexAnimMeta(dexId);
   if (!m) return null;
@@ -322,6 +290,7 @@ export function getDexAnimSlice(dexId, kind) {
   if (kind === 'charge') return m.charge ?? null;
   if (kind === 'shoot') return m.shoot ?? null;
   if (kind === 'attack') return m.attack ?? m.shoot ?? m.charge ?? m.walk ?? m.idle ?? null;
+  if (kind === 'tumble') return m.tumble ?? m.walk ?? m.idle ?? null;
   return m[kind] ?? null;
 }
 "@
