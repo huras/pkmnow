@@ -30,6 +30,12 @@ import {
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from './world-movement-constants.js';
+import {
+  ENTITY_STAMINA_MAX,
+  ensureEntityStamina,
+  canEntityStartSprint,
+  tickEntityStamina
+} from './entity-stamina.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
@@ -152,6 +158,9 @@ export const player = {
   /** Play mode: HP when hit by wild projectiles. */
   hp: 100,
   maxHp: 100,
+  /** Sprint / wild sprint-speed drain; regens when not draining. */
+  stamina: ENTITY_STAMINA_MAX,
+  maxStamina: ENTITY_STAMINA_MAX,
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
@@ -231,6 +240,8 @@ export function setPlayerSpecies(dexId) {
   player.digBurrowMode = false;
   player.digCharge01 = 0;
   player.hp = player.maxHp ?? 100;
+  ensureEntityStamina(player);
+  player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
@@ -339,6 +350,8 @@ export function setPlayerPos(x, y) {
   player.digBurrowMode = false;
   player.digCharge01 = 0;
   player.hp = player.maxHp ?? 100;
+  ensureEntityStamina(player);
+  player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
   player.poisonVisualSec = 0;
   player.socialEmotionType = null;
@@ -864,7 +877,14 @@ export function updatePlayer(dt, data, gameTimeSec) {
       burrowFeetTileExists
     });
   }
-  const runMul = player.runMode ? RUN_SPEED_CAP_MULT : 1;
+  const sprintEligible =
+    !!player.runMode &&
+    canEntityStartSprint(player) &&
+    !carryBlocksWalk &&
+    !flameChargeActive &&
+    !flightMove &&
+    !player.digBurrowMode;
+  const runMul = sprintEligible ? RUN_SPEED_CAP_MULT : 1;
   const flightMul = flightMove
     ? smoothLevitationFlight
       ? FLIGHT_LEVITATION_MAX_SPEED_MULT
@@ -1240,4 +1260,12 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player._flightIdleCycleSec = 0;
     player.flightGroundTetherVisible = false;
   }
+
+  ensureEntityStamina(player);
+  const runningCostsStamina =
+    !!sprintEligible &&
+    !!player.grounded &&
+    !isAirborne &&
+    (player.inputX !== 0 || player.inputY !== 0);
+  tickEntityStamina(player, dt, runningCostsStamina);
 }

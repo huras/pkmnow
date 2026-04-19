@@ -1,22 +1,25 @@
 /**
- * Manages the toggling of Time/Weather and Social popovers on the minimap.
+ * Manages Time, Weather, Social, and Audio popovers on the minimap header.
  */
 export function installMinimapHudPopovers() {
-  const timeToggle = document.getElementById('minimap-time-weather-toggle');
-  const timePop = document.getElementById('minimap-time-weather-popover');
+  const timeToggle = document.getElementById('minimap-time-toggle');
+  const timePop = document.getElementById('minimap-time-popover');
+  const weatherToggle = document.getElementById('minimap-weather-toggle');
+  const weatherPop = document.getElementById('minimap-weather-popover');
   const socialToggle = document.getElementById('minimap-social-toggle');
   const socialPop = document.getElementById('minimap-social-popover');
   const audioToggle = document.getElementById('minimap-audio-toggle');
   const audioPop = document.getElementById('minimap-audio-popover');
 
-  if (!timeToggle || !timePop || !socialToggle || !socialPop) {
+  if (!timeToggle || !timePop || !weatherToggle || !weatherPop || !socialToggle || !socialPop) {
     return { forceCloseAllPopovers: () => {} };
   }
 
   const popovers = [
     { toggle: timeToggle, pop: timePop, name: 'time' },
+    { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
-    { toggle: audioToggle, pop: audioPop, name: 'audio' }
+    ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : [])
   ];
 
   function closeAllExcept(activeName) {
@@ -46,6 +49,11 @@ export function installMinimapHudPopovers() {
   timeToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('time');
+  });
+
+  weatherToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('weather');
   });
 
   socialToggle.addEventListener('click', (e) => {

@@ -2,6 +2,7 @@ import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { resolvePmdFrameSpecForSlice } from '../pokemon/pmd-layout-metrics.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-heights.js';
 import { getSpriteCollabPortraitImage } from '../pokemon/spritecollab-portraits.js';
+import { drawDetailScatterGridPreviewCanvas } from '../main/detail-scatter-preview-html.js';
 
 /**
  * @param {number} x
@@ -107,7 +108,7 @@ export function drawWildSpeechBubbleOverlay(ctx, em, spawnYOffset, imageCache, t
         slug: String(seg.slug || '').toLowerCase(),
         w: itemPx + 2,
         h: itemPx,
-        _src: /** @type {{ _iconPath?: string }} */ (seg)
+        _src: /** @type {{ _iconPath?: string, _scatterItemKey?: string }} */ (seg)
       });
     } else if (seg.kind === 'portrait') {
       const slugSafe =
@@ -237,11 +238,28 @@ export function drawWildSpeechBubbleOverlay(ctx, em, spawnYOffset, imageCache, t
         ctx.textBaseline = 'alphabetic';
         ctx.fillText(atom.text || '', penX, baseline);
       } else if (atom.kind === 'item') {
-        const path = /** @type {{ _src?: { _iconPath?: string } }} */ (atom)._src?._iconPath;
+        const src = /** @type {{ _src?: { _iconPath?: string, _scatterItemKey?: string } }} */ (atom)._src;
+        const path = src?._iconPath;
+        const scatterKey = src?._scatterItemKey;
         const img = path ? imageCache.get(path) : null;
         const iy = penY + (lineH - itemPx) * 0.5;
         if (img && img.naturalWidth) {
           ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, penX, iy, itemPx, itemPx);
+        } else if (scatterKey) {
+          const drew = drawDetailScatterGridPreviewCanvas(
+            ctx,
+            scatterKey,
+            snapPx(penX),
+            snapPx(iy),
+            itemPx,
+            imageCache,
+            snapPx,
+            { seamless: true, gapPx: 0 }
+          );
+          if (!drew) {
+            ctx.fillStyle = 'rgba(180,190,210,0.35)';
+            ctx.fillRect(penX, iy, itemPx, itemPx);
+          }
         } else {
           ctx.fillStyle = 'rgba(180,190,210,0.35)';
           ctx.fillRect(penX, iy, itemPx, itemPx);

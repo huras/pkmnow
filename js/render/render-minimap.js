@@ -37,6 +37,34 @@ const ZOOM_RADIUS = {
 
 const ZOOM_ORDER = ['far', 'mid', 'close', 'closer'];
 
+/**
+ * Text for the minimap footer (between zoom buttons). `side` = edge length in **micro-tiles**
+ * of the square window on the world (minimap is square; value is approximate).
+ * @param {string} zoom
+ * @returns {{ title: string, subtitle: string }}
+ */
+export function getMinimapZoomUiLines(zoom) {
+  const z = ZOOM_RADIUS.hasOwnProperty(zoom) ? zoom : 'close';
+  const r = ZOOM_RADIUS[z];
+  if (r === 0) {
+    return {
+      title: 'Mapa todo',
+      subtitle: 'região completa'
+    };
+  }
+  const side = r * 2 * SAFE_MACRO_STRIDE;
+  if (z === 'closer') {
+    return {
+      title: 'Máximo',
+      subtitle: `≈${side}×${side} telhas · 2×`
+    };
+  }
+  if (z === 'mid') {
+    return { title: 'Médio', subtitle: `≈${side}×${side} telhas` };
+  }
+  return { title: 'Próximo', subtitle: `≈${side}×${side} telhas` };
+}
+
 /** Local sprite minimap: `close` = 1 screen px per micro tile; `closer` = same mode, more zoomed in. */
 function isLocalSpriteMinimapZoom(zoom) {
   return zoom === 'close' || zoom === 'closer';

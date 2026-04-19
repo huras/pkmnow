@@ -43,7 +43,8 @@ let _memoFullH = -1;
 
 /**
  * Invalidate the entire static entity cache.
- * Call this whenever the map (seed/dimensions) changes.
+ * Call this whenever the map (seed/dimensions) changes, or when scatter overrides
+ * change which origins exist as `_override` vs procedural scatter (e.g. Strength place/drop).
  */
 export function invalidateStaticEntityCache() {
   _chunkEntityCache.clear();

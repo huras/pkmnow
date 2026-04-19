@@ -28,6 +28,7 @@ const _BIOME_TO_TERRAIN = {
   [BIOMES.CITY_STREET.id]: "road",
   [BIOMES.TOWN.id]: "Palette grassy — field",
   [BIOMES.TOWN_STREET.id]: "Palette base — sand",
+  [BIOMES.FLOWER_FIELDS.id]: "Palette grassy — field",
 };
 
 export const BIOME_TO_TERRAIN = new Proxy(_BIOME_TO_TERRAIN, {
@@ -99,6 +100,31 @@ const _BIOME_VEGETATION = {
     'blue-coreopsis [1x1]', 'purple-coreopsis [1x1]', 
     'small-blue-crystal [1x1]', 'small-purple-crystal [1x1]', 
     'snow-grass [1x1]', 'baby-pine-tree-full-snow [1x1]'
+  ],
+  /** Wide pool + `foliageDensity` boost in chunking → organic bloom carpets from the same noise stack. */
+  [BIOMES.FLOWER_FIELDS.id]: [
+    'small-grass [1x1]',
+    'grass [1x1]',
+    'red-flower [1x1]',
+    'yellow-lily [1x1]',
+    'pink-lily [1x1]',
+    'orange-lily [1x1]',
+    'blue-lily [1x1]',
+    'purple-lily [1x1]',
+    'red-daisy [1x1]',
+    'white-daisy [1x1]',
+    'blue-daisy [1x1]',
+    'pink-daisy [1x1]',
+    'orange-daisy [1x1]',
+    'yellow-daisy [1x1]',
+    'red-coreopsis [1x1]',
+    'pink-coreopsis [1x1]',
+    'white-coreopsis [1x1]',
+    'yellow-coreopsis [1x1]',
+    'purple-coreopsis [1x1]',
+    'blue-coreopsis [1x1]',
+    'mushroom-1 [1x1]',
+    'dirt-rock [1x1]'
   ],
 };
 
@@ -196,7 +222,8 @@ export const NO_TREE_BIOMES = new Set([
   BIOMES.MOUNTAIN.id, BIOMES.PEAK.id, BIOMES.ICE.id,
   BIOMES.VOLCANO.id, BIOMES.TUNDRA.id, BIOMES.ARCANE.id,
   BIOMES.SAVANNA.id, BIOMES.CITY.id,
-  BIOMES.CITY_STREET.id, BIOMES.TOWN.id, BIOMES.TOWN_STREET.id
+  BIOMES.CITY_STREET.id, BIOMES.TOWN.id, BIOMES.TOWN_STREET.id,
+  BIOMES.FLOWER_FIELDS.id
 ]);
 
 /**
@@ -224,6 +251,7 @@ const _BIOME_TO_FOLIAGE = {
   [BIOMES.CITY_STREET.id]: "cemented-pavement",
   [BIOMES.TOWN.id]: "jogador sandy",
   [BIOMES.TOWN_STREET.id]: "jogador sandy",
+  [BIOMES.FLOWER_FIELDS.id]: "jogador super-healthy-light-grass",
 };
 
 export const BIOME_TO_FOLIAGE = new Proxy(_BIOME_TO_FOLIAGE, {
@@ -312,6 +340,9 @@ export function getGrassParams(biomeId) {
   } else if (biomeId === BIOMES.TUNDRA.id) {
     scale = 0.25;     // Menos itens, mas bem distribuídos
     threshold = 0.55;  // Densidade moderada para as flores/detalhes
+  } else if (biomeId === BIOMES.FLOWER_FIELDS.id) {
+    scale = 0.11;
+    threshold = 0.28;
   }
 
   return { scale, threshold };

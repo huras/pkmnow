@@ -363,7 +363,14 @@ export function getMicroTile(mx, my, macroData) {
     }
 
     // New Layered Terrain Data
-    const fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // Restaurado para 0.08
+    let fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // Restaurado para 0.08
+    if (bId === BIOMES.FLOWER_FIELDS.id) {
+      // Second FBM octave + ridge shaping → more tiles pass scatter gates while keeping macro-scale clumps.
+      const coarse = foliageDensity(mx, my, seed + 9992, 0.05);
+      const fine = foliageDensity(mx * 2.2, my * 2.2, seed + 18102, 0.19);
+      const ridge = Math.abs(fine - 0.5) * 2;
+      fDensity = Math.min(0.995, coarse * 0.42 + fine * 0.38 + ridge * 0.12 + 0.08);
+    }
     const fType = seededHash(mx, my, seed + 9993);
 
     return {

@@ -177,6 +177,10 @@ export const BIOME_BGM_TRACK_URLS = Object.freeze({
     ...sunoFolderTracks('grassland', ['010 - Route 101.mp3', '1-57. Unwavering Emotions.mp3']),
     ...GRASSLAND_PACK
   ]),
+  [BIOMES.FLOWER_FIELDS.id]: Object.freeze([
+    ...sunoFolderTracks('grassland', ['010 - Route 101.mp3', '1-57. Unwavering Emotions.mp3']),
+    ...GRASSLAND_PACK
+  ]),
   [BIOMES.FOREST.id]: Object.freeze([
     ...sunoFolderTracks('forest', [
       '56. Eterna Forest.mp3',

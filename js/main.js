@@ -90,7 +90,7 @@ import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { installMinimapSaveModal } from './main/minimap-save-modal.js';
-import { stepMinimapZoom } from './render/render-minimap.js';
+import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -158,18 +158,16 @@ const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 
-/** Zoom labels shown in the panel badge */
-const ZOOM_LABELS = {
-  far: '🗺 Far',
-  mid: '🔍 Mid',
-  close: '🔍+ Close',
-  closer: '🔍++ Close+'
-};
-
-function syncMinimapZoomBadge() {
-  if (!minimap || !minimapPanel) return;
+function syncMinimapZoomReadout() {
+  if (!minimap) return;
   const zoom = minimap.dataset.zoom || 'close';
-  minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
+  const { title, subtitle } = getMinimapZoomUiLines(zoom);
+  const titleEl = document.getElementById('minimap-zoom-readout-title');
+  const subEl = document.getElementById('minimap-zoom-readout-sub');
+  const readout = document.getElementById('minimap-zoom-readout');
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = subtitle;
+  if (readout) readout.title = `${title} — ${subtitle}`;
 }
 
 function wireMinimapZoomStepButtons() {
@@ -177,15 +175,16 @@ function wireMinimapZoomStepButtons() {
   const c = /** @type {HTMLCanvasElement} */ (minimap);
   btnMinimapZoomIn?.addEventListener('click', () => {
     stepMinimapZoom(c, 1);
-    syncMinimapZoomBadge();
+    syncMinimapZoomReadout();
   });
   btnMinimapZoomOut?.addEventListener('click', () => {
     stepMinimapZoom(c, -1);
-    syncMinimapZoomBadge();
+    syncMinimapZoomReadout();
   });
 }
 
 wireMinimapZoomStepButtons();
+syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
@@ -461,6 +460,12 @@ function refreshPlayModeInfoBar(force = false) {
     ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (F toggle · Space/Shift altitude · hops: 2 or 6 flying)`;
   const hp = player.hp ?? player.maxHp ?? 100;
   const maxH = player.maxHp ?? 100;
+  const sta = Number(player.stamina);
+  const maxSta = Math.max(1, Number(player.maxStamina) || 100);
+  const staLine =
+    Number.isFinite(sta) && Number.isFinite(maxSta)
+      ? ` · STA ${Math.ceil(sta)}/${Math.ceil(maxSta)}`
+      : '';
   const psn =
     (player.poisonVisualSec ?? 0) > 0.05
       ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
@@ -509,7 +514,7 @@ function refreshPlayModeInfoBar(force = false) {
       `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
       `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
     : '';
-  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
+  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${staLine}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
   const infoHtml = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${telem}`;
   if (infoBar.innerHTML !== infoHtml) infoBar.innerHTML = infoHtml;
 }
@@ -893,7 +898,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   btnBackToMap?.classList.remove('hidden');
   if (minimapPanel) minimapPanel.classList.remove('hidden');
   else minimap?.classList.remove('hidden');
-  syncMinimapZoomBadge();
+  syncMinimapZoomReadout();
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
   infoBar.innerHTML =

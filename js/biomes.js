@@ -25,6 +25,8 @@ export const BIOMES = {
   CITY_STREET: { id: 17, name: "Rua de Cidade", color: "#606060" },
   TOWN: { id: 18, name: "Vila Rural", color: "#b09070" },
   TOWN_STREET: { id: 19, name: "Rua de Vila", color: "#907050" },
+  /** Anomaly on dry temperate plains (Campo): high-lineament pockets of wild blooms. */
+  FLOWER_FIELDS: { id: 20, name: "Flower Fields", color: "#c86aa8" },
 };
 
 /** Faixa de elevação (0–1) acima de `waterLevel` tratada como praia em `getBiome` — alinhar com `elevationToStep` em `chunking.js`. */
@@ -103,6 +105,15 @@ export function getBiomeWithAnomalies(e, t, m, a, config = {}) {
                 biomeObj = BIOMES.VOLCANO;
             } else if (m > 0.6 && t < 0.5) {
                 biomeObj = BIOMES.GHOST_WOODS;
+            } else if (
+                biomeObj === BIOMES.GRASSLAND &&
+                a >= 0.54 &&
+                a < 0.78 &&
+                e >= waterLevel + BEACH_ELEVATION_BAND &&
+                e < 0.64
+            ) {
+                // Campo + moderate anomaly ribbon: pastel meadow (not Arcane's a>0.8 / lowland).
+                biomeObj = BIOMES.FLOWER_FIELDS;
             } else if (a > 0.8 && e < 0.5) {
                 biomeObj = BIOMES.ARCANE;
             }

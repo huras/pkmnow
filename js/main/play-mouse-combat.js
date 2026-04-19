@@ -48,7 +48,7 @@ import {
   publishThunderChargePreview,
   withdrawThunderChargePreview
 } from '../moves/thunder-move.js';
-import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsAlongSegment } from './play-crystal-tackle.js';
+import { tryBreakCrystalOnPlayerTackle, tryBreakDetailsInCircle } from './play-crystal-tackle.js';
 import { beginStrengthThrowFromPointer } from './thrown-map-detail-entities.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/index.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
@@ -598,21 +598,11 @@ function castPlayerCut(player, data, charged = false) {
     knockback: useKnockback,
     cutWildHitSound: true
   });
-  const worldHitOnceSet = new Set();
-  const spawnedHitOnceSet = new Set();
-  const rays = charged ? (styleId === 'psychic' ? 16 : 14) : styleId === 'psychic' ? 12 : 9;
-  for (let i = 0; i < rays; i++) {
-    const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * useRadius;
-    const ey = centerY + Math.sin(ang) * useRadius;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
-      worldHitOnceSet,
-      spawnedHitOnceSet,
-      hitSource: 'cut',
-      pz: player.z ?? 0,
-      gamepadRumblePlayer: true
-    });
-  }
+  tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
+    hitSource: 'cut',
+    pz: player.z ?? 0,
+    gamepadRumblePlayer: true
+  });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
 }
 
@@ -662,21 +652,11 @@ function castWeakPartialChargedCut(player, data, charge01) {
     knockback: useKnockback,
     cutWildHitSound: true
   });
-  const worldHitOnceSet = new Set();
-  const spawnedHitOnceSet = new Set();
-  const rays = styleId === 'psychic' ? 11 : 8;
-  for (let i = 0; i < rays; i++) {
-    const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * useRadius;
-    const ey = centerY + Math.sin(ang) * useRadius;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
-      worldHitOnceSet,
-      spawnedHitOnceSet,
-      hitSource: 'cut',
-      pz: player.z ?? 0,
-      gamepadRumblePlayer: true
-    });
-  }
+  tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
+    hitSource: 'cut',
+    pz: player.z ?? 0,
+    gamepadRumblePlayer: true
+  });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
 }
 
@@ -696,7 +676,6 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   let knockback = 5;
   let styleId = 'slash';
   let fxLifeSec = 0.44;
-  let rays = 24;
   if (meleeId === 'cut') {
     const uRange = getChargeRange01(charge01);
     const uDamage = getChargeDamage01(charge01);
@@ -708,7 +687,6 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
     damage = Math.round(profile.damage + 5 + 12 * uDamage);
     knockback = profile.knockback + 1.1 + 2.6 * uRange;
     fxLifeSec = 0.44 + 0.16 * uRange;
-    rays = 24 + Math.round(20 * uRange);
     fieldCutComboStep = 0;
     fieldCutComboTimerSec = 0;
   }
@@ -723,22 +701,13 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
     knockback,
     cutWildHitSound: meleeId === 'cut'
   });
-  const worldHitOnceSet = new Set();
-  const spawnedHitOnceSet = new Set();
   const spinHitSource = meleeId === 'cut' ? 'cut' : 'tackle';
-  for (let i = 0; i < rays; i++) {
-    const ang = (i / rays) * Math.PI * 2;
-    const ex = centerX + Math.cos(ang) * radius;
-    const ey = centerY + Math.sin(ang) * radius;
-    tryBreakDetailsAlongSegment(centerX, centerY, ex, ey, data, {
-      worldHitOnceSet,
-      spawnedHitOnceSet,
-      hitSource: spinHitSource,
-      pz: player.z ?? 0,
-      detailCharge01: charge01,
-      gamepadRumblePlayer: true
-    });
-  }
+  tryBreakDetailsInCircle(centerX, centerY, radius, data, {
+    hitSource: spinHitSource,
+    pz: player.z ?? 0,
+    detailCharge01: charge01,
+    gamepadRumblePlayer: true
+  });
   if (meleeId === 'cut') {
     cutGrassInCircle(centerX, centerY, radius, data, player.z ?? 0);
   }

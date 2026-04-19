@@ -27,6 +27,12 @@ import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { advanceWildSpeechBubble, setWildSpeechBubble } from '../social/speech-bubble-state.js';
 import { getEncounters } from '../ecodex.js';
 import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
+import {
+  ensureEntityStamina,
+  tickEntityStamina,
+  clampVelocityToWalkCapIfNoStamina,
+  isWildSprinting
+} from '../entity-stamina.js';
 import * as groupBehavior from './wild-group-behavior.js';
 import { scenarioOrchestrator } from './wild-scenario-orchestrator.js';
 import { WILD_SOCIAL_SCENARIOS } from './wild-scenario-data.js';
@@ -58,6 +64,7 @@ export function ensureWildPhysicsState(entity) {
   if (entity._wanderLastNx == null) entity._wanderLastNx = 0;
   if (entity._wanderLastNy == null) entity._wanderLastNy = 1;
   if (entity._neutralPostAlertCooldown == null) entity._neutralPostAlertCooldown = 0;
+  ensureEntityStamina(entity);
   groupBehavior.ensureGroupBehaviorState(entity);
 }
 
@@ -933,7 +940,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
 
   const wildMovedTiles = Math.hypot(entity.x - wildFootX0, entity.y - wildFootY0);
 
+  clampVelocityToWalkCapIfNoStamina(entity);
   const spd = Math.hypot(entity.vx, entity.vy);
+  tickEntityStamina(entity, dt, isWildSprinting(entity, spd));
   entity.animMoving = spd > 0.1;
 
   const wantWildFootFloor =

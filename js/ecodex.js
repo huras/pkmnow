@@ -105,7 +105,29 @@ export const WILD_POKEMON = {
   12: ['Articuno', 'Aerodactyl', 'Zapdos', 'Moltres', 'Dragonite', 'Dewgong', 'Skarmory', 'Noctowl', 'Xatu', 'Swablu', 'Altaria', 'Staravia', 'Drifloon'], // PEAK
   13: ['Magmar', 'Ponyta', 'Charmander', 'Growlithe', 'Geodude', 'Mankey', 'Vulpix', 'Cyndaquil', 'Slugma', 'Houndour', 'Torchic', 'Numel', 'Torkoal'], // VOLCANO
   14: ['Gastly', 'Haunter', 'Zubat', 'Grimer', 'Cubone', 'Drowzee', 'Murkrow', 'Misdreavus', 'Houndour', 'Shuppet', 'Duskull', 'Sableye', 'Spiritomb', 'Drifloon'], // GHOST_WOODS
-  15: ['Abra', 'Porygon', 'Mew', 'Drowzee', 'Slowpoke', 'Mr. Mime', 'Kadabra', 'Natu', 'Unown', 'Celebi', 'Ralts', 'Beldum', 'Baltoy', 'Mime Jr.', 'Chingling', 'Bronzor'] // ARCANE
+  15: ['Abra', 'Porygon', 'Mew', 'Drowzee', 'Slowpoke', 'Mr. Mime', 'Kadabra', 'Natu', 'Unown', 'Celebi', 'Ralts', 'Beldum', 'Baltoy', 'Mime Jr.', 'Chingling', 'Bronzor'], // ARCANE
+  20: [
+    'Oddish',
+    'Gloom',
+    'Paras',
+    'Venonat',
+    'Butterfree',
+    'Beedrill',
+    'Bulbasaur',
+    'Chikorita',
+    'Hoppip',
+    'Skiploom',
+    'Sunkern',
+    'Bellossom',
+    'Flabebe',
+    'Combee',
+    'Beautifly',
+    'Ledian',
+    'Ledyba',
+    'Spinarak',
+    'Bellsprout',
+    'Roselia'
+  ] // FLOWER_FIELDS (Campo anomaly)
 };
 
 export function getEncounters(biomeId) {

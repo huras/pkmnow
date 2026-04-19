@@ -19,6 +19,7 @@ import {
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
+import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
 import { detailScatterGridPreviewHtml } from '../main/detail-scatter-preview-html.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape } from '../tessellation-logic.js';
@@ -58,15 +59,6 @@ function lootLabelFromItemKey(itemKey) {
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, (m) => m.toUpperCase())
     .trim();
-}
-
-/** @param {string} itemKey */
-function lootSlugForItemKey(itemKey) {
-  const k = String(itemKey || '').toLowerCase();
-  if (k.includes('crystal')) return 'star-piece';
-  const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
-  if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
-  return null;
 }
 
 /** Tessellation sprite grid sized to fit the play item HUD icon cell (narrow 4-col slot). */

@@ -39,6 +39,7 @@ import { tickPlaySessionAutosave } from './play-session-persist.js';
 import { tickPlayGamepadFrame } from './play-gamepad.js';
 import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
 import { PluginRegistry } from '../core/plugin-registry.js';
+import { canEntityStartSprint } from '../entity-stamina.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -134,7 +135,7 @@ export function createGameLoop(api) {
     if (['play'].includes(getAppMode())) {
       if (mergedX === 0 && mergedY === 0) {
         player.runMode = false;
-      } else if (playInputState.gamepadRunHeld) {
+      } else if (playInputState.gamepadRunHeld && canEntityStartSprint(player)) {
         player.runMode = true;
       }
       player.inputX = mergedX;
@@ -439,7 +440,7 @@ export function registerPlayKeyboard(api) {
         if (!e.repeat) {
           const now = performance.now();
           if (runTapDir === dir && now - runTapAt <= RUN_DOUBLE_TAP_MS) {
-            player.runMode = true;
+            if (canEntityStartSprint(player)) player.runMode = true;
             runTapDir = null;
             runTapAt = 0;
           } else {

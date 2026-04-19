@@ -1,4 +1,5 @@
 import { entitiesByKey } from './wild-core-state.js';
+import { ensureEntityStamina, tickEntityStamina } from '../entity-stamina.js';
 import { decaySocialMemory, trackPlayerProximitySignals } from './wild-social-system.js';
 import { updateWorldReactions } from '../simulation/world-reactions.js';
 import {
@@ -125,6 +126,8 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       e.vx = 0;
       e.vy = 0;
       e.animMoving = false;
+      ensureEntityStamina(e);
+      tickEntityStamina(e, stepDt, false);
     }
 
     wildUpdatePerfLast.motionMs += performance.now() - mark;

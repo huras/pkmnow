@@ -11,6 +11,7 @@ const LANDMARK_RULES = {
   [BIOMES.DESERT.id]: [{ type: "RUINS", name: "Ruínas do Deserto", prob: 0.05 }],
   [BIOMES.JUNGLE.id]: [{ type: "TEMPLE", name: "Templo Escondido", prob: 0.05 }],
   [BIOMES.ARCANE.id]: [{ type: "MONOLITH", name: "Monolito Arcano", prob: 0.2 }],
+  [BIOMES.FLOWER_FIELDS.id]: [{ type: "GARDEN", name: "Campo de flores silvestres", prob: 0.14 }],
 };
 
 /**

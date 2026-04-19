@@ -30,7 +30,7 @@ import {
   sampleStrengthThrowAimArc
 } from '../main/thrown-map-detail-entities.js';
 import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
-import { getStaticEntitiesForChunk, invalidateStaticEntityCache } from './static-entity-cache.js';
+import { getStaticEntitiesForChunk } from './static-entity-cache.js';
 import { aimAtCursor } from '../main/play-mouse-combat.js';
 import { wildSexHudLabel } from '../pokemon/pokemon-sex.js';
 import { defaultPortraitSlugForBalloon } from '../pokemon/spritecollab-portraits.js';
@@ -133,29 +133,7 @@ export function collectRenderItems(options) {
     }
   }
 
-  // --- Player speech bubble (Sims-style) ---
-  if (player.speechBubble?.segments?.length && lodDetail < 2) {
-    const finalVX = player.visualX ?? player.x;
-    const finalVY = player.visualY ?? player.y;
-    const targetHeightTiles = 1.1;
-    const targetHeightPx = targetHeightTiles * tileH;
-    const pmdPivotY = targetHeightPx * PMD_MON_SHEET.pivotYFrac;
-    renderItems.push({
-      type: 'playerSpeechBubble',
-      sortY: finalVY + 0.505,
-      x: finalVX,
-      y: finalVY,
-      cx: snapPx((finalVX + 0.5) * tileW),
-      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
-      pivotY: pmdPivotY,
-      spawnPhase: 1,
-      spawnType: null,
-      dexId: playerDex,
-      speechBubble: player.speechBubble
-    });
-  }
-
-  // --- Player Emotion ---
+  /** Same pivot as `drawWildSpeechBubbleOverlay` / wild overlays: scaled frame height × PMD pivot (not a fixed 1.1t guess). */
   const playerEmotionPayload =
     !player.speechBubble &&
     player.socialEmotionType !== null &&
@@ -168,28 +146,6 @@ export function collectRenderItems(options) {
             defaultPortraitSlugForBalloon(player.socialEmotionType)
         }
       : null;
-
-  if (playerEmotionPayload && lodDetail < 2) {
-    const finalVX = player.visualX ?? player.x;
-    const finalVY = player.visualY ?? player.y;
-    const targetHeightTiles = 1.1; // fallback
-    const targetHeightPx = targetHeightTiles * tileH;
-    const pmdPivotY = (targetHeightPx) * PMD_MON_SHEET.pivotYFrac;
-
-    renderItems.push({
-      type: 'playerEmotion',
-      sortY: finalVY + 0.49,
-      x: finalVX,
-      y: finalVY,
-      cx: snapPx((finalVX + 0.5) * tileW),
-      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
-      pivotY: pmdPivotY,
-      spawnPhase: 1,
-      spawnType: null,
-      dexId: playerDex,
-      emotion: playerEmotionPayload
-    });
-  }
 
   const isPlayerMoving = isPlayerWalkingAnim;
   const borrowDiglettArt =
@@ -269,6 +225,40 @@ export function collectRenderItems(options) {
 
     const dw = sw * finalScale;
     const dh = sh * finalScale;
+    const overlayPivotY = dh * PMD_MON_SHEET.pivotYFrac;
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+
+    if (player.speechBubble?.segments?.length && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerSpeechBubble',
+        sortY: finalVY + 0.52,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        speechBubble: player.speechBubble
+      });
+    }
+    if (playerEmotionPayload && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerEmotion',
+        sortY: finalVY + 0.51,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        emotion: playerEmotionPayload
+      });
+    }
 
     renderItems.push({
       type: 'player',
@@ -298,6 +288,44 @@ export function collectRenderItems(options) {
       targetHeightTiles,
       strengthCarry: player._strengthCarry || null
     });
+  } else {
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+    const fallbackTiles =
+      latchGround && player.digBurrowMode
+        ? POKEMON_HEIGHTS[phDex] || 1.2
+        : POKEMON_HEIGHTS[playerDex] || 1.1;
+    const overlayPivotY = fallbackTiles * tileH * PMD_MON_SHEET.pivotYFrac;
+    if (player.speechBubble?.segments?.length && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerSpeechBubble',
+        sortY: finalVY + 0.52,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        speechBubble: player.speechBubble
+      });
+    }
+    if (playerEmotionPayload && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerEmotion',
+        sortY: finalVY + 0.51,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        emotion: playerEmotionPayload
+      });
+    }
   }
 
   // 2. Add Wild Pokemon

@@ -324,7 +324,7 @@ button.btn-secondary:hover {
   display: none;
   flex-direction: column;
   align-items: stretch;
-  width: 196px;
+  width: 210px;
   border: 2px solid #33333c;
   border-radius: 6px;
   background: #0a0a0c;
@@ -364,8 +364,9 @@ button.btn-secondary:hover {
 .minimap-panel__footer-zoom {
   display: flex;
   align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
 .minimap-panel__header-actions {
@@ -570,7 +571,8 @@ button.btn-secondary:hover {
 }
 
 .minimap-audio-popover,
-.minimap-time-weather-popover,
+.minimap-time-popover,
+.minimap-weather-popover,
 .minimap-social-popover {
   position: absolute;
   right: 0;
@@ -670,6 +672,40 @@ button.btn-secondary:hover {
   word-break: break-word;
 }
 
+.minimap-panel__zoom-readout {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
+  padding: 0 2px;
+  pointer-events: none;
+}
+
+.minimap-panel__zoom-readout-title {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(200, 230, 255, 0.95);
+}
+
+.minimap-panel__zoom-readout-sub {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.52rem;
+  font-weight: 600;
+  color: rgba(180, 200, 220, 0.82);
+  margin-top: 1px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .minimap-panel #minimap {
   display: block;
   width: 192px;
@@ -689,6 +725,7 @@ button.btn-secondary:hover {
 .minimap-panel__help-btn,
 .minimap-panel__save-btn,
 .minimap-panel__time-btn,
+.minimap-panel__weather-btn,
 .minimap-panel__social-btn {
   display: inline-flex;
   align-items: center;
@@ -711,6 +748,7 @@ button.btn-secondary:hover {
 .minimap-panel__help-btn:hover,
 .minimap-panel__save-btn:hover,
 .minimap-panel__time-btn:hover,
+.minimap-panel__weather-btn:hover,
 .minimap-panel__social-btn:hover {
   background: rgba(154, 216, 255, 0.14);
   border-color: rgba(154, 216, 255, 0.3);
@@ -718,6 +756,7 @@ button.btn-secondary:hover {
 }
 
 .minimap-panel__time-btn[aria-pressed="true"],
+.minimap-panel__weather-btn[aria-pressed="true"],
 .minimap-panel__social-btn[aria-pressed="true"] {
   background: rgba(154, 216, 255, 0.18);
   border-color: rgba(154, 216, 255, 0.4);
@@ -729,6 +768,7 @@ button.btn-secondary:hover {
 .minimap-panel__help-btn:focus-visible,
 .minimap-panel__save-btn:focus-visible,
 .minimap-panel__time-btn:focus-visible,
+.minimap-panel__weather-btn:focus-visible,
 .minimap-panel__social-btn:focus-visible {
   outline: 2px solid rgba(154, 216, 255, 0.85);
   outline-offset: 1px;
@@ -739,6 +779,7 @@ button.btn-secondary:hover {
 .minimap-panel__help-icon,
 .minimap-panel__save-icon,
 .minimap-panel__time-icon,
+.minimap-panel__weather-icon,
 .minimap-panel__social-icon {
   width: 14px;
   height: 14px;
@@ -1141,26 +1182,6 @@ button.btn-secondary:hover {
 
 body.play-help-wiki-open {
   overflow: hidden;
-}
-
-/* Zoom level badge shown in the title area via ::after on the panel */
-.minimap-panel[data-zoom-level]::before {
-  content: attr(data-zoom-level);
-  position: absolute;
-  bottom: calc(100% + 4px);
-  right: 0;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgba(154, 216, 255, 0.85);
-  background: rgba(10, 10, 14, 0.82);
-  border: 1px solid rgba(154, 216, 255, 0.22);
-  border-radius: 4px;
-  padding: 1px 5px;
-  pointer-events: none;
-  white-space: nowrap;
 }
 
 /* PLAY MODE EXPERIÊNCIA FULLSCREEN */

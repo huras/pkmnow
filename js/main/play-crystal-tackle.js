@@ -7,6 +7,7 @@ import { parseShape, seededHash } from '../tessellation-logic.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
+import { invalidateStaticEntityCache } from '../render/static-entity-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import {
@@ -351,6 +352,7 @@ export function clearPlayCrystalTackleState() {
   clearCrystalDropPickupState();
   clearTreeTopFallState();
   treeFireSpreadAccSec = 0;
+  invalidateStaticEntityCache();
 }
 
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
@@ -986,6 +988,7 @@ export function strengthRelocateCarriedDetail(
   st.strengthReloPlaced = true;
   invalidateChunksOverlappingFootprint(nox, noy, st.cols, st.rows);
   clearScatterSolidBlockCache();
+  invalidateStaticEntityCache();
   return true;
 }
 
@@ -1064,6 +1067,7 @@ export function strengthDropCarriedAsPickup(liftOx, liftOy, cols, rows, itemKey,
   setScatterItemKeyOverride(liftOx, liftOy, SCATTER_ITEM_KEY_OVERRIDE_EMPTY);
   spawnPickableCrystalDropAt(dropX, dropY, itemKey, null);
   clearScatterSolidBlockCache();
+  invalidateStaticEntityCache();
 }
 
 /** Decorative grass scatter tiles only — skipped by Earthquake radial breaks. */
@@ -1256,6 +1260,398 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
 }
 
 /**
+ * Shared apply pass for segment / disk detail sweeps (must run inside one chunk-rebake batch).
+ * @param {any[]} hits
+ * @param {object} data
+ * @param {{
+ *   worldHitOnceSet?: Set<string>,
+ *   spawnedHitOnceSet?: Set<number>,
+ *   hitSource?: 'tackle' | 'cut' | 'other',
+ *   detailCharge01?: number | null,
+ *   treeDemolishOneShot?: boolean,
+ *   excludePureGrassScatterHits?: boolean,
+ *   gamepadRumblePlayer?: boolean
+ * }} opts
+ * @param {number} nowSec
+ * @param {Set<string>} consumedWorld
+ * @param {Set<number>} consumedSpawned
+ */
+function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumedSpawned) {
+  const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
+  const bonusHits = detailChargeBonusHits(
+    hitSource,
+    opts.detailCharge01 != null && Number.isFinite(opts.detailCharge01) ? opts.detailCharge01 : null
+  );
+  const treeDemolishOneShot = opts.treeDemolishOneShot === true;
+  const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
+  const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
+  const spawnedHitOnceSet = opts.spawnedHitOnceSet instanceof Set ? opts.spawnedHitOnceSet : null;
+
+  for (const hit of hits) {
+    if (hit.type === 'spawnedSmall') {
+      if (consumedSpawned.has(hit.id)) continue;
+      consumedSpawned.add(hit.id);
+      const idx = activeSpawnedSmallCrystals.findIndex((c) => c.id === hit.id);
+      if (idx < 0) continue;
+      const c = activeSpawnedSmallCrystals[idx];
+      const dynKey = `dyn:${c.id}`;
+      markDetailHitHpBar(dynKey, c.x, c.y, 1, 1, 0, nowSec);
+      markDetailHitShake(dynKey, nowSec);
+      spawnDetailHitPulse(c.x, c.y);
+      playRockSmashingSfx({ x: c.x, y: c.y });
+      activeSpawnedSmallCrystals.splice(idx, 1);
+      if (spawnedHitOnceSet) spawnedHitOnceSet.add(c.id);
+      const cSet = OBJECT_SETS[c.itemKey];
+      playCrystalClinkSfx({ x: c.x, y: c.y });
+      spawnPickableCrystalDropAt(c.x, c.y, c.itemKey, countSpritesInObjectSet(cSet));
+      spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
+      tryPlayerGamepadRumbleForHit(opts, 'crystal');
+      continue;
+    }
+
+    const worldKey =
+      hit.type === 'formalTree'
+        ? `formal:${hit.rootOx},${hit.rootOy}`
+        : hit.type === 'charredScatterTree'
+          ? `charredScatter:${hit.rootOx},${hit.rootOy}`
+          : `${hit.rootOx},${hit.rootOy}`;
+    if (consumedWorld.has(worldKey)) continue;
+    consumedWorld.add(worldKey);
+    if (worldHitOnceSet?.has(worldKey)) continue;
+    if (hit.type === 'formalTree') {
+      const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+      if (isPlayFormalTreeRootDestroyed(hit.rootOx, hit.rootOy)) {
+        if (allowChargedStumpHarvest) {
+          if (hitSource === 'cut') {
+            playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          }
+          if (hitSource === 'tackle') {
+            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          }
+          tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
+          if (hitSource === 'cut' || hitSource === 'tackle') {
+            tryPlayerGamepadRumbleForHit(opts, 'tree');
+          }
+        } else {
+          if (hitSource === 'tackle') {
+            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+            tryPlayerGamepadRumbleForHit(opts, 'tree');
+          }
+          markDetailHitShake(bumpKey, nowSec);
+          spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+        }
+        continue;
+      }
+
+      // Normalized Formal Tree HP
+      const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+      const treeType = t0 ? getTreeType(t0.biomeId, hit.rootOx, hit.rootOy, data.seed) : 'broadleaf';
+      const hitsMax = hitsForFormalTree(treeType);
+      const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, `formal:${treeType}`, null, nowSec, hitsMax);
+
+      const hpBefore = st.hitsRemaining;
+      const baseAmt = hitSource === 'cut' || hitSource === 'tackle' ? 1 : 0;
+      let amount = baseAmt > 0 ? baseAmt + bonusHits : 0;
+      if (treeDemolishOneShot && amount > 0) {
+        amount = st.hitsRemaining;
+      }
+      if (amount > 0) {
+        st.hitsRemaining = Math.max(0, st.hitsRemaining - amount);
+        markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+      }
+
+      markDetailHitShake(bumpKey, nowSec);
+      spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+
+      if (hitSource === 'cut') {
+        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      } else if (hitSource === 'tackle') {
+        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
+      if (amount > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
+        tryPlayerGamepadRumbleForHit(opts, 'tree');
+      }
+
+      if (st.hitsRemaining <= 0) {
+        if (hitSource === 'cut') {
+          playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
+        registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec, 'cut', data);
+      } else {
+        if (hitSource === 'tackle') {
+          tryApplyTreeTackleEffects(
+            hit.cx ?? hit.rootOx + 1,
+            hit.cy ?? hit.rootOy + 0.5,
+            t0?.biomeId ?? 0,
+            data.seed ?? 0,
+            data
+          );
+        }
+      }
+      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+      continue;
+    }
+    if (hit.type === 'charredScatterTree') {
+      if (allowChargedStumpHarvest) {
+        if (hitSource === 'cut') {
+          playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
+        if (hitSource === 'tackle') {
+          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+        }
+        tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
+        if (hitSource === 'cut' || hitSource === 'tackle') {
+          tryPlayerGamepadRumbleForHit(opts, 'tree');
+        }
+      } else {
+        const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
+        if (hitSource === 'tackle') {
+          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          tryPlayerGamepadRumbleForHit(opts, 'tree');
+        }
+        markDetailHitShake(bumpKey, nowSec);
+        spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
+        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+        tryApplyTreeTackleEffects(
+          hit.cx ?? hit.rootOx + 0.5,
+          hit.cy ?? hit.rootOy + 0.5,
+          t0?.biomeId ?? 0,
+          data.seed ?? 0,
+          data
+        );
+      }
+      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+      continue;
+    }
+    if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
+    const objSet = OBJECT_SETS[hit.itemKey];
+    const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
+    const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);
+    if (st.destroyed) continue;
+    const hpBefore = st.hitsRemaining;
+    const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
+    const hitX = hit.cx ?? hit.rootOx + 0.5;
+    const hitY = hit.cy ?? hit.rootOy + 0.5;
+    const baseTreeDmg =
+      isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
+    let treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
+    if (treeDemolishOneShot && isTreeHit && treeDamage > 0) {
+      treeDamage = st.hitsRemaining;
+    }
+    st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
+    if (!isTreeHit) {
+      if (treeDamage > 0 && st.hitsRemaining <= 0) {
+        playRockSmashingBreakSfx({ x: hitX, y: hitY });
+      } else {
+        playRockSmashingSfx({ x: hitX, y: hitY });
+      }
+    }
+    if (treeDamage > 0 || !isTreeHit) {
+      markDetailHitHpBar(worldKey, hitX, hitY, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
+    }
+    if (isCrystalItemKey(hit.itemKey) && st.hitsRemaining < hpBefore) {
+      playCrystalClinkSfx({ x: hitX, y: hitY });
+    }
+    markDetailHitShake(worldKey, nowSec);
+    spawnDetailHitPulse(hitX, hitY);
+    if (isTreeHit && treeDamage > 0) {
+      if (hitSource === 'cut') {
+        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      } else if (hitSource === 'tackle') {
+        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
+    }
+    if (opts.gamepadRumblePlayer && !scatterItemKeyIsPureGrassDecoration(hit.itemKey)) {
+      if (isTreeHit && treeDamage > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
+        tryPlayerGamepadRumbleForHit(opts, 'tree');
+      } else if (!isTreeHit && st.hitsRemaining < hpBefore) {
+        tryPlayerGamepadRumbleForHit(opts, isCrystalItemKey(hit.itemKey) ? 'crystal' : 'rock');
+      }
+    }
+    if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+    if (st.hitsRemaining > 0) {
+      if (treeDamage > 0 && hitSource === 'tackle' && isTreeHit) {
+        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
+        tryApplyTreeTackleEffects(
+          hit.cx ?? hit.rootOx + 1,
+          hit.cy ?? hit.rootOy + 0.5,
+          t0?.biomeId ?? 0,
+          data.seed ?? 0,
+          data
+        );
+      }
+      continue;
+    }
+
+    if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
+      playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+    }
+
+    markDestroyedDetailAndScheduleRegen(st, nowSec);
+    burnedScatterTreeOrigins.delete(`${hit.rootOx},${hit.rootOy}`);
+    harvestedBurnedScatterTreeOrigins.delete(`${hit.rootOx},${hit.rootOy}`);
+    burningScatterTreeEndsAtSecByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
+    scatterTreeBurnMeterByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
+    if (!scatterItemKeyIsTree(hit.itemKey)) {
+      const isCrystal = String(hit.itemKey || '').toLowerCase().includes('crystal');
+      const isLargeCrystal = isCrystal && shape.cols >= 2 && shape.rows >= 2;
+      if (isLargeCrystal) {
+        spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
+      } else {
+        spawnPickableCrystalDropAt(
+          hit.cx ?? hit.rootOx + 0.5,
+          hit.cy ?? hit.rootOy + 0.5,
+          hit.itemKey,
+          countSpritesInObjectSet(objSet)
+        );
+      }
+      spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
+    }
+  }
+}
+
+/**
+ * Collects tackle-style hits for an omnidirectional ground disk (Earthquake, etc.).
+ * Uses circle–circle reach vs the old many-ray segment union (same rebake batching at call site).
+ */
+function collectDetailHitsInDisk(px, py, radiusTiles, data, opts) {
+  const R = Math.max(0.08, Number(radiusTiles) || 0);
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const microWm = microW;
+  const microHm = microH;
+  const seed = data.seed ?? 0;
+  const originMemo = new Map();
+  const tileMemo = new Map();
+  const getTileCached = (x, y) => {
+    if (x < 0 || y < 0 || x >= microWm || y >= microHm) return null;
+    const key = `${x},${y}`;
+    if (tileMemo.has(key)) return tileMemo.get(key);
+    const t = getMicroTile(x, y, data);
+    tileMemo.set(key, t || null);
+    return t || null;
+  };
+  /** @type {any[]} */
+  const hits = [];
+  const sweep = TACKLE_SWEEP_RADIUS_TILES;
+
+  for (const sc of activeSpawnedSmallCrystals) {
+    const detailR = Math.max(0.01, (sc.radius || 0.3) * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+    const rr = detailR + sweep;
+    const dx = sc.x - px;
+    const dy = sc.y - py;
+    if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    hits.push({ type: 'spawnedSmall', id: sc.id, itemKey: sc.itemKey, x: sc.x, y: sc.y, t: dist / Math.max(0.001, R) });
+  }
+
+  const minOx = Math.max(0, Math.floor(px - R) - 8);
+  const maxOx = Math.min(microW - 1, Math.ceil(px + R) + 2);
+  const minOy = Math.max(0, Math.floor(py - R) - 5);
+  const maxOy = Math.min(microH - 1, Math.ceil(py + R) + 2);
+
+  for (let oy = minOy; oy <= maxOy; oy++) {
+    for (let ox = minOx; ox <= maxOx; ox++) {
+      if (isPlayScatterTreeOriginCharred(ox, oy)) {
+        const spec = scatterTreeSpecAtOrigin(ox, oy, data, getTileCached, originMemo);
+        if (spec) {
+          const detailR = Math.max(0.01, spec.r * TREE_MOVE_HITBOX_RADIUS_MULT);
+          const rr = detailR + sweep;
+          const dx = spec.cx - px;
+          const dy = spec.cy - py;
+          if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          hits.push({
+            type: 'charredScatterTree',
+            rootOx: ox,
+            rootOy: oy,
+            cx: spec.cx,
+            cy: spec.cy,
+            t: dist / Math.max(0.001, R)
+          });
+        }
+      }
+      const p = scatterPhysicsCircleAtOrigin(ox, oy, data, originMemo);
+      if (isPlayDetailScatterOriginDestroyed(ox, oy)) continue;
+      if (p) {
+        const detailR = Math.max(0.01, p.radius * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);
+        const rr = detailR + sweep;
+        const dx = p.cx - px;
+        const dy = p.cy - py;
+        if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+        if (opts.excludePureGrassScatterHits && scatterItemKeyIsPureGrassDecoration(p.itemKey)) continue;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        hits.push({
+          type: 'worldDetail',
+          rootOx: ox,
+          rootOy: oy,
+          itemKey: String(p.itemKey),
+          cx: p.cx,
+          cy: p.cy,
+          t: dist / Math.max(0.001, R)
+        });
+        continue;
+      }
+      const charred = isPlayFormalTreeRootCharred(ox, oy);
+      if (charred || (!isPlayFormalTreeRootDestroyed(ox, oy) && didFormalTreeSpawnAtRoot(ox, oy, data))) {
+        const trunk = getFormalTreeTrunkCircle(ox, oy, data);
+        const stump = trunk || (charred ? formalTreeStumpCircleAtRoot(ox, oy) : null);
+        const target = trunk || stump;
+        if (target) {
+          const detailR = Math.max(0.01, target.r * TREE_MOVE_HITBOX_RADIUS_MULT);
+          const rr = detailR + sweep;
+          const dx = target.cx - px;
+          const dy = target.cy - py;
+          if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          hits.push({
+            type: 'formalTree',
+            rootOx: ox,
+            rootOy: oy,
+            cx: target.cx,
+            cy: target.cy,
+            t: dist / Math.max(0.001, R)
+          });
+        }
+      }
+
+      const oTile = getTileCached(ox, oy);
+      if (!oTile) continue;
+      if (!validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)) {
+        continue;
+      }
+      const items = BIOME_VEGETATION[oTile.biomeId] || [];
+      if (!items.length) continue;
+      const itemKey = items[Math.floor(seededHash(ox, oy, seed + 222) * items.length)];
+      if (scatterItemKeyIsSolid(itemKey)) continue;
+      const objSet = OBJECT_SETS[itemKey];
+      if (!objSet) continue;
+      const shape = parseShape(objSet.shape);
+      const cx0 = ox + shape.cols * 0.5;
+      const cy0 = oy + shape.rows * 0.5;
+      const detailRBase = Math.max(0.26, Math.max(shape.cols, shape.rows) * 0.33);
+      const detailR = detailRBase * TACKLE_DETAIL_HURTBOX_RADIUS_MULT;
+      const rr = detailR + sweep;
+      const dx = cx0 - px;
+      const dy = cy0 - py;
+      if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+      if (opts.excludePureGrassScatterHits && scatterItemKeyIsPureGrassDecoration(itemKey)) continue;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      hits.push({
+        type: 'worldDetail',
+        rootOx: ox,
+        rootOy: oy,
+        itemKey: String(itemKey),
+        cx: cx0,
+        cy: cy0,
+        t: dist / Math.max(0.001, R)
+      });
+    }
+  }
+  return hits;
+}
+
+/**
  * Applies tackle-trait detail breaking along a segment (capsule sweep against detail hurtboxes).
  * Useful for other moves (e.g. psybeam) that should behave like tackle on map details.
  * @param {number} ax
@@ -1283,14 +1679,6 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   if (Math.abs(pz) > 2.0) return;
   
   const nowSec = performance.now() * 0.001;
-  const hitSource = opts.hitSource === 'cut' ? 'cut' : opts.hitSource === 'other' ? 'other' : 'tackle';
-  const bonusHits = detailChargeBonusHits(
-    hitSource,
-    opts.detailCharge01 != null && Number.isFinite(opts.detailCharge01) ? opts.detailCharge01 : null
-  );
-  const treeDemolishOneShot = opts.treeDemolishOneShot === true;
-  /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */
-  const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
   const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
   const spawnedHitOnceSet = opts.spawnedHitOnceSet instanceof Set ? opts.spawnedHitOnceSet : null;
   const px = Number(ax);
@@ -1449,233 +1837,13 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     opts.reusedConsumedSpawned instanceof Set ? opts.reusedConsumedSpawned : new Set();
   const consumedWorld = opts.reusedConsumedWorld instanceof Set ? opts.reusedConsumedWorld : new Set();
 
-  for (const hit of hits) {
-    if (hit.type === 'spawnedSmall') {
-      if (consumedSpawned.has(hit.id)) continue;
-      consumedSpawned.add(hit.id);
-      const idx = activeSpawnedSmallCrystals.findIndex((c) => c.id === hit.id);
-      if (idx < 0) continue;
-      const c = activeSpawnedSmallCrystals[idx];
-      const dynKey = `dyn:${c.id}`;
-      markDetailHitHpBar(dynKey, c.x, c.y, 1, 1, 0, nowSec);
-      markDetailHitShake(dynKey, nowSec);
-      spawnDetailHitPulse(c.x, c.y);
-      playRockSmashingSfx({ x: c.x, y: c.y });
-      activeSpawnedSmallCrystals.splice(idx, 1);
-      if (spawnedHitOnceSet) spawnedHitOnceSet.add(c.id);
-      const cSet = OBJECT_SETS[c.itemKey];
-      playCrystalClinkSfx({ x: c.x, y: c.y });
-      spawnPickableCrystalDropAt(c.x, c.y, c.itemKey, countSpritesInObjectSet(cSet));
-      spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
-      tryPlayerGamepadRumbleForHit(opts, 'crystal');
-      continue;
-    }
-
-    const worldKey =
-      hit.type === 'formalTree'
-        ? `formal:${hit.rootOx},${hit.rootOy}`
-        : hit.type === 'charredScatterTree'
-          ? `charredScatter:${hit.rootOx},${hit.rootOy}`
-          : `${hit.rootOx},${hit.rootOy}`;
-    if (consumedWorld.has(worldKey)) continue;
-    consumedWorld.add(worldKey);
-    if (worldHitOnceSet?.has(worldKey)) continue;
-    if (hit.type === 'formalTree') {
-      const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
-      if (isPlayFormalTreeRootDestroyed(hit.rootOx, hit.rootOy)) {
-        if (allowChargedStumpHarvest) {
-          if (hitSource === 'cut') {
-            playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-          }
-          if (hitSource === 'tackle') {
-            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-          }
-          tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
-          if (hitSource === 'cut' || hitSource === 'tackle') {
-            tryPlayerGamepadRumbleForHit(opts, 'tree');
-          }
-        } else {
-          if (hitSource === 'tackle') {
-            playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-            tryPlayerGamepadRumbleForHit(opts, 'tree');
-          }
-          markDetailHitShake(bumpKey, nowSec);
-          spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-        }
-        continue;
-      }
-
-      // Normalized Formal Tree HP
-      const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
-      const treeType = t0 ? getTreeType(t0.biomeId, hit.rootOx, hit.rootOy, data.seed) : 'broadleaf';
-      const hitsMax = hitsForFormalTree(treeType);
-      const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, `formal:${treeType}`, null, nowSec, hitsMax);
-      
-      const hpBefore = st.hitsRemaining;
-      const baseAmt = hitSource === 'cut' || hitSource === 'tackle' ? 1 : 0;
-      let amount = baseAmt > 0 ? baseAmt + bonusHits : 0;
-      if (treeDemolishOneShot && amount > 0) {
-        amount = st.hitsRemaining;
-      }
-      if (amount > 0) {
-        st.hitsRemaining = Math.max(0, st.hitsRemaining - amount);
-        markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
-      }
-      
-      markDetailHitShake(bumpKey, nowSec);
-      spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-      
-      if (hitSource === 'cut') {
-        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-      } else if (hitSource === 'tackle') {
-        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-      }
-      if (amount > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
-        tryPlayerGamepadRumbleForHit(opts, 'tree');
-      }
-
-      if (st.hitsRemaining <= 0) {
-        if (hitSource === 'cut') {
-          playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-        }
-        registerDestroyedFormalTreeRoot(hit.rootOx, hit.rootOy, nowSec, 'cut', data);
-      } else {
-        if (hitSource === 'tackle') {
-          tryApplyTreeTackleEffects(
-            hit.cx ?? hit.rootOx + 1,
-            hit.cy ?? hit.rootOy + 0.5,
-            t0?.biomeId ?? 0,
-            data.seed ?? 0,
-            data
-          );
-        }
-      }
-      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
-      continue;
-    }
-    if (hit.type === 'charredScatterTree') {
-      if (allowChargedStumpHarvest) {
-        if (hitSource === 'cut') {
-          playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-        }
-        if (hitSource === 'tackle') {
-          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-        }
-        tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
-        if (hitSource === 'cut' || hitSource === 'tackle') {
-          tryPlayerGamepadRumbleForHit(opts, 'tree');
-        }
-      } else {
-        const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
-        if (hitSource === 'tackle') {
-          playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-          tryPlayerGamepadRumbleForHit(opts, 'tree');
-        }
-        markDetailHitShake(bumpKey, nowSec);
-        spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
-        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
-        tryApplyTreeTackleEffects(
-          hit.cx ?? hit.rootOx + 0.5,
-          hit.cy ?? hit.rootOy + 0.5,
-          t0?.biomeId ?? 0,
-          data.seed ?? 0,
-          data
-        );
-      }
-      if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
-      continue;
-    }
-    if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
-    const objSet = OBJECT_SETS[hit.itemKey];
-    const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
-    const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);
-    if (st.destroyed) continue;
-    const hpBefore = st.hitsRemaining;
-    const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
-    const hitX = hit.cx ?? hit.rootOx + 0.5;
-    const hitY = hit.cy ?? hit.rootOy + 0.5;
-    const baseTreeDmg =
-      isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
-    let treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
-    if (treeDemolishOneShot && isTreeHit && treeDamage > 0) {
-      treeDamage = st.hitsRemaining;
-    }
-    st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
-    if (!isTreeHit) {
-      if (treeDamage > 0 && st.hitsRemaining <= 0) {
-        playRockSmashingBreakSfx({ x: hitX, y: hitY });
-      } else {
-        playRockSmashingSfx({ x: hitX, y: hitY });
-      }
-    }
-    if (treeDamage > 0 || !isTreeHit) {
-      markDetailHitHpBar(worldKey, hitX, hitY, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
-    }
-    if (isCrystalItemKey(hit.itemKey) && st.hitsRemaining < hpBefore) {
-      playCrystalClinkSfx({ x: hitX, y: hitY });
-    }
-    markDetailHitShake(worldKey, nowSec);
-    spawnDetailHitPulse(hitX, hitY);
-    if (isTreeHit && treeDamage > 0) {
-      if (hitSource === 'cut') {
-        playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-      } else if (hitSource === 'tackle') {
-        playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-      }
-    }
-    if (opts.gamepadRumblePlayer && !scatterItemKeyIsPureGrassDecoration(hit.itemKey)) {
-      if (isTreeHit && treeDamage > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
-        tryPlayerGamepadRumbleForHit(opts, 'tree');
-      } else if (!isTreeHit && st.hitsRemaining < hpBefore) {
-        tryPlayerGamepadRumbleForHit(opts, isCrystalItemKey(hit.itemKey) ? 'crystal' : 'rock');
-      }
-    }
-    if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
-    if (st.hitsRemaining > 0) {
-      if (treeDamage > 0 && hitSource === 'tackle' && isTreeHit) {
-        const t0 = getMicroTile(hit.rootOx, hit.rootOy, data);
-        tryApplyTreeTackleEffects(
-          hit.cx ?? hit.rootOx + 1,
-          hit.cy ?? hit.rootOy + 0.5,
-          t0?.biomeId ?? 0,
-          data.seed ?? 0,
-          data
-        );
-      }
-      continue;
-    }
-
-    if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
-      playTreeCutHpZeroSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
-    }
-
-    markDestroyedDetailAndScheduleRegen(st, nowSec);
-    burnedScatterTreeOrigins.delete(`${hit.rootOx},${hit.rootOy}`);
-    harvestedBurnedScatterTreeOrigins.delete(`${hit.rootOx},${hit.rootOy}`);
-    burningScatterTreeEndsAtSecByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
-    scatterTreeBurnMeterByOrigin.delete(`${hit.rootOx},${hit.rootOy}`);
-    if (!scatterItemKeyIsTree(hit.itemKey)) {
-      const isCrystal = String(hit.itemKey || '').toLowerCase().includes('crystal');
-      const isLargeCrystal = isCrystal && shape.cols >= 2 && shape.rows >= 2;
-      if (isLargeCrystal) {
-        spawnSmallCrystalChunksFromLarge(hit.rootOx, hit.rootOy, hit.itemKey);
-      } else {
-        spawnPickableCrystalDropAt(
-          hit.cx ?? hit.rootOx + 0.5,
-          hit.cy ?? hit.rootOy + 0.5,
-          hit.itemKey,
-          countSpritesInObjectSet(objSet)
-        );
-      }
-      spawnCrystalShards(hit.rootOx, hit.rootOy, hit.itemKey, data);
-    }
-  }
+  applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumedSpawned);
   endChunkRebakeBatch();
 }
 
 /**
- * Circular ground shock: many short tackle sweeps from the epicenter share consumed sets so each
- * prop is damaged at most once. Ray count scales with radius (still an approximation vs a true ring).
+ * Circular ground shock: single bbox pass over the disk (vs dozens of tackle sweeps) so large
+ * Earthquakes do not hitch the main thread. Shares one chunk-rebake batch with apply pass.
  *
  * @param {number} cx
  * @param {number} cy
@@ -1689,36 +1857,17 @@ export function tryBreakDetailsInCircle(cx, cy, radiusTiles, data, opts = {}) {
   const py = Number(cy);
   const R = Math.max(0.08, Number(radiusTiles) || 0);
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(R)) return;
+  const pz = Number(opts.pz) || 0;
+  if (Math.abs(pz) > 2.0) return;
   const consumedWorld = new Set();
   const consumedSpawned = new Set();
-  /** Coarser stepping on long rays keeps huge quakes from freezing the main thread. */
-  const originScanStepTiles =
-    R > 9 ? 0.55 : R > 6.5 ? 0.42 : R > 4.5 ? 0.32 : TACKLE_ORIGIN_SCAN_STEP_TILES;
-  const base = {
-    ...opts,
-    reusedConsumedWorld: consumedWorld,
-    reusedConsumedSpawned: consumedSpawned,
-    originScanStepTiles
-  };
-  /**
-   * One outer batch: each segment used to end its own rebake batch, so large rings flushed
-   * chunk rebakes hundreds of times per impact (major hitch). Nested depth defers one flush.
-   */
   beginChunkRebakeBatch();
   try {
-    /** Huge AoE: one dense ring; smaller shocks keep inner+outer ring for coverage. */
-    const ringFrac = /** @type {const} */ (R > 9.5 ? [0.94] : [1, 0.52]);
-    for (let ri = 0; ri < ringFrac.length; ri++) {
-      const rEff = R * ringFrac[ri];
-      const n = Math.min(56, Math.max(18, Math.ceil(12 + rEff * 8.5)));
-      const phase = ri * 0.5;
-      for (let i = 0; i < n; i++) {
-        const a = ((i + phase) / n) * Math.PI * 2;
-        const ex = px + Math.cos(a) * rEff;
-        const ey = py + Math.sin(a) * rEff;
-        tryBreakDetailsAlongSegment(px, py, ex, ey, data, base);
-      }
-    }
+    const hits = collectDetailHitsInDisk(px, py, R, data, opts);
+    if (hits.length === 0) return;
+    hits.sort((a, b) => a.t - b.t);
+    const nowSec = performance.now() * 0.001;
+    applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumedSpawned);
   } finally {
     endChunkRebakeBatch();
   }

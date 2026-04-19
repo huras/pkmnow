@@ -57,9 +57,11 @@ import {
   drawDetailHitHpBar,
   drawDetailHitPulse,
   drawStrengthGrabTargetOutline,
+  drawStrengthGrabTargetOutlineHalf,
   drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
-  drawWildHpBar
+  drawWildHpBar,
+  drawEntityStaminaBar
 } from './render/render-ui-world.js';
 import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
@@ -191,6 +193,11 @@ const _tileCachePool = new Map();
  */
 const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
 
+/**
+ * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
+ * when the player is standing still. Invalidate when tile / facing / carry state changes.
+ */
+let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
 
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
@@ -635,6 +642,41 @@ export function render(canvas, data, options = {}) {
     const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
     const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
 
+    let strengthGrabPrompt = null;
+    if (player._strengthCarry || player._strengthGrabAction) {
+      _strengthGrabPromptCache.key = '';
+      _strengthGrabPromptCache.prompt = null;
+    } else {
+      const vx = player.visualX ?? player.x;
+      const vy = player.visualY ?? player.y;
+      const grabK = `${String(data?.seed ?? '')}_${Math.floor(Number(vx) || 0)}_${Math.floor(Number(vy) || 0)}_${Number(player.tackleDirNx) || 0}_${Number(player.tackleDirNy) || 0}`;
+      if (grabK === _strengthGrabPromptCache.key) {
+        strengthGrabPrompt = _strengthGrabPromptCache.prompt;
+      } else {
+        strengthGrabPrompt = getStrengthGrabPromptInfo(player, data);
+        _strengthGrabPromptCache.key = grabK;
+        _strengthGrabPromptCache.prompt = strengthGrabPrompt;
+      }
+    }
+    let drewSplitStrengthGrabOutline = false;
+    const isStrengthGrabTargetItem = (item) => {
+      const p = strengthGrabPrompt;
+      if (!p) return false;
+      if (p.kind === 'rock' && item.type === 'scatter') {
+        return Math.floor(Number(item.originX) || 0) === Math.floor(Number(p.ox) || 0) &&
+          Math.floor(Number(item.originY) || 0) === Math.floor(Number(p.oy) || 0);
+      }
+      if (p.kind === 'faintedWild' && item.type === 'wild') {
+        if (item.deadState !== 'faint') return false;
+        const ix = Math.floor(Number(item.x) || 0);
+        const iy = Math.floor(Number(item.y) || 0);
+        const dex = Math.max(1, Math.floor(Number(item.dexId) || 1));
+        const pDex = Math.max(1, Math.floor(Number(p.wildDexId) || 1));
+        return ix === Math.floor(Number(p.ox) || 0) && iy === Math.floor(Number(p.oy) || 0) && dex === pDex;
+      }
+      return false;
+    };
+
     const batchedEffects = [];
     for (const item of renderItems) {
       if (item.type === 'wild' || item.type === 'player') {
@@ -646,6 +688,11 @@ export function render(canvas, data, options = {}) {
           if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
           else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
           else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+        }
+
+        if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
+          drewSplitStrengthGrabOutline = true;
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
         // Shadow
@@ -697,6 +744,7 @@ export function render(canvas, data, options = {}) {
           ctx.restore();
         }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
+        drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);
 
         // Terrain / grass depth cue (LOD 0)
         if (playLodGrassSpriteOverlay && (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight)) {
@@ -710,6 +758,10 @@ export function render(canvas, data, options = {}) {
               }
             }
           }
+        }
+
+        if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
         }
 
         // Strength carry visual (and lift-in-progress travel from origin -> above carrier).
@@ -812,7 +864,14 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'scatter') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        if (isStrengthGrabTargetItem(item)) {
+          drewSplitStrengthGrabOutline = true;
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
+        }
         drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached });
+        if (isStrengthGrabTargetItem(item)) {
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
+        }
         ctx.restore();
       } else if (item.type === 'tree') {
         ctx.save();
@@ -893,14 +952,9 @@ export function render(canvas, data, options = {}) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const pulse of getActiveDetailHitPulses()) drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx);
     ctx.restore();
-    drawStrengthGrabTargetOutline(
-      ctx,
-      getStrengthGrabPromptInfo(player, data),
-      tileW,
-      tileH,
-      snapPx,
-      time
-    );
+    if (strengthGrabPrompt && !drewSplitStrengthGrabOutline) {
+      drawStrengthGrabTargetOutline(ctx, strengthGrabPrompt, tileW, tileH, snapPx, time);
+    }
     addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
     // PASS 5a-deferred (grass over spirits)
