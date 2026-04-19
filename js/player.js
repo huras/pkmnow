@@ -564,6 +564,16 @@ const FACING_TO_TACKLE_UNIT = {
 };
 
 /**
+ * Normalized world aim from the player's current 8-way facing (tackle / cut when mouse aim is off).
+ * @param {{ facing?: string } | null | undefined} p
+ */
+export function getTackleDirUnitFromFacing(p) {
+  if (!p) return { nx: 0, ny: 1 };
+  const q = FACING_TO_TACKLE_UNIT[p.facing] || FACING_TO_TACKLE_UNIT.down;
+  return { nx: q[0], ny: q[1] };
+}
+
+/**
  * @param {number} ix
  * @param {number} iy
  */

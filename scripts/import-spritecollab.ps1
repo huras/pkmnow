@@ -1,7 +1,10 @@
+# Imports SpriteCollab sheets for dex 1..MaxDex (default 493; use a lower value for partial imports).
+# Ver: docs/NATIONAL-DEX-PIPELINE.md
 param(
   [string]$SpriteCollabRoot = "H:\cursor\Youtube\SpriteCollab",
   [string]$OutputDir = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\tilesets\pokemon",
-  [string]$MetadataOutput = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\js\pokemon\pmd-anim-metadata.js"
+  [string]$MetadataOutput = "H:\cursor\Youtube\experimento-gerador-regiao-pkmn\js\pokemon\pmd-anim-metadata.js",
+  [int]$MaxDex = 493
 )
 
 Set-StrictMode -Version Latest
@@ -219,7 +222,8 @@ $ok = 0
 $missing = @()
 $metaByDex = @{}
 
-$maxDex = 251
+if ($MaxDex -lt 1) { throw "MaxDex must be >= 1" }
+$maxDex = $MaxDex
 for ($dex = 1; $dex -le $maxDex; $dex++) {
   $dex3 = $dex.ToString("000")
   $dex4 = $dex.ToString("0000")

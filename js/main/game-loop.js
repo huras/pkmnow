@@ -283,23 +283,20 @@ export function createGameLoop(api) {
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
           chunkStats.mode === 'play'
-            ? ` · chk ${chunkStats.drawnVisible}/${chunkStats.totalVisible}` +
+            ? `chk ${chunkStats.drawnVisible}/${chunkStats.totalVisible}` +
               ` · miss ${chunkStats.missingVisible}` +
               ` · bake ${chunkStats.bakedThisFrame}/${chunkStats.bakeBudget}` +
               ` · q ${chunkStats.queueSize}` +
               chunkBoostTag
             : '';
-        playFpsEl.textContent =
-          `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
-          ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
-          ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
-          ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
-          ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
-          ` · rnd top ${top3HeavyRender}` +
-          ` · upd top ${top3HeavyUpdate}` +
-          wildSubTag +
-          ` · stable ${stablePct.toFixed(0)}%` +
-          chunkInfo;
+        const fpsHudLines = [
+          `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms · p50 ${perf.p50Fps.toFixed(1)}fps`,
+          `p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable) · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms`,
+          `rnd top ${top3HeavyRender}`,
+          `upd top ${top3HeavyUpdate}${wildSubTag}`,
+          `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}`
+        ];
+        playFpsEl.textContent = fpsHudLines.join('\n');
       }
     }
     if (getAppMode() === 'play') {

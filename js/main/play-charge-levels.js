@@ -1,6 +1,9 @@
 export const CHARGE_LEVEL_BAR_COUNT = 4;
 export const CHARGE_LEVEL_SEGMENT_SIZE = 1 / CHARGE_LEVEL_BAR_COUNT;
 
+/** Earthquake: first half of linear `charge01` maps to the legacy 4 bars; second half fills bar 5 (ease-out). */
+export const EARTHQUAKE_CHARGE_FIRST_HALF_MAX = 0.5;
+
 /** First charge bar completely filled (same as one segment at 100%). */
 export const CHARGE_STRONG_ATTACK_MIN_01 = CHARGE_LEVEL_SEGMENT_SIZE;
 
@@ -94,4 +97,47 @@ export function getChargeRange01(charge01) {
 export function getChargeDamage01(charge01) {
   const [, p2, p3, p4] = getChargeBarProgresses(charge01);
   return clamp01((p2 + p3 + p4) / 3);
+}
+
+/**
+ * Five HUD segments for Earthquake: bars 1–4 match the global meter on `charge01*2` while
+ * `charge01 <= 0.5`; bar 5 fills on `(charge01-0.5)/0.5` with ease-out (same wall-clock span
+ * as bars 1–4 when charge ramps at half speed — see play-mouse-combat).
+ * @param {number} charge01
+ * @returns {[number, number, number, number, number]}
+ */
+export function getEarthquakeChargeBarProgresses(charge01) {
+  const p = clamp01(charge01);
+  if (p <= EARTHQUAKE_CHARGE_FIRST_HALF_MAX + 1e-9) {
+    const inner = p <= 0 ? 0 : clamp01(p / EARTHQUAKE_CHARGE_FIRST_HALF_MAX);
+    const [b1, b2, b3, b4] = getChargeBarProgresses(inner);
+    return [b1, b2, b3, b4, 0];
+  }
+  const raw5 = clamp01((p - EARTHQUAKE_CHARGE_FIRST_HALF_MAX) / (1 - EARTHQUAKE_CHARGE_FIRST_HALF_MAX));
+  return [1, 1, 1, 1, easeOutCubic(raw5)];
+}
+
+/**
+ * Earthquake charge level 1..5. Level 5 only when the second half-meter is complete (`charge01` → 1).
+ * @param {number} charge01
+ * @returns {0 | 1 | 2 | 3 | 4 | 5}
+ */
+export function getEarthquakeChargeLevel(charge01) {
+  const p = clamp01(charge01);
+  if (p <= 0.0005) return 0;
+  if (p >= 1 - 1e-6) return 5;
+  if (p <= EARTHQUAKE_CHARGE_FIRST_HALF_MAX) return getChargeLevel(clamp01(p / EARTHQUAKE_CHARGE_FIRST_HALF_MAX));
+  return 4;
+}
+
+/**
+ * First-bar range easing for Earthquake (only the first legacy half-meter affects tackle-style range).
+ * @param {number} charge01
+ */
+export function getEarthquakeChargeRange01(charge01) {
+  const p = clamp01(charge01);
+  if (p <= EARTHQUAKE_CHARGE_FIRST_HALF_MAX) {
+    return getChargeRange01(p <= 0 ? 0 : clamp01(p / EARTHQUAKE_CHARGE_FIRST_HALF_MAX));
+  }
+  return 1;
 }

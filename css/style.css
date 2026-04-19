@@ -683,10 +683,11 @@ button.btn-secondary:hover {
   image-rendering: crisp-edges;
 }
 
-/* Zoom in/out + help — same shape as music buttons */
+/* Zoom in/out + help + save — same shape as music buttons */
 .minimap-panel__zoom-in-btn,
 .minimap-panel__zoom-out-btn,
 .minimap-panel__help-btn,
+.minimap-panel__save-btn,
 .minimap-panel__time-btn,
 .minimap-panel__social-btn {
   display: inline-flex;
@@ -708,6 +709,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-btn:hover,
 .minimap-panel__zoom-out-btn:hover,
 .minimap-panel__help-btn:hover,
+.minimap-panel__save-btn:hover,
 .minimap-panel__time-btn:hover,
 .minimap-panel__social-btn:hover {
   background: rgba(154, 216, 255, 0.14);
@@ -725,6 +727,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-btn:focus-visible,
 .minimap-panel__zoom-out-btn:focus-visible,
 .minimap-panel__help-btn:focus-visible,
+.minimap-panel__save-btn:focus-visible,
 .minimap-panel__time-btn:focus-visible,
 .minimap-panel__social-btn:focus-visible {
   outline: 2px solid rgba(154, 216, 255, 0.85);
@@ -734,11 +737,138 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-icon,
 .minimap-panel__zoom-out-icon,
 .minimap-panel__help-icon,
+.minimap-panel__save-icon,
 .minimap-panel__time-icon,
 .minimap-panel__social-icon {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+/* Minimap header — save / clear session (localStorage) */
+.minimap-save-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.minimap-save-modal.hidden {
+  display: none !important;
+}
+
+.minimap-save-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.minimap-save-modal__card {
+  position: relative;
+  z-index: 1;
+  width: min(400px, 100%);
+  max-height: min(88vh, 520px);
+  overflow: auto;
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  background: linear-gradient(180deg, #1e2230 0%, #12141c 100%);
+  border: 2px solid rgba(90, 120, 200, 0.45);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #e8ecff;
+}
+
+.minimap-save-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.minimap-save-modal__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.minimap-save-modal__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.minimap-save-modal__close:hover {
+  background: rgba(230, 0, 18, 0.2);
+  color: #fff;
+}
+
+.minimap-save-modal__desc {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(200, 210, 235, 0.9);
+}
+
+.minimap-save-modal__status {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(180, 200, 255, 0.95);
+}
+
+.minimap-save-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.minimap-save-modal__actions button {
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+#minimap-save-modal-save {
+  background: linear-gradient(180deg, rgba(60, 140, 90, 0.95), rgba(35, 95, 60, 0.98));
+  color: #fff;
+  border-color: rgba(120, 220, 160, 0.45);
+}
+
+#minimap-save-modal-save:hover {
+  filter: brightness(1.06);
+}
+
+#minimap-save-modal-clear {
+  background: rgba(120, 40, 45, 0.35);
+  color: #ffd6d8;
+  border-color: rgba(255, 120, 130, 0.35);
+}
+
+#minimap-save-modal-clear:hover {
+  background: rgba(180, 50, 55, 0.45);
+  color: #fff;
 }
 
 /* ─── Play help wiki (minimap book icon) ─────────────────────────────────── */
@@ -906,9 +1036,11 @@ button.btn-secondary:hover {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  max-width: 76ch;
+  margin: 0 auto;
   font-family: Inter, system-ui, sans-serif;
   font-size: 0.88rem;
-  line-height: 1.55;
+  line-height: 1.58;
   color: rgba(232, 234, 242, 0.94);
 }
 
@@ -922,6 +1054,19 @@ button.btn-secondary:hover {
 
 .play-help-wiki__p {
   margin: 0 0 12px;
+}
+
+.play-help-wiki__note {
+  margin: 0 0 14px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(154, 216, 255, 0.22);
+  border-left-width: 4px;
+  border-left-color: rgba(107, 159, 255, 0.75);
+  background: linear-gradient(105deg, rgba(107, 159, 255, 0.12) 0%, rgba(20, 28, 44, 0.55) 100%);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: rgba(220, 232, 255, 0.96);
 }
 
 .play-help-wiki__ul {
@@ -954,10 +1099,14 @@ button.btn-secondary:hover {
 
 .play-help-wiki__table th,
 .play-help-wiki__table td {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   text-align: left;
   vertical-align: top;
+}
+
+.play-help-wiki__table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .play-help-wiki__table th {
@@ -976,6 +1125,18 @@ button.btn-secondary:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78rem;
   color: #fffbe6;
+}
+
+.play-help-wiki__article kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  color: #fff8dc;
 }
 
 body.play-help-wiki-open {
@@ -1069,7 +1230,10 @@ body.play-mode-active {
   border-radius: 6px;
   pointer-events: none;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  white-space: nowrap;
+  white-space: pre-line;
+  max-width: min(700px, calc(100vw - 20px));
+  max-height: min(45vh, 340px);
+  overflow: auto;
 }
 
 .app.play-mode-active .map-wrap .play-fps {

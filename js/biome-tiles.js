@@ -39,14 +39,14 @@ export const BIOME_TO_TERRAIN = {
  */
 export const BIOME_VEGETATION = {
   [BIOMES.FOREST.id]: ['large-green-broadleaf-1 [4x3]', 'green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
-  [BIOMES.JUNGLE.id]: ['fat-palm [4x3]', 'large-palm-with-coconuts [4x3]', 'large-palm-with-bananas [3x3]', 'palm-tree [2x2]', 'vine [1x1]', 'fern [1x1]'],
+  [BIOMES.JUNGLE.id]: ['fat-palm [4x3]', 'large-palm-with-coconuts [4x3]', 'large-palm-with-bananas [3x3]', 'palm-tree [2x2]', 'vine [2x1]', 'fern [1x1]'],
   [BIOMES.GRASSLAND.id]: ['small-grass [1x1]', 'yellow-lily [1x1]', 'red-daisy [1x1]'],
   [BIOMES.SNOW.id]: ['large-light-blue-crystal [2x2]', 'baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['large-purple-crystal [2x2]', 'large-pink-crystal [2x2]', 'small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
   /** Tufts / cascos / areia — o que era overlay “dirt” + costa; sem folhagem de terreno `jogador sandy`. */
   [BIOMES.BEACH.id]: [
-    'beach-dirt-turf [1x1]',
+    'dry-grass [2x1]',
     'small-grass [1x1]',
     'mushroom-1 [1x1]',
     'sand-grass [1x1]',
@@ -109,7 +109,9 @@ export function isSortableScatter(itemKey) {
     k.includes('broadleaf') ||
     k.includes('palm') ||
     k.includes('pine') ||
-    k.includes('savannah-tree')
+    k.includes('savannah-tree') ||
+    k.includes('dry-grass') ||
+    k.includes('vine')
   );
 }
 

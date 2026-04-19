@@ -159,7 +159,23 @@ export const POKEMON_MOVESET_OVERRIDES = {
   151: ['confusion', 'prismaticLaser', 'psybeam', 'poisonPowder'],
   249: ['prismaticLaser', 'psybeam', 'confusion', 'waterGun'],
   250: ['flamethrower', 'prismaticLaser', 'incinerate', 'psybeam'],
-  251: ['confusion', 'prismaticLaser', 'psybeam', 'poisonPowder']
+  251: ['confusion', 'prismaticLaser', 'psybeam', 'poisonPowder'],
+  382: ['waterCannon', 'hydroPump', 'surf', 'prismaticLaser'],
+  383: ['earthquake', 'incinerate', 'flamethrower', 'prismaticLaser'],
+  384: ['flamethrower', 'prismaticLaser', 'dragonRage', 'hyperBeam'],
+  385: ['prismaticLaser', 'psybeam', 'confusion', 'steelBeam'],
+  386: ['prismaticLaser', 'psybeam', 'confusion', 'psychic'],
+  483: ['steelBeam', 'prismaticLaser', 'dragonRage', 'hyperBeam'],
+  484: ['waterCannon', 'hydroPump', 'prismaticLaser', 'dragonRage'],
+  485: ['flamethrower', 'incinerate', 'steelBeam', 'prismaticLaser'],
+  486: ['hyperBeam', 'earthquake', 'prismaticLaser', 'triAttack'],
+  487: ['nightShade', 'prismaticLaser', 'confusion', 'psychic'],
+  488: ['psybeam', 'prismaticLaser', 'confusion', 'psychic'],
+  489: ['waterBurst', 'bubble', 'waterGun', 'prismaticLaser'],
+  490: ['waterCannon', 'hydroPump', 'surf', 'prismaticLaser'],
+  491: ['nightShade', 'prismaticLaser', 'confusion', 'incinerate'],
+  492: ['solarBeam', 'poisonPowder', 'prismaticLaser', 'gust'],
+  493: ['triAttack', 'hyperBeam', 'prismaticLaser', 'psychic']
 };
 
 /**

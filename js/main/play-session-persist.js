@@ -188,6 +188,15 @@ export function flushPlaySessionSave(data, playerRef) {
   writeSaveToStorage(p);
 }
 
+/** Removes the persisted play snapshot from localStorage (next resume for this map will be empty). */
+export function clearPlaySessionSave() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn('[play-session-persist] clear failed', e);
+  }
+}
+
 /**
  * Resets the wall-clock autosave schedule (first fire at +10s, then every +30s).
  */

@@ -1,39 +1,40 @@
 /**
  * Earthquake — charged Normal ground move: one hop; impact ring damages trees / breakables /
  * ground crystal drops (not decorative grass scatter), hits wilds in radius, and drives the
- * global earthquake shake layer + timed aftershocks on high charge.
+ * global earthquake shake layer + timed aftershocks on high charge (up to 5 charge tiers).
  */
 
-import { getChargeLevel, getChargeRange01 } from '../main/play-charge-levels.js';
+import { getEarthquakeChargeLevel, getEarthquakeChargeRange01 } from '../main/play-charge-levels.js';
 import { tryBreakDetailsInCircle } from '../main/play-crystal-tackle.js';
 import { shatterCrystalDropsInRadius } from '../main/play-crystal-drops.js';
 import { tryPlayerCutHitWildCircle } from '../wild-pokemon/wild-player-interactions.js';
 import { enqueueEarthquakeMovePulse } from '../main/earthquake-layer.js';
 
 /**
- * @param {number} chargeLevel 1..4
+ * @param {number} chargeLevel 1..5
  * @param {number} charge01
  */
 function earthquakeRadiusTiles(chargeLevel, charge01) {
-  const lv = Math.max(1, Math.min(4, Math.floor(chargeLevel) || 1));
-  const range01 = getChargeRange01(charge01);
+  const lv = Math.max(1, Math.min(5, Math.floor(chargeLevel) || 1));
+  const range01 = getEarthquakeChargeRange01(charge01);
   return 3.2 + (lv - 1) * 2.85 + range01 * 2.1;
 }
 
-/** Screen / audio rumble length by charge level (seconds). Max bar ≈ 7s. */
+/** Screen / audio rumble length by charge level (seconds). Max tier ≈ 8.2s. */
 function earthquakeSustainSecForLevel(level) {
-  const lv = Math.max(1, Math.min(4, Math.floor(Number(level)) || 1));
-  const table = { 1: 2.0, 2: 3.6, 3: 5.2, 4: 7.0 };
-  return table[lv] ?? 7.0;
+  const lv = Math.max(1, Math.min(5, Math.floor(Number(level)) || 1));
+  const table = { 1: 2.0, 2: 3.6, 3: 5.2, 4: 7.0, 5: 8.2 };
+  return table[lv] ?? 8.2;
 }
 
-/** Up to 5 aftershocks on a full 4-bar release. */
+/** Aftershock count scales with tier; L5 adds one more than L4. */
 function earthquakeAftershockCountForLevel(level) {
-  const lv = Math.max(1, Math.min(4, Math.floor(Number(level)) || 1));
+  const lv = Math.max(1, Math.min(5, Math.floor(Number(level)) || 1));
   if (lv <= 1) return 0;
   if (lv === 2) return 2;
   if (lv === 3) return 4;
-  return 5;
+  if (lv === 4) return 5;
+  return 6;
 }
 
 /**
@@ -58,7 +59,7 @@ export function onPlayerEarthquakeLanding(player, data, zJumpPrev, gameTimeSec, 
   player.earthquakeAwaitingLand = false;
   const c01 = Math.max(0, Math.min(1, Number(player.earthquakeStoredCharge01) || 0));
   player.earthquakeStoredCharge01 = 0;
-  const lvl = Math.max(1, Math.min(4, getChargeLevel(c01)));
+  const lvl = Math.max(1, Math.min(5, getEarthquakeChargeLevel(c01)));
   const px = Number(player.x);
   const py = Number(player.y);
   if (!data || !Number.isFinite(px) || !Number.isFinite(py)) return;
@@ -70,7 +71,8 @@ export function onPlayerEarthquakeLanding(player, data, zJumpPrev, gameTimeSec, 
     hitSource: 'tackle',
     detailCharge01: c01,
     pz,
-    excludePureGrassScatterHits: true
+    excludePureGrassScatterHits: true,
+    treeDemolishOneShot: lvl >= 5
   });
   shatterCrystalDropsInRadius(px, py, radius * 0.92, data);
 

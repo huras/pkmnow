@@ -159,6 +159,37 @@ SPECIES_BEHAVIOR.set(246, timid(5, 2.8)); // Larvitar
 SPECIES_BEHAVIOR.set(248, aggressive(9, 1.35, 2.9)); // Tyranitar
 SPECIES_BEHAVIOR.set(251, skittish(12, 5.2)); // Celebi — rare, elusive
 
+// ── Gen 3 (selected) ───────────────────────────────────────────────────────
+SPECIES_BEHAVIOR.set(252, neutral(5)); // Treecko
+SPECIES_BEHAVIOR.set(255, neutral(5)); // Torchic
+SPECIES_BEHAVIOR.set(258, neutral(5)); // Mudkip
+SPECIES_BEHAVIOR.set(261, skittish(7, 3.8)); // Poochyena
+SPECIES_BEHAVIOR.set(278, timid(6, 3.4)); // Wingull
+SPECIES_BEHAVIOR.set(280, timid(6, 3.2)); // Ralts
+SPECIES_BEHAVIOR.set(293, timid(5, 2.9)); // Whismur
+SPECIES_BEHAVIOR.set(318, aggressive(7, 1.4, 2.4)); // Carvanha
+SPECIES_BEHAVIOR.set(359, aggressive(8, 1.5, 2.6)); // Absol
+SPECIES_BEHAVIOR.set(371, timid(5, 3.0)); // Bagon
+SPECIES_BEHAVIOR.set(373, aggressive(9, 1.4, 2.8)); // Salamence
+SPECIES_BEHAVIOR.set(376, aggressive(9, 1.2, 2.6)); // Metagross
+SPECIES_BEHAVIOR.set(384, aggressive(12, 1.6, 3.2)); // Rayquaza
+SPECIES_BEHAVIOR.set(386, skittish(11, 5.0)); // Deoxys — alien, jittery
+
+// ── Gen 4 (selected) ───────────────────────────────────────────────────────
+SPECIES_BEHAVIOR.set(387, neutral(5)); // Turtwig
+SPECIES_BEHAVIOR.set(390, neutral(5)); // Chimchar
+SPECIES_BEHAVIOR.set(393, neutral(5)); // Piplup
+SPECIES_BEHAVIOR.set(399, timid(5, 2.8)); // Bidoof
+SPECIES_BEHAVIOR.set(403, skittish(7, 3.6)); // Shinx
+SPECIES_BEHAVIOR.set(425, timid(7, 3.2)); // Drifloon
+SPECIES_BEHAVIOR.set(443, timid(5, 3.0)); // Gible
+SPECIES_BEHAVIOR.set(445, aggressive(9, 1.35, 2.85)); // Garchomp
+SPECIES_BEHAVIOR.set(448, aggressive(8, 1.25, 2.5)); // Lucario
+SPECIES_BEHAVIOR.set(483, neutral(10)); // Dialga
+SPECIES_BEHAVIOR.set(487, aggressive(11, 1.45, 3.0)); // Giratina
+SPECIES_BEHAVIOR.set(491, skittish(10, 4.8)); // Darkrai
+SPECIES_BEHAVIOR.set(493, neutral(12)); // Arceus
+
 /**
  * Get the behavior profile for a species.
  * @param {number} dexId  National dex number

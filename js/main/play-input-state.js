@@ -16,6 +16,10 @@ export const playInputState = {
   gamepadRunHeld: false,
   /** Gamepad X / Square (standard index 2) held — mirrors LMB field slot (`play-gamepad-tick.js` + `play-mouse-combat.js`). */
   gamepadFieldLmbHeld: false,
+  /** RT / ZR held — mirrors RMB field slot (bind slot 2). */
+  gamepadFieldRmbHeld: false,
+  /** LT / ZL held — mirrors MMB field slot (bind slot 3). */
+  gamepadFieldMmbHeld: false,
   /**
    * True while the move bind wheel is driven by the right stick this frame
    * (skips mouse-based hover in `updateBindWheelHover`).
@@ -45,7 +49,7 @@ export const playInputState = {
   /** LMB held while carrying a Strength rock — show throw arc preview. */
   strengthCarryLmbAim: false,
   /**
-   * Field move charge UI (play combat): which bind is filling the 4-bar meter this frame.
+   * Field move charge UI (play combat): which bind is filling the charge meter this frame (4 bars, or 5 for Earthquake).
    * Rendered on the play canvas; cleared when binds release or play exits.
    * @type {{ moveId: string, charge01: number, slot: 'l' | 'r' | 'm' } | null}
    */

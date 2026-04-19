@@ -76,6 +76,19 @@
               </button>
               <button
                 type="button"
+                id="minimap-save-toggle"
+                class="minimap-panel__save-btn"
+                title="Salvar ou limpar progresso deste mapa"
+                aria-label="Salvar ou limpar progresso deste mapa"
+              >
+                <svg class="minimap-panel__save-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-time-weather-toggle"
                 class="minimap-panel__time-btn"
                 title="World time and weather"
@@ -252,6 +265,31 @@
           <div id="play-bgm-toast-status" class="play-bgm-toast-status"></div>
         </div>
 
+      </div>
+    </div>
+
+    <div
+      id="minimap-save-modal"
+      class="minimap-save-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="minimap-save-modal-title"
+    >
+      <div class="minimap-save-modal__backdrop" aria-hidden="true"></div>
+      <div class="minimap-save-modal__card">
+        <header class="minimap-save-modal__header">
+          <h2 id="minimap-save-modal-title" class="minimap-save-modal__title">Progresso no mapa</h2>
+          <button type="button" id="minimap-save-modal-close" class="minimap-save-modal__close" aria-label="Fechar">×</button>
+        </header>
+        <p class="minimap-save-modal__desc">
+          Grava no navegador a <strong>posição</strong> e o <strong>inventário</strong> desta região (mesma seed e tamanho). Ao reentrar nela, o jogo pode restaurar. “Limpar” remove só o armazenamento — não zera o inventário da partida atual.
+        </p>
+        <p id="minimap-save-modal-status" class="minimap-save-modal__status" aria-live="polite"></p>
+        <div class="minimap-save-modal__actions">
+          <button type="button" id="minimap-save-modal-save">Salvar agora</button>
+          <button type="button" id="minimap-save-modal-clear">Limpar salvamento</button>
+        </div>
       </div>
     </div>
 

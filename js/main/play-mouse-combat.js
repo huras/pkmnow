@@ -1,6 +1,11 @@
 import { playInputState } from './play-input-state.js';
 import { invalidatePlayPointerHover } from './play-pointer-world.js';
-import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack, player } from '../player.js';
+import {
+  setPlayerFacingFromWorldAimDelta,
+  triggerPlayerLmbAttack,
+  player,
+  getTackleDirUnitFromFacing
+} from '../player.js';
 import {
   castMoveById,
   castMoveChargedById,
@@ -65,6 +70,11 @@ import { dualBindWheel } from '../ui/dual-bind-wheel.js';
 const TAP_MS = 220;
 const CHARGE_TIME_MULT = 3;
 const CHARGE_MAX_SEC = 1.12 * CHARGE_TIME_MULT;
+
+/** Earthquake uses a 5th segment that fills over the same duration as bars 1–4 combined → 2× wall-clock to reach `charge01 === 1`. */
+function chargeMeterMaxSecForMove(moveId) {
+  return moveId === 'earthquake' ? CHARGE_MAX_SEC * 4 : CHARGE_MAX_SEC;
+}
 const FIELD_LMB_CHARGE_MAX_SEC_DEFAULT = 1.05 * CHARGE_TIME_MULT;
 const FIELD_LMB_CHARGE_MIN_HOLD_MS = 180;
 const FIELD_CUT_COMBO_RESET_SEC = 1.15;
@@ -170,6 +180,11 @@ function applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty) {
 }
 
 let leftHeld = false;
+/** True when LMB field session started from Square only — melee aim must not use mouse tiles. */
+let leftCombatAimIgnoreMouse = false;
+/** Same idea for R2 / MMB when the press began from triggers only. */
+let rightCombatAimIgnoreMouse = false;
+let middleCombatAimIgnoreMouse = false;
 let leftDownAt = 0;
 let rightHeld = false;
 let rightDownAt = 0;
@@ -209,6 +224,8 @@ let fieldWheelMouseClientY = 0;
 let lastScrollBindCastMs = 0;
 /** Prior frame Square/LMB gamepad bit (for press/release edges in `updatePlayPointerCombat`). */
 let prevGamepadFieldLmbHeld = false;
+let prevGamepadFieldRmbHeld = false;
+let prevGamepadFieldMmbHeld = false;
 
 /** 0..4 = Digit1..Digit5 slot being edited, or -1. */
 let bindingWheelSlotIdx = -1;
@@ -823,15 +840,28 @@ export function aimAtCursor(player) {
   /** Same horizontal/vertical anchor as the play sprite (`vx+0.5`, `vy+0.5` in `render.js`). */
   const sx = px + 0.5;
   const sy = py + 0.5;
-  if (!playInputState.mouseValid) {
-    return { tx: sx + 1, ty: sy, sx, sy };
+  const useFacingAim =
+    forceFacingFieldAimOnce ||
+    leftCombatAimIgnoreMouse ||
+    rightCombatAimIgnoreMouse ||
+    middleCombatAimIgnoreMouse ||
+    !playInputState.mouseValid;
+  if (forceFacingFieldAimOnce) forceFacingFieldAimOnce = false;
+  if (useFacingAim) {
+    const { nx, ny } = getTackleDirUnitFromFacing(player);
+    return { sx, sy, tx: sx + nx, ty: sy + ny };
   }
   const wx = playInputState.mouseX;
   const wy = playInputState.mouseY;
   return { tx: wx, ty: wy, sx, sy };
 }
 
-function initLeftCombatPressFromPointerOrGamepad(modifierSnapshot) {
+/**
+ * @param {boolean} modifierSnapshot
+ * @param {boolean} [useMouseForMeleeAim] false when session started from gamepad Square without mouse down.
+ */
+function initLeftCombatPressFromPointerOrGamepad(modifierSnapshot, useMouseForMeleeAim = true) {
+  leftCombatAimIgnoreMouse = !useMouseForMeleeAim;
   leftDownAt = performance.now();
   leftShiftAtDown = !!modifierSnapshot;
   playInputState.chargeLeft01 = 0;
@@ -863,6 +893,69 @@ function finalizeLeftCombatPointerOrGamepad(pl, data, now) {
   }
   leftShiftAtDown = false;
   playInputState.chargeLeft01 = 0;
+  leftCombatAimIgnoreMouse = false;
+}
+
+/**
+ * @param {boolean} [useMouseForMeleeAim] false when session started from gamepad RT only.
+ */
+function initRightCombatPressFromGamepad(useMouseForMeleeAim = true) {
+  rightCombatAimIgnoreMouse = !useMouseForMeleeAim;
+  rightDownAt = performance.now();
+  playInputState.chargeRight01 = 0;
+  rightFlameStreamedThisPress = false;
+  rightWaterStreamedThisPress = false;
+  rightBubbleBeamStreamedThisPress = false;
+  rightPrismaticStreamedThisPress = false;
+  rightSteelBeamStreamedThisPress = false;
+  rightWaterCannonStreamedThisPress = false;
+  rightThundershockStreamedThisPress = false;
+}
+
+/**
+ * @param {import('../player.js').player} pl
+ * @param {object | null | undefined} data
+ * @param {number} now
+ */
+function finalizeRightCombatPointerOrGamepad(pl, data, now) {
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  const bind = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
+  const heldMs = now - rightDownAt;
+  const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeRight01) || 0));
+  finishMoveButtonUp(bind.rmb, pl, data, heldMs, charge01, 'r');
+  playInputState.chargeRight01 = 0;
+  rightCombatAimIgnoreMouse = false;
+}
+
+/**
+ * @param {boolean} [useMouseForMeleeAim] false when session started from gamepad LT only.
+ */
+function initMiddleCombatPressFromGamepad(useMouseForMeleeAim = true) {
+  middleCombatAimIgnoreMouse = !useMouseForMeleeAim;
+  middleDownAt = performance.now();
+  playInputState.chargeMmb01 = 0;
+  middleFlameStreamedThisPress = false;
+  middleWaterStreamedThisPress = false;
+  middleBubbleBeamStreamedThisPress = false;
+  middlePrismaticStreamedThisPress = false;
+  middleSteelBeamStreamedThisPress = false;
+  middleWaterCannonStreamedThisPress = false;
+  middleThundershockStreamedThisPress = false;
+}
+
+/**
+ * @param {import('../player.js').player} pl
+ * @param {object | null | undefined} data
+ * @param {number} now
+ */
+function finalizeMiddleCombatPointerOrGamepad(pl, data, now) {
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  const bind = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
+  const heldMs = now - middleDownAt;
+  const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeMmb01) || 0));
+  finishMoveButtonUp(bind.mmb, pl, data, heldMs, charge01, 'm');
+  playInputState.chargeMmb01 = 0;
+  middleCombatAimIgnoreMouse = false;
 }
 
 /**
@@ -903,6 +996,25 @@ function castScrollSlotMove(moveId, pl, data) {
     return;
   }
   castMoveById(moveId, sx, sy, tx, ty, pl);
+}
+
+/** One-shot: next `aimAtCursor` uses facing (gamepad wheel slots with no mouse aim). */
+let forceFacingFieldAimOnce = false;
+
+/**
+ * Fire wheel-up / wheel-down bind from gamepad (L1+□ / L1+△) with facing-based aim.
+ * @param {import('../player.js').player} pl
+ * @param {object | null | undefined} data
+ * @param {'up'|'down'} kind
+ */
+export function tryGamepadWheelBindCastFromFacing(pl, data, kind) {
+  if (!pl || !data) return;
+  if (dualBindWheel.isOpen || attackWheel.isOpen) return;
+  const dex = Math.floor(Number(pl?.dexId) || 0);
+  const bb = getPlayerInputBindings(dex >= 1 ? dex : 1);
+  const moveId = kind === 'up' ? bb.wheelUp : bb.wheelDown;
+  forceFacingFieldAimOnce = true;
+  castScrollSlotMove(moveId, pl, data);
 }
 
 /**
@@ -1038,12 +1150,26 @@ export function updatePlayPointerCombat(dt, player, data) {
   updateBindWheelHover(player);
 
   const gpLmb = !!playInputState.gamepadFieldLmbHeld;
+  const gpRmb = !!playInputState.gamepadFieldRmbHeld;
+  const gpMmb = !!playInputState.gamepadFieldMmbHeld;
   const nowCombat = performance.now();
   if (!gpLmb && prevGamepadFieldLmbHeld && !leftHeld) {
     finalizeLeftCombatPointerOrGamepad(player, data, nowCombat);
   }
   if (gpLmb && !prevGamepadFieldLmbHeld && !leftHeld) {
-    initLeftCombatPressFromPointerOrGamepad(combatModifierHeld());
+    initLeftCombatPressFromPointerOrGamepad(combatModifierHeld(), false);
+  }
+  if (!gpRmb && prevGamepadFieldRmbHeld && !rightHeld) {
+    finalizeRightCombatPointerOrGamepad(player, data, nowCombat);
+  }
+  if (gpRmb && !prevGamepadFieldRmbHeld && !rightHeld) {
+    initRightCombatPressFromGamepad(false);
+  }
+  if (!gpMmb && prevGamepadFieldMmbHeld && !middleHeld) {
+    finalizeMiddleCombatPointerOrGamepad(player, data, nowCombat);
+  }
+  if (gpMmb && !prevGamepadFieldMmbHeld && !middleHeld) {
+    initMiddleCombatPressFromGamepad(false);
   }
 
   const b = getBindingsOrDefault(player);
@@ -1052,6 +1178,8 @@ export function updatePlayPointerCombat(dt, player, data) {
   const mmb = b.mmb;
 
   const virtLeft = leftHeld || gpLmb;
+  const virtRight = rightHeld || gpRmb;
+  const virtMiddle = middleHeld || gpMmb;
 
   playInputState.strengthCarryLmbAim = !!(
     leftHeld && !combatModifierHeld() && player._strengthCarry && playInputState.mouseValid
@@ -1064,17 +1192,26 @@ export function updatePlayPointerCombat(dt, player, data) {
       const maxSec = Math.max(0.2, resolveFieldLmbChargeMaxSec(lmb));
       playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / maxSec);
     } else if (!isHoldStreamMoveId(lmb) && lmb !== 'psybeam') {
-      playInputState.chargeLeft01 = Math.min(1, (playInputState.chargeLeft01 || 0) + dt / CHARGE_MAX_SEC);
+      playInputState.chargeLeft01 = Math.min(
+        1,
+        (playInputState.chargeLeft01 || 0) + dt / chargeMeterMaxSecForMove(lmb)
+      );
     }
   } else {
     playInputState.chargeLeft01 = 0;
   }
 
-  if (rightHeld && !mod && !isHoldStreamMoveId(rmb) && rmb !== 'psybeam') {
-    playInputState.chargeRight01 = Math.min(1, (playInputState.chargeRight01 || 0) + dt / CHARGE_MAX_SEC);
+  if (virtRight && !mod && !isHoldStreamMoveId(rmb) && rmb !== 'psybeam') {
+    playInputState.chargeRight01 = Math.min(
+      1,
+      (playInputState.chargeRight01 || 0) + dt / chargeMeterMaxSecForMove(rmb)
+    );
   }
-  if (middleHeld && !mod && !isHoldStreamMoveId(mmb) && mmb !== 'psybeam') {
-    playInputState.chargeMmb01 = Math.min(1, (playInputState.chargeMmb01 || 0) + dt / CHARGE_MAX_SEC);
+  if (virtMiddle && !mod && !isHoldStreamMoveId(mmb) && mmb !== 'psybeam') {
+    playInputState.chargeMmb01 = Math.min(
+      1,
+      (playInputState.chargeMmb01 || 0) + dt / chargeMeterMaxSecForMove(mmb)
+    );
   }
 
   if (virtLeft && !mod && lmb === 'psybeam') {
@@ -1083,13 +1220,13 @@ export function updatePlayPointerCombat(dt, player, data) {
   } else {
     playInputState.psybeamLeftHold = null;
   }
-  if (rightHeld && !mod && rmb === 'psybeam') {
+  if (virtRight && !mod && rmb === 'psybeam') {
     if (!playInputState.psybeamRightHold) playInputState.psybeamRightHold = { pulse: 0 };
     playInputState.psybeamRightHold.pulse += dt * 7.2;
   } else {
     playInputState.psybeamRightHold = null;
   }
-  if (middleHeld && !mod && mmb === 'psybeam') {
+  if (virtMiddle && !mod && mmb === 'psybeam') {
     if (!playInputState.psybeamMiddleHold) playInputState.psybeamMiddleHold = { pulse: 0 };
     playInputState.psybeamMiddleHold.pulse += dt * 7.2;
   } else {
@@ -1137,24 +1274,24 @@ export function updatePlayPointerCombat(dt, player, data) {
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) leftThundershockStreamedThisPress = true;
   }
 
-  if (rightHeld && !mod && rmb === 'flamethrower') {
+  if (virtRight && !mod && rmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) rightFlameStreamedThisPress = true;
   }
-  if (rightHeld && !mod && rmb === 'fireSpin') {
+  if (virtRight && !mod && rmb === 'fireSpin') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     tickFireSpinHold(player, dt, pushParticle, playInputState.chargeRight01 || 0);
   }
-  if (rightHeld && !mod && rmb === 'hydroPump') {
+  if (virtRight && !mod && rmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, player)) rightWaterStreamedThisPress = true;
   }
-  if (rightHeld && !mod && (rmb === 'bubbleBeam' || rmb === 'surf')) {
+  if (virtRight && !mod && (rmb === 'bubbleBeam' || rmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) rightBubbleBeamStreamedThisPress = true;
   }
   if (
-    rightHeld &&
+    virtRight &&
     !mod &&
     (rmb === 'prismaticLaser' ||
       rmb === 'solarBeam' ||
@@ -1164,37 +1301,37 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) rightPrismaticStreamedThisPress = true;
   }
-  if (rightHeld && !mod && rmb === 'steelBeam') {
+  if (virtRight && !mod && rmb === 'steelBeam') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, player)) rightSteelBeamStreamedThisPress = true;
   }
-  if (rightHeld && !mod && rmb === 'waterCannon') {
+  if (virtRight && !mod && rmb === 'waterCannon') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerWaterCannonStreamPuff(sx, sy, tx, ty, player)) rightWaterCannonStreamedThisPress = true;
   }
-  if (rightHeld && !mod && rmb === 'thunderShock') {
+  if (virtRight && !mod && rmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) rightThundershockStreamedThisPress = true;
   }
 
-  if (middleHeld && !mod && mmb === 'flamethrower') {
+  if (virtMiddle && !mod && mmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, player)) middleFlameStreamedThisPress = true;
   }
-  if (middleHeld && !mod && mmb === 'fireSpin') {
+  if (virtMiddle && !mod && mmb === 'fireSpin') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     tickFireSpinHold(player, dt, pushParticle, playInputState.chargeMmb01 || 0);
   }
-  if (middleHeld && !mod && mmb === 'hydroPump') {
+  if (virtMiddle && !mod && mmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, player)) middleWaterStreamedThisPress = true;
   }
-  if (middleHeld && !mod && (mmb === 'bubbleBeam' || mmb === 'surf')) {
+  if (virtMiddle && !mod && (mmb === 'bubbleBeam' || mmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerBubbleBeamStreamPuff(sx, sy, tx, ty, player)) middleBubbleBeamStreamedThisPress = true;
   }
   if (
-    middleHeld &&
+    virtMiddle &&
     !mod &&
     (mmb === 'prismaticLaser' ||
       mmb === 'solarBeam' ||
@@ -1204,38 +1341,38 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerPrismaticStreamPuff(sx, sy, tx, ty, player)) middlePrismaticStreamedThisPress = true;
   }
-  if (middleHeld && !mod && mmb === 'steelBeam') {
+  if (virtMiddle && !mod && mmb === 'steelBeam') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerSteelBeamStreamPuff(sx, sy, tx, ty, player)) middleSteelBeamStreamedThisPress = true;
   }
-  if (middleHeld && !mod && mmb === 'waterCannon') {
+  if (virtMiddle && !mod && mmb === 'waterCannon') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerWaterCannonStreamPuff(sx, sy, tx, ty, player)) middleWaterCannonStreamedThisPress = true;
   }
-  if (middleHeld && !mod && mmb === 'thunderShock') {
+  if (virtMiddle && !mod && mmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) middleThundershockStreamedThisPress = true;
   }
 
   const prismaticLaserStreamHeld =
     !!(virtLeft && !mod && lmb === 'prismaticLaser') ||
-    !!(rightHeld && !mod && rmb === 'prismaticLaser') ||
-    !!(middleHeld && !mod && mmb === 'prismaticLaser');
+    !!(virtRight && !mod && rmb === 'prismaticLaser') ||
+    !!(virtMiddle && !mod && mmb === 'prismaticLaser');
   updatePlayerPrismaticMergedBeamVisual(prismaticLaserStreamHeld, sx, sy, tx, ty, player);
 
   const steelBeamStreamHeld =
     !!(virtLeft && !mod && lmb === 'steelBeam') ||
-    !!(rightHeld && !mod && rmb === 'steelBeam') ||
-    !!(middleHeld && !mod && mmb === 'steelBeam');
+    !!(virtRight && !mod && rmb === 'steelBeam') ||
+    !!(virtMiddle && !mod && mmb === 'steelBeam');
   updatePlayerSteelBeamMergedBeamVisual(steelBeamStreamHeld, sx, sy, tx, ty, player);
 
   const waterCannonStreamHeld =
     !!(virtLeft && !mod && lmb === 'waterCannon') ||
-    !!(rightHeld && !mod && rmb === 'waterCannon') ||
-    !!(middleHeld && !mod && mmb === 'waterCannon');
+    !!(virtRight && !mod && rmb === 'waterCannon') ||
+    !!(virtMiddle && !mod && mmb === 'waterCannon');
   updatePlayerWaterCannonMergedBeamVisual(waterCannonStreamHeld, sx, sy, tx, ty, player);
 
-  /** First held slot L→R→M with a charge-tiered field move (4-bar meter on canvas). */
+  /** First held slot L→R→M with a charge-tiered field move (4-bar meter on canvas; Earthquake uses 5). */
   let fieldChargeUiActive = null;
   if (virtLeft && !mod && !player._strengthCarry) {
     const pL = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
@@ -1243,13 +1380,13 @@ export function updatePlayPointerCombat(dt, player, data) {
       fieldChargeUiActive = { moveId: lmb, charge01: pL, slot: 'l' };
     }
   }
-  if (!fieldChargeUiActive && rightHeld && !mod) {
+  if (!fieldChargeUiActive && virtRight && !mod) {
     const pR = Math.max(0, Math.min(1, Number(playInputState.chargeRight01) || 0));
     if (fieldMoveUsesChargeMeter(rmb) && pR > 0.005) {
       fieldChargeUiActive = { moveId: rmb, charge01: pR, slot: 'r' };
     }
   }
-  if (!fieldChargeUiActive && middleHeld && !mod) {
+  if (!fieldChargeUiActive && virtMiddle && !mod) {
     const pM = Math.max(0, Math.min(1, Number(playInputState.chargeMmb01) || 0));
     if (fieldMoveUsesChargeMeter(mmb) && pM > 0.005) {
       fieldChargeUiActive = { moveId: mmb, charge01: pM, slot: 'm' };
@@ -1262,8 +1399,8 @@ export function updatePlayPointerCombat(dt, player, data) {
   // cursor. The publisher gates on L2+ internally so Level 1 tap stays stealth.
   const thunderHolders = [
     { held: virtLeft && !mod && !player._strengthCarry, moveId: lmb, ownerId: 'lmb', charge01: playInputState.chargeLeft01 || 0 },
-    { held: rightHeld && !mod, moveId: rmb, ownerId: 'rmb', charge01: playInputState.chargeRight01 || 0 },
-    { held: middleHeld && !mod, moveId: mmb, ownerId: 'mmb', charge01: playInputState.chargeMmb01 || 0 }
+    { held: virtRight && !mod, moveId: rmb, ownerId: 'rmb', charge01: playInputState.chargeRight01 || 0 },
+    { held: virtMiddle && !mod, moveId: mmb, ownerId: 'mmb', charge01: playInputState.chargeMmb01 || 0 }
   ];
   for (const { held, moveId, ownerId, charge01 } of thunderHolders) {
     if (held && moveIdIsThunder(moveId)) {
@@ -1274,6 +1411,8 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
 
   prevGamepadFieldLmbHeld = gpLmb;
+  prevGamepadFieldRmbHeld = gpRmb;
+  prevGamepadFieldMmbHeld = gpMmb;
 }
 
 /**
@@ -1343,9 +1482,10 @@ export function installPlayPointerCombat(deps) {
         fieldWheelMouseClientY = Number(e.clientY) || fieldWheelMouseClientY;
         leftHeld = true;
         if (!playInputState.gamepadFieldLmbHeld) {
-          initLeftCombatPressFromPointerOrGamepad(sh);
+          initLeftCombatPressFromPointerOrGamepad(sh, true);
         } else {
           leftShiftAtDown = sh;
+          leftCombatAimIgnoreMouse = false;
         }
         canvas.setPointerCapture?.(e.pointerId);
       } else if (e.button === 2) {
@@ -1421,6 +1561,7 @@ export function installPlayPointerCombat(deps) {
     if (!playInputState.gamepadFieldLmbHeld) {
       playInputState.chargeLeft01 = 0;
       playInputState.psybeamLeftHold = null;
+      leftCombatAimIgnoreMouse = false;
     }
     playInputState.chargeRight01 = 0;
     playInputState.chargeMmb01 = 0;
@@ -1439,6 +1580,7 @@ export function installPlayPointerCombat(deps) {
   window.addEventListener('blur', () => {
     bindingWheelArmed = false;
     bindingWheelSlotIdx = -1;
+    leftCombatAimIgnoreMouse = false;
     dismissAttackWheelIfOpen();
   });
 }

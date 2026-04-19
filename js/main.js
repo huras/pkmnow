@@ -89,6 +89,7 @@ import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
+import { installMinimapSaveModal } from './main/minimap-save-modal.js';
 import { stepMinimapZoom } from './render/render-minimap.js';
 import {
   advanceWorldHours,
@@ -328,12 +329,25 @@ configureTileDebugModal({
 
 const minimapAudioUi = installMinimapAudioUi();
 const minimapHudPopovers = installMinimapHudPopovers();
+const minimapSaveModal = installMinimapSaveModal({
+  getCurrentData: () => currentData,
+  getPlayer: () => player
+});
 installPlayHelpWikiModal({
   forceCloseMinimapAudioPopover: () => {
     minimapAudioUi.forceCloseMinimapAudioPopover();
     minimapHudPopovers.forceCloseAllPopovers();
+    minimapSaveModal.forceClose();
   }
 });
+
+function escapeFromPlayOrCloseOverlays() {
+  if (minimapSaveModal.isOpen()) {
+    minimapSaveModal.forceClose();
+    return;
+  }
+  btnBackToMap?.click?.();
+}
 
 let lastHudTileKey = '';
 let lastHudMs = 0;
@@ -349,11 +363,23 @@ function detailLabelFromItemKey(itemKey) {
 }
 
 function detailPreviewHtmlForInfoBar(itemKey) {
-  return detailScatterGridPreviewHtml(itemKey, 14, '');
+  return detailScatterGridPreviewHtml(
+    itemKey,
+    14,
+    '',
+    'vertical-align:middle;margin-right:6px;line-height:0',
+    { seamless: true, gapPx: 0 }
+  );
 }
 
 function detailPreviewHtmlForImmersiveHint(itemKey) {
-  return detailScatterGridPreviewHtml(itemKey, 15, 'play-immersive-hint__sprite');
+  return detailScatterGridPreviewHtml(
+    itemKey,
+    15,
+    'play-immersive-hint__sprite',
+    'vertical-align:middle;line-height:0',
+    { seamless: true, gapPx: 0 }
+  );
 }
 
 /** First frame of faint (or idle) PMD sheet for Strength HUD. */
@@ -643,7 +669,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   getPlayFpsEl: () => playFpsEl,
   getPlayFpsCompact: () => isPlayImmersiveMinimalUi(),
   player,
-  onEscapePlay: () => btnBackToMap?.click?.(),
+  onEscapePlay: escapeFromPlayOrCloseOverlays,
   advanceWorldTime: (dt) => {
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
@@ -670,7 +696,7 @@ registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,
   refreshPlayModeInfoBar,
-  onEscapePlay: () => btnBackToMap?.click?.(),
+  onEscapePlay: escapeFromPlayOrCloseOverlays,
   onPlaySocialAction: (action) => {
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);
@@ -897,6 +923,7 @@ btnBackToMap?.addEventListener('click', () => {
   else minimap?.classList.add('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
+  minimapSaveModal.forceClose();
   infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
   playDetailColliderHighlight = null;
 

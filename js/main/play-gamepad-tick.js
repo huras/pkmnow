@@ -6,7 +6,8 @@ import { attackWheel } from '../ui/attack-wheel.js';
 import { dualBindWheel } from '../ui/dual-bind-wheel.js';
 import {
   dismissAttackWheelIfOpen,
-  handleGamepadBindWheelSlotPress
+  handleGamepadBindWheelSlotPress,
+  tryGamepadWheelBindCastFromFacing
 } from './play-mouse-combat.js';
 
 /**
@@ -38,6 +39,8 @@ export function tickPlayGamepadFrame(api) {
     playInputState.gamepadWheelAimActive = false;
     playInputState.gamepadRunHeld = false;
     playInputState.gamepadFieldLmbHeld = false;
+    playInputState.gamepadFieldRmbHeld = false;
+    playInputState.gamepadFieldMmbHeld = false;
     return { inX: keyboardMoveX, inY: keyboardMoveY };
   }
 
@@ -58,7 +61,7 @@ export function tickPlayGamepadFrame(api) {
       window.dispatchEvent(new CustomEvent('attack-wheel-dismiss'));
     }
   } else {
-    if (sm.risingY && !attackWheel.isOpen) {
+    if (sm.risingY && !attackWheel.isOpen && !sm.heldLB) {
       tryJumpPlayer(getCurrentData());
     }
     if (sm.risingL3 && !attackWheel.isOpen) {
@@ -81,16 +84,24 @@ export function tickPlayGamepadFrame(api) {
       }
     }
 
-    if (sm.risingX) {
-      if (attackWheel.isOpen) dismissAttackWheelIfOpen();
-      else {
+    // PS Square (API "X"): dismiss single bind wheel only — not grab (grab is Circle).
+    if (sm.risingX && attackWheel.isOpen) {
+      dismissAttackWheelIfOpen();
+    } else if (sm.heldLB && sm.risingX && !dualBindWheel.isOpen) {
+      tryGamepadWheelBindCastFromFacing(player, getCurrentData(), 'up');
+    }
+    if (sm.heldLB && sm.risingY && !dualBindWheel.isOpen && !attackWheel.isOpen) {
+      tryGamepadWheelBindCastFromFacing(player, getCurrentData(), 'down');
+    }
+
+    // PS Circle (API "B"): confirm single bind wheel, else Strength/interact (same role as Key E).
+    if (sm.risingB) {
+      if (attackWheel.isOpen) {
+        attackWheel.confirmFromGamepadCircle();
+      } else {
         const data = getCurrentData();
         if (data) tryStrengthInteractKeyE(player, data);
       }
-    }
-
-    if (sm.risingB && attackWheel.isOpen) {
-      attackWheel.confirmFromGamepadCircle();
     }
   }
 
@@ -98,8 +109,11 @@ export function tickPlayGamepadFrame(api) {
   playInputState.gamepadRunHeld =
     !!sm.connected && !!sm.heldA && !dualBindWheel.isOpen;
   // PS Square = standard **X** (index 2) — same slot as mouse LMB / Digit1 bind wheel.
+  // LB+L1 held: Square is reserved for wheel-up bind (slot 4), not LMB slot 1.
   playInputState.gamepadFieldLmbHeld =
-    !!sm.connected && !!sm.heldX && !dualBindWheel.isOpen;
+    !!sm.connected && !!sm.heldX && !sm.heldLB && !dualBindWheel.isOpen;
+  playInputState.gamepadFieldRmbHeld = !!sm.connected && !!sm.heldRT && !dualBindWheel.isOpen;
+  playInputState.gamepadFieldMmbHeld = !!sm.connected && !!sm.heldLT && !dualBindWheel.isOpen;
 
   if (sm.risingStart || sm.risingBack) {
     if (dualBindWheel.isOpen) {

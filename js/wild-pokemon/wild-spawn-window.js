@@ -60,7 +60,33 @@ export const SKY_SPECIES = new Set([
   226, // Mantine
   227, // Skarmory
   249, // Lugia
-  250 // Ho-Oh
+  250, // Ho-Oh
+  267, // Beautifly
+  276,
+  277, // Taillow / Swellow
+  278,
+  279, // Wingull / Pelipper
+  284, // Masquerain
+  329,
+  330, // Vibrava / Flygon
+  333,
+  334, // Swablu / Altaria
+  357, // Tropius
+  373, // Salamence
+  384, // Rayquaza
+  396,
+  397,
+  398, // Starly line
+  425,
+  426, // Drifloon / Drifblim
+  430, // Honchkrow
+  441, // Chatot
+  458, // Mantyke
+  468, // Togekiss
+  469, // Yanmega
+  472, // Gliscor
+  479, // Rotom
+  487 // Giratina
 ]);
 
 export const WILD_WINDOW_RADIUS = 2;

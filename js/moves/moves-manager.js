@@ -52,6 +52,7 @@ import {
   isChargeStrongAttackEligible,
   getWeakPartialChargeT,
   getChargeLevel,
+  getEarthquakeChargeLevel,
   CHARGE_FIELD_RELEASE_MIN_01
 } from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
@@ -91,15 +92,16 @@ import {
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
 } from './moves-player-config.js';
 
-/** Cooldown after Earthquake, by charge level (4-bar meter). */
+/** Cooldown after Earthquake, by charge level (5-bar meter on play HUD). */
 const PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL = Object.freeze({
   1: 0.92,
   2: 1.12,
   3: 1.38,
-  4: 1.68
+  4: 1.68,
+  5: 2.02
 });
 
-const EARTHQUAKE_JUMP_SCALE_BY_LEVEL = Object.freeze([1, 1.08, 1.2, 1.38]);
+const EARTHQUAKE_JUMP_SCALE_BY_LEVEL = Object.freeze([1, 1.08, 1.2, 1.38, 1.56]);
 
 /** Latest `data` from `updateMoves` — used when enqueuing Thunderbolt L4 chain hops (tree search). */
 let lastMovesTickData = null;
@@ -944,7 +946,7 @@ export function castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEn
 function tryBeginPlayerEarthquakeJump(sourceEntity, charge01) {
   if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
   const cp = Math.max(0, Math.min(1, charge01 || 0));
-  const level = Math.max(1, Math.min(4, getChargeLevel(cp) || 1));
+  const level = Math.max(1, Math.min(5, getEarthquakeChargeLevel(cp) || 1));
   const scale = EARTHQUAKE_JUMP_SCALE_BY_LEVEL[level - 1] ?? 1;
   if (!tryJumpPlayer(null, { vzScale: scale })) return false;
   sourceEntity.earthquakeAwaitingLand = true;
@@ -962,14 +964,14 @@ export function castEarthquakeMove(sourceX, sourceY, targetX, targetY, sourceEnt
   return true;
 }
 
-/** Charged Earthquake — jump height scales with 4-bar level; landing radius + aftershocks scale with charge. */
+/** Charged Earthquake — jump height scales with 5-bar level; landing radius + aftershocks scale with charge. */
 export function castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
   if (playerEarthquakeCooldown > 0) return false;
   const cp = Math.max(CHARGE_FIELD_RELEASE_MIN_01, Math.min(1, charge01 || 0));
   if (!tryBeginPlayerEarthquakeJump(sourceEntity, cp)) return false;
-  const level = Math.max(1, Math.min(4, getChargeLevel(cp) || 1));
+  const level = Math.max(1, Math.min(5, getEarthquakeChargeLevel(cp) || 1));
   playerEarthquakeCooldown =
-    PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[level] ?? PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4];
+    PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[level] ?? PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[5];
   bumpPlayerMoveCastVisual(sourceEntity);
   return true;
 }
@@ -1267,7 +1269,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
         PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[1],
         PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[2],
         PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[3],
-        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4]
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[5]
       );
     case 'silkShoot':
       return 0.72;

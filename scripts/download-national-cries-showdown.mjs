@@ -1,8 +1,10 @@
 /**
- * Downloads national dex #152–251 cries (MP3) from Pokemon Showdown CDN into audio/cries/national/.
+ * Downloads national dex cries (MP3, dex > 151) from Pokemon Showdown CDN into audio/cries/national/.
  * Gen 1 cries stay in audio/cries/gen1/ (see scripts/download-gen1-cries-showdown.ps1).
  *
- * Usage: node scripts/download-national-cries-showdown.mjs
+ * Usage:
+ *   node scripts/download-national-cries-showdown.mjs   # 152 .. NATIONAL_DEX_MAX
+ *   node scripts/download-national-cries-showdown.mjs --start 252 --end 386
  */
 import fs from 'fs';
 import path from 'path';
@@ -15,14 +17,50 @@ const destDir = path.join(root, 'audio', 'cries', 'national');
 
 const SHOWDOWN_BASE = 'https://play.pokemonshowdown.com/audio/cries';
 
-const START_DEX = 152;
-const END_DEX = 251;
+/** @returns {{ start?: number, end?: number }} only keys present when flags passed */
+function parseDexRangeArgv(argv) {
+  /** @type {{ start?: number, end?: number }} */
+  const o = {};
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--start' && argv[i + 1] != null) {
+      o.start = Number(argv[++i]);
+    } else if (a === '--end' && argv[i + 1] != null) {
+      o.end = Number(argv[++i]);
+    }
+  }
+  return o;
+}
 
 async function main() {
   fs.mkdirSync(destDir, { recursive: true });
-  const { getNationalShowdownCrySlug, NATIONAL_DEX_LINES } = await import(
+  const { getNationalShowdownCrySlug, NATIONAL_DEX_LINES, NATIONAL_DEX_MAX } = await import(
     pathToFileURL(path.join(root, 'js', 'pokemon', 'national-dex-registry.js')).href
   );
+
+  const parsed = parseDexRangeArgv(process.argv);
+  let START_DEX = parsed.start ?? 152;
+  let END_DEX = parsed.end ?? NATIONAL_DEX_MAX;
+  START_DEX = Math.floor(Number(START_DEX));
+  END_DEX = Math.floor(Number(END_DEX));
+  if (!Number.isFinite(START_DEX) || !Number.isFinite(END_DEX)) {
+    console.error('Invalid --start/--end');
+    process.exit(1);
+  }
+  if (START_DEX < 152) {
+    console.error('Use audio/cries/gen1/ for dex <= 151 (--start must be >= 152).');
+    process.exit(1);
+  }
+  if (START_DEX > END_DEX) {
+    console.error('--start must be <= --end');
+    process.exit(1);
+  }
+  if (END_DEX > NATIONAL_DEX_MAX) {
+    console.error(`--end (${END_DEX}) exceeds NATIONAL_DEX_MAX (${NATIONAL_DEX_MAX}); extend the registry first.`);
+    process.exit(1);
+  }
+
+  console.log(`Downloading national cries dex ${START_DEX}..${END_DEX} -> ${destDir}`);
 
   const manifest = [];
   let ok = 0;

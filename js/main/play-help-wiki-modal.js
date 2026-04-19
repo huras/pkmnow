@@ -19,13 +19,67 @@ const ARTICLES = [
     title: 'Movimento',
     html: `
       <h2 class="play-help-wiki__h2">Movimento</h2>
+      <p class="play-help-wiki__note">Teclado e controle podem ser usados ao mesmo tempo. O artigo <strong>Gamepad</strong> lista todos os botões do controle no modo jogo.</p>
       <ul class="play-help-wiki__ul">
         <li><strong>WASD</strong> ou <strong>setas</strong> — andar em 8 direções (diagonal normalizada).</li>
-        <li><strong>Duplo toque</strong> na mesma direção cardinal (dentro de ~320 ms), tipo <em>Kirby</em> — ativa <strong>corrida</strong> até parar de se mover.</li>
-        <li><strong>Espaço</strong> — <strong>pulo</strong>. Você tem <strong>pulo duplo</strong> (2 pulos no ar) por padrão; Pokémon <strong>Voador</strong> ganha até <strong>6 pulos</strong> consecutivos.</li>
-        <li><strong>F</strong> — alterna <strong>voo criativo</strong> (Pokémon com tipo Voador). Com voo: Espaço / Shift ajustam altitude; o HUD indica se o voo está ligado.</li>
-        <li><strong>Esc</strong> — sai do modo jogo (volta ao mapa global), exceto quando a ajuda está aberta — aí fecha só a ajuda.</li>
+        <li><strong>Duplo toque</strong> na mesma direção cardinal (dentro de ~320 ms), estilo <em>Kirby</em> — ativa <strong>corrida</strong> até você parar de se mover (só teclado).</li>
+        <li><strong>Espaço</strong> — <strong>pulo</strong> no teclado. Você tem <strong>pulo duplo</strong> (2 no ar) por padrão; Pokémon <strong>Voador</strong> ganha até <strong>6 pulos</strong> consecutivos.</li>
+        <li><strong>F</strong> — alterna <strong>voo criativo</strong> (Pokémon com tipo Voador). Com voo ativo: <kbd>Space</kbd> sobe e <kbd>Shift</kbd> desce em altitude; o HUD indica se o voo está ligado.</li>
+        <li><strong>Esc</strong> — sai do modo jogo (volta ao mapa global). Se este menu de ajuda estiver aberto, <kbd>Esc</kbd> fecha só a ajuda.</li>
       </ul>
+    `
+  },
+  {
+    id: 'gamepad',
+    title: 'Gamepad',
+    html: `
+      <h2 class="play-help-wiki__h2">Controle (modo jogo)</h2>
+      <p class="play-help-wiki__p">O jogo usa a <strong>Gamepad API</strong> do navegador (nomes <em>Xbox</em> nos índices). Na coluna PS, o botão físico costuma ser o indicado — pode variar um pouco entre navegador e driver.</p>
+
+      <h3 class="play-help-wiki__h3">Movimento e corpo</h3>
+      <table class="play-help-wiki__table">
+        <thead><tr><th>PS (típico)</th><th>API / Xbox</th><th>Efeito</th></tr></thead>
+        <tbody>
+          <tr><td>Analógico esquerdo</td><td>Eixos 0–1</td><td>Andar (mescla com WASD/setas).</td></tr>
+          <tr><td>Segurar <strong>✕</strong> (Cross)</td><td>Botão <strong>A</strong> (0)</td><td><strong>Corrida</strong> enquanto você se move (equivalente ao sprint por duplo toque no teclado).</td></tr>
+          <tr><td><strong>△</strong> (Triangle)</td><td>Botão <strong>Y</strong> (3)</td><td><strong>Pulo</strong> (toque). Não pula se a roda simples de bind estiver aberta.</td></tr>
+          <tr><td><strong>L3</strong> (clique no analógico esquerdo)</td><td>Botão 10</td><td>Liga / desliga <strong>voo criativo</strong> (só espécies com tipo Voador). Com voo: segure <strong>✕</strong> para subir e <strong>LB</strong> para descer (espelha Espaço / Shift).</td></tr>
+          <tr><td><strong>LB</strong></td><td>Botão 4</td><td>Espelha <kbd>Shift</kbd> — cavar / descer no voo criativo.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="play-help-wiki__h3">Combate (o que já está no controle)</h3>
+      <table class="play-help-wiki__table">
+        <thead><tr><th>PS</th><th>API</th><th>Slot / efeito</th></tr></thead>
+        <tbody>
+          <tr><td>Segurar <strong>□</strong> (Square)</td><td>Botão <strong>X</strong> (2)</td><td>Mesmo que <strong>LMB</strong> — golpe do slot 1 (segure para carregar / stream, solte para soltar).</td></tr>
+          <tr><td>Toque <strong>○</strong> (Circle)</td><td>Botão <strong>B</strong> (1)</td><td>Mesmo que <kbd>E</kbd> — <strong>força / grab</strong> (pegar pedra, cristal, etc.). Com a <strong>roda simples</strong> de bind aberta (teclas 1–5), <strong>○</strong> <strong>confirma</strong> a escolha.</td></tr>
+          <tr><td>Toque <strong>□</strong> com roda simples aberta</td><td>—</td><td><strong>Fecha</strong> a roda sem gravar (cancelar).</td></tr>
+        </tbody>
+      </table>
+      <p class="play-help-wiki__p"><strong>RMB, MMB e gatilhos</strong> para atacar no campo ainda são principalmente <strong>mouse</strong> no PC; o foco do controle hoje é movimento + slot 1 + interação.</p>
+
+      <h3 class="play-help-wiki__h3">Trocar golpes nos slots (controle)</h3>
+      <p class="play-help-wiki__p">Abre a <strong>roda dupla</strong> (tipo à esquerda, golpe à direita): o mundo fica em câmera lenta exceto a UI. <strong>Analógico esquerdo</strong> escolhe o <em>tipo</em>; <strong>direito</strong> escolhe o <em>golpe</em> daquele tipo. <strong>○</strong> confirma; <strong>□</strong> ou <strong>△</strong> cancelam. <strong>Start</strong> ou <strong>Back</strong> também fecham essa roda sem sair do jogo.</p>
+      <table class="play-help-wiki__table">
+        <thead><tr><th>Entrada</th><th>Slot no teclado</th><th>Atalho no painel</th></tr></thead>
+        <tbody>
+          <tr><td><strong>D-pad ↑</strong></td><td>Slot 1 (= LMB / □ no combate)</td><td>□</td></tr>
+          <tr><td><strong>D-pad →</strong></td><td>Slot 2 (= RMB)</td><td>R2</td></tr>
+          <tr><td><strong>D-pad ←</strong></td><td>Slot 3 (= MMB)</td><td>L2</td></tr>
+          <tr><td><strong>D-pad ↓</strong></td><td>Slot 4 (= roda do mouse ↑)</td><td>L1 + □</td></tr>
+          <tr><td><strong>R3</strong> (clique analógico direito)</td><td>Slot 5 (= roda ↓)</td><td>L1 + △</td></tr>
+        </tbody>
+      </table>
+      <p class="play-help-wiki__p">No teclado, <kbd>1</kbd>–<kbd>5</kbd> ainda abrem a <strong>roda simples</strong> (uma só) para rebind com o mouse — é outro fluxo, pensado para PC.</p>
+
+      <h3 class="play-help-wiki__h3">Sistema e menu</h3>
+      <table class="play-help-wiki__table">
+        <thead><tr><th>Entrada</th><th>Efeito</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Start</strong> ou <strong>Back</strong> (Select)</td><td>Sai do modo jogo (volta ao mapa). Se a <strong>roda dupla</strong> estiver aberta, só fecha a roda.</td></tr>
+        </tbody>
+      </table>
     `
   },
   {
@@ -34,18 +88,18 @@ const ARTICLES = [
     html: `
       <h2 class="play-help-wiki__h2">Combate e golpes</h2>
       <ul class="play-help-wiki__ul">
-        <li><strong>LMB</strong> (clique esquerdo) — golpe de campo principal (Tackle, Cut, etc.).</li>
-        <li><strong>Segure LMB</strong> para <strong>carregar o golpe</strong> (estilo Zelda): quanto mais tempo segurar, mais dano/alcance; <strong>solte</strong> para liberar a versão carregada.</li>
-        <li><strong>Segure <kbd>1</kbd></strong> — abre a <strong>roda de binding</strong> para escolher qual golpe vai no slot do clique esquerdo (e nos outros slots 2–5 mantendo a tecla correspondente).</li>
-        <li><strong>Cut</strong> — combo de 3 cortes encadeados no alvo.</li>
-        <li><strong>E</strong> — interação de <strong>força / grab</strong>: pega e solta pedras, cristais e objetos (bioma <em>marrom</em> tem muita pedra quebrável). Com algo nas mãos, <strong>solte LMB</strong> para arremessar.</li>
-        <li><strong>RMB</strong> (clique direito) — slot secundário; normalmente um golpe à distância (ex.: <em>fogo</em> / sopro / raio). Segure para stream contínuo em moves que suportam (ex.: Flamethrower).</li>
-        <li><strong>MMB</strong> (botão do meio) — Ultimate.</li>
-        <li><strong>Wheel ↑ / Wheel ↓</strong> — slots 4 e 5 (scroll do mouse). São moves extras do moveset (ex.: Confusion, Bubble).</li>
-        <li><strong>Digit1–Digit5</strong> — segure a tecla para abrir a <strong>roda de binding</strong> do slot correspondente (1=LMB, 2=RMB, 3=MMB, 4=Wheel↑, 5=Wheel↓). Escolha o novo move com o mouse e solte a tecla para gravar.</li>
-        <li><strong>Ctrl esquerdo</strong> — modificador de combate: enquanto segurado, LMB/RMB/MMB <strong>não disparam</strong> (bom pra parar um stream contínuo sem soltar o botão).</li>
+        <li><strong>LMB</strong> (clique esquerdo) ou, no controle, <strong>segurar Square (□)</strong> — golpe de campo do <strong>slot 1</strong> (Tackle, Cut, etc.).</li>
+        <li><strong>Segure LMB</strong> (ou □) para <strong>carregar</strong> quando o move suporta (estilo Zelda): solte para liberar. Moves em <em>stream</em> continuam enquanto o botão ficar pressionado.</li>
+        <li><strong><kbd>1</kbd> … <kbd>5</kbd></strong> — ao pressionar, abre a <strong>roda simples</strong> de binding daquele slot (1 = LMB, 2 = RMB, 3 = MMB, 4 = roda ↑, 5 = roda ↓). Escolha tipo → golpe com o <strong>mouse</strong> e confirme clicando no golpe ou use o fluxo do teclado/mouse descrito na roda.</li>
+        <li><strong>Controle</strong> — use o <strong>D-pad / R3</strong> para abrir a <strong>roda dupla</strong> de bind (ver artigo <strong>Gamepad</strong>).</li>
+        <li><strong>Cut</strong> — combo de até 3 cortes encadeados no alvo.</li>
+        <li><strong>E</strong> ou <strong>○</strong> (Circle) no controle — <strong>força / grab</strong>: pega e solta pedras, cristais e objetos. Com carga nas mãos, <strong>soltar LMB</strong> (ou soltar □) arremessa na direção do cursor.</li>
+        <li><strong>RMB</strong> — slot 2; em geral golpe à distância. Segure para charge ou stream conforme o move.</li>
+        <li><strong>MMB</strong> — slot 3, em geral Ultimate.</li>
+        <li><strong>Roda do mouse ↑ / ↓</strong> — slots 4 e 5 (moves extras do moveset).</li>
+        <li><strong>Ctrl esquerdo</strong> — modificador: enquanto segurado, LMB/RMB/MMB <strong>não disparam</strong> (útil para parar stream sem soltar o botão).</li>
       </ul>
-      <p class="play-help-wiki__p"><em>Observação:</em> alguns moves aceitam stream (segurar) em vez de charge — o HUD mostra o comportamento do slot ativo.</p>
+      <p class="play-help-wiki__p"><em>Obs.:</em> o HUD de carga mostra o comportamento do slot ativo. Detalhes de controle: artigo <strong>Gamepad</strong>.</p>
     `
   },
   {
@@ -53,7 +107,7 @@ const ARTICLES = [
     title: 'Atalhos (cheatsheet)',
     html: `
       <h2 class="play-help-wiki__h2">Atalhos — referência rápida</h2>
-      <p class="play-help-wiki__p">Lista consolidada de todos os atalhos reconhecidos no modo jogo. Atalhos não disparam enquanto você estiver digitando num campo de texto (seed, busca, etc.).</p>
+      <p class="play-help-wiki__p">Atalhos do modo jogo. Não disparam enquanto o foco está num campo de texto (seed, busca, etc.). <strong>Controle:</strong> veja o artigo <strong>Gamepad</strong> (tabelas completas).</p>
 
       <h3 class="play-help-wiki__h3">Movimento</h3>
       <table class="play-help-wiki__table">
@@ -61,10 +115,10 @@ const ARTICLES = [
         <tbody>
           <tr><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> ou setas</td><td>Andar em 8 direções (diagonal normalizada).</td></tr>
           <tr><td>Duplo toque numa cardinal</td><td>Corrida (sprint). Janela ~320 ms.</td></tr>
-          <tr><td><kbd>Space</kbd></td><td>Pulo. Duplo no chão, até 6 pulos em Pokémon Voador.</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>Pulo (teclado). Duplo no chão; até 6 pulos em Pokémon Voador.</td></tr>
           <tr><td><kbd>Shift</kbd> (L/R)</td><td>Desce altitude em voo criativo.</td></tr>
-          <tr><td><kbd>F</kbd></td><td>Liga/desliga voo criativo (só em espécies Voadoras).</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>Sai do modo jogo (ou fecha o modal aberto).</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Liga / desliga voo criativo (só espécies Voadoras).</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Sai do modo jogo, ou fecha modal (ajuda, etc.). Com a roda dupla de bind do controle aberta, <strong>Start/Back</strong> no gamepad fecha só a roda.</td></tr>
         </tbody>
       </table>
 
@@ -72,13 +126,13 @@ const ARTICLES = [
       <table class="play-help-wiki__table">
         <thead><tr><th>Entrada</th><th>Slot</th><th>Efeito</th></tr></thead>
         <tbody>
-          <tr><td>LMB (clique esquerdo)</td><td>Slot 1</td><td>Tap dispara; segurar carrega (estilo Zelda), soltar libera o golpe carregado.</td></tr>
-          <tr><td>RMB (clique direito)</td><td>Slot 2</td><td>Golpe secundário (geralmente ranged / fogo). Segurar = charge ou stream, conforme o move.</td></tr>
+          <tr><td>LMB ou Square (□) no controle</td><td>Slot 1</td><td>Tap dispara; segurar carrega ou mantém stream; soltar libera.</td></tr>
+          <tr><td>RMB (clique direito)</td><td>Slot 2</td><td>Golpe secundário (geralmente ranged). Segurar = charge ou stream.</td></tr>
           <tr><td>MMB (botão do meio)</td><td>Slot 3</td><td>Ultimate.</td></tr>
-          <tr><td>Wheel ↑ / Wheel ↓</td><td>Slots 4 / 5</td><td>Dispara os moves do scroll para cima / para baixo.</td></tr>
-          <tr><td>Segure <kbd>1</kbd>..<kbd>5</kbd></td><td>Rebind do slot</td><td>Abre a roda após ~170 ms; o cursor do mouse escolhe o move; soltar grava.</td></tr>
-          <tr><td><kbd>E</kbd></td><td>Força / grab</td><td>Pega ou solta pedras / cristais / detalhes; com algo nas mãos, soltar LMB arremessa.</td></tr>
-          <tr><td><kbd>Ctrl</kbd> (esquerdo)</td><td>Modificador</td><td>Enquanto segurado, suprime cast do LMB/RMB/MMB (útil pra parar stream).</td></tr>
+          <tr><td>Wheel ↑ / Wheel ↓</td><td>Slots 4 / 5</td><td>Dispara os moves ligados ao scroll.</td></tr>
+          <tr><td><kbd>1</kbd> … <kbd>5</kbd></td><td>Rebind</td><td>Abre a <strong>roda simples</strong> daquele slot; escolha com o mouse na roda e confirme no golpe (fase “move”).</td></tr>
+          <tr><td><kbd>E</kbd> ou Circle (○)</td><td>Força / grab</td><td>Pega ou solta objetos; com carga, soltar LMB arremessa.</td></tr>
+          <tr><td><kbd>Ctrl</kbd> (esquerdo)</td><td>Modificador</td><td>Enquanto segurado, suprime cast do LMB/RMB/MMB.</td></tr>
         </tbody>
       </table>
 
@@ -158,7 +212,7 @@ const ARTICLES = [
       <h2 class="play-help-wiki__h2">Minimapa</h2>
       <ul class="play-help-wiki__ul">
         <li><strong>Rodapé do minimapa</strong> — <strong>−</strong> / <strong>+</strong> afastam ou aproximam o zoom (mapa inteiro → médio → aproximado → máximo → …). O botão de <strong>expandir</strong> volta ao mapa global. Um selo no painel mostra o nível de zoom atual.</li>
-        <li><strong>Livro</strong> — abre esta ajuda.</li>
+        <li><strong>Livro</strong> — abre esta ajuda (índice com teclado, combate e <strong>Gamepad</strong>).</li>
         <li><strong>Nota musical</strong> — volume BGM, gritos, mute e opção de não mostrar o toast ao trocar de faixa.</li>
         <li><strong>Expandir</strong> (setas nos cantos) — volta ao <strong>mapa global</strong> (mesmo efeito que “Voltar ao mapa” na toolbar).</li>
       </ul>
@@ -220,7 +274,7 @@ const ARTICLES = [
       <ul class="play-help-wiki__ul">
         <li><strong>Verde claro</strong> (campo / grama) — ótimo pra começar: espaço aberto, muitos selvagens de tipos comuns, bom pra testar corrida, pulo duplo e combate básico.</li>
         <li><strong>Verde escuro</strong> (floresta) — denso, com cortes de mato (<em>Cut</em>), rotas de Pokémon planta/bicho; bom pra combo de 3 cortes.</li>
-        <li><strong>Marrom</strong> (rocha / montanha) — bastante coisa de <strong>grab</strong> com <kbd>E</kbd>: pedras pra carregar e arremessar, cristais pra quebrar com Tackle carregado; é o bioma dos Pokémon de <em>Pedra</em> e <em>Lutador</em>.</li>
+        <li><strong>Marrom</strong> (rocha / montanha) — bastante <strong>grab</strong> (<kbd>E</kbd> ou <strong>○</strong> no controle): pedras pra carregar e arremessar, cristais pra quebrar com Tackle carregado; Pokémon de <em>Pedra</em> e <em>Lutador</em>.</li>
       </ul>
       <p class="play-help-wiki__p">Outros biomas (água, neve, deserto, etc.) funcionam, mas ainda estão menos povoados em mecânicas. Use o <strong>botão <code>+</code></strong> no painel do Pokémon para trocar de espécie e casar com o bioma que você escolheu.</p>
     `

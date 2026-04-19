@@ -188,7 +188,7 @@ export class DualBindWheel {
       typeEl.textContent = `${this._groups[tid]?.length || 0} golpes`;
       typeEl.className = `play-dual-bind-wheel__center-type type-${tid}`;
     }
-    if (slice) slice.style.transform = `translate(-50%, -50%) rotate(${(this._leftHover / count) * 360}deg)`;
+    if (slice) slice.style.transform = `translate(-50%, -50%) rotate(${(this._leftHover / count) * 360 - 90}deg)`;
     this.root.querySelectorAll('#dual-left-ring .play-dual-bind-wheel__item').forEach((el, i) => {
       el.classList.toggle('is-hover', i === this._leftHover);
     });
@@ -210,7 +210,7 @@ export class DualBindWheel {
       typeEl.className = `play-dual-bind-wheel__center-type type-${tid}`;
     }
     if (sub) sub.textContent = `Tipo: ${TYPE_LABELS[tid] || tid}`;
-    if (slice) slice.style.transform = `translate(-50%, -50%) rotate(${(this._rightHover / count) * 360}deg)`;
+    if (slice) slice.style.transform = `translate(-50%, -50%) rotate(${(this._rightHover / count) * 360 - 90}deg)`;
     this.root.querySelectorAll('#dual-right-ring .play-dual-bind-wheel__item').forEach((el, i) => {
       el.classList.toggle('is-hover', i === this._rightHover);
     });

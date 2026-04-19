@@ -1,17 +1,18 @@
 /**
- * National Dex registry (Gen 1 + Gen 2): names, encounter lookup, padded dex ids, Showdown cry slugs.
+ * National Dex registry (Gen 1–4 Sinnoh): names, encounter lookup, padded dex ids, Showdown cry slugs.
  * Single source of truth for `NATIONAL_DEX_MAX` and species display names in encounter order.
  *
- * Gen 3 (Hoenn, #252–386): ver `docs/NATIONAL-DEX-PIPELINE.md` — aumentar `NATIONAL_DEX_MAX`,
- * acrescentar bloco `GEN3_LINES`, estender `NATIONAL_DEX_LINES`, overrides de cry se necessário,
- * depois rodar build + cries + import SpriteCollab com `-MaxDex 386`.
+ * Pipeline de assets: `docs/NATIONAL-DEX-PIPELINE.md`.
  */
 
-/** Teto Hoenn (planejamento); ainda não incluído no jogo até `NATIONAL_DEX_MAX` e nomes estarem completos. */
+/** Hoenn cap (dex #386). */
 export const NATIONAL_DEX_HOENN_MAX = 386;
 
-/** @readonly Inclusive national dex cap (Gen 1 + Gen 2). */
-export const NATIONAL_DEX_MAX = 251;
+/** Sinnoh extension cap (dex #493 Arceus). */
+export const NATIONAL_DEX_SINNOH_MAX = 493;
+
+/** @readonly Inclusive national dex cap (Gen 1–4). */
+export const NATIONAL_DEX_MAX = 493;
 
 const GEN1_LINES = `
 Bulbasaur
@@ -276,8 +277,267 @@ Celebi
   .replace(/\r\n/g, '\n')
   .split('\n');
 
+const GEN3_LINES = `
+Treecko
+Grovyle
+Sceptile
+Torchic
+Combusken
+Blaziken
+Mudkip
+Marshtomp
+Swampert
+Poochyena
+Mightyena
+Zigzagoon
+Linoone
+Wurmple
+Silcoon
+Beautifly
+Cascoon
+Dustox
+Lotad
+Lombre
+Ludicolo
+Seedot
+Nuzleaf
+Shiftry
+Taillow
+Swellow
+Wingull
+Pelipper
+Ralts
+Kirlia
+Gardevoir
+Surskit
+Masquerain
+Shroomish
+Breloom
+Slakoth
+Vigoroth
+Slaking
+Nincada
+Ninjask
+Shedinja
+Whismur
+Loudred
+Exploud
+Makuhita
+Hariyama
+Azurill
+Nosepass
+Skitty
+Delcatty
+Sableye
+Mawile
+Aron
+Lairon
+Aggron
+Meditite
+Medicham
+Electrike
+Manectric
+Plusle
+Minun
+Volbeat
+Illumise
+Roselia
+Gulpin
+Swalot
+Carvanha
+Sharpedo
+Wailmer
+Wailord
+Numel
+Camerupt
+Torkoal
+Spoink
+Grumpig
+Spinda
+Trapinch
+Vibrava
+Flygon
+Cacnea
+Cacturne
+Swablu
+Altaria
+Zangoose
+Seviper
+Lunatone
+Solrock
+Barboach
+Whiscash
+Corphish
+Crawdaunt
+Baltoy
+Claydol
+Lileep
+Cradily
+Anorith
+Armaldo
+Feebas
+Milotic
+Castform
+Kecleon
+Shuppet
+Banette
+Duskull
+Dusclops
+Tropius
+Chimecho
+Absol
+Wynaut
+Snorunt
+Glalie
+Spheal
+Sealeo
+Walrein
+Clamperl
+Huntail
+Gorebyss
+Relicanth
+Luvdisc
+Bagon
+Shelgon
+Salamence
+Beldum
+Metang
+Metagross
+Regirock
+Regice
+Registeel
+Latias
+Latios
+Kyogre
+Groudon
+Rayquaza
+Jirachi
+Deoxys
+`
+  .trim()
+  .replace(/\r\n/g, '\n')
+  .split('\n');
+
+const GEN4_LINES = `
+Turtwig
+Grotle
+Torterra
+Chimchar
+Monferno
+Infernape
+Piplup
+Prinplup
+Empoleon
+Starly
+Staravia
+Staraptor
+Bidoof
+Bibarel
+Kricketot
+Kricketune
+Shinx
+Luxio
+Luxray
+Budew
+Roserade
+Cranidos
+Rampardos
+Shieldon
+Bastiodon
+Burmy
+Wormadam
+Mothim
+Combee
+Vespiquen
+Pachirisu
+Buizel
+Floatzel
+Cherubi
+Cherrim
+Shellos
+Gastrodon
+Ambipom
+Drifloon
+Drifblim
+Buneary
+Lopunny
+Mismagius
+Honchkrow
+Glameow
+Purugly
+Chingling
+Stunky
+Skuntank
+Bronzor
+Bronzong
+Bonsly
+Mime Jr.
+Happiny
+Chatot
+Spiritomb
+Gible
+Gabite
+Garchomp
+Munchlax
+Riolu
+Lucario
+Hippopotas
+Hippowdon
+Skorupi
+Drapion
+Croagunk
+Toxicroak
+Carnivine
+Finneon
+Lumineon
+Mantyke
+Snover
+Abomasnow
+Weavile
+Magnezone
+Lickilicky
+Rhyperior
+Tangrowth
+Electivire
+Magmortar
+Togekiss
+Yanmega
+Leafeon
+Glaceon
+Gliscor
+Mamoswine
+Porygon-Z
+Gallade
+Probopass
+Dusknoir
+Froslass
+Rotom
+Uxie
+Mesprit
+Azelf
+Dialga
+Palkia
+Heatran
+Regigigas
+Giratina
+Cresselia
+Phione
+Manaphy
+Darkrai
+Shaymin
+Arceus
+`
+  .trim()
+  .replace(/\r\n/g, '\n')
+  .split('\n');
+
 /** @readonly English display names, index 0 = dex 1. */
-export const NATIONAL_DEX_LINES = Object.freeze([...GEN1_LINES, ...GEN2_LINES]);
+export const NATIONAL_DEX_LINES = Object.freeze([
+  ...GEN1_LINES,
+  ...GEN2_LINES,
+  ...GEN3_LINES,
+  ...GEN4_LINES
+]);
 
 /** Showdown cry filename stem overrides (dex → slug without .mp3). */
 const SHOWDOWN_CRY_SLUG_OVERRIDES = new Map([
@@ -285,7 +545,9 @@ const SHOWDOWN_CRY_SLUG_OVERRIDES = new Map([
   [32, 'nidoranm'],
   [201, 'unown'],
   [233, 'porygon2'],
-  [250, 'hooh']
+  [250, 'hooh'],
+  [439, 'mimejr'],
+  [474, 'porygonz']
 ]);
 
 const NAME_TO_DEX = new Map();
@@ -307,7 +569,7 @@ export function encounterNameToDex(encounterName) {
 
 /**
  * @param {number} dex
- * @returns {string} three-digit folder id for `tilesets/pokemon/NNN_*.png` (Gen 1+2 fits in 3 digits).
+ * @returns {string} three-digit folder id for `tilesets/pokemon/NNN_*.png` (fits up to dex 999).
  */
 export function padDex3(dex) {
   const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Number(dex) || 1));

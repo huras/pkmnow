@@ -1,702 +1,751 @@
 [
   {
-    "dex": 152,
-    "name": "Chikorita",
-    "slug": "chikorita",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/chikorita.mp3",
-    "file": "audio/cries/national/152-chikorita.mp3"
+    "dex": 387,
+    "name": "Turtwig",
+    "slug": "turtwig",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/turtwig.mp3",
+    "file": "audio/cries/national/387-turtwig.mp3"
   },
   {
-    "dex": 153,
-    "name": "Bayleef",
-    "slug": "bayleef",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bayleef.mp3",
-    "file": "audio/cries/national/153-bayleef.mp3"
+    "dex": 388,
+    "name": "Grotle",
+    "slug": "grotle",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/grotle.mp3",
+    "file": "audio/cries/national/388-grotle.mp3"
   },
   {
-    "dex": 154,
-    "name": "Meganium",
-    "slug": "meganium",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/meganium.mp3",
-    "file": "audio/cries/national/154-meganium.mp3"
+    "dex": 389,
+    "name": "Torterra",
+    "slug": "torterra",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/torterra.mp3",
+    "file": "audio/cries/national/389-torterra.mp3"
   },
   {
-    "dex": 155,
-    "name": "Cyndaquil",
-    "slug": "cyndaquil",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cyndaquil.mp3",
-    "file": "audio/cries/national/155-cyndaquil.mp3"
+    "dex": 390,
+    "name": "Chimchar",
+    "slug": "chimchar",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/chimchar.mp3",
+    "file": "audio/cries/national/390-chimchar.mp3"
   },
   {
-    "dex": 156,
-    "name": "Quilava",
-    "slug": "quilava",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/quilava.mp3",
-    "file": "audio/cries/national/156-quilava.mp3"
+    "dex": 391,
+    "name": "Monferno",
+    "slug": "monferno",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/monferno.mp3",
+    "file": "audio/cries/national/391-monferno.mp3"
   },
   {
-    "dex": 157,
-    "name": "Typhlosion",
-    "slug": "typhlosion",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/typhlosion.mp3",
-    "file": "audio/cries/national/157-typhlosion.mp3"
+    "dex": 392,
+    "name": "Infernape",
+    "slug": "infernape",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/infernape.mp3",
+    "file": "audio/cries/national/392-infernape.mp3"
   },
   {
-    "dex": 158,
-    "name": "Totodile",
-    "slug": "totodile",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/totodile.mp3",
-    "file": "audio/cries/national/158-totodile.mp3"
+    "dex": 393,
+    "name": "Piplup",
+    "slug": "piplup",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/piplup.mp3",
+    "file": "audio/cries/national/393-piplup.mp3"
   },
   {
-    "dex": 159,
-    "name": "Croconaw",
-    "slug": "croconaw",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/croconaw.mp3",
-    "file": "audio/cries/national/159-croconaw.mp3"
+    "dex": 394,
+    "name": "Prinplup",
+    "slug": "prinplup",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/prinplup.mp3",
+    "file": "audio/cries/national/394-prinplup.mp3"
   },
   {
-    "dex": 160,
-    "name": "Feraligatr",
-    "slug": "feraligatr",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/feraligatr.mp3",
-    "file": "audio/cries/national/160-feraligatr.mp3"
+    "dex": 395,
+    "name": "Empoleon",
+    "slug": "empoleon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/empoleon.mp3",
+    "file": "audio/cries/national/395-empoleon.mp3"
   },
   {
-    "dex": 161,
-    "name": "Sentret",
-    "slug": "sentret",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/sentret.mp3",
-    "file": "audio/cries/national/161-sentret.mp3"
+    "dex": 396,
+    "name": "Starly",
+    "slug": "starly",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/starly.mp3",
+    "file": "audio/cries/national/396-starly.mp3"
   },
   {
-    "dex": 162,
-    "name": "Furret",
-    "slug": "furret",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/furret.mp3",
-    "file": "audio/cries/national/162-furret.mp3"
+    "dex": 397,
+    "name": "Staravia",
+    "slug": "staravia",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/staravia.mp3",
+    "file": "audio/cries/national/397-staravia.mp3"
   },
   {
-    "dex": 163,
-    "name": "Hoothoot",
-    "slug": "hoothoot",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hoothoot.mp3",
-    "file": "audio/cries/national/163-hoothoot.mp3"
+    "dex": 398,
+    "name": "Staraptor",
+    "slug": "staraptor",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/staraptor.mp3",
+    "file": "audio/cries/national/398-staraptor.mp3"
   },
   {
-    "dex": 164,
-    "name": "Noctowl",
-    "slug": "noctowl",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/noctowl.mp3",
-    "file": "audio/cries/national/164-noctowl.mp3"
+    "dex": 399,
+    "name": "Bidoof",
+    "slug": "bidoof",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bidoof.mp3",
+    "file": "audio/cries/national/399-bidoof.mp3"
   },
   {
-    "dex": 165,
-    "name": "Ledyba",
-    "slug": "ledyba",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ledyba.mp3",
-    "file": "audio/cries/national/165-ledyba.mp3"
+    "dex": 400,
+    "name": "Bibarel",
+    "slug": "bibarel",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bibarel.mp3",
+    "file": "audio/cries/national/400-bibarel.mp3"
   },
   {
-    "dex": 166,
-    "name": "Ledian",
-    "slug": "ledian",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ledian.mp3",
-    "file": "audio/cries/national/166-ledian.mp3"
+    "dex": 401,
+    "name": "Kricketot",
+    "slug": "kricketot",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/kricketot.mp3",
+    "file": "audio/cries/national/401-kricketot.mp3"
   },
   {
-    "dex": 167,
-    "name": "Spinarak",
-    "slug": "spinarak",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/spinarak.mp3",
-    "file": "audio/cries/national/167-spinarak.mp3"
+    "dex": 402,
+    "name": "Kricketune",
+    "slug": "kricketune",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/kricketune.mp3",
+    "file": "audio/cries/national/402-kricketune.mp3"
   },
   {
-    "dex": 168,
-    "name": "Ariados",
-    "slug": "ariados",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ariados.mp3",
-    "file": "audio/cries/national/168-ariados.mp3"
+    "dex": 403,
+    "name": "Shinx",
+    "slug": "shinx",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/shinx.mp3",
+    "file": "audio/cries/national/403-shinx.mp3"
   },
   {
-    "dex": 169,
-    "name": "Crobat",
-    "slug": "crobat",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/crobat.mp3",
-    "file": "audio/cries/national/169-crobat.mp3"
+    "dex": 404,
+    "name": "Luxio",
+    "slug": "luxio",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/luxio.mp3",
+    "file": "audio/cries/national/404-luxio.mp3"
   },
   {
-    "dex": 170,
-    "name": "Chinchou",
-    "slug": "chinchou",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/chinchou.mp3",
-    "file": "audio/cries/national/170-chinchou.mp3"
+    "dex": 405,
+    "name": "Luxray",
+    "slug": "luxray",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/luxray.mp3",
+    "file": "audio/cries/national/405-luxray.mp3"
   },
   {
-    "dex": 171,
-    "name": "Lanturn",
-    "slug": "lanturn",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lanturn.mp3",
-    "file": "audio/cries/national/171-lanturn.mp3"
+    "dex": 406,
+    "name": "Budew",
+    "slug": "budew",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/budew.mp3",
+    "file": "audio/cries/national/406-budew.mp3"
   },
   {
-    "dex": 172,
-    "name": "Pichu",
-    "slug": "pichu",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/pichu.mp3",
-    "file": "audio/cries/national/172-pichu.mp3"
+    "dex": 407,
+    "name": "Roserade",
+    "slug": "roserade",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/roserade.mp3",
+    "file": "audio/cries/national/407-roserade.mp3"
   },
   {
-    "dex": 173,
-    "name": "Cleffa",
-    "slug": "cleffa",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cleffa.mp3",
-    "file": "audio/cries/national/173-cleffa.mp3"
+    "dex": 408,
+    "name": "Cranidos",
+    "slug": "cranidos",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cranidos.mp3",
+    "file": "audio/cries/national/408-cranidos.mp3"
   },
   {
-    "dex": 174,
-    "name": "Igglybuff",
-    "slug": "igglybuff",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/igglybuff.mp3",
-    "file": "audio/cries/national/174-igglybuff.mp3"
+    "dex": 409,
+    "name": "Rampardos",
+    "slug": "rampardos",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/rampardos.mp3",
+    "file": "audio/cries/national/409-rampardos.mp3"
   },
   {
-    "dex": 175,
-    "name": "Togepi",
-    "slug": "togepi",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/togepi.mp3",
-    "file": "audio/cries/national/175-togepi.mp3"
+    "dex": 410,
+    "name": "Shieldon",
+    "slug": "shieldon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/shieldon.mp3",
+    "file": "audio/cries/national/410-shieldon.mp3"
   },
   {
-    "dex": 176,
-    "name": "Togetic",
-    "slug": "togetic",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/togetic.mp3",
-    "file": "audio/cries/national/176-togetic.mp3"
+    "dex": 411,
+    "name": "Bastiodon",
+    "slug": "bastiodon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bastiodon.mp3",
+    "file": "audio/cries/national/411-bastiodon.mp3"
   },
   {
-    "dex": 177,
-    "name": "Natu",
-    "slug": "natu",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/natu.mp3",
-    "file": "audio/cries/national/177-natu.mp3"
+    "dex": 412,
+    "name": "Burmy",
+    "slug": "burmy",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/burmy.mp3",
+    "file": "audio/cries/national/412-burmy.mp3"
   },
   {
-    "dex": 178,
-    "name": "Xatu",
-    "slug": "xatu",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/xatu.mp3",
-    "file": "audio/cries/national/178-xatu.mp3"
+    "dex": 413,
+    "name": "Wormadam",
+    "slug": "wormadam",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/wormadam.mp3",
+    "file": "audio/cries/national/413-wormadam.mp3"
   },
   {
-    "dex": 179,
-    "name": "Mareep",
-    "slug": "mareep",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mareep.mp3",
-    "file": "audio/cries/national/179-mareep.mp3"
+    "dex": 414,
+    "name": "Mothim",
+    "slug": "mothim",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mothim.mp3",
+    "file": "audio/cries/national/414-mothim.mp3"
   },
   {
-    "dex": 180,
-    "name": "Flaaffy",
-    "slug": "flaaffy",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/flaaffy.mp3",
-    "file": "audio/cries/national/180-flaaffy.mp3"
+    "dex": 415,
+    "name": "Combee",
+    "slug": "combee",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/combee.mp3",
+    "file": "audio/cries/national/415-combee.mp3"
   },
   {
-    "dex": 181,
-    "name": "Ampharos",
-    "slug": "ampharos",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ampharos.mp3",
-    "file": "audio/cries/national/181-ampharos.mp3"
+    "dex": 416,
+    "name": "Vespiquen",
+    "slug": "vespiquen",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/vespiquen.mp3",
+    "file": "audio/cries/national/416-vespiquen.mp3"
   },
   {
-    "dex": 182,
-    "name": "Bellossom",
-    "slug": "bellossom",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bellossom.mp3",
-    "file": "audio/cries/national/182-bellossom.mp3"
+    "dex": 417,
+    "name": "Pachirisu",
+    "slug": "pachirisu",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/pachirisu.mp3",
+    "file": "audio/cries/national/417-pachirisu.mp3"
   },
   {
-    "dex": 183,
-    "name": "Marill",
-    "slug": "marill",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/marill.mp3",
-    "file": "audio/cries/national/183-marill.mp3"
+    "dex": 418,
+    "name": "Buizel",
+    "slug": "buizel",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/buizel.mp3",
+    "file": "audio/cries/national/418-buizel.mp3"
   },
   {
-    "dex": 184,
-    "name": "Azumarill",
-    "slug": "azumarill",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/azumarill.mp3",
-    "file": "audio/cries/national/184-azumarill.mp3"
+    "dex": 419,
+    "name": "Floatzel",
+    "slug": "floatzel",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/floatzel.mp3",
+    "file": "audio/cries/national/419-floatzel.mp3"
   },
   {
-    "dex": 185,
-    "name": "Sudowoodo",
-    "slug": "sudowoodo",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/sudowoodo.mp3",
-    "file": "audio/cries/national/185-sudowoodo.mp3"
+    "dex": 420,
+    "name": "Cherubi",
+    "slug": "cherubi",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cherubi.mp3",
+    "file": "audio/cries/national/420-cherubi.mp3"
   },
   {
-    "dex": 186,
-    "name": "Politoed",
-    "slug": "politoed",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/politoed.mp3",
-    "file": "audio/cries/national/186-politoed.mp3"
+    "dex": 421,
+    "name": "Cherrim",
+    "slug": "cherrim",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cherrim.mp3",
+    "file": "audio/cries/national/421-cherrim.mp3"
   },
   {
-    "dex": 187,
-    "name": "Hoppip",
-    "slug": "hoppip",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hoppip.mp3",
-    "file": "audio/cries/national/187-hoppip.mp3"
+    "dex": 422,
+    "name": "Shellos",
+    "slug": "shellos",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/shellos.mp3",
+    "file": "audio/cries/national/422-shellos.mp3"
   },
   {
-    "dex": 188,
-    "name": "Skiploom",
-    "slug": "skiploom",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/skiploom.mp3",
-    "file": "audio/cries/national/188-skiploom.mp3"
+    "dex": 423,
+    "name": "Gastrodon",
+    "slug": "gastrodon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gastrodon.mp3",
+    "file": "audio/cries/national/423-gastrodon.mp3"
   },
   {
-    "dex": 189,
-    "name": "Jumpluff",
-    "slug": "jumpluff",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/jumpluff.mp3",
-    "file": "audio/cries/national/189-jumpluff.mp3"
+    "dex": 424,
+    "name": "Ambipom",
+    "slug": "ambipom",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ambipom.mp3",
+    "file": "audio/cries/national/424-ambipom.mp3"
   },
   {
-    "dex": 190,
-    "name": "Aipom",
-    "slug": "aipom",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/aipom.mp3",
-    "file": "audio/cries/national/190-aipom.mp3"
+    "dex": 425,
+    "name": "Drifloon",
+    "slug": "drifloon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/drifloon.mp3",
+    "file": "audio/cries/national/425-drifloon.mp3"
   },
   {
-    "dex": 191,
-    "name": "Sunkern",
-    "slug": "sunkern",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/sunkern.mp3",
-    "file": "audio/cries/national/191-sunkern.mp3"
+    "dex": 426,
+    "name": "Drifblim",
+    "slug": "drifblim",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/drifblim.mp3",
+    "file": "audio/cries/national/426-drifblim.mp3"
   },
   {
-    "dex": 192,
-    "name": "Sunflora",
-    "slug": "sunflora",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/sunflora.mp3",
-    "file": "audio/cries/national/192-sunflora.mp3"
+    "dex": 427,
+    "name": "Buneary",
+    "slug": "buneary",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/buneary.mp3",
+    "file": "audio/cries/national/427-buneary.mp3"
   },
   {
-    "dex": 193,
-    "name": "Yanma",
-    "slug": "yanma",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/yanma.mp3",
-    "file": "audio/cries/national/193-yanma.mp3"
+    "dex": 428,
+    "name": "Lopunny",
+    "slug": "lopunny",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lopunny.mp3",
+    "file": "audio/cries/national/428-lopunny.mp3"
   },
   {
-    "dex": 194,
-    "name": "Wooper",
-    "slug": "wooper",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/wooper.mp3",
-    "file": "audio/cries/national/194-wooper.mp3"
+    "dex": 429,
+    "name": "Mismagius",
+    "slug": "mismagius",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mismagius.mp3",
+    "file": "audio/cries/national/429-mismagius.mp3"
   },
   {
-    "dex": 195,
-    "name": "Quagsire",
-    "slug": "quagsire",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/quagsire.mp3",
-    "file": "audio/cries/national/195-quagsire.mp3"
+    "dex": 430,
+    "name": "Honchkrow",
+    "slug": "honchkrow",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/honchkrow.mp3",
+    "file": "audio/cries/national/430-honchkrow.mp3"
   },
   {
-    "dex": 196,
-    "name": "Espeon",
-    "slug": "espeon",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/espeon.mp3",
-    "file": "audio/cries/national/196-espeon.mp3"
+    "dex": 431,
+    "name": "Glameow",
+    "slug": "glameow",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/glameow.mp3",
+    "file": "audio/cries/national/431-glameow.mp3"
   },
   {
-    "dex": 197,
-    "name": "Umbreon",
-    "slug": "umbreon",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/umbreon.mp3",
-    "file": "audio/cries/national/197-umbreon.mp3"
+    "dex": 432,
+    "name": "Purugly",
+    "slug": "purugly",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/purugly.mp3",
+    "file": "audio/cries/national/432-purugly.mp3"
   },
   {
-    "dex": 198,
-    "name": "Murkrow",
-    "slug": "murkrow",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/murkrow.mp3",
-    "file": "audio/cries/national/198-murkrow.mp3"
+    "dex": 433,
+    "name": "Chingling",
+    "slug": "chingling",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/chingling.mp3",
+    "file": "audio/cries/national/433-chingling.mp3"
   },
   {
-    "dex": 199,
-    "name": "Slowking",
-    "slug": "slowking",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/slowking.mp3",
-    "file": "audio/cries/national/199-slowking.mp3"
+    "dex": 434,
+    "name": "Stunky",
+    "slug": "stunky",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/stunky.mp3",
+    "file": "audio/cries/national/434-stunky.mp3"
   },
   {
-    "dex": 200,
-    "name": "Misdreavus",
-    "slug": "misdreavus",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/misdreavus.mp3",
-    "file": "audio/cries/national/200-misdreavus.mp3"
+    "dex": 435,
+    "name": "Skuntank",
+    "slug": "skuntank",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/skuntank.mp3",
+    "file": "audio/cries/national/435-skuntank.mp3"
   },
   {
-    "dex": 201,
-    "name": "Unown",
-    "slug": "unown",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/unown.mp3",
-    "file": "audio/cries/national/201-unown.mp3"
+    "dex": 436,
+    "name": "Bronzor",
+    "slug": "bronzor",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bronzor.mp3",
+    "file": "audio/cries/national/436-bronzor.mp3"
   },
   {
-    "dex": 202,
-    "name": "Wobbuffet",
-    "slug": "wobbuffet",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/wobbuffet.mp3",
-    "file": "audio/cries/national/202-wobbuffet.mp3"
+    "dex": 437,
+    "name": "Bronzong",
+    "slug": "bronzong",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bronzong.mp3",
+    "file": "audio/cries/national/437-bronzong.mp3"
   },
   {
-    "dex": 203,
-    "name": "Girafarig",
-    "slug": "girafarig",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/girafarig.mp3",
-    "file": "audio/cries/national/203-girafarig.mp3"
+    "dex": 438,
+    "name": "Bonsly",
+    "slug": "bonsly",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/bonsly.mp3",
+    "file": "audio/cries/national/438-bonsly.mp3"
   },
   {
-    "dex": 204,
-    "name": "Pineco",
-    "slug": "pineco",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/pineco.mp3",
-    "file": "audio/cries/national/204-pineco.mp3"
+    "dex": 439,
+    "name": "Mime Jr.",
+    "slug": "mimejr",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mimejr.mp3",
+    "file": "audio/cries/national/439-mimejr.mp3"
   },
   {
-    "dex": 205,
-    "name": "Forretress",
-    "slug": "forretress",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/forretress.mp3",
-    "file": "audio/cries/national/205-forretress.mp3"
+    "dex": 440,
+    "name": "Happiny",
+    "slug": "happiny",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/happiny.mp3",
+    "file": "audio/cries/national/440-happiny.mp3"
   },
   {
-    "dex": 206,
-    "name": "Dunsparce",
-    "slug": "dunsparce",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/dunsparce.mp3",
-    "file": "audio/cries/national/206-dunsparce.mp3"
+    "dex": 441,
+    "name": "Chatot",
+    "slug": "chatot",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/chatot.mp3",
+    "file": "audio/cries/national/441-chatot.mp3"
   },
   {
-    "dex": 207,
-    "name": "Gligar",
-    "slug": "gligar",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gligar.mp3",
-    "file": "audio/cries/national/207-gligar.mp3"
+    "dex": 442,
+    "name": "Spiritomb",
+    "slug": "spiritomb",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/spiritomb.mp3",
+    "file": "audio/cries/national/442-spiritomb.mp3"
   },
   {
-    "dex": 208,
-    "name": "Steelix",
-    "slug": "steelix",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/steelix.mp3",
-    "file": "audio/cries/national/208-steelix.mp3"
+    "dex": 443,
+    "name": "Gible",
+    "slug": "gible",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gible.mp3",
+    "file": "audio/cries/national/443-gible.mp3"
   },
   {
-    "dex": 209,
-    "name": "Snubbull",
-    "slug": "snubbull",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/snubbull.mp3",
-    "file": "audio/cries/national/209-snubbull.mp3"
+    "dex": 444,
+    "name": "Gabite",
+    "slug": "gabite",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gabite.mp3",
+    "file": "audio/cries/national/444-gabite.mp3"
   },
   {
-    "dex": 210,
-    "name": "Granbull",
-    "slug": "granbull",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/granbull.mp3",
-    "file": "audio/cries/national/210-granbull.mp3"
+    "dex": 445,
+    "name": "Garchomp",
+    "slug": "garchomp",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/garchomp.mp3",
+    "file": "audio/cries/national/445-garchomp.mp3"
   },
   {
-    "dex": 211,
-    "name": "Qwilfish",
-    "slug": "qwilfish",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/qwilfish.mp3",
-    "file": "audio/cries/national/211-qwilfish.mp3"
+    "dex": 446,
+    "name": "Munchlax",
+    "slug": "munchlax",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/munchlax.mp3",
+    "file": "audio/cries/national/446-munchlax.mp3"
   },
   {
-    "dex": 212,
-    "name": "Scizor",
-    "slug": "scizor",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/scizor.mp3",
-    "file": "audio/cries/national/212-scizor.mp3"
+    "dex": 447,
+    "name": "Riolu",
+    "slug": "riolu",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/riolu.mp3",
+    "file": "audio/cries/national/447-riolu.mp3"
   },
   {
-    "dex": 213,
-    "name": "Shuckle",
-    "slug": "shuckle",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/shuckle.mp3",
-    "file": "audio/cries/national/213-shuckle.mp3"
+    "dex": 448,
+    "name": "Lucario",
+    "slug": "lucario",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lucario.mp3",
+    "file": "audio/cries/national/448-lucario.mp3"
   },
   {
-    "dex": 214,
-    "name": "Heracross",
-    "slug": "heracross",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/heracross.mp3",
-    "file": "audio/cries/national/214-heracross.mp3"
+    "dex": 449,
+    "name": "Hippopotas",
+    "slug": "hippopotas",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hippopotas.mp3",
+    "file": "audio/cries/national/449-hippopotas.mp3"
   },
   {
-    "dex": 215,
-    "name": "Sneasel",
-    "slug": "sneasel",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/sneasel.mp3",
-    "file": "audio/cries/national/215-sneasel.mp3"
+    "dex": 450,
+    "name": "Hippowdon",
+    "slug": "hippowdon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hippowdon.mp3",
+    "file": "audio/cries/national/450-hippowdon.mp3"
   },
   {
-    "dex": 216,
-    "name": "Teddiursa",
-    "slug": "teddiursa",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/teddiursa.mp3",
-    "file": "audio/cries/national/216-teddiursa.mp3"
+    "dex": 451,
+    "name": "Skorupi",
+    "slug": "skorupi",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/skorupi.mp3",
+    "file": "audio/cries/national/451-skorupi.mp3"
   },
   {
-    "dex": 217,
-    "name": "Ursaring",
-    "slug": "ursaring",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/ursaring.mp3",
-    "file": "audio/cries/national/217-ursaring.mp3"
+    "dex": 452,
+    "name": "Drapion",
+    "slug": "drapion",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/drapion.mp3",
+    "file": "audio/cries/national/452-drapion.mp3"
   },
   {
-    "dex": 218,
-    "name": "Slugma",
-    "slug": "slugma",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/slugma.mp3",
-    "file": "audio/cries/national/218-slugma.mp3"
+    "dex": 453,
+    "name": "Croagunk",
+    "slug": "croagunk",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/croagunk.mp3",
+    "file": "audio/cries/national/453-croagunk.mp3"
   },
   {
-    "dex": 219,
-    "name": "Magcargo",
-    "slug": "magcargo",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/magcargo.mp3",
-    "file": "audio/cries/national/219-magcargo.mp3"
+    "dex": 454,
+    "name": "Toxicroak",
+    "slug": "toxicroak",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/toxicroak.mp3",
+    "file": "audio/cries/national/454-toxicroak.mp3"
   },
   {
-    "dex": 220,
-    "name": "Swinub",
-    "slug": "swinub",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/swinub.mp3",
-    "file": "audio/cries/national/220-swinub.mp3"
+    "dex": 455,
+    "name": "Carnivine",
+    "slug": "carnivine",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/carnivine.mp3",
+    "file": "audio/cries/national/455-carnivine.mp3"
   },
   {
-    "dex": 221,
-    "name": "Piloswine",
-    "slug": "piloswine",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/piloswine.mp3",
-    "file": "audio/cries/national/221-piloswine.mp3"
+    "dex": 456,
+    "name": "Finneon",
+    "slug": "finneon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/finneon.mp3",
+    "file": "audio/cries/national/456-finneon.mp3"
   },
   {
-    "dex": 222,
-    "name": "Corsola",
-    "slug": "corsola",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/corsola.mp3",
-    "file": "audio/cries/national/222-corsola.mp3"
+    "dex": 457,
+    "name": "Lumineon",
+    "slug": "lumineon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lumineon.mp3",
+    "file": "audio/cries/national/457-lumineon.mp3"
   },
   {
-    "dex": 223,
-    "name": "Remoraid",
-    "slug": "remoraid",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/remoraid.mp3",
-    "file": "audio/cries/national/223-remoraid.mp3"
+    "dex": 458,
+    "name": "Mantyke",
+    "slug": "mantyke",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mantyke.mp3",
+    "file": "audio/cries/national/458-mantyke.mp3"
   },
   {
-    "dex": 224,
-    "name": "Octillery",
-    "slug": "octillery",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/octillery.mp3",
-    "file": "audio/cries/national/224-octillery.mp3"
+    "dex": 459,
+    "name": "Snover",
+    "slug": "snover",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/snover.mp3",
+    "file": "audio/cries/national/459-snover.mp3"
   },
   {
-    "dex": 225,
-    "name": "Delibird",
-    "slug": "delibird",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/delibird.mp3",
-    "file": "audio/cries/national/225-delibird.mp3"
+    "dex": 460,
+    "name": "Abomasnow",
+    "slug": "abomasnow",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/abomasnow.mp3",
+    "file": "audio/cries/national/460-abomasnow.mp3"
   },
   {
-    "dex": 226,
-    "name": "Mantine",
-    "slug": "mantine",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mantine.mp3",
-    "file": "audio/cries/national/226-mantine.mp3"
+    "dex": 461,
+    "name": "Weavile",
+    "slug": "weavile",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/weavile.mp3",
+    "file": "audio/cries/national/461-weavile.mp3"
   },
   {
-    "dex": 227,
-    "name": "Skarmory",
-    "slug": "skarmory",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/skarmory.mp3",
-    "file": "audio/cries/national/227-skarmory.mp3"
+    "dex": 462,
+    "name": "Magnezone",
+    "slug": "magnezone",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/magnezone.mp3",
+    "file": "audio/cries/national/462-magnezone.mp3"
   },
   {
-    "dex": 228,
-    "name": "Houndour",
-    "slug": "houndour",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/houndour.mp3",
-    "file": "audio/cries/national/228-houndour.mp3"
+    "dex": 463,
+    "name": "Lickilicky",
+    "slug": "lickilicky",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lickilicky.mp3",
+    "file": "audio/cries/national/463-lickilicky.mp3"
   },
   {
-    "dex": 229,
-    "name": "Houndoom",
-    "slug": "houndoom",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/houndoom.mp3",
-    "file": "audio/cries/national/229-houndoom.mp3"
+    "dex": 464,
+    "name": "Rhyperior",
+    "slug": "rhyperior",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/rhyperior.mp3",
+    "file": "audio/cries/national/464-rhyperior.mp3"
   },
   {
-    "dex": 230,
-    "name": "Kingdra",
-    "slug": "kingdra",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/kingdra.mp3",
-    "file": "audio/cries/national/230-kingdra.mp3"
+    "dex": 465,
+    "name": "Tangrowth",
+    "slug": "tangrowth",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/tangrowth.mp3",
+    "file": "audio/cries/national/465-tangrowth.mp3"
   },
   {
-    "dex": 231,
-    "name": "Phanpy",
-    "slug": "phanpy",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/phanpy.mp3",
-    "file": "audio/cries/national/231-phanpy.mp3"
+    "dex": 466,
+    "name": "Electivire",
+    "slug": "electivire",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/electivire.mp3",
+    "file": "audio/cries/national/466-electivire.mp3"
   },
   {
-    "dex": 232,
-    "name": "Donphan",
-    "slug": "donphan",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/donphan.mp3",
-    "file": "audio/cries/national/232-donphan.mp3"
+    "dex": 467,
+    "name": "Magmortar",
+    "slug": "magmortar",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/magmortar.mp3",
+    "file": "audio/cries/national/467-magmortar.mp3"
   },
   {
-    "dex": 233,
-    "name": "Porygon2",
-    "slug": "porygon2",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/porygon2.mp3",
-    "file": "audio/cries/national/233-porygon2.mp3"
+    "dex": 468,
+    "name": "Togekiss",
+    "slug": "togekiss",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/togekiss.mp3",
+    "file": "audio/cries/national/468-togekiss.mp3"
   },
   {
-    "dex": 234,
-    "name": "Stantler",
-    "slug": "stantler",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/stantler.mp3",
-    "file": "audio/cries/national/234-stantler.mp3"
+    "dex": 469,
+    "name": "Yanmega",
+    "slug": "yanmega",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/yanmega.mp3",
+    "file": "audio/cries/national/469-yanmega.mp3"
   },
   {
-    "dex": 235,
-    "name": "Smeargle",
-    "slug": "smeargle",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/smeargle.mp3",
-    "file": "audio/cries/national/235-smeargle.mp3"
+    "dex": 470,
+    "name": "Leafeon",
+    "slug": "leafeon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/leafeon.mp3",
+    "file": "audio/cries/national/470-leafeon.mp3"
   },
   {
-    "dex": 236,
-    "name": "Tyrogue",
-    "slug": "tyrogue",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/tyrogue.mp3",
-    "file": "audio/cries/national/236-tyrogue.mp3"
+    "dex": 471,
+    "name": "Glaceon",
+    "slug": "glaceon",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/glaceon.mp3",
+    "file": "audio/cries/national/471-glaceon.mp3"
   },
   {
-    "dex": 237,
-    "name": "Hitmontop",
-    "slug": "hitmontop",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hitmontop.mp3",
-    "file": "audio/cries/national/237-hitmontop.mp3"
+    "dex": 472,
+    "name": "Gliscor",
+    "slug": "gliscor",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gliscor.mp3",
+    "file": "audio/cries/national/472-gliscor.mp3"
   },
   {
-    "dex": 238,
-    "name": "Smoochum",
-    "slug": "smoochum",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/smoochum.mp3",
-    "file": "audio/cries/national/238-smoochum.mp3"
+    "dex": 473,
+    "name": "Mamoswine",
+    "slug": "mamoswine",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mamoswine.mp3",
+    "file": "audio/cries/national/473-mamoswine.mp3"
   },
   {
-    "dex": 239,
-    "name": "Elekid",
-    "slug": "elekid",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/elekid.mp3",
-    "file": "audio/cries/national/239-elekid.mp3"
+    "dex": 474,
+    "name": "Porygon-Z",
+    "slug": "porygonz",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/porygonz.mp3",
+    "file": "audio/cries/national/474-porygonz.mp3"
   },
   {
-    "dex": 240,
-    "name": "Magby",
-    "slug": "magby",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/magby.mp3",
-    "file": "audio/cries/national/240-magby.mp3"
+    "dex": 475,
+    "name": "Gallade",
+    "slug": "gallade",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/gallade.mp3",
+    "file": "audio/cries/national/475-gallade.mp3"
   },
   {
-    "dex": 241,
-    "name": "Miltank",
-    "slug": "miltank",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/miltank.mp3",
-    "file": "audio/cries/national/241-miltank.mp3"
+    "dex": 476,
+    "name": "Probopass",
+    "slug": "probopass",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/probopass.mp3",
+    "file": "audio/cries/national/476-probopass.mp3"
   },
   {
-    "dex": 242,
-    "name": "Blissey",
-    "slug": "blissey",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/blissey.mp3",
-    "file": "audio/cries/national/242-blissey.mp3"
+    "dex": 477,
+    "name": "Dusknoir",
+    "slug": "dusknoir",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/dusknoir.mp3",
+    "file": "audio/cries/national/477-dusknoir.mp3"
   },
   {
-    "dex": 243,
-    "name": "Raikou",
-    "slug": "raikou",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/raikou.mp3",
-    "file": "audio/cries/national/243-raikou.mp3"
+    "dex": 478,
+    "name": "Froslass",
+    "slug": "froslass",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/froslass.mp3",
+    "file": "audio/cries/national/478-froslass.mp3"
   },
   {
-    "dex": 244,
-    "name": "Entei",
-    "slug": "entei",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/entei.mp3",
-    "file": "audio/cries/national/244-entei.mp3"
+    "dex": 479,
+    "name": "Rotom",
+    "slug": "rotom",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/rotom.mp3",
+    "file": "audio/cries/national/479-rotom.mp3"
   },
   {
-    "dex": 245,
-    "name": "Suicune",
-    "slug": "suicune",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/suicune.mp3",
-    "file": "audio/cries/national/245-suicune.mp3"
+    "dex": 480,
+    "name": "Uxie",
+    "slug": "uxie",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/uxie.mp3",
+    "file": "audio/cries/national/480-uxie.mp3"
   },
   {
-    "dex": 246,
-    "name": "Larvitar",
-    "slug": "larvitar",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/larvitar.mp3",
-    "file": "audio/cries/national/246-larvitar.mp3"
+    "dex": 481,
+    "name": "Mesprit",
+    "slug": "mesprit",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/mesprit.mp3",
+    "file": "audio/cries/national/481-mesprit.mp3"
   },
   {
-    "dex": 247,
-    "name": "Pupitar",
-    "slug": "pupitar",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/pupitar.mp3",
-    "file": "audio/cries/national/247-pupitar.mp3"
+    "dex": 482,
+    "name": "Azelf",
+    "slug": "azelf",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/azelf.mp3",
+    "file": "audio/cries/national/482-azelf.mp3"
   },
   {
-    "dex": 248,
-    "name": "Tyranitar",
-    "slug": "tyranitar",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/tyranitar.mp3",
-    "file": "audio/cries/national/248-tyranitar.mp3"
+    "dex": 483,
+    "name": "Dialga",
+    "slug": "dialga",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/dialga.mp3",
+    "file": "audio/cries/national/483-dialga.mp3"
   },
   {
-    "dex": 249,
-    "name": "Lugia",
-    "slug": "lugia",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/lugia.mp3",
-    "file": "audio/cries/national/249-lugia.mp3"
+    "dex": 484,
+    "name": "Palkia",
+    "slug": "palkia",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/palkia.mp3",
+    "file": "audio/cries/national/484-palkia.mp3"
   },
   {
-    "dex": 250,
-    "name": "Ho-Oh",
-    "slug": "hooh",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/hooh.mp3",
-    "file": "audio/cries/national/250-hooh.mp3"
+    "dex": 485,
+    "name": "Heatran",
+    "slug": "heatran",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/heatran.mp3",
+    "file": "audio/cries/national/485-heatran.mp3"
   },
   {
-    "dex": 251,
-    "name": "Celebi",
-    "slug": "celebi",
-    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/celebi.mp3",
-    "file": "audio/cries/national/251-celebi.mp3"
+    "dex": 486,
+    "name": "Regigigas",
+    "slug": "regigigas",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/regigigas.mp3",
+    "file": "audio/cries/national/486-regigigas.mp3"
+  },
+  {
+    "dex": 487,
+    "name": "Giratina",
+    "slug": "giratina",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/giratina.mp3",
+    "file": "audio/cries/national/487-giratina.mp3"
+  },
+  {
+    "dex": 488,
+    "name": "Cresselia",
+    "slug": "cresselia",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/cresselia.mp3",
+    "file": "audio/cries/national/488-cresselia.mp3"
+  },
+  {
+    "dex": 489,
+    "name": "Phione",
+    "slug": "phione",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/phione.mp3",
+    "file": "audio/cries/national/489-phione.mp3"
+  },
+  {
+    "dex": 490,
+    "name": "Manaphy",
+    "slug": "manaphy",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/manaphy.mp3",
+    "file": "audio/cries/national/490-manaphy.mp3"
+  },
+  {
+    "dex": 491,
+    "name": "Darkrai",
+    "slug": "darkrai",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/darkrai.mp3",
+    "file": "audio/cries/national/491-darkrai.mp3"
+  },
+  {
+    "dex": 492,
+    "name": "Shaymin",
+    "slug": "shaymin",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/shaymin.mp3",
+    "file": "audio/cries/national/492-shaymin.mp3"
+  },
+  {
+    "dex": 493,
+    "name": "Arceus",
+    "slug": "arceus",
+    "sourceUrl": "https://play.pokemonshowdown.com/audio/cries/arceus.mp3",
+    "file": "audio/cries/national/493-arceus.mp3"
   }
 ]

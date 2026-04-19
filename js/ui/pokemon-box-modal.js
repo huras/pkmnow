@@ -5,7 +5,7 @@
  * Opens when the player clicks their portrait pill in the character selector.
  *
  * Layout: 5 columns × 6 rows = 30 slots per page.
- * All 251 Gen 1+2 species → 9 pages.
+ * All national species (1..NATIONAL_DEX_MAX) → ceil(MAX/30) pages.
  *
  * Usage:
  *   const modal = new PokemonBoxModal({ onSelect: (dexId) => ... });
@@ -19,7 +19,7 @@ import { startPokemonBoxDetailSpritePreview } from './pokemon-box-detail-sprite.
 
 const SLOTS_PER_PAGE = 30; // 5 cols × 6 rows
 const COLS = 5;
-const TOTAL_PAGES = Math.ceil(NATIONAL_DEX_MAX / SLOTS_PER_PAGE); // 9
+const TOTAL_PAGES = Math.ceil(NATIONAL_DEX_MAX / SLOTS_PER_PAGE);
 
 /** All species cache for searching */
 const ALL_SPECIES = [];

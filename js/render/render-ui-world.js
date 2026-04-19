@@ -255,3 +255,41 @@ export function drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx) {
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
 }
+
+/**
+ * Dashed ellipse around the base footprint of the current Strength grab target.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number } | null} prompt
+ * @param {number} timeSec
+ */
+export function drawStrengthGrabTargetOutline(ctx, prompt, tileW, tileH, snapPx, timeSec = 0) {
+  if (!prompt || prompt.kind !== 'rock') return;
+  const ox = Math.floor(Number(prompt.ox) || 0);
+  const oy = Math.floor(Number(prompt.oy) || 0);
+  const cols = Math.max(1, Math.floor(Number(prompt.cols) || 1));
+  const rows = Math.max(1, Math.floor(Number(prompt.rows) || 1));
+
+  const cx = snapPx((ox + cols * 0.5) * tileW);
+  const cy = snapPx((oy + rows - 0.5) * tileH);
+  const rx = Math.max(tileW * 0.3, cols * tileW * 0.46);
+  const ry = Math.max(tileH * 0.12, tileH * 0.22);
+  const pulse = 0.84 + 0.16 * Math.sin((Number(timeSec) || 0) * 7.5);
+
+  ctx.save();
+  ctx.globalAlpha *= pulse;
+  ctx.setLineDash([Math.max(3, tileW * 0.16), Math.max(2, tileW * 0.12)]);
+  ctx.lineDashOffset = -((Number(timeSec) || 0) * 40) % 1000;
+  ctx.strokeStyle = 'rgba(255, 235, 140, 0.98)';
+  ctx.lineWidth = Math.max(1.5, tileW * 0.06);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 250, 220, 0.45)';
+  ctx.lineWidth = Math.max(1, tileW * 0.028);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 0.92, ry * 0.92, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}

@@ -54,6 +54,7 @@ import {
 import {
   drawDetailHitHpBar,
   drawDetailHitPulse,
+  drawStrengthGrabTargetOutline,
   drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
   drawWildHpBar
@@ -145,6 +146,7 @@ import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
+import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { imageCache } from './image-cache.js';
 import {
@@ -519,36 +521,52 @@ export function render(canvas, data, options = {}) {
     addRenderFramePhaseMs('rndCollectMs', performance.now() - tCollect0);
 
     const tEnt0 = performance.now();
-    const blockedGrassOverlayTiles = new Set();
+    /** Trunk / scatter footprint / building — skip PASS 5a-deferred cell entirely (no full grass redraw). */
+    const blockedGrassFootprintTiles = new Set();
+    /** Footprint ∪ tree/scatter canopy — blocks only `playerTopOverlay` (strip), not base animated grass. */
+    const blockedGrassStripOverlayTiles = new Set();
     const tileKey = (mx, my) => `${mx},${my}`;
-    const markBlockedTile = (mx, my) => {
+    const markFootprintTile = (mx, my) => {
       if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
-      blockedGrassOverlayTiles.add(tileKey(Math.floor(mx), Math.floor(my)));
+      const k = tileKey(Math.floor(mx), Math.floor(my));
+      blockedGrassFootprintTiles.add(k);
+      blockedGrassStripOverlayTiles.add(k);
     };
-    const markBlockedRect = (ox, oy, cols, rows) => {
+    const markFootprintRect = (ox, oy, cols, rows) => {
       const bx = Math.floor(ox);
       const by = Math.floor(oy);
       const w = Math.max(1, Math.floor(cols || 1));
       const h = Math.max(1, Math.floor(rows || 1));
       for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) markBlockedTile(bx + dx, by + dy);
+        for (let dx = 0; dx < w; dx++) markFootprintTile(bx + dx, by + dy);
+      }
+    };
+    const markStripCanopyRect = (ox, oy, cols, rows) => {
+      const bx = Math.floor(ox);
+      const by = Math.floor(oy);
+      const w = Math.max(1, Math.floor(cols || 1));
+      const h = Math.max(1, Math.floor(rows || 1));
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          const mx = bx + dx;
+          const my = by + dy;
+          if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
+          blockedGrassStripOverlayTiles.add(tileKey(mx, my));
+        }
       }
     };
     for (const it of renderItems) {
       if (it.type === 'tree') {
-        // Formal tree trunk/base spans two ground tiles.
-        markBlockedRect(it.originX, it.originY, 2, 1);
-        // Canopy is drawn *after* PASS 5a grass but shares the same sort pass as the sprite.
-        // PASS 5a-deferred / `playerTopOverlay` grass runs *after* all sortables, so without this
-        // the bottom-strip and neighbor grass would paint on top of foliage north of the trunk.
+        markFootprintRect(it.originX, it.originY, 2, 1);
+        // Strip is drawn after all sortables; canopy tiles north of the trunk are not in the footprint set.
         if (!it.isDestroyed) {
           const tops = TREE_TILES[it.treeType]?.top;
           const canopyRows = tops?.length ? Math.ceil(tops.length / 2) : 2;
           const padX = 1;
-          markBlockedRect(it.originX - padX, it.originY - canopyRows, 2 + padX * 2, canopyRows);
+          markStripCanopyRect(it.originX - padX, it.originY - canopyRows, 2 + padX * 2, canopyRows);
         }
       } else if (it.type === 'scatter') {
-        markBlockedRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+        markFootprintRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
         if (scatterItemKeyIsTree(it.itemKey) && !it.isCharred) {
           const objSet = OBJECT_SETS[it.itemKey];
           const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
@@ -556,16 +574,17 @@ export function render(canvas, data, options = {}) {
           if (topPart?.ids?.length) {
             const topRows = Math.max(1, Math.ceil(topPart.ids.length / cols));
             const padX = 1;
-            markBlockedRect(it.originX - padX, it.originY - topRows, cols + padX * 2, topRows);
+            markStripCanopyRect(it.originX - padX, it.originY - topRows, cols + padX * 2, topRows);
           }
         }
       } else if (it.type === 'building') {
         const bCols = it.bData?.cols ?? (it.bData?.type === 'pokecenter' ? 5 : 4);
         const bRows = it.bData?.rows ?? (it.bData?.type === 'pokecenter' ? 6 : 5);
-        markBlockedRect(it.originX, it.originY, bCols, bRows);
+        markFootprintRect(it.originX, it.originY, bCols, bRows);
       }
     }
-    const isGrassOverlayBlocked = (mx, my) => blockedGrassOverlayTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
+    const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
+    const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
 
     const batchedEffects = [];
     for (const item of renderItems) {
@@ -634,7 +653,7 @@ export function render(canvas, data, options = {}) {
         if (playLodGrassSpriteOverlay && (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight)) {
           const tx = Math.floor(item.x); const ty = Math.floor(item.y);
           if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-            if (!isGrassOverlayBlocked(tx, ty)) {
+            if (!isGrassStripOverlayBlocked(tx, ty)) {
               const t = getCached(tx, ty);
               const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t?.biomeId] || 'grass'];
               const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= (t?.heightStep ?? 0);
@@ -825,6 +844,14 @@ export function render(canvas, data, options = {}) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const pulse of getActiveDetailHitPulses()) drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx);
     ctx.restore();
+    drawStrengthGrabTargetOutline(
+      ctx,
+      getStrengthGrabPromptInfo(player, data),
+      tileW,
+      tileH,
+      snapPx,
+      time
+    );
     addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
     // PASS 5a-deferred (grass over spirits)
@@ -843,15 +870,23 @@ export function render(canvas, data, options = {}) {
         for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
             const mx = overlayMx + dx; const my = overlayMy + dy;
             if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
-            if (isGrassOverlayBlocked(mx, my)) continue;
+            if (isGrassFootprintBlocked(mx, my)) continue;
             const tile = getCached(mx, my);
             if (!passesPlayerGate(mx, my, tile)) continue;
-            drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode: (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0) ? 'playerTopOverlay' : undefined, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
+            let mode =
+              (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0)
+                ? 'playerTopOverlay'
+                : undefined;
+            if (mode === 'playerTopOverlay' && isGrassStripOverlayBlocked(mx, my)) {
+              if (isGrassDeferredEwNeighbor(mx, my)) continue;
+              mode = undefined;
+            }
+            drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
         if (
           shouldDrawPlayerOverlay &&
           !preferSouthBottomOverlay &&
-          !isGrassOverlayBlocked(overlayMx, overlayMy) &&
+          !isGrassStripOverlayBlocked(overlayMx, overlayMy) &&
           passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy))
         ) {
           drawGrass5aForCell(ctx, overlayMx, overlayMy, getCached(overlayMx, overlayMy), Math.ceil(tileW), Math.ceil(tileH), overlayMx * tileW, overlayMy * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });

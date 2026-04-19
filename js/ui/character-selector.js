@@ -74,17 +74,21 @@ function playItemHudScatterSpriteHtml(itemKey) {
   const key = String(itemKey || '');
   const objSet = OBJECT_SETS[key];
   if (!objSet) return '';
-  const { cols } = parseShape(objSet.shape || '[1x1]');
+  const { rows, cols } = parseShape(objSet.shape || '[1x1]');
   const gridCols = Math.max(1, cols | 0);
+  const gridRows = Math.max(1, rows | 0);
   const gap = 2;
   /** Fits 4-column HUD cells (~min 64px). */
   const box = 36;
-  const cellPx = Math.max(6, Math.floor((box - gap * (gridCols - 1)) / gridCols));
+  const cellByCols = Math.floor((box - gap * (gridCols - 1)) / gridCols);
+  const cellByRows = Math.floor((box - gap * (gridRows - 1)) / gridRows);
+  const cellPx = Math.max(6, Math.min(cellByCols, cellByRows));
   return detailScatterGridPreviewHtml(
     key,
     cellPx,
     'play-item-hud__detail-sprite',
-    'vertical-align:middle;line-height:0'
+    'vertical-align:middle;line-height:0',
+    { seamless: true, gapPx: 0 }
   );
 }
 

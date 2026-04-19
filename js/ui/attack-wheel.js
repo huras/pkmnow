@@ -477,7 +477,8 @@ export class AttackWheel {
       if (backBtn) backBtn.classList.remove('hidden');
     }
 
-    const angle = (this.hoverIndex / count) * 360;
+    // Match ring item layout: items use (i/count)*360 - 90 for position (first at 12 o'clock).
+    const angle = (this.hoverIndex / count) * 360 - 90;
     sliceEl.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
 
     const items = this.root.querySelectorAll('.play-field-skill-wheel__item');

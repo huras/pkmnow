@@ -18,7 +18,12 @@ import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
 import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '../main/wind-state.js';
-import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
+import {
+  getChargeBarProgresses,
+  getChargeLevel,
+  getEarthquakeChargeBarProgresses,
+  getEarthquakeChargeLevel
+} from '../main/play-charge-levels.js';
 import { getBindableMoveLabel } from '../main/player-input-slots.js';
 import { isPlayGroundDigShiftHeld } from '../main/play-input-state.js';
 
@@ -1583,11 +1588,13 @@ const FIELD_CHARGE_SEG_STYLE = [
   { a: 'rgba(120,210,255,0.92)', b: 'rgba(160,230,255,0.92)' },
   { a: 'rgba(255,197,116,0.94)', b: 'rgba(255,225,146,0.94)' },
   { a: 'rgba(255,116,116,0.94)', b: 'rgba(255,165,126,0.94)' },
-  { a: 'rgba(200,140,255,0.94)', b: 'rgba(255,210,255,0.94)' }
+  { a: 'rgba(200,140,255,0.94)', b: 'rgba(255,210,255,0.94)' },
+  /** Earthquake tier-5 bar — hot rim + white core (reads as “overcharge”). */
+  { a: 'rgba(255,248,200,0.96)', b: 'rgba(255,255,255,0.98)' }
 ];
 
 /**
- * 4-segment field charge meter (Tackle/Cut + charged-release specials) on the play canvas.
+ * Field charge meter on the play canvas (4 segments by default; Earthquake uses 5).
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ appMode: string, playInputState: import('../main/play-input-state.js').playInputState, cw: number, ch: number, timeSec?: number }} options
  */
@@ -1599,22 +1606,24 @@ export function drawFieldCombatChargeBar(ctx, options) {
   const p = Math.max(0, Math.min(1, Number(snap.charge01) || 0));
   if (p <= 0.005) return;
 
-  const [p1, p2, p3, p4] = getChargeBarProgresses(p);
-  const lvl = getChargeLevel(p);
+  const isEarthquake = snap.moveId === 'earthquake';
+  const progresses = isEarthquake ? getEarthquakeChargeBarProgresses(p) : getChargeBarProgresses(p);
+  const lvl = isEarthquake ? getEarthquakeChargeLevel(p) : getChargeLevel(p);
   const slotLab = snap.slot === 'l' ? 'LMB' : snap.slot === 'r' ? 'RMB' : 'MMB';
   const moveLab =
     snap.moveId === 'cut' ? 'Cut' : snap.moveId === 'tackle' ? 'Tackle' : getBindableMoveLabel(snap.moveId);
-  const barW = Math.min(340, cw * 0.52);
+  const barW = Math.min(isEarthquake ? 380 : 340, cw * 0.52);
   const barH = 14;
   const gap = 3;
   const pad = 2;
   const px0 = (cw - barW) * 0.5;
   const py0 = ch - 108;
   const label = `${slotLab} · ${moveLab}  L${lvl}  ${Math.round(p * 100)}%`;
-  const segW = (barW - pad * 2 - gap * 3) / 4;
+  const nSeg = isEarthquake ? 5 : 4;
+  const segW = (barW - pad * 2 - gap * (nSeg - 1)) / nSeg;
   const pulse = 0.5 + 0.5 * Math.sin((timeSec || 0) * 6.8);
   const FULL = 0.994;
-  const progresses = [p1, p2, p3, p4];
+  const t = timeSec || 0;
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1630,7 +1639,7 @@ export function drawFieldCombatChargeBar(ctx, options) {
   ctx.closePath();
   ctx.stroke();
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < nSeg; i++) {
     const sx = px0 + pad + i * (segW + gap);
     const sy = py0 + pad;
     const sh = barH - pad * 2;
@@ -1649,8 +1658,16 @@ export function drawFieldCombatChargeBar(ctx, options) {
     if (pn > 0.002) {
       const fillW = Math.max(0, segW * pn);
       const g = ctx.createLinearGradient(sx, sy, sx + fillW, sy);
-      const st = FIELD_CHARGE_SEG_STYLE[i];
-      const boost = pn >= FULL ? 0.06 + 0.1 * pulse : 0;
+      const st = FIELD_CHARGE_SEG_STYLE[Math.min(i, FIELD_CHARGE_SEG_STYLE.length - 1)];
+      const isFifth = isEarthquake && i === 4;
+      const pulseHi = 0.5 + 0.5 * Math.sin(t * 16.5);
+      const strobe = isFifth && pn >= FULL ? (Math.floor(t * 11) % 2 === 0 ? 1 : 0) : 0;
+      const boost =
+        pn >= FULL
+          ? isFifth
+            ? 0.1 + 0.38 * pulseHi + strobe * 0.42
+            : 0.06 + 0.1 * pulse
+          : 0;
       g.addColorStop(0, st.a);
       g.addColorStop(1, st.b);
       ctx.fillStyle = g;

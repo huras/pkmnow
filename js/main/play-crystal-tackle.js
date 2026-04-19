@@ -1268,6 +1268,7 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  *   spawnedHitOnceSet?: Set<number>,
  *   hitSource?: 'tackle' | 'cut' | 'other',
  *   detailCharge01?: number | null,
+ *   treeDemolishOneShot?: boolean,
  *   excludePureGrassScatterHits?: boolean,
  *   reusedConsumedWorld?: Set<string>,
  *   reusedConsumedSpawned?: Set<number>,
@@ -1287,6 +1288,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     hitSource,
     opts.detailCharge01 != null && Number.isFinite(opts.detailCharge01) ? opts.detailCharge01 : null
   );
+  const treeDemolishOneShot = opts.treeDemolishOneShot === true;
   /** Charcoal pickup from burned stumps: cut or tackle (living trees stay cut-only). */
   const allowChargedStumpHarvest = hitSource === 'cut' || hitSource === 'tackle';
   const worldHitOnceSet = opts.worldHitOnceSet instanceof Set ? opts.worldHitOnceSet : null;
@@ -1511,7 +1513,10 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       
       const hpBefore = st.hitsRemaining;
       const baseAmt = hitSource === 'cut' || hitSource === 'tackle' ? 1 : 0;
-      const amount = baseAmt > 0 ? baseAmt + bonusHits : 0;
+      let amount = baseAmt > 0 ? baseAmt + bonusHits : 0;
+      if (treeDemolishOneShot && amount > 0) {
+        amount = st.hitsRemaining;
+      }
       if (amount > 0) {
         st.hitsRemaining = Math.max(0, st.hitsRemaining - amount);
         markDetailHitHpBar(worldKey, hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5, st.hitsMax, hpBefore, st.hitsRemaining, nowSec);
@@ -1591,7 +1596,10 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     const hitY = hit.cy ?? hit.rootOy + 0.5;
     const baseTreeDmg =
       isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
-    const treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
+    let treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
+    if (treeDemolishOneShot && isTreeHit && treeDamage > 0) {
+      treeDamage = st.hitsRemaining;
+    }
     st.hitsRemaining = Math.max(0, st.hitsRemaining - treeDamage);
     if (!isTreeHit) {
       if (treeDamage > 0 && st.hitsRemaining <= 0) {

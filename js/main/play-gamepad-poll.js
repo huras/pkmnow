@@ -59,6 +59,33 @@ export function readGamepadRightStick(gp) {
 
 const prevPressed = new Array(BTN_TRACK).fill(false);
 
+/** LT/RT are analog on most pads; treat as held past this threshold. */
+const TRIGGER_HELD_T = 0.42;
+
+function triggerHeld(gp, idx) {
+  const b = gp?.buttons?.[idx];
+  if (!b) return false;
+  const v = typeof b.value === 'number' ? b.value : 0;
+  return !!b.pressed || v >= TRIGGER_HELD_T;
+}
+
+let prevTriggerLt = false;
+let prevTriggerRt = false;
+
+function risingTriggerLt(gp) {
+  const now = gp ? triggerHeld(gp, 6) : false;
+  const edge = now && !prevTriggerLt;
+  prevTriggerLt = now;
+  return edge;
+}
+
+function risingTriggerRt(gp) {
+  const now = gp ? triggerHeld(gp, 7) : false;
+  const edge = now && !prevTriggerRt;
+  prevTriggerRt = now;
+  return edge;
+}
+
 function risingEdge(gp, idx) {
   const now = gp ? btnPressed(gp, idx) : false;
   const was = prevPressed[idx];
@@ -68,6 +95,8 @@ function risingEdge(gp, idx) {
 
 function clearPrevButtons() {
   prevPressed.fill(false);
+  prevTriggerLt = false;
+  prevTriggerRt = false;
 }
 
 /** First D-pad direction that got a rising edge this frame → slot 0–3 (Up,Right,Down,Left), or -1. */
@@ -81,8 +110,8 @@ function firstDpadSlotRising(gp) {
 
 /**
  * D-pad rising edge index order from {@link firstDpadSlotRising}: Up, Right, Down, Left.
- * Maps to binding slots: □, R2, L1+□ (wheel↑), L2 (MMB).
- * R3 → slot 4 (L1+△ / wheel↓) handled in the tick separately.
+ * Maps to binding slots: □ (LMB), R2 (RMB), wheel↑ (L1+□), L2 (MMB).
+ * R3 → wheel↓ (L1+△) handled in the tick separately.
  */
 export function dpadEdgeToBindingSlot(edge) {
   const map = [0, 1, 3, 2];
@@ -116,13 +145,19 @@ export function samplePlayGamepadFrame() {
       risingR3: false,
       risingBack: false,
       risingStart: false,
-      dpadSlotEdge: -1
+      dpadSlotEdge: -1,
+      heldLT: false,
+      heldRT: false,
+      risingLT: false,
+      risingRT: false
     };
   }
 
   const { mx, my } = readGamepadMoveVector(gp);
   const { rx, ry } = readGamepadRightStick(gp);
   const dpadSlotEdge = firstDpadSlotRising(gp);
+  const heldLT = triggerHeld(gp, 6);
+  const heldRT = triggerHeld(gp, 7);
 
   return {
     connected: true,
@@ -146,6 +181,10 @@ export function samplePlayGamepadFrame() {
     risingR3: risingEdge(gp, GP_BTN.R3),
     risingBack: risingEdge(gp, GP_BTN.Back),
     risingStart: risingEdge(gp, GP_BTN.Start),
-    dpadSlotEdge
+    dpadSlotEdge,
+    heldLT,
+    heldRT,
+    risingLT: risingTriggerLt(gp),
+    risingRT: risingTriggerRt(gp)
   };
 }
