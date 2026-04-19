@@ -74,6 +74,119 @@ export function drawSteelStreamGradientBeam(ctx, beam, tileW, tileH, snapPx, tim
   ctx.restore();
 }
 
+/**
+ * Thick blue waterfall-style beam (Water Cannon). Non-additive; caller should not force `lighter`.
+ * Same geometry contract as {@link drawSteelStreamGradientBeam}.
+ */
+export function drawWaterCannonStreamBeam(ctx, beam, tileW, tileH, snapPx, time) {
+  const sx = Number(beam.laserBeamSx);
+  const sy = Number(beam.laserBeamSy);
+  const sz = Number(beam.laserBeamSz) || 0;
+  const ex = Number(beam.laserBeamEx);
+  const ey = Number(beam.laserBeamEy);
+  const ez = Number(beam.laserBeamEz) || 0;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(ex) || !Number.isFinite(ey)) return;
+
+  const x0 = snapPx(sx * tileW);
+  const y0 = snapPx(sy * tileH - sz * tileH);
+  const x1 = snapPx(ex * tileW);
+  const y1 = snapPx(ey * tileH - ez * tileH);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenPx = Math.max(10, Math.hypot(dx, dy));
+  const midX = (x0 + x1) * 0.5;
+  const midY = (y0 + y1) * 0.5;
+  const beamAng = Math.atan2(dy, dx);
+  const halfLen = lenPx * 0.5;
+  const baseTh = Math.max(5.5, tileH * 0.088) * 5.4;
+  const waveA = Math.max(2.2, tileH * 0.026);
+  const segs = Math.max(32, Math.min(96, Math.floor(lenPx / 6)));
+
+  ctx.save();
+  ctx.translate(midX, midY);
+  ctx.rotate(beamAng);
+  ctx.globalCompositeOperation = 'source-over';
+
+  const topPts = [];
+  const botPts = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const x = -halfLen + t * lenPx;
+    const w =
+      Math.sin(t * Math.PI * 5.2 + time * 5.4) * waveA +
+      Math.sin(t * Math.PI * 11 + time * 2.9) * waveA * 0.42;
+    const hb = baseTh * (0.4 + 0.11 * Math.sin(t * Math.PI * 4.2 + time * 1.6));
+    topPts.push({ x, y: w - hb });
+    botPts.push({ x, y: w + hb });
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(topPts[0].x, topPts[0].y);
+  for (let i = 1; i < topPts.length; i++) ctx.lineTo(topPts[i].x, topPts[i].y);
+  for (let i = botPts.length - 1; i >= 0; i--) ctx.lineTo(botPts[i].x, botPts[i].y);
+  ctx.closePath();
+
+  const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+  grd.addColorStop(0, 'rgba(28, 95, 190, 0.42)');
+  grd.addColorStop(0.28, 'rgba(55, 150, 235, 0.88)');
+  grd.addColorStop(0.52, 'rgba(190, 235, 255, 0.94)');
+  grd.addColorStop(0.74, 'rgba(40, 130, 220, 0.82)');
+  grd.addColorStop(1, 'rgba(22, 88, 175, 0.38)');
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  const w0 =
+    Math.sin(0 * Math.PI * 5.2 + time * 5.4) * waveA +
+    Math.sin(0 * Math.PI * 11 + time * 2.9) * waveA * 0.42;
+  const hb0 = baseTh * (0.4 + 0.11 * Math.sin(0 * Math.PI * 4.2 + time * 1.6));
+  const capR = Math.max(hb0 * 0.95, 4);
+  ctx.beginPath();
+  ctx.arc(-halfLen, w0, capR, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(120, 200, 255, 0.55)';
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(topPts[0].x, topPts[0].y);
+  for (let i = 1; i < topPts.length; i++) ctx.lineTo(topPts[i].x, topPts[i].y);
+  for (let i = botPts.length - 1; i >= 0; i--) ctx.lineTo(botPts[i].x, botPts[i].y);
+  ctx.closePath();
+  ctx.clip();
+
+  const scroll = time * 12;
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = Math.max(1, tileW * 0.016);
+  const nLines = 10;
+  for (let k = 0; k < nLines; k++) {
+    const lane = ((k + 0.5) / nLines - 0.5) * baseTh * 0.82;
+    ctx.beginPath();
+    for (let j = 0; j <= segs; j++) {
+      const t = j / segs;
+      const x = -halfLen + t * lenPx;
+      const w =
+        Math.sin(t * Math.PI * 5.2 + time * 5.4) * waveA +
+        Math.sin(t * Math.PI * 11 + time * 2.9) * waveA * 0.42;
+      const flow = Math.sin(t * 28 - scroll + k * 1.4) * (baseTh * 0.07);
+      const y = w + lane + flow;
+      if (j === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.moveTo(topPts[0].x, topPts[0].y);
+  for (let i = 1; i < topPts.length; i++) ctx.lineTo(topPts[i].x, topPts[i].y);
+  for (let i = botPts.length - 1; i >= 0; i--) ctx.lineTo(botPts[i].x, botPts[i].y);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(230, 248, 255, 0.36)';
+  ctx.lineWidth = Math.max(1.4, tileW * 0.024);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 export function drawPrismaticStreamGradientBeam(ctx, beam, tileW, tileH, snapPx, time) {
   const sx = Number(beam.laserBeamSx);
   const sy = Number(beam.laserBeamSy);
@@ -599,6 +712,50 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       ctx.fillStyle = 'rgba(230,238,248,0.95)';
       ctx.beginPath();
       ctx.arc(px, py, Math.max(3.2, tileW * 0.13), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (p.type === 'waterCannonShot') {
+    const ang = Math.atan2(p.vy || 0, p.vx || 1);
+    if (p.laserStream) {
+      if (!p.laserStreamHidePerProjectileBeam) {
+        if (p.laserBeamGradient) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-over';
+          drawWaterCannonStreamBeam(ctx, p, tileW, tileH, snapPx, time);
+          ctx.restore();
+        } else {
+          const speed = Math.hypot(p.vx || 0, p.vy || 0);
+          const lenPx = Math.max(16, Math.min(tileW * 2.65, tileW * (0.8 + speed * 0.028)));
+          const th = Math.max(3.4, tileH * 0.09) * 6.2;
+          const halfLen = lenPx * 0.5;
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(ang);
+          const grd = ctx.createLinearGradient(-halfLen, 0, halfLen, 0);
+          grd.addColorStop(0, 'rgba(50,130,210,0.45)');
+          grd.addColorStop(0.5, 'rgba(200,240,255,0.88)');
+          grd.addColorStop(1, 'rgba(35,110,200,0.4)');
+          const roundW = (halfH, arcR) => {
+            ctx.beginPath();
+            ctx.moveTo(-halfLen, -halfH);
+            ctx.arc(-halfLen, 0, arcR, -Math.PI / 2, Math.PI / 2, true);
+            ctx.lineTo(halfLen, halfH);
+            ctx.lineTo(halfLen, -halfH);
+            ctx.closePath();
+          };
+          ctx.fillStyle = 'rgba(40,100,180,0.22)';
+          roundW(th * 0.92, th * 0.92);
+          ctx.fill();
+          ctx.fillStyle = grd;
+          roundW(th * 0.48, th * 0.48);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    } else {
+      ctx.fillStyle = 'rgba(200, 235, 255, 0.92)';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(3.2, tileW * 0.12), 0, Math.PI * 2);
       ctx.fill();
     }
   } else if (p.type === 'prismaticShot') {

@@ -36,6 +36,8 @@ import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-
 import { getLastRenderFrameBreakdown, RENDER_FRAME_PHASE_HUD_LABELS } from '../render/render-frame-phases.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 import { tickPlaySessionAutosave } from './play-session-persist.js';
+import { tickPlayGamepadFrame } from './play-gamepad.js';
+import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -70,7 +72,8 @@ function isPlayMovementKeyEvent(e) {
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
  *   advanceWorldTime?: (dt: number) => void,
- *   getGameTimeSec?: () => number
+ *   getGameTimeSec?: () => number,
+ *   onEscapePlay?: () => void
  * }} api When `getPlayFpsCompact` is true, `#play-fps` shows only the rolling FPS (minimal / immersive UI).
  */
 export function createGameLoop(api) {
@@ -85,15 +88,17 @@ export function createGameLoop(api) {
     player,
     onPlayHudFrame,
     advanceWorldTime,
-    getGameTimeSec
+    getGameTimeSec,
+    onEscapePlay
   } = api;
 
   function gameLoop(timestamp) {
     const tLoopStart = performance.now();
     const dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
+    const simDt = getGameplaySimDt(dt);
     setGameTime(timestamp / 1000);
-    if (getAppMode() === 'play') advanceWorldTime?.(dt);
+    if (getAppMode() === 'play') advanceWorldTime?.(simDt);
 
     let inX = 0;
     let inY = 0;
@@ -108,12 +113,24 @@ export function createGameLoop(api) {
       inY /= mag;
     }
 
+    const { inX: mergedX, inY: mergedY } = tickPlayGamepadFrame({
+      getAppMode,
+      getCurrentData,
+      player,
+      refreshPlayModeInfoBar,
+      onEscapePlay,
+      keyboardMoveX: inX,
+      keyboardMoveY: inY
+    });
+
     if (['play'].includes(getAppMode())) {
-      if (inX === 0 && inY === 0) {
+      if (mergedX === 0 && mergedY === 0) {
         player.runMode = false;
+      } else if (playInputState.gamepadRunHeld) {
+        player.runMode = true;
       }
-      player.inputX = inX;
-      player.inputY = inY;
+      player.inputX = mergedX;
+      player.inputY = mergedY;
     } else {
       player.inputX = 0;
       player.inputY = 0;
@@ -137,14 +154,14 @@ export function createGameLoop(api) {
 
     const currentData = getCurrentData();
     const tUpdPlayer0 = performance.now();
-    updatePlayer(dt, currentData, getGameTimeSec?.());
+    updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
-    updatePlayGrassRustle(dt, player, getAppMode() === 'play' ? currentData : null);
+    updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
-      updateCrystalShardParticles(dt);
-      updateCrystalDropsAndPickup(dt, player);
-      updateBreakableDetailRegeneration(dt, currentData);
+      updateCrystalShardParticles(simDt);
+      updateCrystalDropsAndPickup(simDt, player);
+      updateBreakableDetailRegeneration(simDt, currentData);
     }
 
     if (currentData && getAppMode() === 'play') {
@@ -155,7 +172,7 @@ export function createGameLoop(api) {
       syncWildPokemonWindow(currentData, pvx, pvy);
       updateBreakdown.updWildWindowMs = performance.now() - tWildWindow0;
       const tWild0 = performance.now();
-      updateWildPokemon(dt, currentData, pvx, pvy);
+      updateWildPokemon(simDt, currentData, pvx, pvy);
       updateBreakdown.updWildMs = performance.now() - tWild0;
       updateBreakdown.updWildMiscMs = wildUpdatePerfLast.miscMs;
       updateBreakdown.updWildVerticalMs = wildUpdatePerfLast.verticalMs;
@@ -163,15 +180,15 @@ export function createGameLoop(api) {
       updateBreakdown.updWildMotionMs = wildUpdatePerfLast.motionMs;
       updateBreakdown.updWildPostMs = wildUpdatePerfLast.postMs;
       const tPointer0 = performance.now();
-      updatePlayPointerCombat(dt, player, currentData);
-      updateStrengthCarryInteraction(dt, player, currentData);
-      updateThrownMapDetailEntities(dt, currentData);
+      updatePlayPointerCombat(simDt, player, currentData);
+      updateStrengthCarryInteraction(simDt, player, currentData);
+      updateThrownMapDetailEntities(simDt, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
-      updateMoves(dt, getWildPokemonEntities(), currentData, player);
+      updateMoves(simDt, getWildPokemonEntities(), currentData, player);
       updateBreakdown.updMovesMs = performance.now() - tMoves0;
       const tGrassFire0 = performance.now();
-      updateGrassFire(dt, currentData, pvx, pvy, (wx, wy) => {
+      updateGrassFire(simDt, currentData, pvx, pvy, (wx, wy) => {
         pushParticle({
           type: 'grassFire',
           x: wx,
@@ -185,7 +202,7 @@ export function createGameLoop(api) {
         });
       });
       updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
-      tickLightning(dt, {
+      tickLightning(simDt, {
         rainIntensity: getWeatherRainIntensity(),
         playerWorldX: pvx,
         playerWorldY: pvy,

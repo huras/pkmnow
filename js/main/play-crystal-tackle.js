@@ -59,6 +59,7 @@ import { playTreeCutHitSfx } from '../audio/tree-cut-hit-sfx.js';
 import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 import { playRockSmashingSfx, playRockSmashingBreakSfx } from '../audio/rock-smashing-sfx.js';
 import { getChargeLevel } from './play-charge-levels.js';
+import { rumblePlayerGamepadDetailImpact } from './play-gamepad-rumble.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -1163,6 +1164,13 @@ function sweepDetailBreakState(data, nowSec) {
   }
 }
 
+/** @param {{ gamepadRumblePlayer?: boolean }} opts */
+/** @param {'tree' | 'rock' | 'crystal'} profile */
+function tryPlayerGamepadRumbleForHit(opts, profile) {
+  if (!opts?.gamepadRumblePlayer || !profile) return;
+  rumblePlayerGamepadDetailImpact(profile);
+}
+
 /**
  * Extra break ticks from held melee charge (bars 2–3): +0 / +1 / +2 vs map details.
  * @param {'tackle' | 'cut' | 'other'} hitSource
@@ -1210,6 +1218,7 @@ export function tryBreakCrystalOnPlayerTackle(player, data, detailCharge01 = nul
   tryBreakDetailsAlongSegment(px, py, ex, ey, data, {
     hitSource: 'tackle',
     pz,
+    gamepadRumblePlayer: true,
     ...(dc != null ? { detailCharge01: dc } : {})
   });
 }
@@ -1262,7 +1271,8 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  *   excludePureGrassScatterHits?: boolean,
  *   reusedConsumedWorld?: Set<string>,
  *   reusedConsumedSpawned?: Set<number>,
- *   originScanStepTiles?: number
+ *   originScanStepTiles?: number,
+ *   gamepadRumblePlayer?: boolean
  * }} [opts]
  */
 export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
@@ -1455,6 +1465,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
       playCrystalClinkSfx({ x: c.x, y: c.y });
       spawnPickableCrystalDropAt(c.x, c.y, c.itemKey, countSpritesInObjectSet(cSet));
       spawnCrystalShards(Math.floor(c.x), Math.floor(c.y), c.itemKey, data);
+      tryPlayerGamepadRumbleForHit(opts, 'crystal');
       continue;
     }
 
@@ -1478,9 +1489,13 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
             playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
           }
           tryHarvestCharredFormalTreeAtRoot(hit.rootOx, hit.rootOy);
+          if (hitSource === 'cut' || hitSource === 'tackle') {
+            tryPlayerGamepadRumbleForHit(opts, 'tree');
+          }
         } else {
           if (hitSource === 'tackle') {
             playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+            tryPlayerGamepadRumbleForHit(opts, 'tree');
           }
           markDetailHitShake(bumpKey, nowSec);
           spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
@@ -1509,6 +1524,9 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
       } else if (hitSource === 'tackle') {
         playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
+      if (amount > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
+        tryPlayerGamepadRumbleForHit(opts, 'tree');
       }
 
       if (st.hitsRemaining <= 0) {
@@ -1539,10 +1557,14 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
           playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
         }
         tryHarvestCharredScatterTreeAtOrigin(hit.rootOx, hit.rootOy, data);
+        if (hitSource === 'cut' || hitSource === 'tackle') {
+          tryPlayerGamepadRumbleForHit(opts, 'tree');
+        }
       } else {
         const bumpKey = `treeBump:${hit.rootOx},${hit.rootOy}`;
         if (hitSource === 'tackle') {
           playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+          tryPlayerGamepadRumbleForHit(opts, 'tree');
         }
         markDetailHitShake(bumpKey, nowSec);
         spawnDetailHitPulse(hit.cx ?? hit.rootOx + 0.5, hit.cy ?? hit.rootOy + 0.5);
@@ -1591,6 +1613,13 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         playTreeCutHitSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
       } else if (hitSource === 'tackle') {
         playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
+      }
+    }
+    if (opts.gamepadRumblePlayer && !scatterItemKeyIsPureGrassDecoration(hit.itemKey)) {
+      if (isTreeHit && treeDamage > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
+        tryPlayerGamepadRumbleForHit(opts, 'tree');
+      } else if (!isTreeHit && st.hitsRemaining < hpBefore) {
+        tryPlayerGamepadRumbleForHit(opts, isCrystalItemKey(hit.itemKey) ? 'crystal' : 'rock');
       }
     }
     if (worldHitOnceSet) worldHitOnceSet.add(worldKey);

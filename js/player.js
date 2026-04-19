@@ -21,7 +21,7 @@ import {
   speciesHasGroundType,
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
-import { playInputState } from './main/play-input-state.js';
+import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
 import {
   strengthCarryBlocksWalk,
   onStrengthCarrierDamaged,
@@ -83,6 +83,11 @@ const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 const RUN_SPEED_CAP_MULT = 2;
 /** Hold-LMB combat charge: movement stays possible but slower. */
 const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
+/**
+ * Walk facing: gamepad vectors are rarely axis-aligned. When the smaller axis magnitude
+ * is at most this fraction of the larger, treat facing as pure N/S/E/W (same as keyboard zeros).
+ */
+const FACING_CARDINAL_AXIS_SLIP_RATIO = 0.32;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */
 const DIG_IDLE_ANIM_SPEED = 2.8;
@@ -559,6 +564,31 @@ const FACING_TO_TACKLE_UNIT = {
 };
 
 /**
+ * @param {number} ix
+ * @param {number} iy
+ */
+function setPlayerFacingFromWalkInput(ix, iy) {
+  const ax = Math.abs(ix);
+  const ay = Math.abs(iy);
+  const major = Math.max(ax, ay, 1e-6);
+  const slip = FACING_CARDINAL_AXIS_SLIP_RATIO;
+  if (ax <= slip * major) {
+    if (iy < 0) player.facing = 'up';
+    else if (iy > 0) player.facing = 'down';
+    return;
+  }
+  if (ay <= slip * major) {
+    if (ix < 0) player.facing = 'left';
+    else if (ix > 0) player.facing = 'right';
+    return;
+  }
+  if (ix > 0 && iy < 0) player.facing = 'up-right';
+  else if (ix < 0 && iy < 0) player.facing = 'up-left';
+  else if (ix > 0 && iy > 0) player.facing = 'down-right';
+  else if (ix < 0 && iy > 0) player.facing = 'down-left';
+}
+
+/**
  * Starts the LMB melee pose window (`getDexAnimSlice(dex, 'attack')` timings) + tackle direction for lunge / crystal hit.
  * @param {{ dexId?: number, lmbAttackAnimSec?: number, _lmbAttackAnimTick?: number, facing?: string, tackleDirNx?: number, tackleDirNy?: number, _tackleDurSec?: number } | null | undefined} p
  * @param {number} [dirNx] Optional free-aim X (used when player is not pressing movement input).
@@ -683,7 +713,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player.digCharge01 = 0;
   } else if (player.digBurrowMode) {
     /* latched: stay dug until leave ground / jump */
-  } else if (playInputState.shiftLeftHeld) {
+  } else if (isPlayGroundDigShiftHeld()) {
     player.digCharge01 = Math.min(1, player.digCharge01 + dt / DIG_CHARGE_SEC);
     if (player.digCharge01 >= 1) {
       player.digBurrowMode = true;
@@ -695,12 +725,12 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   const groundDigVisual =
     isGroundDigLatchEligible() && !!player.grounded && !isAirborne && (player.digCharge01 > 0 || player.digBurrowMode);
-  player.digActive = !!player.grounded && (groundDigVisual || (gh && !!playInputState.shiftLeftHeld));
+  player.digActive = !!player.grounded && (groundDigVisual || (gh && !!isPlayGroundDigShiftHeld()));
 
   const raisingHeightOnFlight =
     flightMove &&
-    !!playInputState.spaceHeld &&
-    !playInputState.shiftLeftHeld &&
+    isPlaySpaceAscendHeld() &&
+    !isPlayGroundDigShiftHeld() &&
     player.z < FLIGHT_MAX_Z - 1e-4;
   const flightHorizontalMoveBoost =
     flightMove &&
@@ -746,15 +776,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player.vy = uy * cap;
     setPlayerFacingFromWorldAimDelta(player, ux, uy);
   } else if (player.inputX !== 0 || player.inputY !== 0) {
-    // Determine facing
-    if (player.inputX === 0 && player.inputY < 0) player.facing = 'up';
-    else if (player.inputX === 0 && player.inputY > 0) player.facing = 'down';
-    else if (player.inputX < 0 && player.inputY === 0) player.facing = 'left';
-    else if (player.inputX > 0 && player.inputY === 0) player.facing = 'right';
-    else if (player.inputX > 0 && player.inputY < 0) player.facing = 'up-right';
-    else if (player.inputX < 0 && player.inputY < 0) player.facing = 'up-left';
-    else if (player.inputX > 0 && player.inputY > 0) player.facing = 'down-right';
-    else if (player.inputX < 0 && player.inputY > 0) player.facing = 'down-left';
+    setPlayerFacingFromWalkInput(player.inputX, player.inputY);
 
     // Accelerate (flight: gentler horizontal accel than on foot)
     const accelMul = flightMove ? FLIGHT_ACCEL_MULT : 1;
@@ -958,8 +980,8 @@ export function updatePlayer(dt, data, gameTimeSec) {
     const zFlightPrev = player.z;
     const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
     const cutLock = (player.cutThirdHitLockoutSec || 0) > 0;
-    const up = cutLock ? 0 : playInputState.spaceHeld ? vSp : 0;
-    const down = cutLock ? 0 : playInputState.shiftLeftHeld ? vSp : 0;
+    const up = cutLock ? 0 : isPlaySpaceAscendHeld() ? vSp : 0;
+    const down = cutLock ? 0 : isPlayGroundDigShiftHeld() ? vSp : 0;
     const dz = (up - down) * dt;
     player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
     player.vz = 0;
@@ -1074,8 +1096,8 @@ export function updatePlayer(dt, data, gameTimeSec) {
       (flightMove &&
         smoothLevitationFlight &&
         (spd > 0.1 ||
-          !!playInputState.spaceHeld ||
-          !!playInputState.shiftLeftHeld ||
+          isPlaySpaceAscendHeld() ||
+          isPlayGroundDigShiftHeld() ||
           player.z > 0.02));
 
     if (useWalkLikeAnim) {
@@ -1160,12 +1182,12 @@ export function updatePlayer(dt, data, gameTimeSec) {
   // Ground ↔ air tether: while changing height in flight, or each 4s hover-idle the last 1s blinks on/off.
   if (flightMove) {
     const raisingHeightDraw =
-      !!playInputState.spaceHeld &&
-      !playInputState.shiftLeftHeld &&
+      isPlaySpaceAscendHeld() &&
+      !isPlayGroundDigShiftHeld() &&
       player.z < FLIGHT_MAX_Z - 1e-4;
     const loweringHeightDraw =
-      !!playInputState.shiftLeftHeld &&
-      !playInputState.spaceHeld &&
+      isPlayGroundDigShiftHeld() &&
+      !isPlaySpaceAscendHeld() &&
       player.z > 1e-4;
     const verticalFlightAdjust = raisingHeightDraw || loweringHeightDraw;
     const horizBusy =

@@ -20,6 +20,7 @@ import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
 import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '../main/wind-state.js';
 import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
 import { getBindableMoveLabel } from '../main/player-input-slots.js';
+import { isPlayGroundDigShiftHeld } from '../main/play-input-state.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 1.25;
@@ -1530,11 +1531,11 @@ function tickAndDrawRainSplashes(ctx, timeSec, intensity, splashTargets) {
  * Draws the charge bar for the digging ability.
  */
 export function drawDigChargeBar(ctx, options) {
-  const { latchGround, player, playInputState, cw, ch } = options;
+  const { latchGround, player, cw, ch } = options;
   if (
     latchGround &&
     !!player.grounded &&
-    playInputState.shiftLeftHeld &&
+    isPlayGroundDigShiftHeld() &&
     !player.digBurrowMode &&
     player.digCharge01 > 0
   ) {

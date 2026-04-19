@@ -3,7 +3,7 @@
  * semi-transparent sprite (no Diglett placeholder art). Wired from `underground-burrow.js` + `player.js`.
  */
 
-import { playInputState } from '../main/play-input-state.js';
+import { isPlayGroundDigShiftHeld } from '../main/play-input-state.js';
 import { speciesHasGhostType } from '../pokemon/pokemon-type-helpers.js';
 
 /** Sprite alpha while phasing (Left Shift on the ground). */
@@ -23,11 +23,11 @@ export function isGhostPhaseShiftBurrowEligibleDex(dexId) {
  */
 export function computeGhostPhaseShiftDrawAlpha(p) {
   const { grounded, dexId } = p;
-  if (!grounded || !speciesHasGhostType(dexId) || !playInputState.shiftLeftHeld) return 1;
+  if (!grounded || !speciesHasGhostType(dexId) || !isPlayGroundDigShiftHeld()) return 1;
   return GHOST_PHASE_SHIFT_DRAW_ALPHA;
 }
 
-/** Ghost burrow / phase uses Left Shift only (same key as Ground dig / underground-burrow). */
+/** Ghost burrow / phase: Left Shift or gamepad LB (same side as ground dig). */
 export function isGhostPhaseShiftLeftHeld() {
-  return !!playInputState.shiftLeftHeld;
+  return isPlayGroundDigShiftHeld();
 }

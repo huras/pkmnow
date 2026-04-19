@@ -6,8 +6,23 @@ export const playInputState = {
   /** Left = dig / burrow in play; Right tracked for possible future use. */
   shiftLeftHeld: false,
   shiftRightHeld: false,
+  /** Gamepad LB held — mirrors left-shift dig / flight-down for this frame (set in `play-gamepad-tick.js`). */
+  gamepadLbHeld: false,
   /** Space held — vertical flight up while in creative flight mode. */
   spaceHeld: false,
+  /** Gamepad A held — mirrors Space ascend while in flight (`play-gamepad-tick.js`). */
+  gamepadSpaceHeld: false,
+  /** Gamepad A / Cross (PS “X”, standard index 0) held — run while moving (`play-gamepad-tick.js` + `game-loop.js`). */
+  gamepadRunHeld: false,
+  /** Gamepad X / Square (standard index 2) held — mirrors LMB field slot (`play-gamepad-tick.js` + `play-mouse-combat.js`). */
+  gamepadFieldLmbHeld: false,
+  /**
+   * True while the move bind wheel is driven by the right stick this frame
+   * (skips mouse-based hover in `updateBindWheelHover`).
+   */
+  gamepadWheelAimActive: false,
+  /** When the dual gamepad bind wheels are open: world sim runs at 5% speed (UI/canvas still real-time). */
+  dualBindWheelSlowMo: false,
   /** Left Ctrl held — combat modifier (counter slots). */
   ctrlLeftHeld: false,
   /** World tile coordinates of the mouse (ground plane; see `playScreenPixelsToWorldTileCoords`). */
@@ -38,5 +53,14 @@ export const playInputState = {
 };
 
 export function isShiftDigHeld() {
-  return !!(playInputState.shiftLeftHeld || playInputState.shiftRightHeld);
+  return !!(playInputState.shiftLeftHeld || playInputState.shiftRightHeld || playInputState.gamepadLbHeld);
+}
+
+export function isPlaySpaceAscendHeld() {
+  return !!(playInputState.spaceHeld || playInputState.gamepadSpaceHeld);
+}
+
+/** Ground dig / ghost phase / flight-down: left Shift or gamepad LB (same as keyboard dig side). */
+export function isPlayGroundDigShiftHeld() {
+  return !!(playInputState.shiftLeftHeld || playInputState.gamepadLbHeld);
 }

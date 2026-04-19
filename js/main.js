@@ -30,6 +30,7 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { registerPlayGamepadListeners } from './main/play-gamepad.js';
 import {
   tryApplyPlaySessionResumeOnEnter,
   resetPlayAutosaveSchedule,
@@ -80,9 +81,7 @@ import {
   invalidatePlayPointerHover
 } from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
-import { OBJECT_SETS } from './tessellation-data.js';
-import { parseShape } from './tessellation-logic.js';
-import { TessellationEngine } from './tessellation-engine.js';
+import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
 import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
@@ -347,31 +346,6 @@ function detailLabelFromItemKey(itemKey) {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-/**
- * Multi-tile scatter preview: grid matches object `shape` so crystals read as one piece, not a strip.
- * @param {string} extraClass optional CSS class on the wrapper
- */
-function detailScatterGridPreviewHtml(itemKey, cellPx, extraClass) {
-  const objSet = OBJECT_SETS[String(itemKey || '')];
-  if (!objSet) return '';
-  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return '';
-  const { cols } = parseShape(objSet.shape || '[1x1]');
-  const imgPath = TessellationEngine.getImagePath(objSet.file);
-  if (!imgPath) return '';
-  const atlasCols = imgPath.includes('caves') ? 50 : 57;
-  const gridCols = Math.max(1, cols | 0);
-  const cls = extraClass ? ` class="${extraClass}"` : '';
-  const tiles = base.ids
-    .map((id) => {
-      const sx = (id % atlasCols) * 16;
-      const sy = Math.floor(id / atlasCols) * 16;
-      return `<span style="display:inline-block;width:${cellPx}px;height:${cellPx}px;background-image:url('${imgPath}');background-repeat:no-repeat;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.16) inset"></span>`;
-    })
-    .join('');
-  return `<span${cls} aria-hidden="true" style="display:grid;grid-template-columns:repeat(${gridCols},${cellPx}px);gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
 }
 
 function detailPreviewHtmlForInfoBar(itemKey) {
@@ -669,6 +643,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   getPlayFpsEl: () => playFpsEl,
   getPlayFpsCompact: () => isPlayImmersiveMinimalUi(),
   player,
+  onEscapePlay: () => btnBackToMap?.click?.(),
   advanceWorldTime: (dt) => {
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
@@ -689,6 +664,8 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
 });
 
 /** Help wiki registers Escape (capture) before this so Esc closes the modal instead of exiting play. */
+registerPlayGamepadListeners();
+
 registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,

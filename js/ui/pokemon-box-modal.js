@@ -15,6 +15,7 @@
 import { NATIONAL_DEX_MAX, getNationalSpeciesName, padDex3 } from '../pokemon/national-dex-registry.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
+import { startPokemonBoxDetailSpritePreview } from './pokemon-box-detail-sprite.js';
 
 const SLOTS_PER_PAGE = 30; // 5 cols × 6 rows
 const COLS = 5;
@@ -64,6 +65,17 @@ export class PokemonBoxModal {
     /** @type {AbortController | null} */
     this._portraitAbort = null;
     this._onKeyDown = this._handleKeyDown.bind(this);
+    /** Species summary overlay (sprite preview + stats + Play). */
+    this._detailOpen = false;
+    /** @type {(() => void) | null} */
+    this._stopDetailPreview = null;
+    /** Invalidates in-flight detail preview `startPokemonBoxDetailSpritePreview` when incremented. */
+    this._detailGen = 0;
+    this._detailDexId = 1;
+    /** @type {HTMLDivElement | null} */
+    this._detailEl = null;
+    /** @type {HTMLCanvasElement | null} */
+    this._detailCanvas = null;
   }
 
   // ------------------------------------------------------------------ Build DOM
@@ -113,6 +125,26 @@ export class PokemonBoxModal {
             </svg>
           </button>
         </footer>
+
+        <div class="pkmn-box-detail" id="pkmn-box-detail" aria-hidden="true">
+          <div class="pkmn-box-detail__panel" role="document" aria-label="Pokémon summary">
+            <header class="pkmn-box-detail__header">
+              <button type="button" class="pkmn-box-detail__back" id="pkmn-box-detail-back" aria-label="Back to Pokémon Box">←</button>
+              <div class="pkmn-box-detail__headtext">
+                <h3 class="pkmn-box-detail__title" id="pkmn-box-detail-title">—</h3>
+                <span class="pkmn-box-detail__dex" id="pkmn-box-detail-dex">#000</span>
+              </div>
+            </header>
+            <div class="pkmn-box-detail__stage">
+              <canvas id="pkmn-box-detail-canvas" width="260" height="200" aria-hidden="true"></canvas>
+            </div>
+            <div class="pkmn-box-detail__types" id="pkmn-box-detail-types"></div>
+            <dl class="pkmn-box-detail__stats" id="pkmn-box-detail-stats"></dl>
+            <footer class="pkmn-box-detail__footer">
+              <button type="button" class="pkmn-box-detail__play" id="pkmn-box-detail-play">Play with this Pokémon</button>
+            </footer>
+          </div>
+        </div>
       </div>
     `;
 
@@ -126,6 +158,8 @@ export class PokemonBoxModal {
     this._nextBtn = el.querySelector('#pkmn-box-next');
     this._searchInp = el.querySelector('#pkmn-box-search');
     this._footer = el.querySelector('.pkmn-box-modal__footer');
+    this._detailEl = el.querySelector('#pkmn-box-detail');
+    this._detailCanvas = el.querySelector('#pkmn-box-detail-canvas');
 
     // Build page dots
     this._buildDots();
@@ -141,6 +175,12 @@ export class PokemonBoxModal {
     this._searchInp.addEventListener('input', (e) => {
       this._searchQuery = e.target.value.trim().toLowerCase();
       this._render();
+    });
+
+    el.querySelector('#pkmn-box-detail-back')?.addEventListener('click', () => this._closeDetail());
+    el.querySelector('#pkmn-box-detail-play')?.addEventListener('click', () => this._playFromDetail());
+    this._detailEl?.addEventListener('click', (e) => {
+      if (e.target === this._detailEl) this._closeDetail();
     });
   }
 
@@ -234,13 +274,13 @@ export class PokemonBoxModal {
     for (const slotEl of this._gridEl.querySelectorAll('.pkmn-box-slot:not(.pkmn-box-slot--empty)')) {
       slotEl.addEventListener('click', () => {
         const dex = parseInt(slotEl.dataset.dex, 10);
-        this._select(dex);
+        this._openDetail(dex);
       });
       slotEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           const dex = parseInt(slotEl.dataset.dex, 10);
-          this._select(dex);
+          this._openDetail(dex);
         }
       });
     }
@@ -310,7 +350,14 @@ export class PokemonBoxModal {
     for (const slotEl of this._gridEl.querySelectorAll('.pkmn-box-slot')) {
       slotEl.addEventListener('click', () => {
         const dex = parseInt(slotEl.dataset.dex, 10);
-        this._select(dex);
+        this._openDetail(dex);
+      });
+      slotEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const dex = parseInt(slotEl.dataset.dex, 10);
+          this._openDetail(dex);
+        }
       });
     }
 
@@ -381,6 +428,93 @@ export class PokemonBoxModal {
     this._currentPage = Math.max(0, Math.min(TOTAL_PAGES - 1, page));
   }
 
+  // ------------------------------------------------------------------ Detail overlay
+
+  _populateDetailPanel(dex) {
+    const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Math.floor(Number(dex) || 1)));
+    const name = getNationalSpeciesName(d);
+    const cfg = getPokemonConfig(d);
+    const title = this._el?.querySelector('#pkmn-box-detail-title');
+    const dexLab = this._el?.querySelector('#pkmn-box-detail-dex');
+    const typesEl = this._el?.querySelector('#pkmn-box-detail-types');
+    const statsEl = this._el?.querySelector('#pkmn-box-detail-stats');
+    if (title) title.textContent = name;
+    if (dexLab) dexLab.textContent = `#${padDex3(d)}`;
+    if (typesEl) {
+      typesEl.innerHTML = cfg
+        ? cfg.types.map((t) => `<span class="pkmn-box-slot__type-badge type-${t}">${t.toUpperCase()}</span>`).join('')
+        : '';
+    }
+    if (statsEl) {
+      if (cfg) {
+        statsEl.innerHTML = [
+          '<dt>National Dex</dt>',
+          `<dd>#${padDex3(d)} — ${name}</dd>`,
+          '<dt>Species (config)</dt>',
+          `<dd>${cfg.name}</dd>`,
+          '<dt>Height</dt>',
+          `<dd>${cfg.heightTiles.toFixed(1)} tiles</dd>`,
+          '<dt>Base Speed</dt>',
+          `<dd>${cfg.baseSpeed}</dd>`,
+          '<dt>Walk speed mult.</dt>',
+          `<dd>${cfg.behavior.walkSpeedMul}</dd>`,
+          '<dt>Scatter weight</dt>',
+          `<dd>${cfg.behavior.scatterWeight}</dd>`,
+          '<dt>Turn bias</dt>',
+          `<dd>${cfg.behavior.turnBias}</dd>`
+        ].join('');
+      } else {
+        statsEl.innerHTML = '<dt>Data</dt><dd>No gameplay config for this species.</dd>';
+      }
+    }
+  }
+
+  _openDetail(dexId) {
+    const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Math.floor(Number(dexId) || 1)));
+    this._detailDexId = d;
+    this._activeDexId = d;
+    if (!this._detailEl || !this._detailCanvas) return;
+
+    this._stopDetailPreview?.();
+    this._stopDetailPreview = null;
+    const gen = ++this._detailGen;
+
+    this._populateDetailPanel(d);
+    this._detailEl.classList.add('pkmn-box-detail--open');
+    this._detailEl.setAttribute('aria-hidden', 'false');
+    this._detailOpen = true;
+
+    void (async () => {
+      const ctrl = await startPokemonBoxDetailSpritePreview(this._detailCanvas, d);
+      if (gen !== this._detailGen) {
+        ctrl.stop();
+        return;
+      }
+      this._stopDetailPreview = ctrl.stop;
+    })();
+
+    requestAnimationFrame(() => {
+      this._el?.querySelector('#pkmn-box-detail-back')?.focus();
+    });
+  }
+
+  _closeDetail() {
+    if (!this._detailOpen) return;
+    this._detailGen++;
+    this._stopDetailPreview?.();
+    this._stopDetailPreview = null;
+    this._detailEl?.classList.remove('pkmn-box-detail--open');
+    this._detailEl?.setAttribute('aria-hidden', 'true');
+    this._detailOpen = false;
+    this._render();
+  }
+
+  _playFromDetail() {
+    const d = this._detailDexId;
+    this._closeDetail();
+    this._select(d);
+  }
+
   // ------------------------------------------------------------------ Select
 
   _select(dexId) {
@@ -418,6 +552,13 @@ export class PokemonBoxModal {
 
   close() {
     if (!this._el || !this._isOpen) return;
+    this._detailGen++;
+    this._stopDetailPreview?.();
+    this._stopDetailPreview = null;
+    this._detailEl?.classList.remove('pkmn-box-detail--open');
+    this._detailEl?.setAttribute('aria-hidden', 'true');
+    this._detailOpen = false;
+
     this._el.classList.remove('pkmn-box-modal--open');
     this._el.setAttribute('aria-hidden', 'true');
     this._isOpen = false;
@@ -432,6 +573,13 @@ export class PokemonBoxModal {
 
   _handleKeyDown(e) {
     if (!this._isOpen) return;
+    if (this._detailOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this._closeDetail();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       this.close();

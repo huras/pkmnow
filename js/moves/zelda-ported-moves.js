@@ -13,6 +13,7 @@ import {
 } from './projectile-ground-hypot.js';
 import { spawnPrismaticLaserStreamFx } from './prismatic-laser-fx.js';
 import { spawnSteelBeamStreamFx } from './steel-beam-fx.js';
+import { spawnWaterCannonStreamFx } from './water-cannon-fx.js';
 
 export { castWaterGun } from './water-gun-ball.js';
 
@@ -363,6 +364,19 @@ export function computeSteelBeamPlayerStreamGeometry(sourceX, sourceY, targetX, 
   return { aimX, aimY, dist0, sp, maxHorizForTtl };
 }
 
+/** Water Cannon hold-stream: longer reach than Steel Beam, same mouth→aim clamp. */
+export function computeWaterCannonPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity) {
+  const maxR = 12.5;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+  const base = clampFloorAimToMaxRange(sourceX, sourceY, targetX, targetY, maxR);
+  const aimX = base.aimX;
+  const aimY = base.aimY;
+  const dist0 = base.dist0;
+  const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, aimX, aimY, 0.42);
+  const maxHorizForTtl = Math.max(0.12, Math.min(maxR, dist0));
+  return { aimX, aimY, dist0, sp, maxHorizForTtl };
+}
+
 export function castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile, pushParticle, streamPuff = false } = opts;
   const maxR = fromWild ? 12 : streamPuff ? 10 : 15;
@@ -587,6 +601,126 @@ export function castSteelBeam(sourceX, sourceY, targetX, targetY, sourceEntity, 
       radius: 0.22,
       timeToLive,
       damage: fromWild ? 4.2 : 6.2,
+      sourceEntity,
+      fromWild,
+      hitsWild: !fromWild,
+      hitsPlayer: !!fromWild,
+      trailAcc: LASER_TRAIL_INTERVAL * (i / count),
+      laserStream: false
+    });
+  }
+}
+
+/**
+ * Water Cannon — long blue waterfall-style hold-stream (wild = tight volley).
+ * @param {{
+ *   fromWild?: boolean,
+ *   pushProjectile: (p: object) => void,
+ *   pushParticle?: (p: object) => void,
+ *   streamPuff?: boolean
+ * }} opts
+ */
+export function castWaterCannon(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
+  const { fromWild = false, pushProjectile, pushParticle, streamPuff = false } = opts;
+  const maxR = fromWild ? 12 : streamPuff ? 12.5 : 15;
+  const z0 = Math.max(0, Number(sourceEntity?.z) || 0);
+
+  if (streamPuff && !fromWild) {
+    const geo = computeWaterCannonPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+    const { aimX, aimY, sp, maxHorizForTtl } = geo;
+    const cx = Number(sourceEntity?.visualX ?? sourceEntity?.x) + 0.5;
+    const cy = Number(sourceEntity?.visualY ?? sourceEntity?.y) + 0.5;
+    const cz = Math.max(0, Number(sourceEntity?.z) || 0);
+    const speed = 18.2 + Math.random() * 2.4;
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      aimX,
+      aimY,
+      sourceX,
+      sourceY,
+      speed,
+      maxHorizForTtl,
+      { ttlMargin: 1.05, ttlPad: 0.08 }
+    );
+    const dmg = 2.28 * 5;
+    pushLinearProjectile(pushProjectile, {
+      type: 'waterCannonShot',
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
+      radius: 0.24,
+      timeToLive,
+      damage: dmg,
+      sourceEntity,
+      fromWild,
+      hitsWild: !fromWild,
+      hitsPlayer: !!fromWild,
+      trailAcc: 0,
+      laserStream: true,
+      laserBeamGradient: true,
+      laserStreamHidePerProjectileBeam: true,
+      laserBeamSx: sp.startX,
+      laserBeamSy: sp.startY,
+      laserBeamSz: sp.startZ,
+      laserBeamEx: aimX,
+      laserBeamEy: aimY,
+      laserBeamEz: 0,
+      laserHitSx: cx,
+      laserHitSy: cy,
+      laserHitSz: cz,
+      laserHitEx: aimX,
+      laserHitEy: aimY,
+      laserHitEz: 0,
+      laserHitHalfWidth: 2.85,
+      hasTackleTrait: true,
+      tackleKnockback: 3.05,
+      tackleKnockbackLockSec: 0.3,
+      psyHitWild: new Set(),
+      psyHitDetails: new Set(),
+      playerBeamHitDone: false
+    });
+    if (pushParticle) {
+      spawnWaterCannonStreamFx(pushParticle, sp.startX, sp.startY, aimX, aimY, sp.startZ);
+    }
+    return;
+  }
+
+  const count = fromWild ? 9 : 11;
+  for (let i = 0; i < count; i++) {
+    const spread = (Math.random() - 0.5) * 0.07;
+    const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
+    const reach = 5.8;
+    const rawTx = sourceX + Math.cos(a) * reach;
+    const rawTy = sourceY + Math.sin(a) * reach;
+    const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, rawTx, rawTy, 0.42);
+    const { vx, vy, vz, timeToLive } = velocityFromToGroundWithHorizontalRangeFrom(
+      sp.startX,
+      sp.startY,
+      sp.startZ,
+      rawTx,
+      rawTy,
+      sourceX,
+      sourceY,
+      18,
+      maxR,
+      { ttlMargin: 1.02, ttlPad: 0.06 }
+    );
+    pushLinearProjectile(pushProjectile, {
+      type: 'waterCannonShot',
+      x: sp.startX,
+      y: sp.startY,
+      vx,
+      vy,
+      vz,
+      z: sp.startZ,
+      radius: 0.22,
+      timeToLive,
+      damage: fromWild ? 4 : 5.9,
       sourceEntity,
       fromWild,
       hitsWild: !fromWild,

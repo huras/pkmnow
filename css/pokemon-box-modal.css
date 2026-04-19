@@ -546,6 +546,171 @@
 .pkmn-box-slot__type-badge.type-steel    { background: #b8b8d0; color: #333; }
 .pkmn-box-slot__type-badge.type-fairy    { background: #ee99ac; color: #fff; }
 
+/* ---------- Species detail (sprite preview + stats + Play) ---------- */
+.pkmn-box-detail {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(4, 6, 20, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.pkmn-box-detail.pkmn-box-detail--open {
+  display: flex;
+}
+
+.pkmn-box-detail__panel {
+  width: min(340px, 100%);
+  max-height: min(92%, 620px);
+  overflow: auto;
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  background: linear-gradient(180deg, #1f2458 0%, #14183d 55%, #0f1230 100%);
+  border: 2px solid rgba(90, 120, 220, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(140, 180, 255, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 16px 48px rgba(0, 0, 0, 0.65);
+}
+
+.pkmn-box-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(100, 140, 255, 0.25);
+}
+
+.pkmn-box-detail__back {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(220, 230, 255, 0.92);
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pkmn-box-detail__back:hover {
+  background: rgba(100, 140, 255, 0.22);
+  border-color: rgba(160, 200, 255, 0.45);
+}
+
+.pkmn-box-detail__headtext {
+  flex: 1;
+  min-width: 0;
+}
+
+.pkmn-box-detail__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #e8eeff;
+  text-shadow: 0 1px 3px rgba(0, 0, 40, 0.8);
+}
+
+.pkmn-box-detail__dex {
+  display: block;
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(160, 185, 255, 0.85);
+}
+
+.pkmn-box-detail__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 50% 70%, rgba(40, 60, 140, 0.55), rgba(8, 10, 28, 0.92) 72%);
+  border: 1px solid rgba(80, 110, 200, 0.35);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+#pkmn-box-detail-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.pkmn-box-detail__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 12px;
+  min-height: 22px;
+}
+
+.pkmn-box-detail__stats {
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 38%) 1fr;
+  gap: 6px 10px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.pkmn-box-detail__stats dt {
+  margin: 0;
+  font-weight: 700;
+  color: rgba(170, 195, 255, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.58rem;
+}
+
+.pkmn-box-detail__stats dd {
+  margin: 0;
+  font-weight: 600;
+  color: rgba(240, 245, 255, 0.95);
+}
+
+.pkmn-box-detail__footer {
+  display: flex;
+  justify-content: center;
+}
+
+.pkmn-box-detail__play {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 2px solid rgba(100, 220, 140, 0.55);
+  background: linear-gradient(180deg, rgba(50, 160, 90, 0.95), rgba(30, 110, 65, 0.98));
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.pkmn-box-detail__play:hover {
+  filter: brightness(1.08);
+}
+
+.pkmn-box-detail__play:active {
+  transform: scale(0.98);
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 600px) {
   .pkmn-box-modal__card {
@@ -584,7 +749,10 @@
   .pkmn-box-modal,
   .pkmn-box-modal__card,
   .pkmn-box-slot,
-  .pkmn-box-modal__page-btn {
+  .pkmn-box-modal__page-btn,
+  .pkmn-box-detail__panel,
+  .pkmn-box-detail__play,
+  .pkmn-box-detail__back {
     transition: none;
   }
 }

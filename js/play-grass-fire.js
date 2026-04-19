@@ -40,7 +40,8 @@ const WATER_PROJECTILE_TYPES = new Set([
   'waterGunBall',
   'bubbleShot',
   'bubbleBeamShot',
-  'waterBurstShot'
+  'waterBurstShot',
+  'waterCannonShot'
 ]);
 
 /**
@@ -186,6 +187,8 @@ function waterExtinguishDamage(projType, projRef) {
       return Math.max(22, fromDmg > 0 ? Math.round(8 + (Number(projRef?.damage) || 0) * 8.5) : 34);
     case 'bubbleShot':
       return Math.max(18, fromDmg);
+    case 'waterCannonShot':
+      return Math.max(52, fromDmg);
     default:
       return Math.max(22, fromDmg);
   }

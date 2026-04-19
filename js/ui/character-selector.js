@@ -19,6 +19,9 @@ import {
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
+import { detailScatterGridPreviewHtml } from '../main/detail-scatter-preview-html.js';
+import { OBJECT_SETS } from '../tessellation-data.js';
+import { parseShape } from '../tessellation-logic.js';
 import { installPokemonBoxModal } from './pokemon-box-modal.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
@@ -64,6 +67,25 @@ function lootSlugForItemKey(itemKey) {
   const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
   if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
   return null;
+}
+
+/** Tessellation sprite grid sized to fit the play item HUD icon cell (narrow 4-col slot). */
+function playItemHudScatterSpriteHtml(itemKey) {
+  const key = String(itemKey || '');
+  const objSet = OBJECT_SETS[key];
+  if (!objSet) return '';
+  const { cols } = parseShape(objSet.shape || '[1x1]');
+  const gridCols = Math.max(1, cols | 0);
+  const gap = 2;
+  /** Fits 4-column HUD cells (~min 64px). */
+  const box = 36;
+  const cellPx = Math.max(6, Math.floor((box - gap * (gridCols - 1)) / gridCols));
+  return detailScatterGridPreviewHtml(
+    key,
+    cellPx,
+    'play-item-hud__detail-sprite',
+    'vertical-align:middle;line-height:0'
+  );
 }
 
 export class CharacterSelector {
@@ -250,7 +272,7 @@ export class CharacterSelector {
     if (!listEl) return;
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
-      .slice(0, 4);
+      .slice(0, 8);
     const sig = `${crystalN}|${rows.map((r) => `${r.itemKey}:${r.count | 0}`).join(';')}`;
     if (sig === this._lastPlayItemHudSig) return;
     this._lastPlayItemHudSig = sig;
@@ -260,15 +282,20 @@ export class CharacterSelector {
       .map((r) => {
         const slug = lootSlugForItemKey(r.itemKey);
         const path = slug && m ? m.get(slug) : null;
+        const spriteHtml = path ? '' : playItemHudScatterSpriteHtml(r.itemKey);
         const icon = path
-          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="20" height="20" decoding="async" />`
-          : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="36" height="36" decoding="async" />`
+          : spriteHtml
+            ? spriteHtml
+            : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
         const dragKey = encodeURIComponent(String(r.itemKey || ''));
         return `
           <div class="play-item-hud__row play-item-hud__row--draggable" draggable="true" data-inventory-drag="${dragKey}" title="Drag to the map to drop">
             <span class="play-item-hud__icon" aria-hidden="true">${icon}</span>
-            <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
-            <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
+            <div class="play-item-hud__meta">
+              <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
+              <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
+            </div>
           </div>
         `;
       })
@@ -400,20 +427,24 @@ export class CharacterSelector {
 
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__title">Items</div>
-          <div
-            class="play-item-hud__row play-item-hud__row--draggable"
-            id="play-item-crystal-row"
-            draggable="false"
-            data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
-            title="Drag to the map to drop"
-          >
-            <span class="play-item-hud__icon" aria-hidden="true">
-              <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="20" height="20" alt="" decoding="async" />
-            </span>
-            <span class="play-item-hud__label">Crystal Shards</span>
-            <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+          <div class="play-item-hud__grid" id="play-item-grid">
+            <div
+              class="play-item-hud__row play-item-hud__row--draggable"
+              id="play-item-crystal-row"
+              draggable="false"
+              data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
+              title="Drag to the map to drop"
+            >
+              <span class="play-item-hud__icon" aria-hidden="true">
+                <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="36" height="36" alt="" decoding="async" />
+              </span>
+              <div class="play-item-hud__meta">
+                <span class="play-item-hud__label">Crystal Shards</span>
+                <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+              </div>
+            </div>
+            <div id="play-item-loot-list"></div>
           </div>
-          <div id="play-item-loot-list"></div>
         </div>
       </div>
     `;

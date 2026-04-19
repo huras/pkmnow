@@ -180,7 +180,7 @@ export function tickActiveProjectiles(ctx) {
     }
 
     if (
-      (proj.type === 'prismaticShot' || proj.type === 'steelBeamShot') &&
+      (proj.type === 'prismaticShot' || proj.type === 'steelBeamShot' || proj.type === 'waterCannonShot') &&
       proj.laserStream &&
       Number.isFinite(proj.laserHitEx) &&
       Number.isFinite(proj.laserHitSx)
@@ -210,13 +210,15 @@ export function tickActiveProjectiles(ctx) {
 
       if (proj.trailAcc != null) {
         proj.trailAcc += dt;
+        const trailName = proj.type === 'waterCannonShot' ? 'waterTrail' : 'laserTrail';
+        const trailIv = proj.type === 'waterCannonShot' ? WATER_TRAIL_INTERVAL : LASER_TRAIL_INTERVAL;
         let trailBudget = 2;
-        while (proj.trailAcc >= LASER_TRAIL_INTERVAL && trailBudget-- > 0) {
-          proj.trailAcc -= LASER_TRAIL_INTERVAL;
-          spawnTrailParticle(proj.x, proj.y, 'laserTrail', proj.z);
+        while (proj.trailAcc >= trailIv && trailBudget-- > 0) {
+          proj.trailAcc -= trailIv;
+          spawnTrailParticle(proj.x, proj.y, trailName, proj.z);
         }
-        if (trailBudget <= 0 && proj.trailAcc > LASER_TRAIL_INTERVAL * 3) {
-          proj.trailAcc = LASER_TRAIL_INTERVAL * 3;
+        if (trailBudget <= 0 && proj.trailAcc > trailIv * 3) {
+          proj.trailAcc = trailIv * 3;
         }
       }
 
@@ -301,9 +303,13 @@ export function tickActiveProjectiles(ctx) {
             const tx = sx0 + (sx1 - sx0) * u;
             const ty = sy0 + (sy1 - sy0) * u;
             const tz = szA + (szB - szA) * u;
-            tryApplyFireHitToFormalTreesAt(tx, ty, tz, proj.type, data);
+            if (proj.type !== 'waterCannonShot') {
+              tryApplyFireHitToFormalTreesAt(tx, ty, tz, proj.type, data);
+            } else {
+              grassFireTryExtinguishAt(tx, ty, tz, proj.type, data, proj);
+            }
           }
-          if (grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
+          if (proj.type !== 'waterCannonShot' && grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
             pushParticle({
               type: 'grassFire',
               x: proj.x,
@@ -509,11 +515,13 @@ export function tickActiveProjectiles(ctx) {
                   ? 'laserTrail'
                   : proj.type === 'steelBeamShot'
                     ? 'steelLaserTrail'
-                  : proj.type === 'flamethrowerShot' ||
-                      proj.type === 'fireBlastCore' ||
-                      proj.type === 'fireSpinBurst'
-                    ? 'emberTrail'
-                    : null;
+                    : proj.type === 'waterCannonShot'
+                      ? 'waterTrail'
+                      : proj.type === 'flamethrowerShot' ||
+                          proj.type === 'fireBlastCore' ||
+                          proj.type === 'fireSpinBurst'
+                        ? 'emberTrail'
+                        : null;
     if (trailType && proj.trailAcc != null) {
       proj.trailAcc += dt;
       const interval =

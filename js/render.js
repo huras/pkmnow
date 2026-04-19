@@ -43,7 +43,8 @@ import {
 import {
   drawBatchedProjectile,
   drawPrismaticStreamGradientBeam,
-  drawSteelStreamGradientBeam
+  drawSteelStreamGradientBeam,
+  drawWaterCannonStreamBeam
 } from './render/render-projectiles.js';
 import { drawBatchedParticle } from './render/render-particles.js';
 import {
@@ -117,8 +118,9 @@ import './render/render-debug-hotkeys.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-config.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
-import { BIOME_TO_TERRAIN } from './biome-tiles.js';
+import { BIOME_TO_TERRAIN, TREE_TILES } from './biome-tiles.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { scatterItemKeyIsTree } from './scatter-pass2-debug.js';
 import { getRoleForCell } from './tessellation-logic.js';
 import {
   speciesHasFlyingType,
@@ -128,7 +130,8 @@ import {
   activeProjectiles,
   activeParticles,
   getPlayerPrismaticMergedBeamVisual,
-  getPlayerSteelBeamMergedBeamVisual
+  getPlayerSteelBeamMergedBeamVisual,
+  getPlayerWaterCannonMergedBeamVisual
 } from './moves/moves-manager.js';
 import {
   activeCrystalShards,
@@ -137,7 +140,7 @@ import {
   getActiveDetailHitHpBars,
   getActiveDetailHitPulses
 } from './main/play-crystal-tackle.js';
-import { playInputState } from './main/play-input-state.js';
+import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
 import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
@@ -311,8 +314,8 @@ export function render(canvas, data, options = {}) {
       (flightHudActive &&
         smoothLev &&
         (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 ||
-          !!playInputState.spaceHeld ||
-          !!playInputState.shiftLeftHeld ||
+          isPlaySpaceAscendHeld() ||
+          isPlayGroundDigShiftHeld() ||
           (player.z ?? 0) > 0.02));
     
     updateJumpRings(time);
@@ -535,8 +538,27 @@ export function render(canvas, data, options = {}) {
       if (it.type === 'tree') {
         // Formal tree trunk/base spans two ground tiles.
         markBlockedRect(it.originX, it.originY, 2, 1);
+        // Canopy is drawn *after* PASS 5a grass but shares the same sort pass as the sprite.
+        // PASS 5a-deferred / `playerTopOverlay` grass runs *after* all sortables, so without this
+        // the bottom-strip and neighbor grass would paint on top of foliage north of the trunk.
+        if (!it.isDestroyed) {
+          const tops = TREE_TILES[it.treeType]?.top;
+          const canopyRows = tops?.length ? Math.ceil(tops.length / 2) : 2;
+          const padX = 1;
+          markBlockedRect(it.originX - padX, it.originY - canopyRows, 2 + padX * 2, canopyRows);
+        }
       } else if (it.type === 'scatter') {
         markBlockedRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+        if (scatterItemKeyIsTree(it.itemKey) && !it.isCharred) {
+          const objSet = OBJECT_SETS[it.itemKey];
+          const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
+          const cols = Math.max(1, it.cols || 1);
+          if (topPart?.ids?.length) {
+            const topRows = Math.max(1, Math.ceil(topPart.ids.length / cols));
+            const padX = 1;
+            markBlockedRect(it.originX - padX, it.originY - topRows, cols + padX * 2, topRows);
+          }
+        }
       } else if (it.type === 'building') {
         const bCols = it.bData?.cols ?? (it.bData?.type === 'pokecenter' ? 5 : 4);
         const bRows = it.bData?.rows ?? (it.bData?.type === 'pokecenter' ? 6 : 5);
@@ -771,6 +793,7 @@ export function render(canvas, data, options = {}) {
 
     const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
     const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
+    const mergedWaterCannonBeam = getPlayerWaterCannonMergedBeamVisual();
     if (batchedEffects.length > 0 || mergedPrismaticBeam || mergedSteelBeam) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       if (mergedPrismaticBeam) {
@@ -783,6 +806,11 @@ export function render(canvas, data, options = {}) {
         if (be.kind === 'projectile') drawBatchedProjectile(ctx, be.proj, tileW, tileH, snapPx, time);
         else drawBatchedParticle(ctx, be.part, tileW, tileH, snapPx);
       }
+      ctx.restore();
+    }
+    if (mergedWaterCannonBeam) {
+      ctx.save();
+      drawWaterCannonStreamBeam(ctx, mergedWaterCannonBeam, tileW, tileH, snapPx, time);
       ctx.restore();
     }
 
@@ -850,7 +878,7 @@ export function render(canvas, data, options = {}) {
       ch
     });
     
-    drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
+    drawDigChargeBar(ctx, { latchGround, player, cw, ch });
     drawFieldCombatChargeBar(ctx, { appMode, playInputState, cw, ch, timeSec: time });
     addRenderFramePhaseMs('rndDebugMs', performance.now() - tDebug0);
 

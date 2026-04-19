@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'waterCannon'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
@@ -18,6 +18,7 @@ export const MOVE_LABELS = Object.freeze({
   flamethrower: 'Flamethrower',
   gust: 'Gust',
   hydroPump: 'Hydro Pump',
+  waterCannon: 'Water Cannon',
   hyperBeam: 'Hyper Beam',
   iceBeam: 'Ice Beam',
   megaDrain: 'Mega Drain',
@@ -70,6 +71,7 @@ export const PLAYER_PROJECTILE_MOVE_IDS = Object.freeze(
     'flamethrower',
     'gust',
     'hydroPump',
+    'waterCannon',
     'hyperBeam',
     'iceBeam',
     'megaDrain',
@@ -115,7 +117,7 @@ export const PLAYER_SPECIAL_WHEEL_MOVE_IDS = Object.freeze(
 
 const TYPE_PRESETS = Object.freeze({
   fire: /** @type {MoveId[]} */ (['ember', 'flamethrower', 'fireSpin', 'flameCharge']),
-  water: /** @type {MoveId[]} */ (['waterBurst', 'bubbleBeam', 'waterGun', 'silkShoot']),
+  water: /** @type {MoveId[]} */ (['waterBurst', 'bubbleBeam', 'waterGun', 'waterCannon']),
   psychic: /** @type {MoveId[]} */ (['confusion', 'psybeam', 'prismaticLaser', 'poisonPowder']),
   poison: /** @type {MoveId[]} */ (['poisonSting', 'poisonPowder', 'silkShoot', 'confusion']),
   bug: /** @type {MoveId[]} */ (['silkShoot', 'poisonPowder', 'poisonSting', 'bubble']),

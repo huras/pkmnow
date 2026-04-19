@@ -1084,12 +1084,12 @@ body.play-mode-active {
   right: 10px;
 }
 
-/* Autosave toast — canto inferior esquerdo do mapa */
+/* Autosave toast — canto superior esquerdo do mapa */
 .play-save-indicator {
   display: none;
   position: absolute;
   left: 10px;
-  bottom: 12px;
+  top: 10px;
   z-index: 30;
   align-items: center;
   gap: 8px;
@@ -1146,8 +1146,13 @@ body.play-mode-active {
   transition: opacity 0.26s ease, visibility 0s linear 0.26s;
 }
 
+.app.play-mode-active .map-wrap .play-save-indicator {
+  /* Below #hud-info (same vertical band as .play-fps) */
+  top: calc(0.6rem + 0.6rem + 40px + 8px);
+}
+
 .app.play-mode-active.app--play-immersive .map-wrap .play-save-indicator {
-  bottom: 10px;
+  top: 10px;
   left: 10px;
 }
 

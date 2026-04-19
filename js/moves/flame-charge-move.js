@@ -182,7 +182,8 @@ export function tickPlayerFlameChargeDash(player, dt, data, pushParticle) {
     tryBreakDetailsAlongSegment(ax, ay, bx, by, data, {
       hitSource: 'tackle',
       pz,
-      detailCharge01: cfg.detailCharge01
+      detailCharge01: cfg.detailCharge01,
+      gamepadRumblePlayer: true
     });
   }
 

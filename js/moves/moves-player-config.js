@@ -25,6 +25,8 @@ export const PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL = Object.freeze({ 1: 0.44, 2: 0.
 export const PRISMATIC_STREAM_INTERVAL = 0.25;
 // --- Steel Beam (hold stream; thick silver beam) ---
 export const STEEL_BEAM_STREAM_INTERVAL = 0.22;
+/** Hold-stream cadence for Water Cannon (long blue waterfall beam). */
+export const WATER_CANNON_STREAM_INTERVAL = 0.2;
 /** Min seconds between stream segment damage ticks to the same wild (overlapping puffs). */
 export const PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC = 0.3;
 

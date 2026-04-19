@@ -216,7 +216,8 @@ const WATER_PROJECTILES = new Set([
   'waterGunBall',
   'bubbleShot',
   'bubbleBeamShot',
-  'waterBurstShot'
+  'waterBurstShot',
+  'waterCannonShot'
 ]);
 const ELECTRIC_PROJECTILES = new Set(['prismaticShot', 'thunderBoltArc']);
 

@@ -22,6 +22,8 @@ import {
   computePrismaticPlayerStreamGeometry,
   castSteelBeam,
   computeSteelBeamPlayerStreamGeometry,
+  castWaterCannon,
+  computeWaterCannonPlayerStreamGeometry,
   castPoisonPowder,
   castIncinerate,
   castSilkShoot
@@ -83,6 +85,7 @@ import {
   PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL,
   PRISMATIC_STREAM_INTERVAL,
   STEEL_BEAM_STREAM_INTERVAL,
+  WATER_CANNON_STREAM_INTERVAL,
   PLAYER_THUNDER_COOLDOWN_SEC,
   PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
@@ -134,6 +137,8 @@ let playerPrismaticMergedBeam = null;
 let playerSteelBeamCooldown = 0;
 /** Merged hold beam for Steel Beam (silver). */
 let playerSteelBeamMergedBeam = null;
+let playerWaterCannonCooldown = 0;
+let playerWaterCannonMergedBeam = null;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
 let playerFireBlastCooldown = 0;
@@ -340,6 +345,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'steelBeam') return castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'waterCannon') return castWaterCannonMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -512,6 +518,27 @@ export function getPlayerSteelBeamMergedBeamVisual() {
   return playerSteelBeamMergedBeam;
 }
 
+export function updatePlayerWaterCannonMergedBeamVisual(active, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (!active) {
+    playerWaterCannonMergedBeam = null;
+    return;
+  }
+  const geo = computeWaterCannonPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const { sp, aimX, aimY } = geo;
+  playerWaterCannonMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0
+  };
+}
+
+export function getPlayerWaterCannonMergedBeamVisual() {
+  return playerWaterCannonMergedBeam;
+}
+
 /**
  * One prismatic laser stream puff (hold / hotkey). Same idea as flamethrower stream.
  * @returns {boolean} true when a puff was spawned
@@ -545,6 +572,24 @@ export function tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targ
 
 export function castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   return tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/** @returns {boolean} true when a puff was spawned */
+export function tryCastPlayerWaterCannonStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerWaterCannonCooldown > 0) return false;
+  playerWaterCannonCooldown = WATER_CANNON_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterCannon(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    pushParticle,
+    streamPuff: true
+  });
+  return true;
+}
+
+export function castWaterCannonMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerWaterCannonStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -1140,6 +1185,8 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'steelBeam') {
     castSteelBeam(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'waterCannon') {
+    castWaterCannon(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'poisonPowder') {
     castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'fireBlast') {
@@ -1191,6 +1238,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return PRISMATIC_STREAM_INTERVAL;
     case 'steelBeam':
       return STEEL_BEAM_STREAM_INTERVAL;
+    case 'waterCannon':
+      return WATER_CANNON_STREAM_INTERVAL;
     case 'poisonPowder':
       return 0.95;
     case 'incinerate':
@@ -1278,6 +1327,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerPrismaticLaserCooldown;
     case 'steelBeam':
       return playerSteelBeamCooldown;
+    case 'waterCannon':
+      return playerWaterCannonCooldown;
     case 'poisonPowder':
       return playerPoisonPowderCooldown;
     case 'incinerate':
@@ -1333,6 +1384,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
   playerSteelBeamCooldown = Math.max(0, playerSteelBeamCooldown - dt);
+  playerWaterCannonCooldown = Math.max(0, playerWaterCannonCooldown - dt);
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
   playerFireBlastCooldown = Math.max(0, playerFireBlastCooldown - dt);
@@ -1374,6 +1426,20 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     p.life -= dt;
     if (p.life <= 0) {
       activeParticles.splice(i, 1);
+      continue;
+    }
+    if (p.type === 'waterCannonBubble') {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.vz += 0.55 * dt;
+      p.vz -= 5.5 * dt;
+      if (p.z < 0) {
+        p.z = 0;
+        p.vz = Math.abs(p.vz) * 0.2;
+      }
       continue;
     }
     if (p.type === 'grassFire') {

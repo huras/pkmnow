@@ -2,7 +2,7 @@ import { PLAYER_BINDABLE_MOVE_IDS, getInputSlotId, getPlayerInputBindings } from
 import { getMoveLabel } from '../moves/pokemon-moveset-config.js';
 
 /** Stable order for type wedges on the wheel. */
-const TYPE_ORDER = /** @type {const string[]} */ ([
+export const TYPE_ORDER = /** @type {const string[]} */ ([
   'normal',
   'fire',
   'water',
@@ -19,7 +19,7 @@ const TYPE_ORDER = /** @type {const string[]} */ ([
   'dragon'
 ]);
 
-const TYPE_LABELS = /** @type {Record<string, string>} */ ({
+export const TYPE_LABELS = /** @type {Record<string, string>} */ ({
   normal: 'Normal',
   fire: 'Fire',
   water: 'Water',
@@ -40,7 +40,7 @@ const TYPE_LABELS = /** @type {Record<string, string>} */ ({
  * Maps Move IDs to Pokemon Types for categorization.
  * @param {string} moveId
  */
-function getMoveType(moveId) {
+export function getMoveType(moveId) {
   switch (moveId) {
     case 'ember':
     case 'fireBlast':
@@ -60,6 +60,7 @@ function getMoveType(moveId) {
     case 'waterGun':
     case 'bubbleBeam':
     case 'hydroPump':
+    case 'waterCannon':
     case 'surf':
     case 'rainDance':
       return 'water';
@@ -380,6 +381,29 @@ export class AttackWheel {
     this.sync();
   }
 
+  /**
+   * Aim the wheel slice from a normalized vector (e.g. right analog).
+   * Uses the same wedge math as {@link updateMouse} without DOM coordinates.
+   * @param {number} dx
+   * @param {number} dy
+   */
+  updateAnalogAim(dx, dy) {
+    if (!this.isOpen) return;
+    const m = Math.hypot(dx, dy);
+    if (m < 0.12) return;
+    const nx = dx / m;
+    const ny = dy / m;
+    let angle = Math.atan2(ny, nx) * (180 / Math.PI);
+    angle = (angle + 360) % 360;
+    const count = this._ringCount();
+    let normalizedAngle = (angle + 90 + 180 / count) % 360;
+    const index = Math.floor((normalizedAngle / 360) * count);
+    if (index !== this.hoverIndex) {
+      this.hoverIndex = index;
+      this.sync();
+    }
+  }
+
   updateMouse(x, y) {
     if (!this.isOpen || !this.root) return;
     this.mouseX = x;
@@ -405,6 +429,22 @@ export class AttackWheel {
     if (index !== this.hoverIndex) {
       this.hoverIndex = index;
       this.sync();
+    }
+  }
+
+  /**
+   * PlayStation-style Circle (standard button 1): confirm type or bind move.
+   */
+  confirmFromGamepadCircle() {
+    if (!this.isOpen) return;
+    if (this.phase === 'type') {
+      const tid = this.ringIds[this.hoverIndex];
+      if (tid) this.enterMovePhaseForType(tid);
+    } else {
+      const moveId = this.getSelectedMove();
+      if (moveId) {
+        window.dispatchEvent(new CustomEvent('attack-wheel-confirm-bind', { detail: { moveId } }));
+      }
     }
   }
 

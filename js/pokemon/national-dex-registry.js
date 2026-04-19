@@ -1,7 +1,14 @@
 /**
  * National Dex registry (Gen 1 + Gen 2): names, encounter lookup, padded dex ids, Showdown cry slugs.
  * Single source of truth for `NATIONAL_DEX_MAX` and species display names in encounter order.
+ *
+ * Gen 3 (Hoenn, #252–386): ver `docs/NATIONAL-DEX-PIPELINE.md` — aumentar `NATIONAL_DEX_MAX`,
+ * acrescentar bloco `GEN3_LINES`, estender `NATIONAL_DEX_LINES`, overrides de cry se necessário,
+ * depois rodar build + cries + import SpriteCollab com `-MaxDex 386`.
  */
+
+/** Teto Hoenn (planejamento); ainda não incluído no jogo até `NATIONAL_DEX_MAX` e nomes estarem completos. */
+export const NATIONAL_DEX_HOENN_MAX = 386;
 
 /** @readonly Inclusive national dex cap (Gen 1 + Gen 2). */
 export const NATIONAL_DEX_MAX = 251;

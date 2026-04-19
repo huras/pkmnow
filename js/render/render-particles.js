@@ -291,6 +291,17 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
     ctx.fill();
+  } else if (p.type === 'waterCannonBubble') {
+    const br = Math.max(1.5, (Number(p.bubbleR) || 0.1) * tileW * (0.55 + 0.45 * a));
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.45 * a})`;
+    ctx.lineWidth = Math.max(1, tileW * 0.028);
+    ctx.beginPath();
+    ctx.arc(px, py, br, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(248,252,255,${0.12 + 0.35 * a})`;
+    ctx.beginPath();
+    ctx.arc(px, py, br * 0.55, 0, Math.PI * 2);
+    ctx.fill();
   } else if (p.type === 'rainFootSplash') {
     // Growing upward-opening crown (matches debug rain-splash look). Stays in place;
     // no motion is applied to this type in `moves-manager`'s particle tick.
