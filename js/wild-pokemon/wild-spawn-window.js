@@ -105,7 +105,23 @@ const GROUP_SLOT_MAX_DIST_MIN = 24.0;
 const GROUP_SLOT_MAX_DIST_MAX = 72.0;
 const GROUP_MEMBER_MAX_DIST_MACRO_TILES = 0.9;
 const GROUP_MEMBER_MAX_SPAWN_DIST = GROUP_MEMBER_MAX_DIST_MACRO_TILES * MACRO_TILE_STRIDE;
-const FORCE_GROUPS_ONLY_FOR_TEST = true;
+
+/**
+ * Inclusive bounds on **rolled** wild group size (leader + companions). After the roll, `total` is clamped here.
+ * Fewer companions than desired can still shrink the spawned group; if the result would fall below `MIN`, the slot is skipped.
+ * Set `MIN = 2` to disallow solo spawns from the roller (singles from weights become pairs).
+ */
+export const WILD_GROUP_SIZE_MIN = 1;
+export const WILD_GROUP_SIZE_MAX = 3;
+
+const GROUP_SIZE_CLAMP_LO = Math.max(1, Math.min(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
+const GROUP_SIZE_CLAMP_HI = Math.max(GROUP_SIZE_CLAMP_LO, Math.max(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
+
+/** @param {number} total */
+function clampWildGroupTotal(total) {
+  const t = Math.floor(Number(total)) || 1;
+  return Math.min(GROUP_SIZE_CLAMP_HI, Math.max(GROUP_SIZE_CLAMP_LO, t));
+}
 
 /** Keys for play-debug summons: never despawned by sync slot budget. */
 export const DEBUG_SUMMON_KEY_PREFIX = 'debug:';
@@ -143,15 +159,23 @@ function slotCenter(mx, my, sx, sy, cellW) {
 
 function rollGroupPattern(mx, my, sx, sy, seed) {
   const r = seededHashInt(mx * 1291 + sx * 271, my * 1237 + sy * 313, seed ^ SALT_GROUP) % GROUP_ROLL_TOTAL;
-  if (FORCE_GROUPS_ONLY_FOR_TEST) {
-    if (r < 700) return { total: 2, mixed: false }; // maioria em dupla mesma espécie
-    if (r < 920) return { total: 3, mixed: false }; // alguns trios mesma espécie
-    return { total: 2, mixed: true }; // poucos pares mistos
+  let total;
+  let mixed;
+  if (r < GROUP_WEIGHT_SINGLE) {
+    total = 1;
+    mixed = false;
+  } else if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME) {
+    total = 2;
+    mixed = false;
+  } else if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME + GROUP_WEIGHT_TRIO_SAME) {
+    total = 3;
+    mixed = false;
+  } else {
+    total = 2;
+    mixed = true;
   }
-  if (r < GROUP_WEIGHT_SINGLE) return { total: 1, mixed: false };
-  if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME) return { total: 2, mixed: false };
-  if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME + GROUP_WEIGHT_TRIO_SAME) return { total: 3, mixed: false };
-  return { total: 2, mixed: true };
+  total = clampWildGroupTotal(total);
+  return { total, mixed };
 }
 
 function resolveGroupId(mx, my, sx, sy, seed) {
@@ -672,8 +696,8 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       companionSlotMaxDist ** 2
     );
     const actualCompanions = Math.min(desiredCompanions, companionSlots.length);
-    if (FORCE_GROUPS_ONLY_FOR_TEST && desiredCompanions > 0 && actualCompanions <= 0) continue;
     const groupSize = 1 + actualCompanions;
+    if (groupSize < GROUP_SIZE_CLAMP_LO) continue;
     /** @type {Array<{ x: number, y: number }>} */
     const groupSpawnPoints = [];
 

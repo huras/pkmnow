@@ -20,7 +20,7 @@ import {
  *   keyboardMoveX: number,
  *   keyboardMoveY: number
  * }} api
- * @returns {{ inX: number, inY: number }}
+ * @returns {{ inX: number, inY: number, gamepadAnalogMove: boolean }}
  */
 export function tickPlayGamepadFrame(api) {
   const {
@@ -45,7 +45,7 @@ export function tickPlayGamepadFrame(api) {
     playInputState.gamepadAimMag01 = 0;
     playInputState.gamepadAimActive = false;
     playInputState.throwAimInputMode = 'mouse';
-    return { inX: keyboardMoveX, inY: keyboardMoveY };
+    return { inX: keyboardMoveX, inY: keyboardMoveY, gamepadAnalogMove: false };
   }
 
   const sm = samplePlayGamepadFrame();
@@ -142,12 +142,13 @@ export function tickPlayGamepadFrame(api) {
   }
 
   const gm = Math.hypot(sm.moveX, sm.moveY);
+  const gamepadAnalogMove = !!sm.connected && gm > 0.001;
   let inX = keyboardMoveX;
   let inY = keyboardMoveY;
-  if (gm > 0.001) {
+  if (gamepadAnalogMove) {
     inX = sm.moveX;
     inY = sm.moveY;
   }
 
-  return { inX, inY };
+  return { inX, inY, gamepadAnalogMove };
 }

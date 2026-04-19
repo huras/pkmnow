@@ -20,12 +20,19 @@ import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '.
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
 import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
+import {
+  PLAY_ITEM_HUD_PICKUP_OPAQUE_MS,
+  PLAY_ITEM_HUD_POP_MS
+} from '../main/play-item-pickup-feedback.js';
 import { detailScatterGridPreviewHtml } from '../main/detail-scatter-preview-html.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape } from '../tessellation-logic.js';
 import { installPokemonBoxModal } from './pokemon-box-modal.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
+
+/** One HUD row for all crystal stacks — map key so parallel non-crystal pops stay independent. */
+const PLAY_ITEM_POP_CRYSTAL_SLOT = '__pkmn_crystal_shard_slot__';
 
 /** Move id (strip `field:`) → PNG basename when it differs from the id (pack filenames). */
 const SKILL_ICON_FILE_BY_MOVE_ID = Object.freeze({
@@ -127,6 +134,35 @@ export class CharacterSelector {
     this._lootIconPathMap = null;
     /** Cache so the loot list DOM is not rebuilt every frame (enables HTML5 drag from rows). */
     this._lastPlayItemHudSig = '';
+    /** Item HUD: dimmed to 50% unless hovered, dragging from inventory, or post-pickup highlight. */
+    this._playItemHudPointerInside = false;
+    this._playItemHudInventoryDragActive = false;
+    this._playItemHudPickupOpaqueUntil = 0;
+    /** @type {Map<string, number>} itemKey → expiry (ms); several keys can pop in parallel. */
+    this._playItemPopUntilByKey = new Map();
+    /** @type {Map<string, number>} bump on each pickup so the same slot can replay while overlapping. */
+    this._playItemPopGenByKey = new Map();
+
+    /** @param {Event} ev */
+    this._onPlayItemHudPickup = (ev) => {
+      const k = String(/** @type {CustomEvent<{ itemKey?: string }>} */ (ev).detail?.itemKey || '');
+      if (!k) return;
+      const now = performance.now();
+      this._playItemHudPickupOpaqueUntil = now + PLAY_ITEM_HUD_PICKUP_OPAQUE_MS;
+      const popSlotKey = k.toLowerCase().includes('crystal') ? PLAY_ITEM_POP_CRYSTAL_SLOT : k;
+      const until = Math.max(this._playItemPopUntilByKey.get(popSlotKey) || 0, now + PLAY_ITEM_HUD_POP_MS);
+      this._playItemPopUntilByKey.set(popSlotKey, until);
+      this._playItemPopGenByKey.set(popSlotKey, (this._playItemPopGenByKey.get(popSlotKey) || 0) + 1);
+      this._lastPlayItemHudSig = '';
+      this.updatePlayItemsHud();
+      this._syncPlayItemHudOpacity();
+    };
+    this._onDocInventoryDragEnd = () => {
+      if (!this._playItemHudInventoryDragActive) return;
+      this._playItemHudInventoryDragActive = false;
+      this._syncPlayItemHudOpacity();
+    };
+
     void getPokemondbItemIconPathMap().then((m) => {
       this._lootIconPathMap = m;
       const crystalPath = m.get('star-piece');
@@ -242,6 +278,11 @@ export class CharacterSelector {
   /** Clears item HUD counters (e.g. when leaving play mode). */
   clearPlayItemsHud() {
     this._lastPlayItemHudSig = '';
+    this._playItemHudPickupOpaqueUntil = 0;
+    this._playItemPopUntilByKey.clear();
+    this._playItemPopGenByKey.clear();
+    this._playItemHudPointerInside = false;
+    this._playItemHudInventoryDragActive = false;
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (v) v.textContent = '0';
     const listEl = this.container?.querySelector('#play-item-loot-list');
@@ -265,12 +306,19 @@ export class CharacterSelector {
     if (crystalRow) crystalRow.setAttribute('draggable', crystalN > 0 ? 'true' : 'false');
 
     const listEl = this.container?.querySelector('#play-item-loot-list');
-    if (!listEl) return;
+    if (!listEl) {
+      this._syncPlayItemHudOpacity();
+      return;
+    }
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
       .slice(0, 8);
     const sig = `${crystalN}|${rows.map((r) => `${r.itemKey}:${r.count | 0}`).join(';')}`;
-    if (sig === this._lastPlayItemHudSig) return;
+    if (sig === this._lastPlayItemHudSig) {
+      this._syncPlayItemHudOpacity();
+      this._reapplyPlayItemPopIfNeeded();
+      return;
+    }
     this._lastPlayItemHudSig = sig;
 
     const m = this._lootIconPathMap;
@@ -296,6 +344,64 @@ export class CharacterSelector {
         `;
       })
       .join('');
+    this._reapplyPlayItemPopIfNeeded();
+    this._syncPlayItemHudOpacity();
+  }
+
+  _syncPlayItemHudOpacity() {
+    const el = this.container?.querySelector('#play-item-hud');
+    if (!(el instanceof HTMLElement)) return;
+    const engaged =
+      this._playItemHudPointerInside ||
+      this._playItemHudInventoryDragActive ||
+      performance.now() < (this._playItemHudPickupOpaqueUntil || 0);
+    el.classList.toggle('play-item-hud--engaged', engaged);
+  }
+
+  /** @param {string} itemKey */
+  _findPlayItemHudRowForPop(itemKey) {
+    const key = String(itemKey || '');
+    if (key === PLAY_ITEM_POP_CRYSTAL_SLOT || key.toLowerCase().includes('crystal')) {
+      return this.container?.querySelector('#play-item-crystal-row') ?? null;
+    }
+    return (
+      this.container?.querySelector(
+        `#play-item-loot-list [data-inventory-drag="${encodeURIComponent(key)}"]`
+      ) ?? null
+    );
+  }
+
+  _pruneExpiredPlayItemPops(now) {
+    for (const [k, until] of [...this._playItemPopUntilByKey.entries()]) {
+      if (now < until) continue;
+      this._playItemPopUntilByKey.delete(k);
+      this._playItemPopGenByKey.delete(k);
+      const row = this._findPlayItemHudRowForPop(k);
+      if (row instanceof HTMLElement) {
+        row.classList.remove('play-item-hud__row--pop');
+        delete row.dataset.popGen;
+      }
+    }
+  }
+
+  _reapplyPlayItemPopIfNeeded() {
+    const now = performance.now();
+    this._pruneExpiredPlayItemPops(now);
+    for (const [key, until] of this._playItemPopUntilByKey.entries()) {
+      if (now >= until) continue;
+      const row = this._findPlayItemHudRowForPop(key);
+      if (!(row instanceof HTMLElement)) continue;
+      const gen = this._playItemPopGenByKey.get(key) || 0;
+      const appliedGen = row.dataset.popGen || '';
+      if (appliedGen !== String(gen)) {
+        row.dataset.popGen = String(gen);
+        row.classList.remove('play-item-hud__row--pop');
+        void row.offsetWidth;
+        row.classList.add('play-item-hud__row--pop');
+      } else if (!row.classList.contains('play-item-hud__row--pop')) {
+        row.classList.add('play-item-hud__row--pop');
+      }
+    }
   }
 
   /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
@@ -517,9 +623,19 @@ export class CharacterSelector {
     }
     window.addEventListener('play-field-skill-change', this._onFieldSkillChange);
     window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
+    window.addEventListener('play-item-hud-pickup', this._onPlayItemHudPickup);
+    document.addEventListener('dragend', this._onDocInventoryDragEnd);
 
     const itemHud = this.container?.querySelector('#play-item-hud');
     if (itemHud) {
+      itemHud.addEventListener('pointerenter', () => {
+        this._playItemHudPointerInside = true;
+        this._syncPlayItemHudOpacity();
+      });
+      itemHud.addEventListener('pointerleave', () => {
+        this._playItemHudPointerInside = false;
+        this._syncPlayItemHudOpacity();
+      });
       itemHud.addEventListener('dragstart', (e) => {
         const t = e.target;
         if (!(t instanceof Element)) return;
@@ -538,6 +654,8 @@ export class CharacterSelector {
         }
         e.dataTransfer.setData('text/plain', `pkmn-inventory-drop:${token}`);
         e.dataTransfer.effectAllowed = 'copyMove';
+        this._playItemHudInventoryDragActive = true;
+        this._syncPlayItemHudOpacity();
       });
     }
   }

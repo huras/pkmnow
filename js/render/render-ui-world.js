@@ -254,7 +254,7 @@ export function drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH) {
       : Math.floor(baseTop - barH - 6);
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
-  ctx.fillStyle = s01 > 0.35 ? '#6ec8ff' : s01 > 0.12 ? '#9ad8ff' : '#c4e8ff';
+  ctx.fillStyle = s01 > 0.35 ? '#59e36e' : s01 > 0.12 ? '#8ecf6a' : '#b8e050';
   ctx.fillRect(x, y, Math.max(0, Math.floor(barW * s01)), barH);
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 1;

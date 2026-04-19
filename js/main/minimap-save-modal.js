@@ -6,12 +6,17 @@ import {
 
 /**
  * Minimap header control: modal to save now or clear browser session storage for this map.
- * @param {{ getCurrentData: () => object | null, getPlayer: () => object }} opts
+ * @param {{
+ *   getCurrentData: () => object | null,
+ *   getPlayer: () => object,
+ *   getPersistExtra?: () => object | null
+ * }} opts
  * @returns {{ forceClose: () => void, isOpen: () => boolean }}
  */
 export function installMinimapSaveModal(opts) {
   const getData = opts.getCurrentData;
   const getPlayer = opts.getPlayer;
+  const getPersistExtra = opts.getPersistExtra;
 
   const modal = document.getElementById('minimap-save-modal');
   const toggle = document.getElementById('minimap-save-toggle');
@@ -33,7 +38,7 @@ export function installMinimapSaveModal(opts) {
     const saved = peekPlaySessionSaveForMap(data);
     statusEl.textContent = saved
       ? 'Há dados salvos para esta região (mesma seed e tamanho). Você pode sobrescrever ou limpar.'
-      : 'Nenhum dado salvo para esta região ainda — “Salvar agora” grava posição e inventário.';
+      : 'Nenhum dado salvo ainda — “Salvar agora” grava posição, inventário, hora do mundo e clima.';
   }
 
   function setOpen(v) {
@@ -63,7 +68,7 @@ export function installMinimapSaveModal(opts) {
     const data = getData?.();
     const player = getPlayer?.();
     if (!data || !player) return;
-    flushPlaySessionSave(data, player);
+    flushPlaySessionSave(data, player, getPersistExtra?.() ?? null);
     syncStatus();
   });
 

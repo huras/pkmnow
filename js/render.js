@@ -32,6 +32,7 @@ import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from '
 import { bakeChunk } from './render/play-chunk-bake.js';
 import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
+import { resolveMapGlobalPlayerMicroForMarker } from './main/play-session-persist.js';
 import { renderMinimap } from './render/render-minimap.js';
 import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
 import {
@@ -299,6 +300,30 @@ export function render(canvas, data, options = {}) {
       endX,
       endY
     });
+    const mapPlayerMicro = resolveMapGlobalPlayerMicroForMarker(
+      data,
+      options.settings?.player,
+      options.settings?.appMode ?? 'map',
+      { sessionEnteredPlayOnCurrentMap: !!options.settings?.sessionEnteredPlayOnCurrentMap }
+    );
+    if (mapPlayerMicro && data.width > 0 && data.height > 0) {
+      const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
+      const gy = mapPlayerMicro.y / MACRO_TILE_STRIDE;
+      const tileW = cw / data.width;
+      const tileH = ch / data.height;
+      const px = (gx + 0.5) * tileW;
+      const py = (gy + 0.5) * tileH;
+      const r = Math.max(4, Math.min(8, Math.min(tileW, tileH) * 0.42));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillStyle = 'rgba(120, 220, 255, 0.95)';
+      ctx.lineWidth = Math.max(1.5, r * 0.22);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
     const tCam0 = performance.now();

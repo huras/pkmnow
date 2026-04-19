@@ -75,7 +75,8 @@ function isPlayMovementKeyEvent(e) {
  *   onPlayHudFrame?: (data: object | null) => void,
  *   advanceWorldTime?: (dt: number) => void,
  *   getGameTimeSec?: () => number,
- *   onEscapePlay?: () => void
+ *   onEscapePlay?: () => void,
+ *   getPlaySessionPersistExtra?: () => object | null
  * }} api When `getPlayFpsCompact` is true, `#play-fps` shows only the rolling FPS (minimal / immersive UI).
  */
 export function createGameLoop(api) {
@@ -91,7 +92,8 @@ export function createGameLoop(api) {
     onPlayHudFrame,
     advanceWorldTime,
     getGameTimeSec,
-    onEscapePlay
+    onEscapePlay,
+    getPlaySessionPersistExtra
   } = api;
   let lastFpsHudWriteMs = 0;
   let lastFpsHudText = '';
@@ -122,7 +124,7 @@ export function createGameLoop(api) {
       inY /= mag;
     }
 
-    const { inX: mergedX, inY: mergedY } = tickPlayGamepadFrame({
+    const { inX: mergedX, inY: mergedY, gamepadAnalogMove } = tickPlayGamepadFrame({
       getAppMode,
       getCurrentData,
       player,
@@ -135,6 +137,13 @@ export function createGameLoop(api) {
     if (['play'].includes(getAppMode())) {
       if (mergedX === 0 && mergedY === 0) {
         player.runMode = false;
+      } else if (gamepadAnalogMove) {
+        // Joystick move: sprint only while run button (A / Cross) is held — release stops running.
+        if (playInputState.gamepadRunHeld && canEntityStartSprint(player)) {
+          player.runMode = true;
+        } else {
+          player.runMode = false;
+        }
       } else if (playInputState.gamepadRunHeld && canEntityStartSprint(player)) {
         player.runMode = true;
       }
@@ -227,7 +236,7 @@ export function createGameLoop(api) {
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
       updateBreakdown.updHudMs = performance.now() - tHud0;
-      tickPlaySessionAutosave(timestamp / 1000, currentData, player);
+      tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
     }
 
     // --- Plugin Hooks: postUpdate ---

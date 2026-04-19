@@ -253,6 +253,8 @@ let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
 let worldTimeRunning = true;
+/** After play on this map in the page session; map overview can show live player if there is no save yet. */
+let sessionEnteredPlayOnCurrentMap = false;
 // Weather engine state lives in `./main/weather-system.js` — this file only wires the
 // DOM panel + the tick call. Initial seed here so the first `getActiveWeatherParams()`
 // read (during `getSettings()` before the first tick) returns the correct shape.
@@ -338,7 +340,8 @@ const minimapAudioUi = installMinimapAudioUi();
 const minimapHudPopovers = installMinimapHudPopovers();
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
-  getPlayer: () => player
+  getPlayer: () => player,
+  getPersistExtra: () => buildPlaySessionPersistExtra()
 });
 installPlayHelpWikiModal({
   forceCloseMinimapAudioPopover: () => {
@@ -464,7 +467,7 @@ function refreshPlayModeInfoBar(force = false) {
   const maxSta = Math.max(1, Number(player.maxStamina) || 100);
   const staLine =
     Number.isFinite(sta) && Number.isFinite(maxSta)
-      ? ` · STA ${Math.ceil(sta)}/${Math.ceil(maxSta)}`
+      ? ` · <span style="color:#7fe88a;font-weight:600">STA ${Math.ceil(sta)}/${Math.ceil(maxSta)}</span>`
       : '';
   const psn =
     (player.poisonVisualSec ?? 0) > 0.05
@@ -544,6 +547,38 @@ function syncPlayWorldTimePanel() {
   }
 }
 
+function buildPlaySessionPersistExtra() {
+  const wt = getWeatherTarget();
+  return {
+    worldHours: wrapHours(worldHours),
+    weatherPreset: wt.preset,
+    weatherIntensity01: wt.intensity01,
+    earthquakeIntensity01: getEarthquakeActiveIntensity01()
+  };
+}
+
+/**
+ * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01: number, earthquakeIntensity01: number }} env
+ */
+function applyRestoredPlayEnvironmentFromSave(env) {
+  if (!env) return;
+  worldHours = wrapHours(env.worldHours);
+  const stepped = Math.round(worldHours / 0.05) * 0.05;
+  if (playWorldTimeSlider) playWorldTimeSlider.value = String(stepped);
+  const phase = getDayPhaseFromHours(worldHours);
+  lastWorldTimePanelPhase = phase;
+  if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
+  if (playWorldTimeHourEl) playWorldTimeHourEl.textContent = `${worldHours.toFixed(2)} h`;
+  snapDayCycleTintSmoothToHours(worldHours);
+  setWeatherTarget({ preset: env.weatherPreset, intensity01: env.weatherIntensity01 }, 'external');
+  syncWeatherUi();
+  setEarthquakeTargetIntensity01(env.earthquakeIntensity01);
+  if (playEarthquakeIntensityEl) {
+    playEarthquakeIntensityEl.value = String(Math.round(env.earthquakeIntensity01 * 100));
+  }
+}
+
 function syncPlayBgmNowPlayingPanel() {
   if (appMode !== 'play') return;
   if (!playBgmNowPlayingTrackEl || !playBgmNowPlayingStatusEl) return;
@@ -620,6 +655,7 @@ function getSettings() {
     playColliderOverlayCache: collidersOn ? getPlayColliderOverlayCache() : null,
     playDetailColliderHighlight,
     appMode,
+    sessionEnteredPlayOnCurrentMap,
     player,
     time: gameTime,
     dayPhase,
@@ -708,7 +744,8 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
     minimapAudioUi.syncMinimapAudioPopover();
-  }
+  },
+  getPlaySessionPersistExtra: () => buildPlaySessionPersistExtra()
 });
 
 /** Help wiki registers Escape (capture) before this so Esc closes the modal instead of exiting play. */
@@ -760,6 +797,7 @@ installPlayContextMenu({
 
 function run() {
   resizeCanvas();
+  sessionEnteredPlayOnCurrentMap = false;
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
@@ -884,13 +922,16 @@ function enterPlayMode(gx, gy, opts = {}) {
     currentData &&
     tryApplyPlaySessionResumeOnEnter(currentData, player, {
       position: resumePosition,
-      inventory: true
+      inventory: true,
+      applyEnvironmentFromSave: resumePosition,
+      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave
     })
   ) {
     playCharacterSelector?.invalidatePlayItemsHudSignature?.();
     playCharacterSelector?.updatePlayItemsHud?.();
   }
   resetPlayAutosaveSchedule();
+  sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
   invalidatePlayPointerHover();
   appMode = 'play';
@@ -930,7 +971,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 });
 
 btnBackToMap?.addEventListener('click', () => {
-  if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player);
+  if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
   stopBiomeBgm();
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
