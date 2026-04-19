@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/character-selector.css" />
     <link rel="stylesheet" href="css/attack-wheel.css" />
+    <link rel="stylesheet" href="css/pokemon-box-modal.css" />
   </head>
   <body>
     <div class="app">
@@ -226,6 +227,16 @@
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
+        <div
+          id="play-save-indicator"
+          class="play-save-indicator"
+          role="status"
+          aria-live="polite"
+          aria-hidden="true"
+        >
+          <span class="play-save-indicator__spinner" aria-hidden="true"></span>
+          <span class="play-save-indicator__label">Salvando…</span>
+        </div>
         <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">
           <div class="play-bgm-now-playing-title">Now playing</div>
           <div id="play-bgm-now-playing-track" class="play-bgm-now-playing-track">—</div>

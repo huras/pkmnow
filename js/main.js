@@ -30,6 +30,13 @@ import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.
 import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import {
+  tryApplyPlaySessionResumeOnEnter,
+  resetPlayAutosaveSchedule,
+  flushPlaySessionSave,
+  peekPlaySessionSaveForMap,
+  getPlayResumeMacroTileFromSave
+} from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
 import { WEATHER_PRESET_LABELS } from './main/weather-presets.js';
 import {
@@ -229,6 +236,8 @@ let playSocialOverlay = {
 };
 
 let currentData = null;
+/** One-shot: auto-enter play at saved position after first map load (page session). */
+let didAutoResumePlayOnInitialLoad = false;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
 let playCharacterSelector = null;
 let appMode = 'map';
@@ -835,11 +844,28 @@ canvas.addEventListener('mouseleave', () => {
   if (currentData && appMode === 'map') updateView();
 });
 
-function enterPlayMode(gx, gy) {
+/**
+ * @param {number} gx
+ * @param {number} gy
+ * @param {{ resumePosition?: boolean }} [opts] — `resumePosition: true` only for cold resume on load; map click omits it so the clicked tile wins.
+ */
+function enterPlayMode(gx, gy, opts = {}) {
+  const resumePosition = opts.resumePosition === true;
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
+  if (
+    currentData &&
+    tryApplyPlaySessionResumeOnEnter(currentData, player, {
+      position: resumePosition,
+      inventory: true
+    })
+  ) {
+    playCharacterSelector?.invalidatePlayItemsHudSignature?.();
+    playCharacterSelector?.updatePlayItemsHud?.();
+  }
+  resetPlayAutosaveSchedule();
   playInputState.mouseValid = false;
   invalidatePlayPointerHover();
   appMode = 'play';
@@ -879,12 +905,14 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 });
 
 btnBackToMap?.addEventListener('click', () => {
+  if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player);
   stopBiomeBgm();
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
   stopFireLoopAudio();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
+  playInputState.fieldChargeUiActive = null;
   appMode = 'map';
   btnExport?.classList.remove('hidden');
   btnBackToMap?.classList.add('hidden');
@@ -1193,4 +1221,22 @@ loadTilesetImages().then(async () => {
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   run();
+  queueTryAutoResumePlayFromSave();
 });
+
+function queueTryAutoResumePlayFromSave() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => tryAutoResumePlayFromSave());
+  });
+}
+
+function tryAutoResumePlayFromSave() {
+  if (didAutoResumePlayOnInitialLoad) return;
+  if (appMode !== 'map' || !currentData) return;
+  const saved = peekPlaySessionSaveForMap(currentData);
+  if (!saved) return;
+  const tile = getPlayResumeMacroTileFromSave(saved, currentData);
+  if (!tile) return;
+  didAutoResumePlayOnInitialLoad = true;
+  enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+}

@@ -210,7 +210,14 @@ const FIRE_PROJECTILES = new Set([
   'fireBlastCore',
   'fireBlastShard'
 ]);
-const WATER_PROJECTILES = new Set(['waterShot', 'waterGunShot', 'bubbleShot', 'bubbleBeamShot', 'waterBurstShot']);
+const WATER_PROJECTILES = new Set([
+  'waterShot',
+  'waterGunShot',
+  'waterGunBall',
+  'bubbleShot',
+  'bubbleBeamShot',
+  'waterBurstShot'
+]);
 const ELECTRIC_PROJECTILES = new Set(['prismaticShot', 'thunderBoltArc']);
 
 export function emitWorldReactionFromProjectile(proj, data, x, y) {

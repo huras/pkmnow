@@ -17,6 +17,7 @@ import {
 import { FORMAL_TRUNK_BASE_WIDTH_TILES, TRUNK_STRIP_WIDTH_FRAC, TREE_MOVE_HITBOX_RADIUS_MULT } from '../scatter-collider-config.js';
 import { playTreeTackleSfx } from '../audio/tree-tackle-sfx.js';
 import { getRainFireSnuffSeconds } from './weather-state.js';
+import { GRASS_FIRE_SPREAD_INTERVAL_SEC, GRASS_FIRE_SPREAD_BASE_CHANCE } from '../play-grass-fire.js';
 import {
   pushVegetationDissolveFromSt,
   pushFormalTreeTopFall,
@@ -85,6 +86,11 @@ const scatterTreeRegrowFadeByOrigin = new Map();
 const burnedScatterTreeOrigins = new Set();
 /** Burned scatter stump already tackled and converted into charcoal pickup. */
 const harvestedBurnedScatterTreeOrigins = new Set();
+/** Formal tree root `rootX,my` → fire spread depth (0 = ignited by projectile; +1 per neighbor hop). */
+const formalTreeFireSpreadDepthByRoot = new Map();
+/** Scatter tree origin `ox,oy` → fire spread depth (same semantics as grass). */
+const scatterTreeFireSpreadDepthByOrigin = new Map();
+let treeFireSpreadAccSec = 0;
 /** @type {Map<string, {
  *   ox: number,
  *   oy: number,
@@ -325,9 +331,11 @@ export function clearPlayCrystalTackleState() {
   destroyedFormalTreeCauseByRoot.clear();
   formalTreeBurnMeterByRoot.clear();
   burningFormalTreeEndsAtSecByRoot.clear();
+  formalTreeFireSpreadDepthByRoot.clear();
   harvestedBurnedFormalTreeRoots.clear();
   scatterTreeBurnMeterByOrigin.clear();
   burningScatterTreeEndsAtSecByOrigin.clear();
+  scatterTreeFireSpreadDepthByOrigin.clear();
   burnedScatterTreeOrigins.clear();
   harvestedBurnedScatterTreeOrigins.clear();
   formalTreeRegrowFadeStartSecByRoot.clear();
@@ -341,6 +349,7 @@ export function clearPlayCrystalTackleState() {
   activeDetailHitPulses.length = 0;
   clearCrystalDropPickupState();
   clearTreeTopFallState();
+  treeFireSpreadAccSec = 0;
 }
 
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
@@ -351,6 +360,7 @@ function registerDestroyedCrystalOrigin(rootOx, rootOy) {
 function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut', data = null) {
   const key = `${rootX},${my}`;
   burningFormalTreeEndsAtSecByRoot.delete(key);
+  formalTreeFireSpreadDepthByRoot.delete(key);
   destroyedFormalTreeRoots.add(key);
   destroyedFormalTreeRegenAtSecByRoot.set(key, nowSec + FORMAL_TREE_REGEN_AFTER_BREAK_SEC);
   destroyedFormalTreeCauseByRoot.set(key, cause === 'burned' ? 'burned' : 'cut');
@@ -436,7 +446,141 @@ function markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data) {
   harvestedBurnedScatterTreeOrigins.delete(key);
   scatterTreeBurnMeterByOrigin.delete(key);
   burningScatterTreeEndsAtSecByOrigin.delete(key);
+  scatterTreeFireSpreadDepthByOrigin.delete(key);
   return true;
+}
+
+/** Max trunk-center distance (tiles) for fire to jump formal → formal tree. */
+const FORMAL_TREE_FIRE_NEIGHBOR_DIST = 2.98;
+/** Max canopy-center distance for fire to jump scatter → scatter tree. */
+const SCATTER_TREE_FIRE_NEIGHBOR_DIST = 3.15;
+
+function treeFireSpreadChance01(sourceSpreadDepth) {
+  const d = Math.max(0, Math.floor(Number(sourceSpreadDepth)) || 0);
+  return GRASS_FIRE_SPREAD_BASE_CHANCE * Math.pow(0.5, d);
+}
+
+/**
+ * @param {(rx: number, ry: number, neighborKey: string) => void} cb
+ */
+function forEachNeighborFormalTreeRoot(rootX, my, data, trunk, cb) {
+  if (!trunk) return;
+  const seen = new Set();
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -5; dx <= 5; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const rx = rootX + dx;
+      const ry = my + dy;
+      const nk = `${rx},${ry}`;
+      if (seen.has(nk)) continue;
+      if (!didFormalTreeSpawnAtRoot(rx, ry, data)) continue;
+      const t2 = getFormalTreeTrunkCircle(rx, ry, data);
+      if (!t2) continue;
+      const dist = Math.hypot(t2.cx - trunk.cx, t2.cy - trunk.cy);
+      if (dist > FORMAL_TREE_FIRE_NEIGHBOR_DIST) continue;
+      seen.add(nk);
+      cb(rx, ry, nk);
+    }
+  }
+}
+
+function tryIgniteFormalTreeFromNeighborFire(rootX, my, nowSec, data, spreadDepth) {
+  const key = `${rootX},${my}`;
+  if (isPlayFormalTreeRootDestroyed(rootX, my)) return false;
+  if (burningFormalTreeEndsAtSecByRoot.has(key)) return false;
+  formalTreeBurnMeterByRoot.delete(key);
+  burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+  formalTreeFireSpreadDepthByRoot.set(key, Math.max(0, Math.floor(Number(spreadDepth)) || 0));
+  queuePlayChunkRebake(Math.floor(rootX / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  queuePlayChunkRebake(Math.floor((rootX + 1) / PLAY_CHUNK_SIZE), Math.floor(my / PLAY_CHUNK_SIZE), true);
+  return true;
+}
+
+/**
+ * @param {(nx: number, ny: number, neighborKey: string) => void} cb
+ */
+function forEachNeighborScatterTreeOrigin(ox, oy, data, spec, scatterMemo, cb) {
+  if (!spec) return;
+  const seen = new Set([`${ox},${oy}`]);
+  for (let dy = -3; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = ox + dx;
+      const ny = oy + dy;
+      const nk = `${nx},${ny}`;
+      if (seen.has(nk)) continue;
+      const sp = scatterTreeSpecAtOrigin(nx, ny, data, null, scatterMemo);
+      if (!sp) continue;
+      const dist = Math.hypot(sp.cx - spec.cx, sp.cy - spec.cy);
+      if (dist > SCATTER_TREE_FIRE_NEIGHBOR_DIST) continue;
+      seen.add(nk);
+      cb(nx, ny, nk);
+    }
+  }
+}
+
+function tryIgniteScatterTreeFromNeighborFire(ox, oy, nowSec, data, spreadDepth) {
+  const key = `${ox},${oy}`;
+  if (isPlayDetailScatterOriginDestroyed(ox, oy)) return false;
+  if (burningScatterTreeEndsAtSecByOrigin.has(key)) return false;
+  const spec = scatterTreeSpecAtOrigin(ox, oy, data);
+  if (!spec) return false;
+  scatterTreeBurnMeterByOrigin.delete(key);
+  burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+  scatterTreeFireSpreadDepthByOrigin.set(key, Math.max(0, Math.floor(Number(spreadDepth)) || 0));
+  burnedScatterTreeOrigins.delete(key);
+  harvestedBurnedScatterTreeOrigins.delete(key);
+  queueChunkRebakeOverlappingFootprint(spec.ox, spec.oy, spec.cols, spec.rows);
+  return true;
+}
+
+function tickTreeFireSpreadToNeighbors(dt, data) {
+  if (!data || dt <= 0) return;
+  treeFireSpreadAccSec += dt;
+  if (treeFireSpreadAccSec < GRASS_FIRE_SPREAD_INTERVAL_SEC) return;
+  treeFireSpreadAccSec = 0;
+  const nowSec = performance.now() * 0.001;
+  if (burningFormalTreeEndsAtSecByRoot.size > 0) {
+    const formalKeys = [...burningFormalTreeEndsAtSecByRoot.keys()];
+    for (let i = 0; i < formalKeys.length; i++) {
+      const key = formalKeys[i];
+      const burnEnd = burningFormalTreeEndsAtSecByRoot.get(key);
+      if (!Number.isFinite(burnEnd) || nowSec >= burnEnd) continue;
+      const depth = formalTreeFireSpreadDepthByRoot.get(key) ?? 0;
+      const p = treeFireSpreadChance01(depth);
+      const c = key.indexOf(',');
+      const rootX = Number(key.slice(0, c));
+      const my = Number(key.slice(c + 1));
+      if (!Number.isFinite(rootX) || !Number.isFinite(my)) continue;
+      const trunk = getFormalTreeTrunkCircle(rootX, my, data);
+      if (!trunk) continue;
+      forEachNeighborFormalTreeRoot(rootX, my, data, trunk, (rx, ry) => {
+        if (Math.random() >= p) return;
+        tryIgniteFormalTreeFromNeighborFire(rx, ry, nowSec, data, depth + 1);
+      });
+    }
+  }
+  if (burningScatterTreeEndsAtSecByOrigin.size > 0) {
+    const scatterKeys = [...burningScatterTreeEndsAtSecByOrigin.keys()];
+    const scatterMemo = new Map();
+    for (let i = 0; i < scatterKeys.length; i++) {
+      const key = scatterKeys[i];
+      const burnEnd = burningScatterTreeEndsAtSecByOrigin.get(key);
+      if (!Number.isFinite(burnEnd) || nowSec >= burnEnd) continue;
+      const depth = scatterTreeFireSpreadDepthByOrigin.get(key) ?? 0;
+      const p = treeFireSpreadChance01(depth);
+      const c = key.indexOf(',');
+      const ox = Number(key.slice(0, c));
+      const oy = Number(key.slice(c + 1));
+      if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue;
+      const spec = scatterTreeSpecAtOrigin(ox, oy, data, null, scatterMemo);
+      if (!spec) continue;
+      forEachNeighborScatterTreeOrigin(ox, oy, data, spec, scatterMemo, (nx, ny) => {
+        if (Math.random() >= p) return;
+        tryIgniteScatterTreeFromNeighborFire(nx, ny, nowSec, data, depth + 1);
+      });
+    }
+  }
 }
 
 function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data) {
@@ -462,6 +606,7 @@ function addFormalTreeBurnMeterAndMaybeDestroy(rootX, my, projType, nowSec, data
       registerDestroyedFormalTreeRoot(rootX, my, nowSec, 'burned', data);
     } else {
       burningFormalTreeEndsAtSecByRoot.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+      formalTreeFireSpreadDepthByRoot.set(key, 0);
     }
     return true;
   }
@@ -491,6 +636,7 @@ function addScatterTreeBurnMeterAndMaybeDestroy(ox, oy, projType, nowSec, data) 
       markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data);
     } else {
       burningScatterTreeEndsAtSecByOrigin.set(key, nowSec + FORMAL_TREE_BURNING_VISUAL_SEC);
+      scatterTreeFireSpreadDepthByOrigin.set(key, 0);
       burnedScatterTreeOrigins.delete(key);
       harvestedBurnedScatterTreeOrigins.delete(key);
     }
@@ -1053,7 +1199,7 @@ export function tryBreakCrystalOnPlayerTackle(player, data, detailCharge01 = nul
   const px = player.x ?? 0;
   const py = player.y ?? 0;
   const pz = Number(player.z ?? 0);
-  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 2);
+  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 1);
   const probeReach = Math.max(0.2, reach - TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
@@ -1551,6 +1697,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
   if (!data) return;
   beginChunkRebakeBatch();
   pruneTreeTopFalls(performance.now() * 0.001);
+  tickTreeFireSpreadToNeighbors(dt, data);
   if (burningFormalTreeEndsAtSecByRoot.size > 0) {
     const nowSec = performance.now() * 0.001;
     // Rain-scaled snuff: weak rain drags the burn out, strong rain snuffs almost instantly.
@@ -1560,6 +1707,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
     for (const [key, burnEnd] of burningFormalTreeEndsAtSecByRoot.entries()) {
       if (!Number.isFinite(burnEnd)) {
         burningFormalTreeEndsAtSecByRoot.delete(key);
+        formalTreeFireSpreadDepthByRoot.delete(key);
         continue;
       }
       // Rain puts out trees once they've been burning long enough for the current rain
@@ -1569,6 +1717,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
         if (nowSec - startedSec >= rainSnuffSec) {
           burningFormalTreeEndsAtSecByRoot.delete(key);
           formalTreeBurnMeterByRoot.delete(key);
+          formalTreeFireSpreadDepthByRoot.delete(key);
           continue;
         }
       }
@@ -1578,6 +1727,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
       const my = Number(sy);
       if (!Number.isFinite(rootX) || !Number.isFinite(my)) {
         burningFormalTreeEndsAtSecByRoot.delete(key);
+        formalTreeFireSpreadDepthByRoot.delete(key);
         continue;
       }
       registerDestroyedFormalTreeRoot(rootX, my, nowSec, 'burned');
@@ -1601,6 +1751,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
     for (const [key, burnEnd] of burningScatterTreeEndsAtSecByOrigin.entries()) {
       if (!Number.isFinite(burnEnd)) {
         burningScatterTreeEndsAtSecByOrigin.delete(key);
+        scatterTreeFireSpreadDepthByOrigin.delete(key);
         continue;
       }
       if (rainSnuffing) {
@@ -1608,6 +1759,7 @@ export function updateBreakableDetailRegeneration(dt, data) {
         if (nowSec - startedSec >= rainSnuffSec) {
           burningScatterTreeEndsAtSecByOrigin.delete(key);
           scatterTreeBurnMeterByOrigin.delete(key);
+          scatterTreeFireSpreadDepthByOrigin.delete(key);
           continue;
         }
       }
@@ -1617,10 +1769,12 @@ export function updateBreakableDetailRegeneration(dt, data) {
       const oy = Number(sy);
       if (!Number.isFinite(ox) || !Number.isFinite(oy)) {
         burningScatterTreeEndsAtSecByOrigin.delete(key);
+        scatterTreeFireSpreadDepthByOrigin.delete(key);
         continue;
       }
       if (!markScatterTreeBurnedAndScheduleRegen(ox, oy, nowSec, data)) {
         burningScatterTreeEndsAtSecByOrigin.delete(key);
+        scatterTreeFireSpreadDepthByOrigin.delete(key);
       }
     }
   }

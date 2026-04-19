@@ -28,7 +28,13 @@ export const playInputState = {
   /** Psybeam: MMB held. */
   psybeamMiddleHold: /** @type {{ pulse: number } | null} */ (null),
   /** LMB held while carrying a Strength rock — show throw arc preview. */
-  strengthCarryLmbAim: false
+  strengthCarryLmbAim: false,
+  /**
+   * Field move charge UI (play combat): which bind is filling the 4-bar meter this frame.
+   * Rendered on the play canvas; cleared when binds release or play exits.
+   * @type {{ moveId: string, charge01: number, slot: 'l' | 'r' | 'm' } | null}
+   */
+  fieldChargeUiActive: null
 };
 
 export function isShiftDigHeld() {

@@ -185,7 +185,7 @@
   display: none !important;
 }
 
-.app--play-immersive .map-wrap > :not(#map):not(#minimap-panel):not(#play-fps):not(#play-bgm-toast):not(#play-immersive-hint) {
+.app--play-immersive .map-wrap > :not(#map):not(#minimap-panel):not(#play-fps):not(#play-save-indicator):not(#play-bgm-toast):not(#play-immersive-hint) {
   display: none !important;
 }
 
@@ -238,6 +238,21 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.player-preview-pill:hover {
+  border-color: rgba(140, 180, 255, 0.55);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 0 0 2px rgba(100, 150, 255, 0.35),
+    0 0 12px rgba(80, 130, 255, 0.25);
+}
+
+.player-preview-pill:active {
+  transform: scale(0.93);
 }
 
 .player-preview-pill--no-portrait {

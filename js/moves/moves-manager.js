@@ -15,6 +15,7 @@ import {
   castConfusion,
   castBubble,
   castWaterGun,
+  castHydroPump,
   castBubbleBeam,
   castPsybeam,
   castPrismaticLaser,
@@ -77,8 +78,9 @@ import {
   MOVE_CAST_VIS_SEC,
   FLAMETHROWER_STREAM_INTERVAL,
   FLAMETHROWER_STREAM_INTERVAL_MAX,
-  WATER_GUN_STREAM_INTERVAL,
+  HYDRO_PUMP_STREAM_INTERVAL,
   BUBBLE_BEAM_STREAM_INTERVAL,
+  PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL,
   PRISMATIC_STREAM_INTERVAL,
   STEEL_BEAM_STREAM_INTERVAL,
   PLAYER_THUNDER_COOLDOWN_SEC,
@@ -123,6 +125,7 @@ let playerFlamethrowerCooldown = 0;
 let playerConfusionCooldown = 0;
 let playerBubbleCooldown = 0;
 let playerWaterGunCooldown = 0;
+let playerHydroPumpCooldown = 0;
 let playerBubbleBeamCooldown = 0;
 let playerPsybeamCooldown = 0;
 let playerPrismaticLaserCooldown = 0;
@@ -302,8 +305,6 @@ function resolveMoveRuntimeAlias(moveId) {
     case 'gust':
     case 'razorWind':
       return 'silkShoot';
-    case 'hydroPump':
-      return 'waterGun';
     case 'hyperBeam':
       return 'prismaticLaser';
     case 'petalDance':
@@ -334,6 +335,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'bubble') return castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterBurst') return castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterGun') return castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'hydroPump') return castHydroPumpMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'bubbleBeam') return castBubbleBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -368,6 +370,7 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   if (moveId === 'flameCharge') return castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'fireSpin') return castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'earthquake') return castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'waterGun') return castWaterGunCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
@@ -387,7 +390,8 @@ export function moveSupportsChargedRelease(moveId) {
     resolved === 'fireBlast' ||
     resolved === 'flameCharge' ||
     resolved === 'fireSpin' ||
-    resolved === 'earthquake'
+    resolved === 'earthquake' ||
+    resolved === 'waterGun'
   );
 }
 
@@ -548,19 +552,23 @@ export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceE
 }
 
 /**
- * One water-gun stream puff toward floor aim (short cadence like flamethrower).
+ * One hydro-pump stream puff (hold). Water Gun uses {@link castWaterGunMove} / {@link castWaterGunCharged}.
  * @returns {boolean} true when a puff was spawned
  */
-export function tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerWaterGunCooldown > 0) return false;
-  playerWaterGunCooldown = WATER_GUN_STREAM_INTERVAL;
+export function tryCastPlayerHydroPumpStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerHydroPumpCooldown > 0) return false;
+  playerHydroPumpCooldown = HYDRO_PUMP_STREAM_INTERVAL;
   bumpPlayerMoveCastVisual(sourceEntity);
-  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+  castHydroPump(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
     streamPuff: true
   });
   return true;
+}
+
+export function castHydroPumpMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerHydroPumpStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -586,7 +594,36 @@ export function castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity 
 }
 
 export function castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  return tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (playerWaterGunCooldown > 0) return false;
+  playerWaterGunCooldown = PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    waterGunTier: 1
+  });
+  return true;
+}
+
+/**
+ * Charged Water Gun: tier 1 weak partial / tap-equivalent, tier 2 first strong segment, tier 3 two+ segments.
+ */
+export function castWaterGunCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerWaterGunCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  playerWaterGunCooldown = PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    waterGunTier: tier
+  });
+  return true;
 }
 
 /**
@@ -1139,7 +1176,13 @@ export function getPlayerMoveCooldownUiMax(moveId) {
     case 'bubble':
       return 0.55;
     case 'waterGun':
-      return WATER_GUN_STREAM_INTERVAL;
+      return Math.max(
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[1],
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[2],
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'hydroPump':
+      return HYDRO_PUMP_STREAM_INTERVAL;
     case 'bubbleBeam':
       return BUBBLE_BEAM_STREAM_INTERVAL;
     case 'psybeam':
@@ -1225,6 +1268,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerBubbleCooldown;
     case 'waterGun':
       return playerWaterGunCooldown;
+    case 'hydroPump':
+      return playerHydroPumpCooldown;
     case 'bubbleBeam':
       return playerBubbleBeamCooldown;
     case 'psybeam':
@@ -1283,6 +1328,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerConfusionCooldown = Math.max(0, playerConfusionCooldown - dt);
   playerBubbleCooldown = Math.max(0, playerBubbleCooldown - dt);
   playerWaterGunCooldown = Math.max(0, playerWaterGunCooldown - dt);
+  playerHydroPumpCooldown = Math.max(0, playerHydroPumpCooldown - dt);
   playerBubbleBeamCooldown = Math.max(0, playerBubbleBeamCooldown - dt);
   playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
@@ -1350,7 +1396,8 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldSpinAttack' ||
       p.type === 'rainFootSplash' ||
       p.type === 'prismaticWindArc' ||
-      p.type === 'steelWindArc'
+      p.type === 'steelWindArc' ||
+      p.type === 'waterGunWaveRing'
     ) {
       continue;
     }

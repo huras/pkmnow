@@ -240,7 +240,7 @@ export const POKEMON_CONFIG = {
   219: { name: 'Magcargo', types: ['fire', 'rock'], heightTiles: 3.2, baseSpeed: 30 },
   220: { name: 'Swinub', types: ['ice', 'ground'], heightTiles: 1.2, baseSpeed: 50 },
   221: { name: 'Piloswine', types: ['ice', 'ground'], heightTiles: 3.1, baseSpeed: 50 },
-  222: { name: 'Corsola', types: ['water', 'rock'], heightTiles: 2.4, baseSpeed: 35 },
+  222: { name: 'Corsola', types: ['water', 'rock'], heightTiles: 1.9, baseSpeed: 35 },
   223: { name: 'Remoraid', types: ['water'], heightTiles: 2.4, baseSpeed: 65 },
   224: { name: 'Octillery', types: ['water'], heightTiles: 2.7, baseSpeed: 45 },
   225: { name: 'Delibird', types: ['ice', 'flying'], heightTiles: 3.1, baseSpeed: 75 },

@@ -18,6 +18,8 @@ import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getWorldReactionOverlayCells } from '../simulation/world-reactions.js';
 import { drawLightning, getCloudSlotGlow } from '../weather/lightning.js';
 import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '../main/wind-state.js';
+import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
+import { getBindableMoveLabel } from '../main/player-input-slots.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 1.25;
@@ -1573,4 +1575,104 @@ export function drawDigChargeBar(ctx, options) {
     }
     ctx.restore();
   }
+}
+
+/** Segment fill colors aligned with `character-selector.css` `.player-field-charge__fill--n`. */
+const FIELD_CHARGE_SEG_STYLE = [
+  { a: 'rgba(120,210,255,0.92)', b: 'rgba(160,230,255,0.92)' },
+  { a: 'rgba(255,197,116,0.94)', b: 'rgba(255,225,146,0.94)' },
+  { a: 'rgba(255,116,116,0.94)', b: 'rgba(255,165,126,0.94)' },
+  { a: 'rgba(200,140,255,0.94)', b: 'rgba(255,210,255,0.94)' }
+];
+
+/**
+ * 4-segment field charge meter (Tackle/Cut + charged-release specials) on the play canvas.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ appMode: string, playInputState: import('../main/play-input-state.js').playInputState, cw: number, ch: number, timeSec?: number }} options
+ */
+export function drawFieldCombatChargeBar(ctx, options) {
+  const { appMode, playInputState, cw, ch, timeSec = 0 } = options;
+  if (appMode !== 'play') return;
+  const snap = playInputState.fieldChargeUiActive;
+  if (!snap || typeof snap.moveId !== 'string') return;
+  const p = Math.max(0, Math.min(1, Number(snap.charge01) || 0));
+  if (p <= 0.005) return;
+
+  const [p1, p2, p3, p4] = getChargeBarProgresses(p);
+  const lvl = getChargeLevel(p);
+  const slotLab = snap.slot === 'l' ? 'LMB' : snap.slot === 'r' ? 'RMB' : 'MMB';
+  const moveLab =
+    snap.moveId === 'cut' ? 'Cut' : snap.moveId === 'tackle' ? 'Tackle' : getBindableMoveLabel(snap.moveId);
+  const barW = Math.min(340, cw * 0.52);
+  const barH = 14;
+  const gap = 3;
+  const pad = 2;
+  const px0 = (cw - barW) * 0.5;
+  const py0 = ch - 108;
+  const label = `${slotLab} · ${moveLab}  L${lvl}  ${Math.round(p * 100)}%`;
+  const segW = (barW - pad * 2 - gap * 3) / 4;
+  const pulse = 0.5 + 0.5 * Math.sin((timeSec || 0) * 6.8);
+  const FULL = 0.994;
+  const progresses = [p1, p2, p3, p4];
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const outerR = 8;
+  ctx.moveTo(px0 + outerR, py0);
+  ctx.arcTo(px0 + barW, py0, px0 + barW, py0 + barH, outerR);
+  ctx.arcTo(px0 + barW, py0 + barH, px0, py0 + barH, outerR);
+  ctx.arcTo(px0, py0 + barH, px0, py0, outerR);
+  ctx.arcTo(px0, py0, px0 + barW, py0, outerR);
+  ctx.closePath();
+  ctx.stroke();
+
+  for (let i = 0; i < 4; i++) {
+    const sx = px0 + pad + i * (segW + gap);
+    const sy = py0 + pad;
+    const sh = barH - pad * 2;
+    const pn = progresses[i];
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath();
+    const ir = Math.min(5, sh / 2);
+    ctx.moveTo(sx + ir, sy);
+    ctx.arcTo(sx + segW, sy, sx + segW, sy + sh, ir);
+    ctx.arcTo(sx + segW, sy + sh, sx, sy + sh, ir);
+    ctx.arcTo(sx, sy + sh, sx, sy, ir);
+    ctx.arcTo(sx, sy, sx + segW, sy, ir);
+    ctx.closePath();
+    ctx.fill();
+
+    if (pn > 0.002) {
+      const fillW = Math.max(0, segW * pn);
+      const g = ctx.createLinearGradient(sx, sy, sx + fillW, sy);
+      const st = FIELD_CHARGE_SEG_STYLE[i];
+      const boost = pn >= FULL ? 0.06 + 0.1 * pulse : 0;
+      g.addColorStop(0, st.a);
+      g.addColorStop(1, st.b);
+      ctx.fillStyle = g;
+      ctx.globalAlpha = Math.min(1, 0.88 + boost);
+      ctx.beginPath();
+      ctx.moveTo(sx + ir, sy);
+      ctx.arcTo(sx + fillW, sy, sx + fillW, sy + sh, ir);
+      ctx.arcTo(sx + fillW, sy + sh, sx, sy + sh, ir);
+      ctx.arcTo(sx, sy + sh, sx, sy, ir);
+      ctx.arcTo(sx, sy, sx + fillW, sy, ir);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '600 11px system-ui,Segoe UI,sans-serif';
+  ctx.fillStyle = 'rgba(225,240,255,0.92)';
+  ctx.strokeStyle = 'rgba(0,20,40,0.55)';
+  ctx.lineWidth = 3;
+  ctx.strokeText(label, cw * 0.5, py0 + barH + 5);
+  ctx.fillText(label, cw * 0.5, py0 + barH + 5);
+  ctx.restore();
 }

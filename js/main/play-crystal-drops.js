@@ -321,6 +321,25 @@ export function getCollectedDetailInventorySnapshot() {
   return out;
 }
 
+/**
+ * Replaces session inventory from a persisted snapshot (e.g. play resume).
+ * @param {Array<{ itemKey?: string, count?: number }> | null | undefined} rows
+ */
+export function restoreCollectedDetailInventoryFromSnapshot(rows) {
+  collectedDetailInventory.clear();
+  crystalLootCount = 0;
+  if (!Array.isArray(rows)) return;
+  for (const row of rows) {
+    const k = String(row?.itemKey || '');
+    const c = Math.max(0, row?.count | 0);
+    if (!k || c <= 0) continue;
+    collectedDetailInventory.set(k, c);
+  }
+  for (const [k, c] of collectedDetailInventory.entries()) {
+    if (isCrystalItemKey(k)) crystalLootCount += Math.max(0, c | 0);
+  }
+}
+
 /** `data-inventory-drag` value for the aggregated “Crystal Shards” HUD row. */
 export const PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE = '__pkmn_crystal_shards__';
 

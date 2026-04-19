@@ -15,9 +15,11 @@ export const FLAMETHROWER_STREAM_INTERVAL_MAX = 0.176;
 /** Collision cadence for stream shots (render stays at full FPS). */
 export const FLAMETHROWER_STREAM_HIT_TICK_SEC = 1 / 30;
 
-// --- Water Gun / Bubble Beam (hold streams) ---
-export const WATER_GUN_STREAM_INTERVAL = 0.074;
+// --- Hydro Pump (hold stream) / Bubble Beam ---
+export const HYDRO_PUMP_STREAM_INTERVAL = 0.068;
 export const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
+/** Per-tier cooldown after Water Gun ball (tap = 1, charged L2 / L3+). */
+export const PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL = Object.freeze({ 1: 0.44, 2: 0.68, 3: 1.02 });
 
 // --- Prismatic Laser (hold stream) ---
 export const PRISMATIC_STREAM_INTERVAL = 0.25;

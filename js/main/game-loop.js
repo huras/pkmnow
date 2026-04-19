@@ -8,8 +8,8 @@ import {
   getWildPokemonEntities,
   wildUpdatePerfLast
 } from '../wild-pokemon/index.js';
-import { updateMoves } from '../moves/moves-manager.js';
-import { updateGrassFire } from '../play-grass-fire.js';
+import { updateMoves, pushParticle } from '../moves/moves-manager.js';
+import { updateGrassFire, GRASS_FIRE_PARTICLE_SEC } from '../play-grass-fire.js';
 import { tickLightning } from '../weather/lightning.js';
 import { getWeatherRainIntensity } from './weather-state.js';
 import {
@@ -33,7 +33,9 @@ import { syncEarthquakeAmbientAudio } from '../audio/earthquake-ambient-audio.js
 import { syncFireLoopAudio } from '../audio/fire-loop-sfx.js';
 import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
+import { getLastRenderFrameBreakdown, RENDER_FRAME_PHASE_HUD_LABELS } from '../render/render-frame-phases.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
+import { tickPlaySessionAutosave } from './play-session-persist.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -169,7 +171,19 @@ export function createGameLoop(api) {
       updateMoves(dt, getWildPokemonEntities(), currentData, player);
       updateBreakdown.updMovesMs = performance.now() - tMoves0;
       const tGrassFire0 = performance.now();
-      updateGrassFire(dt, currentData, pvx, pvy);
+      updateGrassFire(dt, currentData, pvx, pvy, (wx, wy) => {
+        pushParticle({
+          type: 'grassFire',
+          x: wx,
+          y: wy,
+          vx: 0,
+          vy: 0,
+          z: 0.06,
+          vz: 0,
+          life: GRASS_FIRE_PARTICLE_SEC,
+          maxLife: GRASS_FIRE_PARTICLE_SEC
+        });
+      });
       updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
       tickLightning(dt, {
         rainIntensity: getWeatherRainIntensity(),
@@ -187,6 +201,7 @@ export function createGameLoop(api) {
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
       updateBreakdown.updHudMs = performance.now() - tHud0;
+      tickPlaySessionAutosave(timestamp / 1000, currentData, player);
     }
 
     const tRenderStart = performance.now();
@@ -207,7 +222,7 @@ export function createGameLoop(api) {
         const lod = getPlayLodDetail();
         const updateMs = tRenderStart - tLoopStart;
         const renderMs = tRenderEnd - tRenderStart;
-        const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown);
+        const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown, getLastRenderFrameBreakdown());
         const stablePct = perf.stableRatio01 * 100;
         const heavyUpdateSlices = [
           ['ply', perf.p95UpdPlayerMsStable],
@@ -240,6 +255,13 @@ export function createGameLoop(api) {
               .join(' | ')
           : '';
         const wildSubTag = wildSubHeavy ? ` · wldΔ ${wildSubHeavy}` : '';
+        const rndHeavy = Object.entries(perf.renderP95Stable)
+          .map(([k, ms]) => [RENDER_FRAME_PHASE_HUD_LABELS[k] || k, ms])
+          .sort((a, b) => b[1] - a[1]);
+        const top3HeavyRender = rndHeavy
+          .slice(0, 3)
+          .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+          .join(' | ');
         const chunkStats = getPlayChunkFrameStats();
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
@@ -256,6 +278,7 @@ export function createGameLoop(api) {
           ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
           ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
           ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
+          ` · rnd top ${top3HeavyRender}` +
           ` · upd top ${top3HeavyUpdate}` +
           wildSubTag +
           ` · stable ${stablePct.toFixed(0)}%` +

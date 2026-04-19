@@ -14,6 +14,8 @@ import {
 import { spawnPrismaticLaserStreamFx } from './prismatic-laser-fx.js';
 import { spawnSteelBeamStreamFx } from './steel-beam-fx.js';
 
+export { castWaterGun } from './water-gun-ball.js';
+
 function pushLinearProjectile(pushProjectile, spec) {
   pushProjectile(spec);
 }
@@ -141,18 +143,22 @@ export function castBubble(sourceX, sourceY, targetX, targetY, sourceEntity, opt
   }
 }
 
-export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
+/**
+ * Hydro Pump — dense water stream (hold). Water Gun uses {@link castWaterGun} in `water-gun-ball.js`.
+ * @param {{ fromWild?: boolean, pushProjectile: (p: object) => void, streamPuff?: boolean }} opts
+ */
+export function castHydroPump(sourceX, sourceY, targetX, targetY, sourceEntity, opts) {
   const { fromWild = false, pushProjectile, streamPuff = false } = opts;
-  const maxR = fromWild ? 9 : 11;
+  const maxR = fromWild ? 11 : 13;
   const z0 = Math.max(0, Number(sourceEntity?.z) || 0) + 0.04;
-  const count = streamPuff ? 4 : 8;
-  const spreadMag = streamPuff ? 0.12 : 0.16;
-  const dmg = streamPuff ? (fromWild ? 2.3 : 2.7) : fromWild ? 3 : 5;
-  const speedBase = streamPuff ? 16.2 : 14.5;
+  const count = streamPuff ? 5 : 9;
+  const spreadMag = streamPuff ? 0.1 : 0.14;
+  const dmg = streamPuff ? (fromWild ? 2.5 : 2.9) : fromWild ? 3.2 : 5.4;
+  const speedBase = streamPuff ? 16.8 : 15.2;
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * spreadMag;
     const a = Math.atan2(targetY - sourceY, targetX - sourceX) + spread;
-    const reach = 4.8;
+    const reach = 5.2;
     const rawTx = sourceX + Math.cos(a) * reach;
     const rawTy = sourceY + Math.sin(a) * reach;
     const sp = spawnAlongHypotTowardGround(sourceX, sourceY, z0, rawTx, rawTy, 0.33);
@@ -164,7 +170,7 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
       rawTy,
       sourceX,
       sourceY,
-      speedBase + Math.random() * (streamPuff ? 1.4 : 0.8),
+      speedBase + Math.random() * (streamPuff ? 1.5 : 0.85),
       maxR,
       { ttlMargin: 1.05, ttlPad: 0.08 }
     );
@@ -176,7 +182,7 @@ export function castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, o
       vy,
       vz,
       z: sp.startZ,
-      radius: streamPuff ? 0.22 : 0.25,
+      radius: streamPuff ? 0.23 : 0.26,
       timeToLive,
       damage: dmg,
       sourceEntity,

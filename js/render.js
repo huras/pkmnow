@@ -108,6 +108,7 @@ import {
   drawWorldReactionsOverlay,
   drawEnvironmentalEffects,
   drawDigChargeBar,
+  drawFieldCombatChargeBar,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
 
@@ -148,7 +149,12 @@ import {
   resolveCanonicalPmdH
 } from './pokemon/pmd-layout-metrics.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
-
+import {
+  beginRenderFrameProfile,
+  addRenderFramePhaseMs,
+  finalizeRenderFrameProfile,
+  clearRenderFrameBreakdown
+} from './render/render-frame-phases.js';
 
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -169,7 +175,16 @@ export function spawnJumpRingAt(x, y) {
 
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
-  if (!ctx || !data) return;
+  if (!ctx || !data) {
+    clearRenderFrameBreakdown();
+    return;
+  }
+
+  let tFrame0 = 0;
+  try {
+    tFrame0 = performance.now();
+    beginRenderFrameProfile(options.settings?.appMode || 'map');
+    const tPrep0 = performance.now();
 
   if (!didWarnTerrainSetRoles) {
     const terrainRoleProblems = TessellationEngine.validateAllTerrainSets();
@@ -229,8 +244,11 @@ export function render(canvas, data, options = {}) {
     resetPlayChunkBakeAutoTuner();
   }
 
+  addRenderFramePhaseMs('rndPrepMs', performance.now() - tPrep0);
+
   if (appMode === 'map') {
     clearPlayCameraSnapshot();
+    const tMap0 = performance.now();
     drawCachedMapOverview(ctx, {
       data,
       cw,
@@ -244,7 +262,9 @@ export function render(canvas, data, options = {}) {
       endX,
       endY
     });
+    addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
+    const tCam0 = performance.now();
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
@@ -302,8 +322,10 @@ export function render(canvas, data, options = {}) {
     startY = Math.max(0, playCam.startYTiles);
     endX = Math.min(width * MACRO_TILE_STRIDE, playCam.endXTiles);
     endY = Math.min(height * MACRO_TILE_STRIDE, playCam.endYTiles);
+    addRenderFramePhaseMs('rndCamMs', performance.now() - tCam0);
 
     // --- CHUNK BAKING & RENDERING ---
+    const tChunkQ0 = performance.now();
     const maxChunkXi = Math.floor((width * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const maxChunkYi = Math.floor((height * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const padC = playCam.chunkPad;
@@ -342,6 +364,7 @@ export function render(canvas, data, options = {}) {
         }
       }
     }
+    addRenderFramePhaseMs('rndChunkQMs', performance.now() - tChunkQ0);
 
     const chunkBakeBudget = getAdaptivePlayChunkBakeBudget({
       lodDetail, cachedVisibleChunks, missingVisibleChunks,
@@ -349,12 +372,15 @@ export function render(canvas, data, options = {}) {
       totalVisibleChunks: visibleChunkCoords.length
     });
 
+    const tChunkBake0 = performance.now();
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
     for (const req of bakeRequests) {
       if (hasPlayChunk(req.key) && !req.forceRebake) continue;
       setPlayChunk(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
     }
+    addRenderFramePhaseMs('rndChunkBakeMs', performance.now() - tChunkBake0);
 
+    const tChunkDraw0 = performance.now();
     const currentTransX = playCam.currentTransX + earthquakeShakePx.x;
     const currentTransY = playCam.currentTransY + earthquakeShakePx.y;
     const chunkDrawScale = playCam.viewScale;
@@ -391,8 +417,10 @@ export function render(canvas, data, options = {}) {
     });
     ctx.imageSmoothingEnabled = prevSmoothing;
     ctx.translate(currentTransX, currentTransY);
+    addRenderFramePhaseMs('rndChunkDrawMs', performance.now() - tChunkDraw0);
 
     // --- TILE CACHE & WARMING ---
+    const tTileWarm0 = performance.now();
     const tileCache = new Map();
     const getCached = (mx, my) => {
       const key = (mx << 16) | (my & 0xFFFF);
@@ -408,6 +436,7 @@ export function render(canvas, data, options = {}) {
         for (let mx = startX; mx < endX; mx++) getCached(mx, my);
       }
     }
+    addRenderFramePhaseMs('rndTileWarmMs', performance.now() - tTileWarm0);
 
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
@@ -415,10 +444,12 @@ export function render(canvas, data, options = {}) {
     const canopyAnimTime = vegAnimTime;
 
     // PASS 0: Ocean
+    const tOcean0 = performance.now();
     drawOceanPass(ctx, { 
       waterImg: imageCache.get('tilesets/water-tile.png'), 
       lodDetail, time, startX, startY, endX, endY, getCached, tileW, tileH 
     });
+    addRenderFramePhaseMs('rndOceanMs', performance.now() - tOcean0);
 
     const forEachAbovePlayerTile = (fn) => {
       for (let my = startY; my < endY; my++) {
@@ -460,6 +491,7 @@ export function render(canvas, data, options = {}) {
     };
 
     // PASS 5a: Animated Grass
+    const tGrass0 = performance.now();
     drawAnimatedGrassPass(ctx, { 
       lodDetail, forEachAbovePlayerTile, playerTileMx: overlayMx, playerTileMy: overlayMy, 
       playLodGrassSpriteOverlay, isGrassDeferredAroundPlayer, isGrassDeferredEwNeighbor, skipPlayerGrassOverlayDuringFlight,
@@ -467,8 +499,10 @@ export function render(canvas, data, options = {}) {
         drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
       }
     });
+    addRenderFramePhaseMs('rndGrassMs', performance.now() - tGrass0);
 
     // PASS 3.5: Entity Collection & Drawing
+    const tCollect0 = performance.now();
     const renderItems = collectRenderItems({ 
       data, player, startX, startY, endX, endY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
@@ -479,7 +513,9 @@ export function render(canvas, data, options = {}) {
     renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
     trackJumpStartRings(renderItems);
     trackRunningDust(renderItems, time);
+    addRenderFramePhaseMs('rndCollectMs', performance.now() - tCollect0);
 
+    const tEnt0 = performance.now();
     const blockedGrassOverlayTiles = new Set();
     const tileKey = (mx, my) => `${mx},${my}`;
     const markBlockedTile = (mx, my) => {
@@ -761,8 +797,10 @@ export function render(canvas, data, options = {}) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const pulse of getActiveDetailHitPulses()) drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx);
     ctx.restore();
+    addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
     // PASS 5a-deferred (grass over spirits)
+    const tGrassDef0 = performance.now();
     if (playLodGrassSpriteOverlay && !skipPlayerGrassOverlayDuringFlight) {
         const passesPlayerGate = (mx, my, t) => {
             if (!t || t.heightStep < 1) return false;
@@ -791,7 +829,9 @@ export function render(canvas, data, options = {}) {
           drawGrass5aForCell(ctx, overlayMx, overlayMy, getCached(overlayMx, overlayMy), Math.ceil(tileW), Math.ceil(tileH), overlayMx * tileW, overlayMy * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
     }
+    addRenderFramePhaseMs('rndGrassDeferMs', performance.now() - tGrassDef0);
 
+    const tDebug0 = performance.now();
     drawWorldColliderOverlay(ctx, { 
       showFullColliderOverlay: options.settings?.showPlayColliders || window.debugColliders, 
       detailColliderDbg: options.settings?.detailColliderDbg, 
@@ -811,6 +851,10 @@ export function render(canvas, data, options = {}) {
     });
     
     drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
+    drawFieldCombatChargeBar(ctx, { appMode, playInputState, cw, ch, timeSec: time });
+    addRenderFramePhaseMs('rndDebugMs', performance.now() - tDebug0);
+
+    const tWeather0 = performance.now();
     const rainI = Number(options.settings?.weatherRainIntensity) || 0;
     const cloudPresenceForShadowShift = Number(options.settings?.weatherCloudPresence) || 0;
     const splashTargets = [];
@@ -891,16 +935,24 @@ export function render(canvas, data, options = {}) {
       earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
       cloudWhiteLayerAlphaMul
     });
+    addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);
 
+    const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
+    addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }
 
   if (options.hover) {
+    const th0 = performance.now();
     const { x, y } = options.hover;
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+    addRenderFramePhaseMs('rndHoverMs', performance.now() - th0);
   }
   ctx.restore();
+  } finally {
+    finalizeRenderFrameProfile(performance.now() - tFrame0);
+  }
 }

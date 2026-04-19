@@ -11,7 +11,12 @@ import { AnimationRenderer } from '../animation-renderer.js';
 import { getGrassVariant, GRASS_TILES } from '../biome-tiles.js';
 import { foliageType } from '../chunking.js';
 import { getPlayAnimatedGrassLayers } from '../play-grass-eligibility.js';
-import { grassFireVisualPhaseAt, grassFireCharredRegrowth01 } from '../play-grass-fire.js';
+import {
+  grassFireVisualPhaseAt,
+  grassFireCharredRegrowth01,
+  grassFireExtinguishBarVisibleAt,
+  grassFireBurningHpAt
+} from '../play-grass-fire.js';
 import { getGrassCutFadeoutAlpha01 } from '../play-grass-cut.js';
 import { TCOLS_NATURE } from './render-utils-internal.js';
 
@@ -204,6 +209,31 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       ctx.filter = 'none';
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
+      if (grassFireExtinguishBarVisibleAt(mx, my)) {
+        const hpInfo = grassFireBurningHpAt(mx, my);
+        if (hpInfo && hpInfo.maxHp > 0) {
+          const frac = Math.max(0, Math.min(1, hpInfo.hp / hpInfo.maxHp));
+          const bx = snapPx(tx + tileW * 0.08);
+          const bw = Math.max(10, tileW * 0.84);
+          const by = ty - tileH * 0.22;
+          const bh = Math.max(3.5, tileH * 0.075);
+          ctx.save();
+          ctx.globalAlpha = playerTopOverlay ? 0.88 * PLAYER_TILE_GRASS_OVERLAY_ALPHA : 0.94;
+          ctx.fillStyle = 'rgba(0,0,0,0.58)';
+          ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+          ctx.fillStyle = 'rgba(28,28,28,0.95)';
+          ctx.fillRect(bx, by, bw, bh);
+          const r = Math.round(255);
+          const gCol = Math.round(70 + 150 * frac);
+          const bCol = Math.round(35 + 55 * frac);
+          ctx.fillStyle = `rgb(${r},${gCol},${bCol})`;
+          ctx.fillRect(bx, by, bw * frac, bh);
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bx, by, bw, bh);
+          ctx.restore();
+        }
+      }
       ctx.restore();
     } else {
       const u = Math.max(0, Math.min(1, charredRegrowU));

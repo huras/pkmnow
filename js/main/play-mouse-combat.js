@@ -4,13 +4,16 @@ import { setPlayerFacingFromWorldAimDelta, triggerPlayerLmbAttack, player } from
 import {
   castMoveById,
   castMoveChargedById,
+  moveSupportsChargedRelease,
   castUltimate,
   spawnFieldCutPsychicSlashFx,
   spawnFieldCutSlashFx,
   spawnFieldSpinAttackFx,
   spawnFieldCutVineSlashFx,
   tryCastPlayerFlamethrowerStreamPuff,
-  tryCastPlayerWaterGunStreamPuff,
+  tryCastPlayerHydroPumpStreamPuff,
+  castWaterGunMove,
+  castWaterGunCharged,
   tryCastPlayerBubbleBeamStreamPuff,
   tryCastPlayerPrismaticStreamPuff,
   updatePlayerPrismaticMergedBeamVisual,
@@ -63,7 +66,8 @@ const FIELD_LMB_CHARGE_MAX_SEC_DEFAULT = 1.05 * CHARGE_TIME_MULT;
 const FIELD_LMB_CHARGE_MIN_HOLD_MS = 180;
 const FIELD_CUT_COMBO_RESET_SEC = 1.15;
 const FIELD_TACKLE_CHARGE_MAX_SEC = 2.0 * CHARGE_TIME_MULT;
-const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 8.0;
+const FIELD_TACKLE_CHARGE_MIN_REACH_TILES = 1;
+const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 3;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_CUT_CHARGE_MAX_RADIUS_MUL = 3.0;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
@@ -566,7 +570,8 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-  player._tackleReachTiles = FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES;
+  player._tackleReachTiles =
+    meleeId === 'tackle' ? FIELD_TACKLE_CHARGE_MIN_REACH_TILES : FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES;
   const nx = Number(player.tackleDirNx) || 0;
   const ny = Number(player.tackleDirNy) || 1;
   const headingRad = Math.atan2(ny, nx || 1e-6);
@@ -652,24 +657,36 @@ function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, mel
     if (charged && isChargeStrongAttackEligible(charge01)) {
       const uRange = getChargeRange01(charge01);
       const uDamage = getChargeDamage01(charge01);
-      const chargedReach = 2 + (FIELD_TACKLE_CHARGE_MAX_REACH_TILES - 2) * uRange;
+      const span = FIELD_TACKLE_CHARGE_MAX_REACH_TILES - FIELD_TACKLE_CHARGE_MIN_REACH_TILES;
+      const chargedReach = FIELD_TACKLE_CHARGE_MIN_REACH_TILES + span * uRange;
       const tackleDamage = Math.round(12 + 10 * uDamage);
-      player._tackleReachTiles = Math.max(2, chargedReach);
+      player._tackleReachTiles = Math.min(
+        FIELD_TACKLE_CHARGE_MAX_REACH_TILES,
+        Math.max(FIELD_TACKLE_CHARGE_MIN_REACH_TILES, chargedReach)
+      );
       tryPlayerTackleHitWild(player, data, { damage: tackleDamage });
       tryBreakCrystalOnPlayerTackle(player, data, charge01);
     } else if (charged) {
       const weakT = getWeakPartialChargeT(charge01);
       const tackleDamage = Math.round(12 + 2 + 6 * weakT);
-      const reach = 2 + 0.9 * weakT;
-      player._tackleReachTiles = Math.max(2, reach);
+      const span = FIELD_TACKLE_CHARGE_MAX_REACH_TILES - FIELD_TACKLE_CHARGE_MIN_REACH_TILES;
+      const reach = FIELD_TACKLE_CHARGE_MIN_REACH_TILES + span * weakT;
+      player._tackleReachTiles = Math.min(
+        FIELD_TACKLE_CHARGE_MAX_REACH_TILES,
+        Math.max(FIELD_TACKLE_CHARGE_MIN_REACH_TILES, reach)
+      );
       tryPlayerTackleHitWild(player, data, { damage: tackleDamage });
       tryBreakCrystalOnPlayerTackle(player, data, 0.1 + 0.22 * weakT);
     } else {
       const uRange = getChargeRange01(charge01);
       const uDamage = getChargeDamage01(charge01);
-      const chargedReach = 2 + (FIELD_TACKLE_CHARGE_MAX_REACH_TILES - 2) * uRange;
+      const span = FIELD_TACKLE_CHARGE_MAX_REACH_TILES - FIELD_TACKLE_CHARGE_MIN_REACH_TILES;
+      const chargedReach = FIELD_TACKLE_CHARGE_MIN_REACH_TILES + span * uRange;
       const tackleDamage = Math.round(12 + 10 * uDamage);
-      player._tackleReachTiles = Math.max(2, chargedReach);
+      player._tackleReachTiles = Math.min(
+        FIELD_TACKLE_CHARGE_MAX_REACH_TILES,
+        Math.max(FIELD_TACKLE_CHARGE_MIN_REACH_TILES, chargedReach)
+      );
       tryPlayerTackleHitWild(player, data, { damage: tackleDamage });
       tryBreakCrystalOnPlayerTackle(player, data, null);
     }
@@ -692,7 +709,6 @@ const THUNDER_PREVIEW_OWNER_IDS = ['lmb', 'rmb', 'mmb'];
 function isHoldStreamMoveId(moveId) {
   return (
     moveId === 'flamethrower' ||
-    moveId === 'waterGun' ||
     moveId === 'hydroPump' ||
     moveId === 'bubbleBeam' ||
     moveId === 'surf' ||
@@ -739,6 +755,10 @@ function getBindingsOrDefault(pl) {
 
 function isMeleeTackleOrCut(moveId) {
   return moveId === 'tackle' || moveId === 'cut';
+}
+
+function fieldMoveUsesChargeMeter(moveId) {
+  return isMeleeTackleOrCut(moveId) || moveSupportsChargedRelease(moveId);
 }
 
 /**
@@ -816,10 +836,17 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
       tryCastPlayerFlamethrowerStreamPuff(sx, sy, tx, ty, pl);
     }
-  } else if (moveId === 'waterGun' || moveId === 'hydroPump') {
+  } else if (moveId === 'hydroPump') {
     if (!water) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
-      tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, pl);
+      tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'waterGun') {
+    applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+    if (heldMs < TAP_MS) {
+      castWaterGunMove(sx, sy, tx, ty, pl);
+    } else {
+      castWaterGunCharged(sx, sy, tx, ty, pl, charge01 || 0);
     }
   } else if (moveId === 'bubbleBeam' || moveId === 'surf') {
     if (!bubble) {
@@ -936,9 +963,9 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     tickFireSpinHold(player, dt, pushParticle, playInputState.chargeLeft01 || 0);
   }
-  if (leftHeld && !mod && (lmb === 'waterGun' || lmb === 'hydroPump')) {
+  if (leftHeld && !mod && lmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) leftWaterStreamedThisPress = true;
+    if (tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, player)) leftWaterStreamedThisPress = true;
   }
   if (leftHeld && !mod && (lmb === 'bubbleBeam' || lmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -972,9 +999,9 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     tickFireSpinHold(player, dt, pushParticle, playInputState.chargeRight01 || 0);
   }
-  if (rightHeld && !mod && (rmb === 'waterGun' || rmb === 'hydroPump')) {
+  if (rightHeld && !mod && rmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) rightWaterStreamedThisPress = true;
+    if (tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, player)) rightWaterStreamedThisPress = true;
   }
   if (rightHeld && !mod && (rmb === 'bubbleBeam' || rmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1008,9 +1035,9 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     tickFireSpinHold(player, dt, pushParticle, playInputState.chargeMmb01 || 0);
   }
-  if (middleHeld && !mod && (mmb === 'waterGun' || mmb === 'hydroPump')) {
+  if (middleHeld && !mod && mmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    if (tryCastPlayerWaterGunStreamPuff(sx, sy, tx, ty, player)) middleWaterStreamedThisPress = true;
+    if (tryCastPlayerHydroPumpStreamPuff(sx, sy, tx, ty, player)) middleWaterStreamedThisPress = true;
   }
   if (middleHeld && !mod && (mmb === 'bubbleBeam' || mmb === 'surf')) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1047,6 +1074,28 @@ export function updatePlayPointerCombat(dt, player, data) {
     !!(rightHeld && !mod && rmb === 'steelBeam') ||
     !!(middleHeld && !mod && mmb === 'steelBeam');
   updatePlayerSteelBeamMergedBeamVisual(steelBeamStreamHeld, sx, sy, tx, ty, player);
+
+  /** First held slot L→R→M with a charge-tiered field move (4-bar meter on canvas). */
+  let fieldChargeUiActive = null;
+  if (leftHeld && !mod && !player._strengthCarry) {
+    const pL = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
+    if (fieldMoveUsesChargeMeter(lmb) && pL > 0.005) {
+      fieldChargeUiActive = { moveId: lmb, charge01: pL, slot: 'l' };
+    }
+  }
+  if (!fieldChargeUiActive && rightHeld && !mod) {
+    const pR = Math.max(0, Math.min(1, Number(playInputState.chargeRight01) || 0));
+    if (fieldMoveUsesChargeMeter(rmb) && pR > 0.005) {
+      fieldChargeUiActive = { moveId: rmb, charge01: pR, slot: 'r' };
+    }
+  }
+  if (!fieldChargeUiActive && middleHeld && !mod) {
+    const pM = Math.max(0, Math.min(1, Number(playInputState.chargeMmb01) || 0));
+    if (fieldMoveUsesChargeMeter(mmb) && pM > 0.005) {
+      fieldChargeUiActive = { moveId: mmb, charge01: pM, slot: 'm' };
+    }
+  }
+  playInputState.fieldChargeUiActive = fieldChargeUiActive;
 
   // Thunder charge preview: while a held button is bound to Thunder and the charge has
   // passed the first bar, broadcast a "charging storm cell" + ground-shadow at the live
@@ -1225,6 +1274,7 @@ export function installPlayPointerCombat(deps) {
     playInputState.chargeLeft01 = 0;
     playInputState.chargeRight01 = 0;
     playInputState.chargeMmb01 = 0;
+    playInputState.fieldChargeUiActive = null;
     playInputState.psybeamLeftHold = null;
     playInputState.psybeamRightHold = null;
     playInputState.psybeamMiddleHold = null;

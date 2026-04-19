@@ -117,7 +117,7 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
   nx /= len;
   ny /= len;
 
-  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 2);
+  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 1);
   const probeReach = Math.max(0.2, reach - PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;

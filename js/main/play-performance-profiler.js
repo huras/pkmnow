@@ -1,5 +1,9 @@
+import { RENDER_FRAME_PHASE_KEYS } from '../render/render-frame-phases.js';
+
 const PERF_WINDOW_MS = 12000;
 const PERF_WARMUP_MS = 2500;
+
+/** @typedef {Record<string, number>} RenderPhaseBreakdown */
 
 /** @type {Array<{
  *   t: number,
@@ -19,7 +23,7 @@ const PERF_WARMUP_MS = 2500;
  *   updGrassFireMs: number,
  *   updBgmMs: number,
  *   updHudMs: number
- * }>} */
+ * } & RenderPhaseBreakdown>} */
 const samples = [];
 let warmupCutoffAt = 0;
 
@@ -65,6 +69,7 @@ function safeFpsFromFrameMs(ms) {
  *   updBgmMs?: number,
  *   updHudMs?: number
  * }} [updateBreakdown]
+ * @param {RenderPhaseBreakdown} [renderBreakdown] Phase timings from the same frame as `renderMs` (see render-frame-phases).
  * @returns {{
  *   frameCount: number,
  *   stableFrameCount: number,
@@ -87,11 +92,20 @@ function safeFpsFromFrameMs(ms) {
  *   p95UpdMovesMsStable: number,
  *   p95UpdGrassFireMsStable: number,
  *   p95UpdBgmMsStable: number,
- *   p95UpdHudMsStable: number
+ *   p95UpdHudMsStable: number,
+ *   renderP95Stable: RenderPhaseBreakdown
  * }}
  */
-export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performance.now(), updateBreakdown = {}) {
-  samples.push({
+export function ingestPlayPerfSample(
+  frameMs,
+  updateMs,
+  renderMs,
+  now = performance.now(),
+  updateBreakdown = {},
+  renderBreakdown = {}
+) {
+  /** @type {typeof samples[number]} */
+  const row = {
     t: now,
     frameMs,
     updateMs,
@@ -109,7 +123,11 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
     updGrassFireMs: updateBreakdown.updGrassFireMs ?? 0,
     updBgmMs: updateBreakdown.updBgmMs ?? 0,
     updHudMs: updateBreakdown.updHudMs ?? 0
-  });
+  };
+  for (const k of RENDER_FRAME_PHASE_KEYS) {
+    row[k] = renderBreakdown[k] ?? 0;
+  }
+  samples.push(row);
   trimSamples(now);
 
   const stable = samples.filter((s) => s.t >= warmupCutoffAt);
@@ -130,6 +148,12 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
   const stableUpdGrassFireSorted = toSorted(stable, (s) => s.updGrassFireMs);
   const stableUpdBgmSorted = toSorted(stable, (s) => s.updBgmMs);
   const stableUpdHudSorted = toSorted(stable, (s) => s.updHudMs);
+
+  /** @type {RenderPhaseBreakdown} */
+  const renderP95Stable = {};
+  for (const k of RENDER_FRAME_PHASE_KEYS) {
+    renderP95Stable[k] = percentile(toSorted(stable, (s) => s[k] ?? 0), 0.95);
+  }
 
   const p50FrameMs = percentile(frameMsSorted, 0.5);
   const p95FrameMs = percentile(frameMsSorted, 0.95);
@@ -157,7 +181,8 @@ export function ingestPlayPerfSample(frameMs, updateMs, renderMs, now = performa
     p95UpdMovesMsStable: percentile(stableUpdMovesSorted, 0.95),
     p95UpdGrassFireMsStable: percentile(stableUpdGrassFireSorted, 0.95),
     p95UpdBgmMsStable: percentile(stableUpdBgmSorted, 0.95),
-    p95UpdHudMsStable: percentile(stableUpdHudSorted, 0.95)
+    p95UpdHudMsStable: percentile(stableUpdHudSorted, 0.95),
+    renderP95Stable
   };
 }
 

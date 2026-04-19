@@ -173,6 +173,47 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.globalAlpha = 1;
     return;
   }
+  if (p.type === 'waterGunWaveRing') {
+    const px = snapPx(p.x * tileW);
+    const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+    const life01 = Math.max(0, Math.min(1, p.life / Math.max(1e-4, p.maxLife)));
+    const elapsed = 1 - life01;
+    const ri = Number(p.ringIndex) || 0;
+    const lag = ri * 0.14;
+    const u = Math.max(0, Math.min(1, (elapsed - lag) / (0.55 + lag * 0.2)));
+    if (u <= 0.01) {
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const fade = Math.max(0.08, 1 - elapsed * 0.85);
+    const spanTiles = (Number(p.maxSpanTiles) || 3) * u;
+    const span = Math.max(12, spanTiles * tileW);
+    queueFieldSpinWindTextureLoad();
+    const windImg = imageCache.get(FIELD_SPIN_WIND_TEX);
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate((p.rot0 || 0) + performance.now() * 0.0028 + ri * 0.35);
+    const prevComp = ctx.globalCompositeOperation;
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = prevAlpha * fade * 0.72;
+    if (windImg?.naturalWidth) {
+      ctx.filter = 'hue-rotate(185deg) saturate(2.6) brightness(1.12)';
+      ctx.drawImage(windImg, -span * 0.5, -span * 0.5, span, span);
+      ctx.filter = 'none';
+    } else {
+      ctx.strokeStyle = `rgba(120,200,255,${fade * 0.55})`;
+      ctx.lineWidth = Math.max(2, tileW * 0.06);
+      ctx.beginPath();
+      ctx.arc(0, 0, span * 0.48, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = prevComp;
+    ctx.globalAlpha = prevAlpha;
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
   const px = snapPx(p.x * tileW);
   const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
   const a = Math.max(0, p.life / p.maxLife);

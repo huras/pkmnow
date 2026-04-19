@@ -143,6 +143,7 @@ Como o sistema de pokémons sumonados é dinâmico
 			Talking about another pokemon
 		Wild pokemon picking details the player put on another place and putting the detail back on place to help free memory (if the thing is nearby 30 tiles max)
 		Korok Events (marked on minimap with icon) (fixed due to proderually but deterministically generation)
+		Global storm and earthquake: reason: groudon and kyogre fighting
 
 Wild Battling
 	When attacked pokemon should turn aggro
@@ -220,3 +221,114 @@ Ao terminar o pokemon, mandar para:
 
 
 You start a village with your partner and start doing quests with pokemon around trying to recruit them to your BASES!
+
+
+It would be genius and fresh to tackle pokemon moves in a different way than the turn based games
+Zelda has the 3 types of weapons: sword, spear, heavy sword
+Pokémon would have:
+	Fire
+		Embers        (rapid chip, burn buildup)
+		Flames        (continuous pressure)
+		Explosions    (burst AoE, knockback)
+		Heat 
+
+	Grass
+		Leafs         (spread projectiles)
+		Vines         (root, grab, control)
+		Sunlight      (healing, buffs, scaling)
+		Seeds
+		Flowers
+		Fruits
+		Plants
+
+	Water
+		Splashes      (fast combo hits)
+		Streams       (sustained pressure, push)
+		Waves         (AoE displacement)
+		Mist          (vision control, stealth)
+		Bubbles
+
+	Electric
+		Sparks        (instant poke, chaining)
+		Bolts         (precision burst)
+		Storm         (AoE chaos zone)
+		Charge        (self-buff, mobility)
+		ElectroMagnetism
+
+	Rock
+		Pebbles       (interrupt spam)
+		Boulders      (slow heavy projectiles)
+		Impact        (stun, knockdown, armor break)
+		Minerals
+
+	Ground
+		Dust          (blind, soft control)
+		Quick Sand        (traps, area denial)
+		Quake         (AoE shockwave, stagger, terrain)
+
+	Flying
+		Wind Spirals
+		Wind Cuts
+		Horizontal Line Wind         (push/pull spacing)
+		Dashes        (hit-and-run mobility)
+		Updrafts      (vertical control)
+
+	Ice
+		Shards        (crit projectiles)
+		Freeze        (slow → hard CC)
+		Blizzard      (AoE denial, vision loss)
+		Slip
+
+	Psychic
+		Force Fields
+		Telekinesis
+		Psychich Raw Power
+
+		Pulses        (wave pressure)
+		Control       (stun/confuse)
+		Telekinesis   (grab/throw/reposition)
+
+	Ghost
+		Phasing       (invulnerability/dodge)
+		Curses        (DoT, delayed damage)
+		Shadows       (ambush, clones)
+
+	Dark
+		Strikes       (fast melee, crit/backstab)
+		Corruption    (stacking debuffs)
+		Fear          (panic, disruption)
+
+	Steel
+		Blades        (precise melee)
+		Armor         (damage reduction)
+		Impact        (heavy stagger, resist interrupt)
+
+	Fairy
+		Light         (healing, buffs)
+		Glitter       (charm/confuse)
+		Burst         (magic AoE, anti-dark)
+
+	Dragon
+		Breath        (cone pressure)
+		Roar          (buff/debuff, control)
+		Fury          (rage scaling)
+
+	Fighting
+		Punches       (fast combos)
+		Throws        (grapples)
+		Focus         (charged burst)
+
+	Poison
+		Toxins        (DoT)
+		Clouds        (lingering zones)
+		Acid          (defense shred)
+
+	Bug
+		Swarm         (multi-hit overwhelm)
+		Silk          (trap/slow)
+		Bite          (quick sustain melee)
+
+Ex:
+	Lança = Lança chamas
+	Claymore = Fire Spin?
+	Sword = Ember?

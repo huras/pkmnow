@@ -156,6 +156,24 @@ export function drawBatchedProjectile(ctx, p, tileW, tileH, snapPx, time) {
       ctx.arc(px, py, 6, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (p.type === 'waterGunBall') {
+    const tier = Number(p.wgTier) || 1;
+    const baseR = Math.max(6, tileW * (0.38 + tier * 0.1));
+    const pulse = 0.94 + 0.06 * Math.sin(time * 26 + (p.x ?? 0) * 5.5);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px, py, baseR * pulse, 0, Math.PI * 2);
+    const g = ctx.createRadialGradient(px - baseR * 0.38, py - baseR * 0.38, baseR * 0.1, px, py, baseR * 1.08);
+    g.addColorStop(0, 'rgba(236,252,255,0.98)');
+    g.addColorStop(0.42, 'rgba(120,200,255,0.9)');
+    g.addColorStop(0.78, 'rgba(50,140,230,0.72)');
+    g.addColorStop(1, 'rgba(30,100,200,0.45)');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(210,240,255,0.82)';
+    ctx.lineWidth = Math.max(1.2, tileW * 0.042);
+    ctx.stroke();
+    ctx.restore();
   } else if (p.type === 'waterShot') {
     ctx.fillStyle = 'rgba(140,210,255,0.9)';
     ctx.beginPath();

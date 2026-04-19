@@ -92,8 +92,8 @@ const DIG_CHARGE_SEC = 0.88;
 const DIG_CHARGE_DECAY = 2.2;
 /** Fixed real-time length for one tackle window (seconds). */
 const TACKLE_DURATION_SEC = 0.5;
-/** Tackle visual reach in tile units (sprite-only lunge; gameplay body stays in place). */
-const TACKLE_REACH_TILES = 2;
+/** Tackle visual reach in tile units (sprite-only lunge; gameplay body stays in place). Field tackle charges 1..3. */
+const TACKLE_REACH_TILES = 1;
 /** Tackle lunge curve profile (`sin` = symmetric out/back, `easeOut` = snappier hit then settle). */
 const TACKLE_LUNGE_CURVE = 'sin';
 /** PMD-ish depth foreshortening for tackle sprite offset on world Y (visual only). */
@@ -267,6 +267,32 @@ export function setPlayerSpecies(dexId) {
     window.dispatchEvent(
       new CustomEvent('pkmn-player-species-changed', { detail: { dexId: player.dexId } })
     );
+  }
+}
+
+/**
+ * Sets world position after a resume save (no Strength-drop side effects, no full stat reset).
+ * @param {number} x
+ * @param {number} y
+ * @param {number} [z=0]
+ */
+export function applyPlayerWorldResumePosition(x, y, z = 0) {
+  const xf = Number(x);
+  const yf = Number(y);
+  const zf = Math.max(0, Number(z) || 0);
+  if (!Number.isFinite(xf) || !Number.isFinite(yf)) return;
+  player.x = xf;
+  player.y = yf;
+  player.visualX = xf;
+  player.visualY = yf;
+  player.vx = 0;
+  player.vy = 0;
+  player.vz = 0;
+  player.z = zf;
+  player.grounded = zf <= 1e-4;
+  if (player.grounded) {
+    player.jumping = false;
+    player.jumpsUsed = 0;
   }
 }
 
@@ -1112,7 +1138,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
   const tackleRem = player.lmbAttackAnimSec || 0;
   if (tackleRem > 0 && tackleDur > 1e-6) {
     const progress = 1 - tackleRem / tackleDur;
-    const reach = Math.max(0, Number(player._tackleReachTiles) || 2);
+    const reach = Math.max(0, Number(player._tackleReachTiles) || TACKLE_REACH_TILES);
     const lunge = resolveTackleLunge01(progress) * reach;
     player._tackleLungeDx = (player.tackleDirNx ?? 0) * lunge;
     player._tackleLungeDy = (player.tackleDirNy ?? 0) * lunge * TACKLE_VISUAL_DEPTH_Y_SCALE;

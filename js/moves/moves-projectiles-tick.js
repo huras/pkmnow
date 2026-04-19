@@ -39,6 +39,7 @@ import {
   GRASS_FIRE_PARTICLE_SEC
 } from '../play-grass-fire.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
+import { spawnWaterGunImpactWaveParticles } from './water-gun-ball.js';
 
 /**
  * @param {{
@@ -170,7 +171,7 @@ export function tickActiveProjectiles(ctx) {
                 spawnedGrassFireParticle = true;
               }
             }
-            grassFireTryExtinguishAt(tx, ty, zz, proj.type, data);
+            grassFireTryExtinguishAt(tx, ty, zz, proj.type, data, proj);
           }
         }
         projectiles.splice(i, 1);
@@ -315,10 +316,128 @@ export function tickActiveProjectiles(ctx) {
               maxLife: GRASS_FIRE_PARTICLE_SEC
             });
           }
-          grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
+          grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data, proj);
         }
         projectiles.splice(i, 1);
       }
+      continue;
+    }
+
+    if (proj.type === 'waterGunBall') {
+      const px0 = Number.isFinite(proj._wgPrevX) ? proj._wgPrevX : proj.x;
+      const py0 = Number.isFinite(proj._wgPrevY) ? proj._wgPrevY : proj.y;
+
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      if (Number.isFinite(proj.vz)) {
+        const zPrev = Number(proj.z) || 0;
+        proj.z += proj.vz * dt;
+        if (zPrev > 0.006 && proj.z <= 0) {
+          playFloorHit2Sfx({ x: proj.x, y: proj.y, z: 0 });
+          proj.z = 0;
+          proj.vz = 0;
+        }
+      }
+
+      proj.timeToLive -= dt;
+
+      const r = Math.max(0.12, Number(proj.radius) || 0.5);
+      const set = proj.wgHitWild instanceof Set ? proj.wgHitWild : (proj.wgHitWild = new Set());
+      const pad = COLLISION_BROAD_PHASE_TILES + r + 1.2;
+      const minX = Math.min(px0, proj.x) - pad;
+      const maxX = Math.max(px0, proj.x) + pad;
+      const minY = Math.min(py0, proj.y) - pad;
+      const maxY = Math.max(py0, proj.y) + pad;
+      const dax = proj.x - px0;
+      const day = proj.y - py0;
+      const len2 = dax * dax + day * day;
+      const zSeg = Number(proj.z) || 0;
+
+      queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+        if (wild === proj.sourceEntity) return;
+        if (set.has(wild)) return;
+        if (!projectileZInPokemonHurtbox(zSeg, dex, z)) return;
+        const hurtR = getPokemonHurtboxRadiusTiles(dex);
+        const dist =
+          len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
+        if (dist > r + hurtR) return;
+        if (wild.takeDamage) wild.takeDamage(proj.damage);
+        spawnHitParticles(hx, hy, z);
+        set.add(wild);
+      });
+
+      if (proj.hitsPlayer && !proj.playerWgPierceDone) {
+        const pxx = player.visualX ?? player.x;
+        const pyy = player.visualY ?? player.y;
+        const dex = player.dexId ?? 1;
+        const { hx, hy } = getPokemonHurtboxCenterWorldXY(pxx, pyy, dex);
+        if (projectileZInPokemonHurtbox(zSeg, dex, player.z ?? 0)) {
+          const hurtR = getPokemonHurtboxRadiusTiles(dex);
+          const dist =
+            len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
+          if (dist <= r + hurtR) {
+            if (tryDamagePlayerFromProjectile(proj.damage, false, data)) {
+              spawnHitParticles(hx, hy, player.z ?? 0);
+            }
+            proj.playerWgPierceDone = true;
+          }
+        }
+      }
+
+      proj._wgPrevX = proj.x;
+      proj._wgPrevY = proj.y;
+
+      const impact = (ix, iy) => {
+        const iz = Math.max(0, Number(proj.z) || 0);
+        spawnWaterGunImpactWaveParticles(pushParticle, ix, iy, iz, proj.wgTier || 1);
+        const splashRef = { ...proj, x: ix, y: iy, z: iz };
+        applySplashToWild(splashRef, wildList, iz, wildSpatial);
+        const sr = Number(proj.splashRadius) || 0;
+        const sd = Number(proj.splashDamage) || 0;
+        if (proj.hitsPlayer && sr > 0 && sd > 0) {
+          const pxw = player.visualX ?? player.x;
+          const pyw = player.visualY ?? player.y;
+          const dpx = player.dexId ?? 1;
+          const { hx: phx, hy: phy } = getPokemonHurtboxCenterWorldXY(pxw, pyw, dpx);
+          const hr = getPokemonHurtboxRadiusTiles(dpx);
+          if (
+            projectileZInPokemonHurtbox(iz, dpx, player.z ?? 0) &&
+            Math.hypot(phx - ix, phy - iy) <= sr + hr
+          ) {
+            tryDamagePlayerFromProjectile(sd, false, data);
+            spawnHitParticles(ix, iy, player.z ?? 0);
+          }
+        }
+        emitProjectileWorldReactionOnce(proj, data, ix, iy);
+        spawnHitParticles(ix, iy, iz);
+        if (data) {
+          grassFireTryExtinguishAt(ix, iy, iz, proj.type, data, proj);
+        }
+      };
+
+      if (data && isProjectileBlockedByTree(proj, data)) {
+        impact(proj.x, proj.y);
+        projectiles.splice(i, 1);
+        continue;
+      }
+      if (proj.timeToLive <= 0) {
+        impact(proj.x, proj.y);
+        projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (proj.trailAcc != null) {
+        proj.trailAcc += dt;
+        let trailBudget = 2;
+        while (proj.trailAcc >= WATER_TRAIL_INTERVAL && trailBudget-- > 0) {
+          proj.trailAcc -= WATER_TRAIL_INTERVAL;
+          spawnTrailParticle(proj.x, proj.y, 'waterTrail', proj.z);
+        }
+        if (trailBudget <= 0 && proj.trailAcc > WATER_TRAIL_INTERVAL * 3) {
+          proj.trailAcc = WATER_TRAIL_INTERVAL * 3;
+        }
+      }
+
       continue;
     }
 
@@ -365,7 +484,7 @@ export function tickActiveProjectiles(ctx) {
           });
         }
         tryApplyFireHitToFormalTreesAt(proj.x, proj.y, zz, proj.type, data);
-        grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
+        grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data, proj);
       }
       projectiles.splice(i, 1);
       continue;
@@ -374,7 +493,11 @@ export function tickActiveProjectiles(ctx) {
     const trailType =
       proj.type === 'ember'
         ? 'emberTrail'
-        : proj.type === 'waterShot' || proj.type === 'waterGunShot' || proj.type === 'bubbleShot' || proj.type === 'bubbleBeamShot'
+        : proj.type === 'waterShot' ||
+            proj.type === 'waterGunShot' ||
+            proj.type === 'waterGunBall' ||
+            proj.type === 'bubbleShot' ||
+            proj.type === 'bubbleBeamShot'
           ? 'waterTrail'
           : proj.type === 'poisonPowderShot'
             ? 'powderTrail'

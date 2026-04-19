@@ -6,12 +6,10 @@ import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portrai
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
-import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import {
   getPlayerMoveCooldownRemaining,
-  getPlayerMoveCooldownUiMax,
-  moveSupportsChargedRelease
+  getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
 import {
   getCollectedDetailInventorySnapshot,
@@ -20,8 +18,8 @@ import {
 } from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
-import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
+import { installPokemonBoxModal } from './pokemon-box-modal.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
 
@@ -83,6 +81,8 @@ export class CharacterSelector {
     this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
     this.allSpecies = [];
     this.isOpen = false;
+    /** @type {import('./pokemon-box-modal.js').PokemonBoxModal | null} */
+    this._boxModal = null;
     this._onFieldSkillChange = (ev) => {
       const dex = Math.floor(Number(ev?.detail?.dexId) || 0);
       if (dex === (player.dexId ?? 0)) {
@@ -304,7 +304,7 @@ export class CharacterSelector {
     this.container.innerHTML = `
       <div class="character-selector">
         <div class="selector-header">
-          <div class="player-preview-pill player-preview-pill--no-portrait" id="player-preview-pill" title="${activeName}">
+          <div class="player-preview-pill player-preview-pill--no-portrait" id="player-preview-pill" title="Click to open Pokémon Box" aria-label="Open Pokémon Box" role="button" tabindex="0">
             <img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="${activeName}" width="40" height="40">
           </div>
           <div class="player-info">
@@ -424,6 +424,22 @@ export class CharacterSelector {
     const resultsList = this.container.querySelector('#search-results');
     const pointerBar = this.container.querySelector('#play-pointer-mode-bar');
 
+    // Pokémon Box modal — triggered by clicking the portrait pill
+    this._boxModal = installPokemonBoxModal(this);
+    const portraitPill = this.container.querySelector('#player-preview-pill');
+    if (portraitPill) {
+      portraitPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._boxModal.open(player.dexId ?? 1);
+      });
+      portraitPill.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this._boxModal.open(player.dexId ?? 1);
+        }
+      });
+    }
+
     if (pointerBar) {
       this.syncPlayPointerModeRadios();
       for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
@@ -511,49 +527,7 @@ export class CharacterSelector {
 
   updatePlayFieldMoveChargeHud() {
     const wrap = this.container?.querySelector('#player-field-charge');
-    const fill1 = this.container?.querySelector('#player-field-charge-fill-1');
-    const fill2 = this.container?.querySelector('#player-field-charge-fill-2');
-    const fill3 = this.container?.querySelector('#player-field-charge-fill-3');
-    const fill4 = this.container?.querySelector('#player-field-charge-fill-4');
-    const label = this.container?.querySelector('#player-field-charge-label');
-    if (
-      !(wrap instanceof HTMLElement) ||
-      !(fill1 instanceof HTMLElement) ||
-      !(fill2 instanceof HTMLElement) ||
-      !(fill3 instanceof HTMLElement) ||
-      !(fill4 instanceof HTMLElement) ||
-      !(label instanceof HTMLElement)
-    ) return;
-    const skillId = getPlayerInputBindings(player.dexId).lmb;
-    const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-    const [p1, p2, p3, p4] = getChargeBarProgresses(p);
-    const lvl = getChargeLevel(p);
-    // Show the meter for melee field skills (tackle/cut) + any ranged move that has
-    // a dedicated charged release (ember, waterBurst, thunder, thunderbolt). Streamed /
-    // tap-only moves still hide the meter.
-    const canChargeFieldSkill =
-      skillId === 'tackle' || skillId === 'cut' || moveSupportsChargedRelease(skillId);
-    const shouldShow = canChargeFieldSkill && p > 0.005;
-    const moveLabel =
-      skillId === 'cut' ? 'Cut' : skillId === 'tackle' ? 'Tackle' : getBindableMoveLabel(skillId);
-    wrap.classList.toggle('hidden', !shouldShow);
-    fill1.style.width = `${Math.round(p1 * 100)}%`;
-    fill2.style.width = `${Math.round(p2 * 100)}%`;
-    fill3.style.width = `${Math.round(p3 * 100)}%`;
-    fill4.style.width = `${Math.round(p4 * 100)}%`;
-    label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
-
-    const FULL = 0.994;
-    const setBarFullGlow = (fill, easedPn) => {
-      const on = shouldShow && easedPn >= FULL;
-      fill.classList.toggle('player-field-charge__fill--full', on);
-      const seg = fill.parentElement;
-      if (seg) seg.classList.toggle('player-field-charge__segment--full', on);
-    };
-    setBarFullGlow(fill1, p1);
-    setBarFullGlow(fill2, p2);
-    setBarFullGlow(fill3, p3);
-    setBarFullGlow(fill4, p4);
+    if (wrap instanceof HTMLElement) wrap.classList.add('hidden');
   }
 
   syncPlayPointerModeRadios() {
