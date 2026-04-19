@@ -43,9 +43,9 @@ let windGust01 = 1;
  * with the returned values to publish them.
  *
  * @param {number} time world time seconds
- * @param {'clear' | 'cloudy' | 'rain' | 'blizzard'} preset
+ * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | 'sandstorm'} preset
  * @param {number} rainIntensity01
- * @param {{ clear?: number, cloudy?: number, rain?: number, blizzard?: number } | null} [presetBlend]
+ * @param {{ clear?: number, cloudy?: number, rain?: number, blizzard?: number, sandstorm?: number } | null} [presetBlend]
  * @returns {{ baseIntensity: number, dirRad: number, gust: number }}
  */
 export function computeLiveWindState(time, preset, rainIntensity01, presetBlend = null) {
@@ -59,17 +59,20 @@ export function computeLiveWindState(time, preset, rainIntensity01, presetBlend 
   const wCloudy = clamp01(presetBlend?.cloudy);
   const wRain = clamp01(presetBlend?.rain);
   const wBlizzard = clamp01(presetBlend?.blizzard);
-  const ws = wClear + wCloudy + wRain + wBlizzard;
+  const wSandstorm = clamp01(presetBlend?.sandstorm);
+  const ws = wClear + wCloudy + wRain + wBlizzard + wSandstorm;
   const hasBlend = ws > 1e-6;
   const clearW = hasBlend ? wClear / ws : preset === 'clear' ? 1 : 0;
   const cloudyW = hasBlend ? wCloudy / ws : preset === 'cloudy' ? 1 : 0;
   const rainW = hasBlend ? wRain / ws : preset === 'rain' ? 1 : 0;
   const blizzardW = hasBlend ? wBlizzard / ws : preset === 'blizzard' ? 1 : 0;
+  const sandstormW = hasBlend ? wSandstorm / ws : preset === 'sandstorm' ? 1 : 0;
   const baseByPreset =
     clearW * 0.08 +
     cloudyW * 0.3 +
     rainW * (0.25 + 0.55 * rain) +
-    blizzardW * (0.52 + 0.44 * rain);
+    blizzardW * (0.52 + 0.44 * rain) +
+    sandstormW * (0.62 + 0.34 * rain);
   const baseIntensity = Math.max(0, Math.min(1, baseByPreset));
   // Two-sine gust envelope (period ≈ 6–16 s), biased so average sits near ~0.7.
   const g1 = Math.sin(time * 0.38);

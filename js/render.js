@@ -111,6 +111,7 @@ import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
   drawEnvironmentalEffects,
+  drawVolumetricEnvironmentalLayer,
   drawDigChargeBar,
   drawFieldCombatChargeBar,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
@@ -1042,6 +1043,34 @@ export function render(canvas, data, options = {}) {
       cloudWhiteLayerAlphaMul
     });
     addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);
+
+    drawVolumetricEnvironmentalLayer(ctx, {
+      cw,
+      ch,
+      time,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      lodDetail,
+      macroData: data,
+      weatherPreset: options.settings?.weatherPreset,
+      weatherBlizzardBlend01: options.settings?.weatherBlizzardBlend01 ?? 0,
+      weatherSandstormBlend01: options.settings?.weatherSandstormBlend01 ?? 0,
+      rainIntensity: rainI,
+      windIntensity: options.settings?.weatherWindIntensity ?? 0,
+      windDirRad: options.settings?.weatherWindDirRad ?? 0,
+      volumetricParticleDensity: options.settings?.weatherVolumetricParticleDensity ?? 0,
+      volumetricVolumeDepth: options.settings?.weatherVolumetricVolumeDepth ?? 0.5,
+      volumetricFallSpeed: options.settings?.weatherVolumetricFallSpeed ?? 0.5,
+      volumetricWindCarry: options.settings?.weatherVolumetricWindCarry ?? 0.5,
+      volumetricTurbulence: options.settings?.weatherVolumetricTurbulence ?? 0.2,
+      volumetricAbsorptionBias: options.settings?.weatherVolumetricAbsorptionBias ?? 0.5,
+      volumetricSplashBias: options.settings?.weatherVolumetricSplashBias ?? 0.5,
+      weatherVolumetricMode: options.settings?.weatherVolumetricMode ?? 'clear'
+    });
 
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');

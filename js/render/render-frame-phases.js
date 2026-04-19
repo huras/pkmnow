@@ -19,6 +19,7 @@ export const RENDER_FRAME_PHASE_KEYS = Object.freeze([
   'rndGrassDeferMs',
   'rndDebugMs',
   'rndWeatherMs',
+  'rndVolumetricWeatherMs',
   'rndMinimapMs',
   'rndHoverMs',
   'rndGapMs'
@@ -109,6 +110,7 @@ export const RENDER_FRAME_PHASE_HUD_LABELS = Object.freeze(
     rndGrassDeferMs: 'gd',
     rndDebugMs: 'dbg',
     rndWeatherMs: 'wx',
+    rndVolumetricWeatherMs: 'vol',
     rndMinimapMs: 'mm',
     rndHoverMs: 'hov',
     rndGapMs: 'gap'

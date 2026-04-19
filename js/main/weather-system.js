@@ -53,7 +53,8 @@ const activePresetBlend = {
   clear: 0,
   cloudy: 0,
   rain: 0,
-  blizzard: 0
+  blizzard: 0,
+  sandstorm: 0
 };
 
 /** @type {Set<(ev: { preset: WeatherPresetId, intensity01: number, source: WeatherTargetChangeSource }) => void>} */
@@ -164,6 +165,15 @@ export function tickWeather(dt, gameTime) {
   active.cloudAlphaMul = lerpN(active.cloudAlphaMul, target.cloudAlphaMul);
   active.rainIntensity = lerpN(active.rainIntensity, target.rainIntensity);
 
+  active.weatherMode = target.weatherMode;
+  active.volumetricParticleDensity = lerpN(active.volumetricParticleDensity, target.volumetricParticleDensity);
+  active.volumetricVolumeDepth = lerpN(active.volumetricVolumeDepth, target.volumetricVolumeDepth);
+  active.volumetricFallSpeed = lerpN(active.volumetricFallSpeed, target.volumetricFallSpeed);
+  active.volumetricWindCarry = lerpN(active.volumetricWindCarry, target.volumetricWindCarry);
+  active.volumetricTurbulence = lerpN(active.volumetricTurbulence, target.volumetricTurbulence);
+  active.volumetricAbsorptionBias = lerpN(active.volumetricAbsorptionBias, target.volumetricAbsorptionBias);
+  active.volumetricSplashBias = lerpN(active.volumetricSplashBias, target.volumetricSplashBias);
+
   // Tint blends via alpha so `null` targets smoothly fade out instead of popping. When
   // the current tint has no source but the target does (or vice versa) we fabricate a
   // zero-alpha stand-in so the RGB channels don't jump on the first frame of the fade.
@@ -197,7 +207,19 @@ export function tickWeather(dt, gameTime) {
 
   // 3. Publish to shared read-only state modules (rain → weather-state; wind → wind-state).
   //    Everything else (audio, fire snuff, render) reads from there, not from this engine.
-  setWeatherRenderState({ rainIntensity: active.rainIntensity, preset: getActiveWeatherPreset() });
+  setWeatherRenderState({
+    rainIntensity: active.rainIntensity,
+    preset: getActiveWeatherPreset(),
+    weatherMode: active.weatherMode,
+    volumetricParticleDensity: active.volumetricParticleDensity,
+    volumetricVolumeDepth: active.volumetricVolumeDepth,
+    volumetricFallSpeed: active.volumetricFallSpeed,
+    volumetricWindCarry: active.volumetricWindCarry,
+    volumetricTurbulence: active.volumetricTurbulence,
+    volumetricAbsorptionBias: active.volumetricAbsorptionBias,
+    volumetricSplashBias: active.volumetricSplashBias,
+    weatherSandstormBlend01: getActiveWeatherPresetBlend('sandstorm')
+  });
   setWindState(computeLiveWindState(gameTime, targetPreset, active.rainIntensity, activePresetBlend));
 }
 

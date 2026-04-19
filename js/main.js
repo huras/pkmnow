@@ -630,10 +630,19 @@ function getSettings() {
     weatherRainIntensity: weather.rainIntensity,
     weatherScreenTint: weather.screenTint,
     weatherBlizzardBlend01: getActiveWeatherPresetBlend('blizzard'),
+    weatherSandstormBlend01: getActiveWeatherPresetBlend('sandstorm'),
     weatherCloudNoiseSeed,
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
-    weatherEarthquakeIntensity: getEarthquakeActiveIntensity01()
+    weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
+    weatherVolumetricMode: weather.weatherMode,
+    weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
+    weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
+    weatherVolumetricFallSpeed: weather.volumetricFallSpeed,
+    weatherVolumetricWindCarry: weather.volumetricWindCarry,
+    weatherVolumetricTurbulence: weather.volumetricTurbulence,
+    weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
+    weatherVolumetricSplashBias: weather.volumetricSplashBias
   };
 }
 

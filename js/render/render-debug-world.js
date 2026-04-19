@@ -26,6 +26,11 @@ import {
 } from '../main/play-charge-levels.js';
 import { getBindableMoveLabel } from '../main/player-input-slots.js';
 import { isPlayGroundDigShiftHeld } from '../main/play-input-state.js';
+import { renderPhaseMs } from './render-frame-phases.js';
+import {
+  updateAndDrawVolumetricWeatherParticles,
+  drawSandstormVolumetricHaze
+} from '../weather/volumetric-weather-particles.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 1.25;
@@ -799,7 +804,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {number} [options.rainIntensity=0] — 0..1 rain VFX intensity.
  * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (drives streamline density/brightness).
  * @param {number} [options.windDirRad=0] — wind direction in radians (0 = east, +π/2 = south).
- * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | string} [options.weatherPreset='clear'] — current weather preset id.
+ * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | 'sandstorm' | string} [options.weatherPreset='clear'] — current weather preset id.
  * @param {number} [options.weatherBlizzardBlend01=0] — smoothed 0..1 blend into blizzard precipitation.
  * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
@@ -941,6 +946,116 @@ export function drawEnvironmentalEffects(ctx, options) {
   if (eqVis > 0.008) {
     drawEarthquakeScreenFx(ctx, cw, ch, time, eqVis);
   }
+}
+
+/**
+ * Volumetric-style weather layer (dense particles + sandstorm haze), timed as {@link rndVolumetricWeatherMs}.
+ * Invoked from `render.js` after {@link drawEnvironmentalEffects} so perf HUD splits base weather vs volumetric cost.
+ *
+ * @param {CanvasRenderingContext2D} ctx — same world transform as precipitation passes.
+ * @param {object} options
+ * @param {number} options.cw
+ * @param {number} options.ch
+ * @param {number} options.time
+ * @param {number} options.startX
+ * @param {number} options.startY
+ * @param {number} options.endX
+ * @param {number} options.endY
+ * @param {number} options.tileW
+ * @param {number} options.tileH
+ * @param {number} [options.lodDetail=0]
+ * @param {object | null | undefined} options.macroData — map data for surface sampling.
+ * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | 'sandstorm' | string} [options.weatherPreset]
+ * @param {number} [options.weatherBlizzardBlend01=0]
+ * @param {number} [options.weatherSandstormBlend01=0]
+ * @param {number} [options.rainIntensity=0]
+ * @param {number} [options.windIntensity=0]
+ * @param {number} [options.windDirRad=0]
+ * @param {number} [options.volumetricParticleDensity=0]
+ * @param {number} [options.volumetricVolumeDepth=0.5]
+ * @param {number} [options.volumetricFallSpeed=0.5]
+ * @param {number} [options.volumetricWindCarry=0.5]
+ * @param {number} [options.volumetricTurbulence=0.2]
+ * @param {number} [options.volumetricAbsorptionBias=0.5]
+ * @param {number} [options.volumetricSplashBias=0.5]
+ * @param {'clear' | 'rain' | 'snow' | 'sandstorm'} [options.weatherVolumetricMode]
+ */
+export function drawVolumetricEnvironmentalLayer(ctx, options) {
+  return renderPhaseMs('rndVolumetricWeatherMs', () => {
+    const {
+      cw,
+      ch,
+      time,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      lodDetail = 0,
+      macroData,
+      weatherPreset = 'clear',
+      weatherBlizzardBlend01 = 0,
+      weatherSandstormBlend01 = 0,
+      rainIntensity = 0,
+      windIntensity = 0,
+      windDirRad = 0,
+      volumetricParticleDensity = 0,
+      volumetricVolumeDepth = 0.5,
+      volumetricFallSpeed = 0.5,
+      volumetricWindCarry = 0.5,
+      volumetricTurbulence = 0.2,
+      volumetricAbsorptionBias = 0.5,
+      volumetricSplashBias = 0.5,
+      weatherVolumetricMode = 'clear'
+    } = options;
+
+    const rainI = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
+    const vpd = Math.max(0, Math.min(1, Number(volumetricParticleDensity) || 0));
+    const blendRaw = Number(weatherBlizzardBlend01);
+    const blizzardBlend = Math.max(
+      0,
+      Math.min(1, Number.isFinite(blendRaw) ? blendRaw : weatherPreset === 'blizzard' ? 1 : 0)
+    );
+    const rainShare = 1 - blizzardBlend;
+    const rainVisualI = rainI * rainShare;
+    const snowVisualI = rainI * blizzardBlend;
+    const ssb = Math.max(0, Math.min(1, Number(weatherSandstormBlend01) || 0));
+    const sandstormVisualI = ssb;
+
+    const hazeI = Math.min(1, ssb * (0.5 + 0.5 * vpd));
+    if (hazeI > 0.028) {
+      drawSandstormVolumetricHaze(ctx, cw, ch, hazeI);
+    }
+
+    const precip = Math.max(rainVisualI * vpd, snowVisualI * vpd, sandstormVisualI * vpd);
+    if (precip < 0.012 || !macroData) return;
+
+    updateAndDrawVolumetricWeatherParticles(ctx, {
+      timeSec: time,
+      tileW,
+      tileH,
+      startX,
+      startY,
+      endX,
+      endY,
+      windDirRad,
+      windIntensity01: windIntensity,
+      lodDetail,
+      macroData,
+      rainVisualI,
+      snowVisualI,
+      sandstormVisualI,
+      volumetricParticleDensity: vpd,
+      volumetricVolumeDepth,
+      volumetricFallSpeed,
+      volumetricWindCarry,
+      volumetricTurbulence,
+      volumetricAbsorptionBias,
+      volumetricSplashBias,
+      weatherMode: weatherVolumetricMode
+    });
+  });
 }
 
 /**
