@@ -75,7 +75,17 @@ const DESERT_PACK = packFolderTracks('desert', [
 
 const GRASSLAND_PACK = packFolderTracks('plains', [
   'Wind Through the Amber Route (1).mp3',
-  'Wind Through the Amber Route.mp3'
+  'Wind Through the Amber Route.mp3',
+  '12. Route 201 (Day).mp3',
+  '13. Road to Viridian City\uA789 Leaving Pallet Town).mp3',
+  'Green Plains Journey - Plains Day A.mp3',
+  'Green Plains Journey - Plains Day B.mp3',
+  'Mossfield March - Plains Day A.mp3',
+  'Mossfield March - Plains Day B.mp3',
+  'Starfield Meadow - Plains Night A (1).mp3',
+  'Starfield Meadow - Plains Night A.mp3',
+  'Starry Plains - Plains Night A.mp3',
+  'Starry Plains - Plains Night B.mp3'
 ]);
 
 const FOREST_PACK = packFolderTracks('woods', [

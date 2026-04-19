@@ -29,6 +29,7 @@ let volumetricWindCarry = 0.12;
 let volumetricTurbulence = 0.04;
 let volumetricAbsorptionBias = 0.5;
 let volumetricSplashBias = 0.35;
+let groundWetness01 = 0;
 
 /** Minimum rain to meaningfully dampen / put out fires. Avoids trace rain ruining gameplay. */
 export const RAIN_EXTINGUISH_THRESHOLD = 0.25;
@@ -136,13 +137,38 @@ export function isRainExtinguishing() {
 }
 
 /**
+ * Advance weather-dependent world state (like ground wetness) by dt.
+ * @param {number} dt delta time in seconds.
+ */
+export function tickWeatherState(dt) {
+  if (!Number.isFinite(dt) || dt <= 0) return;
+
+  // Wetness increases during rain, decreases when dry.
+  // Rain at 1.0 intensity takes ~20 seconds to reach full saturation (0.05 per sec).
+  // Drying takes ~50 seconds (0.02 per sec).
+  if (rainIntensity01 > 0.05) {
+    groundWetness01 += rainIntensity01 * 0.05 * dt;
+  } else {
+    groundWetness01 -= 0.02 * dt;
+  }
+  groundWetness01 = Math.max(0, Math.min(1, groundWetness01));
+}
+
+export function getGroundWetness01() {
+  return groundWetness01;
+}
+
+/**
  * Seconds of burn time before rain forcibly extinguishes a fire, lerped by current rain intensity.
  * Returns `Infinity` when rain is below the extinguish threshold (fires are not dampened at all).
  */
 export function getRainFireSnuffSeconds() {
-  if (rainIntensity01 < RAIN_EXTINGUISH_THRESHOLD) return Infinity;
+  // If ground is very wet (>50%), it always dampens fire even if rain just stopped.
+  const effectiveRain = Math.max(rainIntensity01, groundWetness01 * 0.45);
+  
+  if (effectiveRain < RAIN_EXTINGUISH_THRESHOLD) return Infinity;
   const span = 1 - RAIN_EXTINGUISH_THRESHOLD;
-  const t = span > 0 ? (rainIntensity01 - RAIN_EXTINGUISH_THRESHOLD) / span : 1;
+  const t = span > 0 ? (effectiveRain - RAIN_EXTINGUISH_THRESHOLD) / span : 1;
   const clamped = Math.max(0, Math.min(1, t));
   return (
     FIRE_RAIN_EXTINGUISH_WEAK_SEC +

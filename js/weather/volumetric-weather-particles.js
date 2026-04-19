@@ -1,7 +1,7 @@
 /**
  * Dedicated volumetric-style weather particle layer (rain / snow / sand).
- * Separate pool from combat `moves-manager` particles — fixed cap, LOD + last-frame
- * timing feedback for adaptive spawn budget.
+ * High-performance overhaul with Z-depth layering, batched rendering,
+ * and texture-based volumetric haze.
  */
 
 import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '../main/wind-state.js';
@@ -11,40 +11,89 @@ import {
   worldPixelToMicroTile
 } from './weather-surface-material.js';
 import { getLastRenderFrameBreakdown } from '../render/render-frame-phases.js';
+import { imageCache } from '../image-cache.js';
 
 /** @typedef {import('../main/weather-presets.js').VolumetricWeatherMode} VolumetricWeatherMode */
 
-const MAX_PART = 500;
-const MAX_SPL = 160;
+// --- Constants & Config ---
+const MAX_PART = 2000; // Increased for high-performance demo
+const MAX_SPL = 300;
+const MAX_RING = 250;  // Expanding ground ripples
+const Z_LAYERS = 3;    // Background, Midground, Foreground
 
-/** @type {Array<{ alive: number, x: number, y: number, vx: number, vy: number, life: number, kind: number }>} */
+/** 
+ * Particle Structure
+ * @type {Array<{ alive: number, x: number, y: number, z: number, vx: number, vy: number, life: number, kind: number, size: number, alpha: number }>} 
+ */
 let parts = [];
-/** @type {Array<{ alive: number, x: number, y: number, vx: number, vy: number, life: number, r: number }>} */
+/** @type {Array<{ alive: number, x: number, y: number, vx: number, vy: number, life: number, r: number, alpha: number }>} */
 let splashes = [];
+/** @type {Array<{ alive: number, x: number, y: number, life: number, r: number, maxR: number, alpha: number }>} */
+let rings = [];
 
 const surfaceFrameCache = new Map();
 let lastSimTimeSec = -1;
+let fogTexture = null;
+
+// --- Initialization ---
 
 function ensurePools() {
   if (parts.length >= MAX_PART) return;
   for (let i = parts.length; i < MAX_PART; i++) {
-    parts.push({ alive: 0, x: 0, y: 0, vx: 0, vy: 0, life: 0, kind: 0 });
+    parts.push({ alive: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, life: 0, kind: 0, size: 1, alpha: 1 });
   }
   for (let i = splashes.length; i < MAX_SPL; i++) {
-    splashes.push({ alive: 0, x: 0, y: 0, vx: 0, vy: 0, life: 0, r: 0 });
+    splashes.push({ alive: 0, x: 0, y: 0, vx: 0, vy: 0, life: 0, r: 0, alpha: 1 });
+  }
+  for (let i = rings.length; i < MAX_RING; i++) {
+    rings.push({ alive: 0, x: 0, y: 0, life: 0, r: 0, maxR: 4, alpha: 1 });
   }
 }
 
 export function resetVolumetricWeatherParticles() {
   parts.length = 0;
   splashes.length = 0;
+  rings.length = 0;
   ensurePools();
   for (const p of parts) p.alive = 0;
   for (const s of splashes) s.alive = 0;
+  for (const r of rings) r.alive = 0;
   lastSimTimeSec = -1;
 }
 
 ensurePools();
+
+/** Loads the volumetric fog texture generated for this system. */
+async function ensureFogTexture() {
+  if (fogTexture) return fogTexture;
+  // Note: Path is relative to the environment or pre-loaded in imageCache
+  const path = 'volumetric_fog_texture_1776622118170.png'; 
+  if (imageCache.has(path)) {
+    fogTexture = imageCache.get(path);
+    return fogTexture;
+  }
+  
+  // Fallback: load if not in cache (though usually pre-loaded in a real app)
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      fogTexture = img;
+      imageCache.set(path, img);
+      resolve(img);
+    };
+    img.onerror = () => {
+      // If texture fails, we'll use procedural fallback
+      fogTexture = 'FAILED';
+      resolve(null);
+    };
+    img.src = 'js/weather/' + path; // Adjusted path
+  });
+}
+
+// Kick off loading
+ensureFogTexture();
+
+// --- Pool Management ---
 
 function allocPart() {
   for (let i = 0; i < MAX_PART; i++) {
@@ -60,22 +109,21 @@ function allocSplash() {
   return null;
 }
 
-function countAlivePart() {
-  let n = 0;
-  for (let i = 0; i < MAX_PART; i++) if (parts[i].alive) n++;
-  return n;
+function allocRing() {
+  for (let i = 0; i < MAX_RING; i++) {
+    if (!rings[i].alive) return rings[i];
+  }
+  return null;
 }
 
 function adaptiveQualityMul() {
   try {
     const b = getLastRenderFrameBreakdown();
     const v = Number(b?.rndVolumetricWeatherMs) || 0;
-    if (v > 3.2) return 0.5;
-    if (v > 2.0) return 0.68;
-    if (v > 1.25) return 0.82;
-  } catch (_) {
-    /* ignore */
-  }
+    // High-performance targets: be more aggressive if under load
+    if (v > 4.0) return 0.4;
+    if (v > 2.5) return 0.7;
+  } catch (_) {}
   return 1;
 }
 
@@ -86,61 +134,40 @@ function spawnSplash(px, py, splashBias01, tw) {
   s.alive = 1;
   s.x = px;
   s.y = py;
-  const spread = 18 + 26 * b;
+  const spread = 20 + 30 * b;
   s.vx = (Math.random() - 0.5) * spread;
-  s.vy = -(40 + 70 * Math.random() * b);
-  s.life = 0.1 + 0.11 * b;
-  s.r = (2.2 + 3.8 * b) * Math.max(0.85, tw / 32);
+  s.vy = -(50 + 80 * Math.random() * b);
+  s.life = 0.15 + 0.15 * b;
+  s.r = (1.5 + 2.5 * b) * (tw / 32);
+  s.alpha = 0.6 + 0.4 * b;
 }
+
+function spawnGroundRing(px, py, tw) {
+  const r = allocRing();
+  if (!r) return;
+  r.alive = 1;
+  r.x = px;
+  r.y = py;
+  r.life = 0.4 + Math.random() * 0.3;
+  r.r = 1.5;
+  r.maxR = (6 + 8 * Math.random()) * (tw / 32);
+  r.alpha = 0.4 + 0.3 * Math.random();
+}
+
+// --- Main Loop & Draw ---
 
 /**
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} opts
- * @param {number} opts.timeSec
- * @param {number} opts.tileW
- * @param {number} opts.tileH
- * @param {number} opts.startX
- * @param {number} opts.startY
- * @param {number} opts.endX
- * @param {number} opts.endY
- * @param {number} opts.windDirRad
- * @param {number} opts.windIntensity01
- * @param {number} opts.lodDetail
- * @param {object} opts.macroData — map data for surface sampling
- * @param {number} opts.rainVisualI — 0..1 rain channel (existing renderer share)
- * @param {number} opts.snowVisualI — 0..1 snow channel
- * @param {number} opts.sandstormVisualI — 0..1 sand channel
- * @param {number} opts.volumetricParticleDensity
- * @param {number} opts.volumetricVolumeDepth
- * @param {number} opts.volumetricFallSpeed
- * @param {number} opts.volumetricWindCarry
- * @param {number} opts.volumetricTurbulence
- * @param {number} opts.volumetricAbsorptionBias
- * @param {number} opts.volumetricSplashBias
- * @param {VolumetricWeatherMode} [opts.weatherMode]
  */
 export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
   const {
-    timeSec,
-    tileW,
-    tileH,
-    startX,
-    startY,
-    endX,
-    endY,
-    windDirRad,
-    windIntensity01,
-    lodDetail = 0,
-    macroData,
-    rainVisualI = 0,
-    snowVisualI = 0,
-    sandstormVisualI = 0,
-    volumetricParticleDensity = 0,
-    volumetricVolumeDepth = 0.5,
-    volumetricFallSpeed = 0.5,
-    volumetricWindCarry = 0.5,
-    volumetricTurbulence = 0.2,
-    volumetricAbsorptionBias = 0.5,
+    timeSec, tileW, tileH, startX, startY, endX, endY,
+    windDirRad, windIntensity01, lodDetail = 0, macroData,
+    rainVisualI = 0, snowVisualI = 0, sandstormVisualI = 0,
+    volumetricParticleDensity = 0, volumetricVolumeDepth = 0.5,
+    volumetricFallSpeed = 0.5, volumetricWindCarry = 0.5,
+    volumetricTurbulence = 0.2, volumetricAbsorptionBias = 0.5,
     volumetricSplashBias = 0.5
   } = opts;
 
@@ -149,15 +176,17 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
   const th = Math.max(1, Number(tileH) || tw);
   const wx0 = Number(startX) * tw;
   const wy0 = Number(startY) * th;
-  const worldW = Math.max(1, (Number(endX) - Number(startX)) * tw);
-  const worldH = Math.max(1, (Number(endY) - Number(startY)) * th);
+  const worldW = (Number(endX) - Number(startX)) * tw;
+  const worldH = (Number(endY) - Number(startY)) * th;
 
   const volD = Math.max(0, Math.min(1, Number(volumetricParticleDensity) || 0));
-  const rainCh = Math.max(0, Math.min(1, Number(rainVisualI) || 0)) * volD;
-  const snowCh = Math.max(0, Math.min(1, Number(snowVisualI) || 0)) * volD;
-  const sandCh = Math.max(0, Math.min(1, Number(sandstormVisualI) || 0)) * volD;
+  const rainCh = rainVisualI * volD;
+  const snowCh = snowVisualI * volD;
+  const sandCh = sandstormVisualI * volD;
   const precip = Math.max(rainCh, snowCh, sandCh);
-  if (!macroData || precip < 0.012) {
+
+  // Exit if no weather or missing data
+  if (!macroData || precip < 0.01) {
     lastSimTimeSec = time;
     for (let i = 0; i < MAX_PART; i++) parts[i].alive = 0;
     for (let i = 0; i < MAX_SPL; i++) splashes[i].alive = 0;
@@ -165,200 +194,261 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
   }
 
   const dtRaw = lastSimTimeSec >= 0 ? time - lastSimTimeSec : 0;
-  let dt = !Number.isFinite(dtRaw) || dtRaw < 0 || dtRaw > 0.22 ? 0 : dtRaw;
+  const dt = (dtRaw > 0 && dtRaw < 0.2) ? dtRaw : 1 / 60;
   lastSimTimeSec = time;
-  if (dt <= 0) dt = 1 / 60;
 
   surfaceFrameCache.clear();
 
-  const lod = Number(lodDetail) || 0;
-  const lodSpawnMul = lod >= 2 ? 0.42 : lod >= 1 ? 0.68 : 1;
-  const qMul = adaptiveQualityMul() * lodSpawnMul;
-
+  const qMul = adaptiveQualityMul() * (lodDetail >= 2 ? 0.4 : lodDetail >= 1 ? 0.7 : 1);
   const windI01 = Math.max(0, Math.min(1, Number(windIntensity01) || 0));
   const liveDir = Number.isFinite(windDirRad) ? windDirRad : WIND_CLOUD_BLEND_BASELINE_DIR_RAD;
   const wTiles = getWindVelocityTilesPerSec(windI01, liveDir);
   const windCarry = Math.max(0, Math.min(1, Number(volumetricWindCarry) || 0));
-  const kWind = 34 * windCarry;
-  const windVx = wTiles.vx * tw * kWind;
-  const windVy = wTiles.vy * th * kWind;
+  const windVx = wTiles.vx * tw * 35 * windCarry;
+  const windVy = wTiles.vy * th * 35 * windCarry;
 
-  const fallS = Math.max(0.08, Math.min(1, Number(volumetricFallSpeed) || 0.5));
-  const turb = Math.max(0, Math.min(1, Number(volumetricTurbulence) || 0));
-  const depth01 = Math.max(0.05, Math.min(1, Number(volumetricVolumeDepth) || 0.5));
-  const absorbB = Math.max(0, Math.min(1, Number(volumetricAbsorptionBias) || 0));
-  const splashB = Math.max(0, Math.min(1, Number(volumetricSplashBias) || 0));
+  const fallS = Math.max(0.1, Number(volumetricFallSpeed) || 0.5);
+  const turb = Math.max(0, Number(volumetricTurbulence) || 0.2);
+  const depthB = Math.max(0.1, Number(volumetricVolumeDepth) || 0.5);
 
-  const sumCh = rainCh + snowCh + sandCh + 1e-6;
-  const wRain = rainCh / sumCh;
-  const wSnow = snowCh / sumCh;
-  const wSand = sandCh / sumCh;
+  // Spawn logic
+  const maxActive = Math.floor(MAX_PART * precip * qMul);
+  let currentlyAlive = 0;
+  for (let i = 0; i < MAX_PART; i++) if (parts[i].alive) currentlyAlive++;
+  
+  const spawnCount = Math.min(25, Math.floor((maxActive - currentlyAlive) * 0.4));
+  
+  const wTotal = rainCh + snowCh + sandCh + 0.001;
+  const pRain = rainCh / wTotal;
+  const pSnow = snowCh / wTotal;
 
-  const maxActive = Math.floor(MAX_PART * (0.28 + 0.72 * precip) * qMul);
-  const active = countAlivePart();
-  const deficit = maxActive - active;
-  const spawnBudget = Math.max(0, Math.min(14, Math.floor(deficit * 0.35 + precip * 6 * qMul)));
-
-  const marginX = tw * (6 + 10 * depth01);
-  const marginY = th * (8 + 14 * depth01);
-  const xMin = wx0 - marginX;
-  const xMax = wx0 + worldW + marginX;
-  const yMin = wy0 - marginY * (0.6 + 0.5 * depth01);
-  const ySpawnHi = wy0 - marginY * 0.15;
-
-  const pickKind = () => {
-    const r = Math.random();
-    if (r < wRain) return 0;
-    if (r < wRain + wSnow) return 1;
-    return 2;
-  };
-
-  for (let n = 0; n < spawnBudget; n++) {
+  for (let n = 0; n < spawnCount; n++) {
     const p = allocPart();
     if (!p) break;
-    const kind = pickKind();
     p.alive = 1;
-    p.kind = kind;
-    p.x = xMin + Math.random() * (xMax - xMin);
-    p.y = yMin + Math.random() * (ySpawnHi - yMin);
-    const fallMul = fallS * (0.55 + 0.45 * Math.random());
-    if (kind === 0) {
-      p.vy = (180 + 220 * rainCh) * fallMul;
-      p.vx = windVx * (0.35 + 0.65 * Math.random());
-    } else if (kind === 1) {
-      p.vy = (28 + 55 * snowCh) * fallMul;
-      p.vx = windVx * (0.55 + 0.45 * Math.random());
-    } else {
-      p.vy = (10 + 38 * sandCh) * fallMul;
-      p.vx = windVx * (0.65 + 0.5 * Math.random()) + (Math.random() - 0.5) * 18;
+    p.kind = Math.random() < pRain ? 0 : (Math.random() < (pRain + pSnow) / (pRain + pSnow + 0.1) ? 1 : 2);
+    p.z = Math.random(); // 0 = far, 1 = near
+    p.x = wx0 - 200 + Math.random() * (worldW + 400);
+    p.y = wy0 - 100 + Math.random() * 200;
+    p.life = 1.5 + Math.random() * 2.5;
+    
+    // Base physics by kind
+    if (p.kind === 0) { // Rain
+      p.vy = (200 + 300 * rainCh) * fallS;
+      p.vx = windVx * (0.8 + 0.4 * Math.random());
+    } else if (p.kind === 1) { // Snow
+      p.vy = (40 + 60 * snowCh) * fallS;
+      p.vx = windVx * (0.6 + 0.8 * Math.random());
+    } else { // Sand
+      p.vy = (15 + 40 * sandCh) * fallS;
+      p.vx = windVx * (1.2 + 0.5 * Math.random());
     }
-    p.life = 2.2 + 3.8 * Math.random();
   }
 
-  const turbPx = 26 * turb;
-
+  // Simulation
+  const turbAmp = turb * 40;
   for (let i = 0; i < MAX_PART; i++) {
     const p = parts[i];
     if (!p.alive) continue;
     p.life -= dt;
-    if (p.life <= 0) {
-      p.alive = 0;
-      continue;
-    }
+    if (p.life <= 0) { p.alive = 0; continue; }
 
-    const ox = Math.sin(time * (2.1 + p.kind * 0.4) + i * 0.31) * turbPx * dt;
-    const oy = Math.cos(time * (1.7 + p.kind * 0.3) + i * 0.27) * turbPx * 0.35 * dt;
+    // Parallax & Wind
+    const zScale = 0.5 + p.z * 1.5; // Closer objects move faster and are larger
+    const pTurbX = Math.sin(time * 3 + i) * turbAmp * zScale;
+    const pTurbY = Math.cos(time * 2 + i) * turbAmp * 0.5 * zScale;
 
-    p.vx += windVx * 0.08 * dt;
-    p.vy += (p.kind === 1 ? 35 : p.kind === 2 ? 12 : 140) * fallS * dt;
+    p.x += (p.vx * zScale + pTurbX) * dt;
+    p.y += (p.vy * zScale + pTurbY) * dt;
 
-    p.x += (p.vx + ox) * dt;
-    p.y += (p.vy + oy) * dt;
-
+    // Collision (Soft Ground)
     const { mx, my } = worldPixelToMicroTile(p.x, p.y, tw, th);
-    const groundY = (my + 1) * th - Math.max(1, th * 0.08);
-
-    if (p.y >= groundY) {
+    const groundY = (my + 1) * th;
+    
+    if (p.y > groundY - 2) {
       const surf = getWeatherSurfaceMaterialCached(mx, my, macroData, surfaceFrameCache);
       if (surf === WEATHER_SURFACE_HARD) {
-        const splashChance = Math.max(0.08, Math.min(0.98, 0.35 + 0.55 * splashB - 0.22 * absorbB));
-        const doSplash = Math.random() < splashChance;
-        if (doSplash && p.kind === 0) spawnSplash(p.x, groundY, splashB, tw);
-        else if (doSplash && p.kind === 1 && Math.random() < 0.25 + 0.35 * splashB) {
-          spawnSplash(p.x, groundY, splashB * 0.55, tw);
-        } else if (doSplash && p.kind === 2 && Math.random() < 0.2) {
-          spawnSplash(p.x, groundY, splashB * 0.35, tw);
+        if (p.kind === 0) {
+           if (Math.random() < 0.4 * volumetricSplashBias) {
+             spawnSplash(p.x, groundY, volumetricSplashBias, tw);
+           }
+           // Ground rings (pingos) — always spawn some on hard surface when raining
+           if (Math.random() < 0.6) {
+             spawnGroundRing(p.x, groundY, tw);
+           }
         }
       }
       p.alive = 0;
-    } else if (p.x < xMin - tw * 4 || p.x > xMax + tw * 4 || p.y > wy0 + worldH + th * 10) {
+    }
+
+    // Bounds check
+    if (p.x < wx0 - 400 || p.x > wx0 + worldW + 400 || p.y > wy0 + worldH + 200) {
       p.alive = 0;
     }
   }
 
+  // Splash Simulation
   for (let i = 0; i < MAX_SPL; i++) {
     const s = splashes[i];
     if (!s.alive) continue;
     s.life -= dt;
-    if (s.life <= 0) {
-      s.alive = 0;
-      continue;
-    }
+    if (s.life <= 0) { s.alive = 0; continue; }
     s.x += s.vx * dt;
     s.y += s.vy * dt;
-    s.vy += 220 * dt;
+    s.vy += 400 * dt;
+    s.alpha *= 0.92;
   }
 
-  ctx.save();
-  const prevAlpha = ctx.globalAlpha;
-  const prevComp = ctx.globalCompositeOperation;
+  // Ring Simulation
+  for (let i = 0; i < MAX_RING; i++) {
+    const r = rings[i];
+    if (!r.alive) continue;
+    r.life -= dt;
+    if (r.life <= 0) { r.alive = 0; continue; }
+    // Expand and fade
+    const u = 1 - r.life / 0.7; // 0..1
+    r.r += (r.maxR - r.r) * 0.15;
+    r.alpha *= 0.94;
+  }
 
+  // --- RENDERING ---
+  ctx.save();
+  
+  // 1. Volumetric Haze / Fog Layer (The "Beauty" pass)
+  drawVolumetricFog(ctx, wx0, wy0, worldW, worldH, time, precip, sandCh);
+
+  // 2. Batched Particles by Z-Layer
+  const bins = [[], [], []];
   for (let i = 0; i < MAX_PART; i++) {
-    const p = parts[i];
-    if (!p.alive) continue;
-    if (p.kind === 0) {
-      ctx.globalAlpha = 0.22 + 0.28 * rainCh;
-      ctx.strokeStyle = 'rgba(200, 215, 245, 0.95)';
-      ctx.lineWidth = Math.max(1, 1.15 * (tw / 32));
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      const dropLen = (10 + 16 * rainCh) * (tw / 32);
-      ctx.lineTo(p.x - windVx * 0.006 - dropLen * 0.08, p.y - dropLen);
-      ctx.stroke();
-    } else if (p.kind === 1) {
-      ctx.globalAlpha = 0.35 + 0.35 * snowCh;
-      ctx.fillStyle = 'rgba(248, 252, 255, 0.92)';
-      const rr = (1.1 + 1.6 * snowCh) * (tw / 32);
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, rr, rr * 0.86, 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.globalAlpha = 0.18 + 0.32 * sandCh;
-      ctx.fillStyle = 'rgba(200, 160, 110, 0.85)';
-      const w = 1.8 * (tw / 32);
-      const h = 1.1 * (tw / 32);
-      ctx.fillRect(p.x - w * 0.5, p.y - h * 0.5, w, h);
+    if (parts[i].alive) {
+      const b = Math.min(Z_LAYERS - 1, Math.floor(parts[i].z * Z_LAYERS));
+      bins[b].push(parts[i]);
     }
   }
 
+  bins.forEach((bin, bIdx) => {
+    const zFac = 0.5 + (bIdx / Z_LAYERS) * 1.5;
+    ctx.globalAlpha = Math.min(1, (0.3 + 0.7 * (bIdx / Z_LAYERS)) * precip);
+    
+    // Draw each kind in batch
+    [0, 1, 2].forEach(kind => {
+      ctx.beginPath();
+      bin.filter(p => p.kind === kind).forEach(p => {
+        if (kind === 0) { // Rain
+          const len = (12 + 15 * rainCh) * zFac;
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.015, p.y - len);
+        } else if (kind === 1) { // Snow
+          const r = (1.5 + 2 * snowCh) * zFac;
+          ctx.moveTo(p.x + r, p.y);
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        } else { // Sand
+          const w = 2 * zFac;
+          ctx.rect(p.x - w / 2, p.y - w / 2, w, w);
+        }
+      });
+      
+      if (kind === 0) {
+        ctx.strokeStyle = 'rgba(180, 210, 255, 0.6)';
+        ctx.lineWidth = 1 * zFac;
+        ctx.stroke();
+      } else if (kind === 1) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
+      } else {
+        ctx.fillStyle = 'rgba(210, 180, 120, 0.5)';
+        ctx.fill();
+      }
+    });
+  });
+
+  // 3. Splashes
   ctx.globalCompositeOperation = 'lighter';
+  ctx.beginPath();
   for (let i = 0; i < MAX_SPL; i++) {
     const s = splashes[i];
     if (!s.alive) continue;
-    const u = s.life / 0.22;
-    ctx.globalAlpha = 0.14 + 0.32 * u * splashB;
-    ctx.fillStyle = 'rgba(210, 225, 250, 0.9)';
+    ctx.moveTo(s.x + s.r, s.y);
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+  }
+  ctx.fillStyle = 'rgba(200, 230, 255, 0.3)';
+  ctx.fill();
+
+  // 4. Ground Rings (Pingos)
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < MAX_RING; i++) {
+    const r = rings[i];
+    if (!r.alive) continue;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r * (1.6 - u), 0, Math.PI * 2);
-    ctx.fill();
+    ctx.globalAlpha = r.alpha;
+    ctx.strokeStyle = 'rgba(210, 235, 255, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
-  ctx.globalCompositeOperation = prevComp;
-  ctx.globalAlpha = prevAlpha;
   ctx.restore();
 }
 
-/**
- * Full-screen warm haze for sandstorm (multiply-friendly). Caller sets ctx transform to screen if needed.
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} cw
- * @param {number} ch
- * @param {number} intensity01
+/** 
+ * Beautiful volumetric haze using the noise texture or procedural fallback.
  */
+function drawVolumetricFog(ctx, x, y, w, h, time, precip, sandCh) {
+  const intensity = precip * 0.4;
+  if (intensity < 0.05) return;
+
+  ctx.save();
+  ctx.globalAlpha = intensity;
+  
+  if (fogTexture && fogTexture !== 'FAILED') {
+    // Texture-based high-fidelity fog
+    const scrollX = time * 20;
+    const scrollY = Math.sin(time * 0.5) * 10;
+    
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    
+    // Draw two layers of scrolling noise for "volumetric" depth
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fogTexture, (x - scrollX) % 512, y + scrollY, 512, 512, x, y, w, h);
+    ctx.globalAlpha *= 0.5;
+    ctx.drawImage(fogTexture, (x + scrollX * 0.5) % 512, y - scrollY, 512, 512, x, y, w, h);
+  } else {
+    // Procedural Fallback: Banded Gradients with Parallax
+    ctx.globalCompositeOperation = 'screen';
+    const layers = 2;
+    for (let l = 0; l < layers; l++) {
+      const lIntensity = intensity * (0.4 + 0.6 * (l / layers));
+      const lScroll = (time * (10 + l * 15)) % w;
+      const grad = ctx.createLinearGradient(x, y, x, y + h);
+      grad.addColorStop(0, `rgba(200, 210, 230, 0)`);
+      grad.addColorStop(0.3 + 0.1 * l, `rgba(220, 230, 250, ${lIntensity * 0.4})`);
+      grad.addColorStop(0.7 - 0.1 * l, `rgba(220, 230, 250, ${lIntensity * 0.4})`);
+      grad.addColorStop(1, `rgba(200, 210, 230, 0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, w, h);
+    }
+  }
+
+  // Sandstorm specific tint
+  if (sandCh > 0.1) {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = `rgba(210, 160, 80, ${sandCh * 0.2})`;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  ctx.restore();
+}
+
+/** Legacy support for sandstorm haze */
 export function drawSandstormVolumetricHaze(ctx, cw, ch, intensity01) {
   const t = Math.max(0, Math.min(1, Number(intensity01) || 0));
-  if (t < 0.04) return;
+  if (t < 0.05) return;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'multiply';
-  const g = ctx.createLinearGradient(0, 0, cw, ch * 0.7);
-  g.addColorStop(0, `rgba(210, 175, 120, ${0.08 + 0.2 * t})`);
-  g.addColorStop(1, `rgba(160, 120, 78, ${0.12 + 0.22 * t})`);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, cw, ch);
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 0.12 + 0.2 * t;
-  ctx.fillStyle = `rgba(230, 200, 140, ${0.15 + 0.15 * t})`;
+  ctx.fillStyle = `rgba(210, 175, 120, ${0.1 * t})`;
   ctx.fillRect(0, 0, cw, ch);
   ctx.restore();
 }

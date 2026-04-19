@@ -20,7 +20,7 @@
  */
 
 import { consumeWeatherChangeRequest } from './weather-control.js';
-import { setWeatherRenderState } from './weather-state.js';
+import { setWeatherRenderState, tickWeatherState } from './weather-state.js';
 import { computeLiveWindState, setWindState } from './wind-state.js';
 import {
   WEATHER_PRESETS,
@@ -221,6 +221,9 @@ export function tickWeather(dt, gameTime) {
     weatherSandstormBlend01: getActiveWeatherPresetBlend('sandstorm')
   });
   setWindState(computeLiveWindState(gameTime, targetPreset, active.rainIntensity, activePresetBlend));
+
+  // 4. Evolve world-state (wetness, etc.)
+  tickWeatherState(dt);
 }
 
 /**

@@ -40,6 +40,7 @@ import {
   BURN_START_FRAME,
   BURN_START_FRAMES
 } from './moves/move-constants.js';
+import { getGroundWetness01 } from './main/weather-state.js';
 
 import {
   drawBatchedProjectile,
@@ -1071,6 +1072,23 @@ export function render(canvas, data, options = {}) {
       volumetricSplashBias: options.settings?.weatherVolumetricSplashBias ?? 0.5,
       weatherVolumetricMode: options.settings?.weatherVolumetricMode ?? 'clear'
     });
+
+    // --- Wet Ground Sheen Pass ---
+    const wetness = getGroundWetness01();
+    if (wetness > 0.01) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // 1. Darken the ground
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgba(200, 210, 230, ${0.1 * wetness})`;
+      ctx.fillRect(0, 0, cw, ch);
+      // 2. Subtle specular sheen
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = 0.05 * wetness;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    }
 
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
