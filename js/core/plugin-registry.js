@@ -4,6 +4,10 @@ class PokemonPluginRegistry {
     this.biomes = new Map();
     this.items = new Map();
     this.pokemon = new Map();
+    this.particles = new Map();
+    this.assets = new Map();
+    this.hooks = new Map();
+    this.weather = new Map();
     this.cooldowns = new Map();
   }
 
@@ -105,6 +109,70 @@ class PokemonPluginRegistry {
 
   hasPokemon(dexId) {
     return this.pokemon.has(String(dexId));
+  }
+
+  // --- PARTICLES ---
+  /**
+   * Registers a custom particle effect.
+   * @param {string} id - The unique identifier.
+   * @param {Object} config - { update, draw, ... }
+   */
+  registerParticleEffect(id, config) {
+    this.particles.set(id, config);
+  }
+
+  getParticleEffect(id) {
+    return this.particles.get(id);
+  }
+
+  // --- ASSETS ---
+  /**
+   * Registers an external asset (image/audio).
+   * @param {string} id - The unique key.
+   * @param {string} url - The remote or local URL.
+   */
+  registerAsset(id, url) {
+    this.assets.set(id, url);
+  }
+
+  getAsset(id) {
+    return this.assets.get(id);
+  }
+
+  // --- HOOKS ---
+  /**
+   * Registers a callback for an engine lifecycle hook.
+   * @param {string} hookName - 'preUpdate' | 'postUpdate' | 'preRender' | 'postRender'
+   * @param {Function} callback
+   */
+  registerHook(hookName, callback) {
+    if (!this.hooks.has(hookName)) {
+      this.hooks.set(hookName, new Set());
+    }
+    this.hooks.get(hookName).add(callback);
+  }
+
+  executeHooks(hookName, ...args) {
+    const set = this.hooks.get(hookName);
+    if (set) {
+      for (const cb of set) {
+        try { cb(...args); } catch (e) { console.error(`[PluginRegistry] Hook error (${hookName}):`, e); }
+      }
+    }
+  }
+
+  // --- WEATHER ---
+  /**
+   * Registers a custom weather preset.
+   * @param {string} id - The unique identifier.
+   * @param {Object} config - { rainIntensity, cloudPresence, ... }
+   */
+  registerWeather(id, config) {
+    this.weather.set(id, config);
+  }
+
+  getWeather(id) {
+    return this.weather.get(id);
   }
 }
 

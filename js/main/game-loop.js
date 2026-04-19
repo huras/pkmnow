@@ -38,6 +38,7 @@ import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 import { tickPlaySessionAutosave } from './play-session-persist.js';
 import { tickPlayGamepadFrame } from './play-gamepad.js';
 import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -101,6 +102,10 @@ export function createGameLoop(api) {
     lastTimestamp = timestamp;
     const simDt = getGameplaySimDt(dt);
     setGameTime(timestamp / 1000);
+
+    // --- Plugin Hooks: preUpdate ---
+    PluginRegistry.executeHooks('preUpdate', simDt);
+
     if (getAppMode() === 'play') advanceWorldTime?.(simDt);
 
     let inX = 0;
@@ -223,6 +228,9 @@ export function createGameLoop(api) {
       updateBreakdown.updHudMs = performance.now() - tHud0;
       tickPlaySessionAutosave(timestamp / 1000, currentData, player);
     }
+
+    // --- Plugin Hooks: postUpdate ---
+    PluginRegistry.executeHooks('postUpdate', simDt);
 
     const tRenderStart = performance.now();
     updateView();

@@ -117,6 +117,7 @@ import {
   drawFieldCombatChargeBar,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
+import { PluginRegistry } from './core/plugin-registry.js';
 
 import './render/render-debug-hotkeys.js';
 
@@ -203,6 +204,9 @@ export function render(canvas, data, options = {}) {
     clearRenderFrameBreakdown();
     return;
   }
+
+  // --- Plugin Hooks: preRender ---
+  PluginRegistry.executeHooks('preRender', ctx, data, options);
 
   let tFrame0 = 0;
   try {
@@ -1104,8 +1108,12 @@ export function render(canvas, data, options = {}) {
     ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
     addRenderFramePhaseMs('rndHoverMs', performance.now() - th0);
   }
+
+  // --- Plugin Hooks: postRender ---
+  PluginRegistry.executeHooks('postRender', ctx, data, options);
+
   ctx.restore();
-  } finally {
+} finally {
     finalizeRenderFrameProfile(performance.now() - tFrame0);
   }
 }

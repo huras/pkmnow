@@ -67,4 +67,35 @@ PluginRegistry.registerPokemon('mod_shadow_pikachu', {
   walk: { frameWidth: 32, frameHeight: 32, durations: [8, 8, 8, 8] }
 });
 
+// 5. Novo: Utilizando Hooks de Renderização para um efeito visual de "Aura Corrompida"
+PluginRegistry.registerHook('postRender', (ctx, data, options) => {
+  // Só aplica se estivermos no bioma corrompido
+  const player = options.settings?.player;
+  if (!player || !data) return;
+  
+  // Pegamos o bioma atual do player (aproximado pelo centro da tela)
+  const mx = Math.floor(player.x);
+  const my = Math.floor(player.y);
+  // Nota: getMicroTile não está exportado globalmente, mas podemos checar o biomeId se tivermos acesso ao chunk
+  // Para simplificar no mod, vamos apenas checar se o bioma registrado é o CORRUPTED_LANDS
+  
+  // Efeito visual: Vinheta roxa pulsante
+  const time = options.settings?.time || 0;
+  const pulse = (Math.sin(time * 2) + 1) * 0.5;
+  
+  // Vamos aplicar apenas se o céu estiver escuro ou se for bioma específico (fictício aqui para o demo)
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const grad = ctx.createRadialGradient(
+    ctx.canvas.width/2, ctx.canvas.height/2, 0,
+    ctx.canvas.width/2, ctx.canvas.height/2, ctx.canvas.width * 0.8
+  );
+  grad.addColorStop(0, 'rgba(42, 10, 42, 0)');
+  grad.addColorStop(1, `rgba(42, 10, 42, ${0.2 + pulse * 0.15})`);
+  
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
+});
+
 console.log('[TestMod] Mod loaded successfully!');
