@@ -60,9 +60,26 @@ export function getPlayChunk(key) {
  * @param {{ canvas: HTMLCanvasElement, suppressedSet: Set<number> }} chunk
  */
 export function setPlayChunk(key, chunk) {
-  playChunkMap.set(key, chunk);
+  // Parse cx/cy once here so prunePlayChunkCache never needs to split strings.
+  const [cxRaw, cyRaw] = key.split(',');
+  const cx = Number(cxRaw);
+  const cy = Number(cyRaw);
+  const w = chunk.canvas.width;
+  const h = chunk.canvas.height;
+  /** @type {{ canvas: HTMLCanvasElement, bitmap: ImageBitmap|null, suppressedSet: Set<number>, w: number, h: number, cx: number, cy: number }} */
+  const entry = { canvas: chunk.canvas, bitmap: null, suppressedSet: chunk.suppressedSet, w, h, cx, cy };
+  playChunkMap.set(key, entry);
   touchPlayChunkKey(key);
   bumpPlayChunkCacheRevision();
+  // Async GPU upload: after the first frame (canvas draw), all subsequent frames use
+  // the ImageBitmap which is a zero-copy GPU blit — no pixel re-upload per frame.
+  if (typeof createImageBitmap === 'function') {
+    createImageBitmap(chunk.canvas).then((bmp) => {
+      // Only attach if the chunk is still the same entry (not evicted and re-baked).
+      const current = playChunkMap.get(key);
+      if (current === entry) current.bitmap = bmp;
+    }).catch(() => { /* fall back to canvas draw silently */ });
+  }
 }
 
 export function clearPlayChunkCache() {
@@ -96,11 +113,11 @@ export function prunePlayChunkCache(opts = {}) {
   const keepRingRadius = Math.max(0, Math.floor(opts.keepRingRadius ?? PLAY_CHUNK_CACHE_KEEP_RING_RADIUS));
 
   const candidates = [];
-  for (const key of playChunkMap.keys()) {
+  for (const [key, entry] of playChunkMap.entries()) {
     if (keepSet.has(key)) continue;
-    const [cxRaw, cyRaw] = key.split(',');
-    const cx = Number(cxRaw);
-    const cy = Number(cyRaw);
+    // cx/cy stored in the entry at bake time — no string parsing needed.
+    const cx = entry.cx;
+    const cy = entry.cy;
     const hasCenter = centerCx != null && centerCy != null && Number.isFinite(cx) && Number.isFinite(cy);
     const dist = hasCenter ? Math.abs(cx - centerCx) + Math.abs(cy - centerCy) : -1;
     if (hasCenter && dist <= keepRingRadius) continue;

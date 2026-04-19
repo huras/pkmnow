@@ -30,6 +30,7 @@ import {
 } from './play-grass-fire.js';
 import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from './play-grass-cut.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
+import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { renderMinimap } from './render/render-minimap.js';
 import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
@@ -171,7 +172,22 @@ export {
 export { loadTilesetImages } from './render/load-tileset-images.js';
 export { getPlayChunkFrameStats };
 
+
 let didWarnTerrainSetRoles = false;
+
+// ---------------------------------------------------------------------------
+// Performance: module-level pools — allocated once, cleared per frame.
+// Avoids GC pressure from `new Map()` / string key allocation in the hot path.
+// ---------------------------------------------------------------------------
+/** Reused per-frame tile metadata Map (cleared at start of each render, never GC'd). */
+const _tileCachePool = new Map();
+/**
+ * Fast integer tile key identical to the one used inside bakeChunk.
+ * Safe for map sizes up to 32767×32767 micro-tiles.
+ * @param {number} mx @param {number} my @returns {number}
+ */
+const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
+
 
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
@@ -248,6 +264,8 @@ export function render(canvas, data, options = {}) {
     clearGrassFireStateForNewMap();
     clearGrassCutStateForNewMap();
     resetPlayChunkBakeAutoTuner();
+    // Clear static entity descriptors so the new map is scanned fresh.
+    invalidateStaticEntityCache();
   }
 
   addRenderFramePhaseMs('rndPrepMs', performance.now() - tPrep0);
@@ -398,8 +416,10 @@ export function render(canvas, data, options = {}) {
       const chunk = getPlayChunk(key);
       if (!chunk) continue;
       drawnVisibleChunks++;
+      // Use GPU-resident ImageBitmap when available (zero-copy); fall back to canvas.
+      const src = chunk.bitmap || chunk.canvas;
       ctx.drawImage(
-        chunk.canvas, 0, 0, chunk.canvas.width, chunk.canvas.height,
+        src, 0, 0, chunk.w, chunk.h,
         currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
         currentTransY + cy * PLAY_CHUNK_SIZE * tileH,
         Math.max(1, PLAY_CHUNK_SIZE * tileW),
@@ -427,9 +447,11 @@ export function render(canvas, data, options = {}) {
 
     // --- TILE CACHE & WARMING ---
     const tTileWarm0 = performance.now();
-    const tileCache = new Map();
+    // Reuse the module-level Map to avoid per-frame GC pressure.
+    _tileCachePool.clear();
+    const tileCache = _tileCachePool;
     const getCached = (mx, my) => {
-      const key = (mx << 16) | (my & 0xFFFF);
+      const key = _tileKeyInt(mx, my);
       let t = tileCache.get(key);
       if (!t) {
         t = getMicroTile(mx, my, data);
@@ -449,6 +471,29 @@ export function render(canvas, data, options = {}) {
     const vegAnimTime = lodDetail === 0 ? time : 0;
     const canopyAnimTime = vegAnimTime;
 
+    // Pre-compute the set of grass-eligible tiles ONCE per frame.
+    // Eliminates per-tile getRoleForCell calls inside forEachAbovePlayerTile
+    // and in the playerTopOverlay path (O(viewport) → O(1) lookup).
+    // Only needed at LOD 0/1 — at LOD 2 animated grass is fully skipped.
+    const grassEligibleSet = new Set();
+    if (lodDetail < 2) {
+      const _mH = height * MACRO_TILE_STRIDE;
+      const _mW = width * MACRO_TILE_STRIDE;
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          const tile = getCached(mx, my);
+          if (!tile || tile.heightStep < 1) continue;
+          const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+          if (gateSet) {
+            const _h = tile.heightStep;
+            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= _h;
+            if (getRoleForCell(my, mx, _mH, _mW, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
+          }
+          grassEligibleSet.add(_tileKeyInt(mx, my));
+        }
+      }
+    }
+
     // PASS 0: Ocean
     const tOcean0 = performance.now();
     drawOceanPass(ctx, { 
@@ -457,17 +502,14 @@ export function render(canvas, data, options = {}) {
     });
     addRenderFramePhaseMs('rndOceanMs', performance.now() - tOcean0);
 
-    const forEachAbovePlayerTile = (fn) => {
+    // forEachAbovePlayerTile iterates the pre-computed grassEligibleSet instead of
+    // calling getRoleForCell per tile per frame. At LOD >= 2, the animated-grass
+    // pass returns immediately anyway, so skip building the closure entirely.
+    const forEachAbovePlayerTile = lodDetail >= 2 ? (_fn) => {} : (fn) => {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
-          if (lodDetail >= 2 && (mx + my) % 2 !== 0) continue;
+          if (!grassEligibleSet.has(_tileKeyInt(mx, my))) continue;
           const tile = getCached(mx, my);
-          if (!tile || tile.heightStep < 1) continue;
-          const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-          if (gateSet) {
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-            if (getRoleForCell(my, mx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
-          }
           fn(mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), Math.floor(mx * tileW), Math.floor(my * tileH));
         }
       }
@@ -526,10 +568,10 @@ export function render(canvas, data, options = {}) {
     const blockedGrassFootprintTiles = new Set();
     /** Footprint ∪ tree/scatter canopy — blocks only `playerTopOverlay` (strip), not base animated grass. */
     const blockedGrassStripOverlayTiles = new Set();
-    const tileKey = (mx, my) => `${mx},${my}`;
+    // Use integer keys (bitpacked) instead of template-string allocation per tile.
     const markFootprintTile = (mx, my) => {
       if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
-      const k = tileKey(Math.floor(mx), Math.floor(my));
+      const k = _tileKeyInt(Math.floor(mx), Math.floor(my));
       blockedGrassFootprintTiles.add(k);
       blockedGrassStripOverlayTiles.add(k);
     };
@@ -552,7 +594,7 @@ export function render(canvas, data, options = {}) {
           const mx = bx + dx;
           const my = by + dy;
           if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
-          blockedGrassStripOverlayTiles.add(tileKey(mx, my));
+          blockedGrassStripOverlayTiles.add(_tileKeyInt(mx, my));
         }
       }
     };
@@ -584,8 +626,8 @@ export function render(canvas, data, options = {}) {
         markFootprintRect(it.originX, it.originY, bCols, bRows);
       }
     }
-    const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
-    const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
+    const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
+    const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
 
     const batchedEffects = [];
     for (const item of renderItems) {
@@ -655,10 +697,9 @@ export function render(canvas, data, options = {}) {
           const tx = Math.floor(item.x); const ty = Math.floor(item.y);
           if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
             if (!isGrassStripOverlayBlocked(tx, ty)) {
-              const t = getCached(tx, ty);
-              const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t?.biomeId] || 'grass'];
-              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= (t?.heightStep ?? 0);
-              if (t?.heightStep > 0 && (!gateSet || getRoleForCell(ty, tx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) === 'CENTER')) {
+              // Re-use pre-computed grassEligibleSet — avoids a second getRoleForCell call here.
+              if (grassEligibleSet.has(_tileKeyInt(tx, ty))) {
+                const t = getCached(tx, ty);
                 drawGrass5aForCell(ctx, tx, ty, t, Math.ceil(tileW), Math.ceil(tileH), tx * tileW, ty * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
               }
             }
