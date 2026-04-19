@@ -1,3 +1,5 @@
+import { PluginRegistry } from './core/plugin-registry.js';
+
 /**
  * Biomes definitions and lookup logic based on Whittaker model.
  */
@@ -104,8 +106,29 @@ export function getBiomeWithAnomalies(e, t, m, a, config = {}) {
             } else if (a > 0.8 && e < 0.5) {
                 biomeObj = BIOMES.ARCANE;
             }
+            
+            // Allow mods to override anomalies
+            const modBiomes = PluginRegistry.getBiomes();
+            for (const [key, modConfig] of modBiomes) {
+              if (modConfig.anomalyCheck && modConfig.anomalyCheck(e, t, m, a, isLand)) {
+                biomeObj = modConfig;
+              }
+            }
         }
     }
     return biomeObj;
+}
+
+/**
+ * Sincroniza biomas registrados no PluginRegistry para o objeto estático BIOMES.
+ * Útil para que a UI e Minimapa encontrem biomas de mods pelo ID.
+ */
+export function syncModBiomesToStaticObject() {
+  const modBiomes = PluginRegistry.getBiomes();
+  for (const [key, config] of modBiomes) {
+    if (!BIOMES[key]) {
+      BIOMES[key] = config;
+    }
+  }
 }
 

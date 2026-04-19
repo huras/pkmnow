@@ -77,6 +77,7 @@ import {
 } from './thunderbolt-move.js';
 import { castRainDance, castSunnyDay, castBlizzard } from './weather-moves.js';
 import { tickActiveProjectiles } from './moves-projectiles-tick.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
 import {
   MOVE_CAST_VIS_SEC,
   FLAMETHROWER_STREAM_INTERVAL,
@@ -336,6 +337,14 @@ function resolveMoveRuntimeAlias(moveId) {
 
 export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    if (PluginRegistry.getCooldown(moveId) > 0) return false;
+    const mod = PluginRegistry.getMove(moveId);
+    PluginRegistry.setCooldown(moveId, mod.cooldownSec || 0.5);
+    bumpPlayerMoveCastVisual(sourceEntity);
+    if (mod.cast) mod.cast(sourceX, sourceY, targetX, targetY, sourceEntity, { pushProjectile, pushParticle });
+    return true;
+  }
   if (moveId === 'ember') return castEmber(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'flamethrower') return castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'confusion') return castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -370,6 +379,17 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
  */
 export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    const mod = PluginRegistry.getMove(moveId);
+    if (mod.supportsCharge && mod.castCharged) {
+      if (PluginRegistry.getCooldown(moveId) > 0) return false;
+      PluginRegistry.setCooldown(moveId, mod.cooldownSec || 0.5);
+      bumpPlayerMoveCastVisual(sourceEntity);
+      mod.castCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01, { pushProjectile, pushParticle });
+      return true;
+    }
+    return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
+  }
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
@@ -390,6 +410,9 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
  */
 export function moveSupportsChargedRelease(moveId) {
   const resolved = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(resolved)) {
+    return !!PluginRegistry.getMove(resolved).supportsCharge;
+  }
   return (
     resolved === 'ember' ||
     resolved === 'waterBurst' ||
@@ -1305,6 +1328,9 @@ export function getPlayerMoveCooldownUiMax(moveId) {
 export function getPlayerMoveCooldownRemaining(moveId) {
   if (String(moveId || '').startsWith('field:')) return 0;
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    return PluginRegistry.getCooldown(moveId);
+  }
   switch (moveId) {
     case 'ember':
       return playerEmberCooldown;
@@ -1372,6 +1398,10 @@ export function getPlayerMoveCooldownRemaining(moveId) {
 export function updateMoves(dt, wildPokemonList, data, player) {
   lastMovesTickData = data;
   updatePlayerCombatTimers(dt);
+  for (const key of PluginRegistry.cooldowns.keys()) {
+    const current = PluginRegistry.getCooldown(key);
+    if (current > 0) PluginRegistry.setCooldown(key, Math.max(0, current - dt));
+  }
   playerEmberCooldown = Math.max(0, playerEmberCooldown - dt);
   playerWaterCooldown = Math.max(0, playerWaterCooldown - dt);
   playerPoisonCooldown = Math.max(0, playerPoisonCooldown - dt);

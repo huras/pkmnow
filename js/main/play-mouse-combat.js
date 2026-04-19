@@ -53,10 +53,11 @@ import { beginStrengthThrowFromPointer } from './thrown-map-detail-entities.js';
 import { tryPlayerCutHitWildCircle, tryPlayerTackleHitWild } from '../wild-pokemon/index.js';
 import { cutGrassInCircle } from '../play-grass-cut.js';
 import { speciesHasType } from '../pokemon/pokemon-type-helpers.js';
-import { playHomeRunBatHitSfx } from '../audio/home-run-bat-hit-sfx.js';
+import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
 import { playCutComboSwordSwishSfx } from '../audio/cut-sword-swish-sfx.js';
 import {
   getChargeLevel,
+  getEarthquakeChargeLevel,
   getChargeRange01,
   getChargeDamage01,
   isChargeStrongAttackEligible,
@@ -64,6 +65,10 @@ import {
   CHARGE_FIELD_RELEASE_MIN_01
 } from './play-charge-levels.js';
 import { playLinkSuperSwordSfx } from '../audio/link-super-sword-sfx.js';
+import {
+  rumblePlayerGamepadChargeFlow,
+  rumblePlayerGamepadChargeStepLock
+} from './play-gamepad-rumble.js';
 import { attackWheel } from '../ui/attack-wheel.js';
 import { dualBindWheel } from '../ui/dual-bind-wheel.js';
 
@@ -226,6 +231,9 @@ let lastScrollBindCastMs = 0;
 let prevGamepadFieldLmbHeld = false;
 let prevGamepadFieldRmbHeld = false;
 let prevGamepadFieldMmbHeld = false;
+let prevGamepadThrowHeld = false;
+/** Highest reached charge bar level this hold (per gamepad slot) for lock-click edges. */
+const gamepadChargeLevelBySlot = { l: 0, r: 0, m: 0 };
 
 /** 0..4 = Digit1..Digit5 slot being edited, or -1. */
 let bindingWheelSlotIdx = -1;
@@ -840,13 +848,38 @@ export function aimAtCursor(player) {
   /** Same horizontal/vertical anchor as the play sprite (`vx+0.5`, `vy+0.5` in `render.js`). */
   const sx = px + 0.5;
   const sy = py + 0.5;
+  const gamepadCombatAimActive =
+    !!playInputState.gamepadFieldLmbHeld ||
+    !!playInputState.gamepadFieldRmbHeld ||
+    !!playInputState.gamepadFieldMmbHeld ||
+    !!playInputState.gamepadThrowHeld;
   const useFacingAim =
     forceFacingFieldAimOnce ||
+    gamepadCombatAimActive ||
     leftCombatAimIgnoreMouse ||
     rightCombatAimIgnoreMouse ||
     middleCombatAimIgnoreMouse ||
     !playInputState.mouseValid;
   if (forceFacingFieldAimOnce) forceFacingFieldAimOnce = false;
+  if (player?._strengthCarry) {
+    const preferGamepadAim = playInputState.throwAimInputMode === 'gamepad';
+    if (preferGamepadAim) {
+      if (playInputState.gamepadAimActive) {
+        const nx = Number(playInputState.gamepadAimNx) || 0;
+        const ny = Number(playInputState.gamepadAimNy) || 1;
+        const mag01 = Math.max(0, Math.min(1, Number(playInputState.gamepadAimMag01) || 0));
+        // Stick controls throw distance: short nudge = short toss, full deflection = long throw.
+        const throwDistTiles = 1.15 + 7.15 * mag01;
+        return { sx, sy, tx: sx + nx * throwDistTiles, ty: sy + ny * throwDistTiles };
+      }
+      // Last aim came from joystick; keep throw aim independent from mouse drift.
+      const { nx, ny } = getTackleDirUnitFromFacing(player);
+      return { sx, sy, tx: sx + nx, ty: sy + ny };
+    }
+    if (playInputState.mouseValid) {
+      return { tx: playInputState.mouseX, ty: playInputState.mouseY, sx, sy };
+    }
+  }
   if (useFacingAim) {
     const { nx, ny } = getTackleDirUnitFromFacing(player);
     return { sx, sy, tx: sx + nx, ty: sy + ny };
@@ -882,7 +915,31 @@ function initLeftCombatPressFromPointerOrGamepad(modifierSnapshot, useMouseForMe
 function finalizeLeftCombatPointerOrGamepad(pl, data, now) {
   const dex = Math.floor(Number(pl?.dexId) || 0);
   const bind = dex >= 1 ? getPlayerInputBindings(dex) : getPlayerInputBindings(1);
-  const { sx, sy, tx, ty } = aimAtCursor(pl);
+  let sx;
+  let sy;
+  let tx;
+  let ty;
+  if (pl?._strengthCarry && leftCombatAimIgnoreMouse) {
+    // Gamepad-originated throw: never fallback to stale mouse coordinates on release.
+    const px = pl.visualX ?? pl.x;
+    const py = pl.visualY ?? pl.y;
+    sx = px + 0.5;
+    sy = py + 0.5;
+    if (playInputState.gamepadAimActive) {
+      const nx = Number(playInputState.gamepadAimNx) || 0;
+      const ny = Number(playInputState.gamepadAimNy) || 1;
+      const mag01 = Math.max(0, Math.min(1, Number(playInputState.gamepadAimMag01) || 0));
+      const throwDistTiles = 1.15 + 7.15 * mag01;
+      tx = sx + nx * throwDistTiles;
+      ty = sy + ny * throwDistTiles;
+    } else {
+      const { nx, ny } = getTackleDirUnitFromFacing(pl);
+      tx = sx + nx;
+      ty = sy + ny;
+    }
+  } else {
+    ({ sx, sy, tx, ty } = aimAtCursor(pl));
+  }
   const heldMs = now - leftDownAt;
   const charge01 = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
   const threw = !!(pl._strengthCarry && data && beginStrengthThrowFromPointer(pl, data, tx, ty));
@@ -981,6 +1038,51 @@ function fieldMoveUsesChargeMeter(moveId) {
 
 /**
  * @param {string} moveId
+ * @returns {number}
+ */
+function chargeMaxLevelForMove(moveId) {
+  return moveId === 'earthquake' ? 5 : 4;
+}
+
+/**
+ * @param {string} moveId
+ * @param {number} charge01
+ * @returns {number}
+ */
+function chargeLevelForMove(moveId, charge01) {
+  return moveId === 'earthquake' ? getEarthquakeChargeLevel(charge01) : getChargeLevel(charge01);
+}
+
+/**
+ * Controller-only charge haptics:
+ * - low repeating texture while charging
+ * - distinct lock pulse when crossing a filled bar level
+ * @param {'l'|'r'|'m'} slot
+ * @param {boolean} active
+ * @param {string} moveId
+ * @param {number} charge01
+ */
+function tickGamepadChargeRumbleForSlot(slot, active, moveId, charge01) {
+  if (!active || !fieldMoveUsesChargeMeter(moveId)) {
+    gamepadChargeLevelBySlot[slot] = 0;
+    return;
+  }
+  const p = Math.max(0, Math.min(1, Number(charge01) || 0));
+  if (p <= 0.005) {
+    gamepadChargeLevelBySlot[slot] = 0;
+    return;
+  }
+  rumblePlayerGamepadChargeFlow(p);
+  const level = chargeLevelForMove(moveId, p);
+  const prev = Math.max(0, Math.floor(Number(gamepadChargeLevelBySlot[slot]) || 0));
+  if (level > prev) {
+    rumblePlayerGamepadChargeStepLock(level, chargeMaxLevelForMove(moveId));
+  }
+  gamepadChargeLevelBySlot[slot] = level;
+}
+
+/**
+ * @param {string} moveId
  * @param {import('../player.js').player} pl
  * @param {object | null} data
  */
@@ -1034,7 +1136,7 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
   if (isMeleeTackleOrCut(moveId)) {
     const charged = heldMs >= FIELD_LMB_CHARGE_MIN_HOLD_MS && charge01 >= CHARGE_FIELD_RELEASE_MIN_01;
     if (charged && chargeLevel >= 3) {
-      playHomeRunBatHitSfx(pl);
+      playModerateSwordHitSfx(pl);
     }
     castSelectedFieldSkill(pl, data, charged, charge01, moveId);
     return;
@@ -1124,7 +1226,7 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     castMoveById(moveId, sx, sy, tx, ty, pl);
   } else {
     if (chargeLevel >= 3) {
-      playHomeRunBatHitSfx(pl);
+      playModerateSwordHitSfx(pl);
     }
     castMoveChargedById(moveId, sx, sy, tx, ty, pl, charge01 || 0);
   }
@@ -1152,11 +1254,15 @@ export function updatePlayPointerCombat(dt, player, data) {
   const gpLmb = !!playInputState.gamepadFieldLmbHeld;
   const gpRmb = !!playInputState.gamepadFieldRmbHeld;
   const gpMmb = !!playInputState.gamepadFieldMmbHeld;
+  const gpThrow = !!playInputState.gamepadThrowHeld;
   const nowCombat = performance.now();
-  if (!gpLmb && prevGamepadFieldLmbHeld && !leftHeld) {
+  const carryThrowMode = !!player._strengthCarry;
+  const gpLeftActionHeld = carryThrowMode ? gpThrow : gpLmb;
+  const prevGpLeftActionHeld = carryThrowMode ? prevGamepadThrowHeld : prevGamepadFieldLmbHeld;
+  if (!gpLeftActionHeld && prevGpLeftActionHeld && !leftHeld) {
     finalizeLeftCombatPointerOrGamepad(player, data, nowCombat);
   }
-  if (gpLmb && !prevGamepadFieldLmbHeld && !leftHeld) {
+  if (gpLeftActionHeld && !prevGpLeftActionHeld && !leftHeld) {
     initLeftCombatPressFromPointerOrGamepad(combatModifierHeld(), false);
   }
   if (!gpRmb && prevGamepadFieldRmbHeld && !rightHeld) {
@@ -1182,7 +1288,13 @@ export function updatePlayPointerCombat(dt, player, data) {
   const virtMiddle = middleHeld || gpMmb;
 
   playInputState.strengthCarryLmbAim = !!(
-    leftHeld && !combatModifierHeld() && player._strengthCarry && playInputState.mouseValid
+    player._strengthCarry &&
+    !combatModifierHeld() &&
+    (
+      playInputState.throwAimInputMode === 'gamepad' ||
+      playInputState.mouseValid ||
+      playInputState.gamepadAimActive
+    )
   );
 
   const mod = combatModifierHeld();
@@ -1213,6 +1325,15 @@ export function updatePlayPointerCombat(dt, player, data) {
       (playInputState.chargeMmb01 || 0) + dt / chargeMeterMaxSecForMove(mmb)
     );
   }
+
+  tickGamepadChargeRumbleForSlot(
+    'l',
+    gpLmb && !mod && !player._strengthCarry,
+    lmb,
+    playInputState.chargeLeft01 || 0
+  );
+  tickGamepadChargeRumbleForSlot('r', gpRmb && !mod, rmb, playInputState.chargeRight01 || 0);
+  tickGamepadChargeRumbleForSlot('m', gpMmb && !mod, mmb, playInputState.chargeMmb01 || 0);
 
   if (virtLeft && !mod && lmb === 'psybeam') {
     if (!playInputState.psybeamLeftHold) playInputState.psybeamLeftHold = { pulse: 0 };
@@ -1413,6 +1534,7 @@ export function updatePlayPointerCombat(dt, player, data) {
   prevGamepadFieldLmbHeld = gpLmb;
   prevGamepadFieldRmbHeld = gpRmb;
   prevGamepadFieldMmbHeld = gpMmb;
+  prevGamepadThrowHeld = gpThrow;
 }
 
 /**
@@ -1439,6 +1561,7 @@ export function installPlayPointerCombat(deps) {
     (e) => {
       fieldWheelMouseClientX = Number(e.clientX) || 0;
       fieldWheelMouseClientY = Number(e.clientY) || 0;
+      playInputState.throwAimInputMode = 'mouse';
       const p = getPlayer();
       if (attackWheel.isOpen) updateBindWheelHover(p);
     },

@@ -1,16 +1,13 @@
 import { BIOMES } from './biomes.js';
+import { PluginRegistry } from './core/plugin-registry.js';
 import { seededHash, getRoleForCell } from './tessellation-logic.js';
 import { TERRAIN_SETS } from './tessellation-data.js';
+
 
 /**
  * Mapeamento entre nossos IDs de Bioma e as chaves do TERRAIN_SETS no tessellation-data.js.
  */
-/**
- * Base do terreno por bioma.
- * Biomas com grama: base solo `grassy-terrain.png` + paletas (terrain-palette-grassy.js); folhagem jogador em cima.
- * Resto: folhas solo conc-conv-a 5×3 — `terrain-palette-base.js` (uma PNG por paleta).
- */
-export const BIOME_TO_TERRAIN = {
+const _BIOME_TO_TERRAIN = {
   [BIOMES.OCEAN.id]: "Palette base — lake shore",
   [BIOMES.BEACH.id]: "Palette base — sand",
   [BIOMES.DESERT.id]: "Palette base — sand",
@@ -33,14 +30,45 @@ export const BIOME_TO_TERRAIN = {
   [BIOMES.TOWN_STREET.id]: "Palette base — sand",
 };
 
+export const BIOME_TO_TERRAIN = new Proxy(_BIOME_TO_TERRAIN, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    const mod = PluginRegistry.getBiomeById(prop);
+    return mod?.terrain;
+  }
+});
+
+
 /**
  * Configuração de vegetação (Scatter) por bioma.
  * Cada entrada é um OBJECT_SET name do tessellation-data.js.
  */
-export const BIOME_VEGETATION = {
-  [BIOMES.FOREST.id]: ['large-green-broadleaf-1 [4x3]', 'green-broadleaf-1 [3x2]', 'grass [1x1]', 'red-flower [1x1]'],
-  [BIOMES.JUNGLE.id]: ['fat-palm [4x3]', 'large-palm-with-coconuts [4x3]', 'large-palm-with-bananas [3x3]', 'palm-tree [2x2]', 'vine [2x1]', 'fern [1x1]'],
-  [BIOMES.GRASSLAND.id]: ['small-grass [1x1]', 'yellow-lily [1x1]', 'red-daisy [1x1]'],
+const _BIOME_VEGETATION = {
+  [BIOMES.FOREST.id]: [
+    'large-green-broadleaf-1 [4x3]',
+    'green-broadleaf-1 [3x2]',
+    'grass [1x1]',
+    'red-flower [1x1]',
+    // A few carryable props for Strength.
+    'dirt-rock [1x1]'
+  ],
+  [BIOMES.JUNGLE.id]: [
+    'fat-palm [4x3]',
+    'large-palm-with-coconuts [4x3]',
+    'large-palm-with-bananas [3x3]',
+    'palm-tree [2x2]',
+    'vine [2x1]',
+    'fern [1x1]',
+    // A few carryable props for Strength.
+    'small-dirt-rocks-a [1x1]'
+  ],
+  [BIOMES.GRASSLAND.id]: [
+    'small-grass [1x1]',
+    'yellow-lily [1x1]',
+    'red-daisy [1x1]',
+    // A few carryable props for Strength.
+    'dirt-rock [1x1]'
+  ],
   [BIOMES.SNOW.id]: ['large-light-blue-crystal [2x2]', 'baby-pine-tree-full-snow [1x1]', 'snow-grass [1x1]'],
   [BIOMES.MOUNTAIN.id]: ['large-purple-crystal [2x2]', 'large-pink-crystal [2x2]', 'small-dirt-rocks-a [1x1]', 'dirt-rock [1x1]'],
   [BIOMES.OCEAN.id]: ['pointy-sea-shell [1x1]'],
@@ -73,6 +101,15 @@ export const BIOME_VEGETATION = {
     'snow-grass [1x1]', 'baby-pine-tree-full-snow [1x1]'
   ],
 };
+
+export const BIOME_VEGETATION = new Proxy(_BIOME_VEGETATION, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    const mod = PluginRegistry.getBiomeById(prop);
+    return mod?.vegetation;
+  }
+});
+
 
 /**
  * Onde bake/render permitem scatter (e gates alinhados): terra firme (heightStep ≥ 1) ou **praia** no degrau 0
@@ -166,7 +203,7 @@ export const NO_TREE_BIOMES = new Set([
  * Mapeamento de "Terrain Foliage" (Forragem/Skin superior).
  * Usa os sets "jogador X" do tessellation-data.js.
  */
-export const BIOME_TO_FOLIAGE = {
+const _BIOME_TO_FOLIAGE = {
   [BIOMES.GRASSLAND.id]: "jogador light-grass",
   [BIOMES.FOREST.id]: "jogador light-grass",
   [BIOMES.JUNGLE.id]: "jogador super-healthy-light-grass",
@@ -188,6 +225,15 @@ export const BIOME_TO_FOLIAGE = {
   [BIOMES.TOWN.id]: "jogador sandy",
   [BIOMES.TOWN_STREET.id]: "jogador sandy",
 };
+
+export const BIOME_TO_FOLIAGE = new Proxy(_BIOME_TO_FOLIAGE, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    const mod = PluginRegistry.getBiomeById(prop);
+    return mod?.foliage;
+  }
+});
+
 
 /**
  * Retorna o variant de grama para um biome ID.

@@ -318,14 +318,16 @@ export class CharacterSelector {
       const cd = getPlayerMoveCooldownRemaining(id);
       const max = Math.max(0.02, getPlayerMoveCooldownUiMax(id));
       if (cd <= 0.008) {
-        sweep.style.setProperty('--cd-p', '0');
-        timer.textContent = '';
-        slot.classList.remove('move-slot--on-cd');
+        if (sweep.style.getPropertyValue('--cd-p') !== '0') sweep.style.setProperty('--cd-p', '0');
+        if (timer.textContent) timer.textContent = '';
+        if (slot.classList.contains('move-slot--on-cd')) slot.classList.remove('move-slot--on-cd');
       } else {
         const p = Math.min(1, cd / max);
-        sweep.style.setProperty('--cd-p', String(p));
-        timer.textContent = cd >= 10 ? String(Math.round(cd)) : cd.toFixed(1);
-        slot.classList.add('move-slot--on-cd');
+        const pText = String(p);
+        if (sweep.style.getPropertyValue('--cd-p') !== pText) sweep.style.setProperty('--cd-p', pText);
+        const timerText = cd >= 10 ? String(Math.round(cd)) : cd.toFixed(1);
+        if (timer.textContent !== timerText) timer.textContent = timerText;
+        if (!slot.classList.contains('move-slot--on-cd')) slot.classList.add('move-slot--on-cd');
       }
     }
   }

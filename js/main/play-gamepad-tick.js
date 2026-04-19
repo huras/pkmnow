@@ -41,10 +41,26 @@ export function tickPlayGamepadFrame(api) {
     playInputState.gamepadFieldLmbHeld = false;
     playInputState.gamepadFieldRmbHeld = false;
     playInputState.gamepadFieldMmbHeld = false;
+    playInputState.gamepadThrowHeld = false;
+    playInputState.gamepadAimMag01 = 0;
+    playInputState.gamepadAimActive = false;
+    playInputState.throwAimInputMode = 'mouse';
     return { inX: keyboardMoveX, inY: keyboardMoveY };
   }
 
   const sm = samplePlayGamepadFrame();
+  const rightMag = Math.hypot(sm.rightRx, sm.rightRy);
+  if (rightMag >= 0.16) {
+    const inv = 1 / Math.max(1e-6, rightMag);
+    playInputState.gamepadAimNx = sm.rightRx * inv;
+    playInputState.gamepadAimNy = sm.rightRy * inv;
+    playInputState.gamepadAimMag01 = Math.max(0, Math.min(1, (rightMag - 0.16) / (1 - 0.16)));
+    playInputState.gamepadAimActive = true;
+    playInputState.throwAimInputMode = 'gamepad';
+  } else {
+    playInputState.gamepadAimMag01 = 0;
+    playInputState.gamepadAimActive = false;
+  }
   playInputState.gamepadSpaceHeld = !!sm.heldA;
   playInputState.gamepadLbHeld = !!sm.heldLB;
   playInputState.gamepadWheelAimActive = false;
@@ -114,6 +130,8 @@ export function tickPlayGamepadFrame(api) {
     !!sm.connected && !!sm.heldX && !sm.heldLB && !dualBindWheel.isOpen;
   playInputState.gamepadFieldRmbHeld = !!sm.connected && !!sm.heldRT && !dualBindWheel.isOpen;
   playInputState.gamepadFieldMmbHeld = !!sm.connected && !!sm.heldLT && !dualBindWheel.isOpen;
+  // Dedicated throw button while carrying Strength props.
+  playInputState.gamepadThrowHeld = !!sm.connected && !!sm.heldRB && !dualBindWheel.isOpen;
 
   if (sm.risingStart || sm.risingBack) {
     if (dualBindWheel.isOpen) {

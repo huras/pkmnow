@@ -709,6 +709,30 @@ export function drawStrengthThrowAimPreview(ctx, item, options) {
 }
 
 /**
+ * Handles drawing of the default Strength throw target ring on ground (no active aim input).
+ */
+export function drawStrengthThrowIdleTarget(ctx, item, options) {
+  const { snapPx, tileW, tileH } = options;
+  const lc = snapPx(item.landX * tileW);
+  const lg = snapPx(item.landY * tileH);
+  const footprint = Math.max(1, Math.hypot(Number(item.cols) || 1, Number(item.rows) || 1));
+  const cr = Math.max(tileW * 0.3, footprint * tileW * 0.2);
+  ctx.save();
+  ctx.fillStyle = 'rgba(140, 210, 255, 0.1)';
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 225, 255, 0.86)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/**
  * Handles drawing of the psybeam charge ball.
  */
 export function drawPsybeamChargeBall(ctx, item, options) {

@@ -1344,7 +1344,7 @@ body.play-mode-active {
 }
 
 .app.play-mode-active .map-wrap .play-bgm-now-playing {
-  display: block;
+  display: none !important;
 }
 
 .play-bgm-now-playing-title {

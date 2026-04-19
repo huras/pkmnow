@@ -91,6 +91,9 @@ export function createGameLoop(api) {
     getGameTimeSec,
     onEscapePlay
   } = api;
+  let lastFpsHudWriteMs = 0;
+  let lastFpsHudText = '';
+  let lastFpsHudCompact = null;
 
   function gameLoop(timestamp) {
     const tLoopStart = performance.now();
@@ -233,8 +236,18 @@ export function createGameLoop(api) {
       while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
       const fps = playFpsSampleTimes.length;
       const compact = getPlayFpsCompact?.() ?? false;
-      if (compact) {
-        playFpsEl.textContent = `${fps} FPS`;
+      const hudCadenceMs = compact ? 250 : 160;
+      const compactChanged = lastFpsHudCompact == null || compact !== lastFpsHudCompact;
+      if (!compactChanged && tEnd - lastFpsHudWriteMs < hudCadenceMs) {
+        // Keep HUD responsive enough while avoiding per-frame text/layout churn.
+      } else if (compact) {
+        const text = `${fps} FPS`;
+        if (text !== lastFpsHudText) {
+          playFpsEl.textContent = text;
+          lastFpsHudText = text;
+        }
+        lastFpsHudWriteMs = tEnd;
+        lastFpsHudCompact = compact;
       } else {
         const lod = getPlayLodDetail();
         const updateMs = tRenderStart - tLoopStart;
@@ -296,7 +309,13 @@ export function createGameLoop(api) {
           `upd top ${top3HeavyUpdate}${wildSubTag}`,
           `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}`
         ];
-        playFpsEl.textContent = fpsHudLines.join('\n');
+        const text = fpsHudLines.join('\n');
+        if (text !== lastFpsHudText) {
+          playFpsEl.textContent = text;
+          lastFpsHudText = text;
+        }
+        lastFpsHudWriteMs = tEnd;
+        lastFpsHudCompact = compact;
       }
     }
     if (getAppMode() === 'play') {

@@ -15,6 +15,7 @@ import {
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
 import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
+import { rumblePlayerGamepadPokemonHitDealt } from '../main/play-gamepad-rumble.js';
 
 const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
 const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
@@ -143,6 +144,7 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
   const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
   if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  rumblePlayerGamepadPokemonHitDealt();
   applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
   applyWildKnockbackFromPoint(best, px, py, knockback);
@@ -186,6 +188,7 @@ export function tryPlayerFlameChargeHitWildAlongSegment(player, data, ax, ay, bx
   const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
   if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  rumblePlayerGamepadPokemonHitDealt();
   applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
   applyWildKnockbackFromPoint(best, ex, ey, knockback);
@@ -204,6 +207,7 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
   const py = Number(fromY);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
   if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  rumblePlayerGamepadPokemonHitDealt();
   setEmotion(entity, 5, false, 'Pain');
   applyWildKnockbackFromPoint(entity, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);
   pushRecentNearbyEvent(entity, 'player_field_move', 1.18);
@@ -250,6 +254,7 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
     pushRecentNearbyEvent(e, 'player_field_move', 1.08);
     broadcastNearbyPlayerEvent(e.x, e.y, 'player_field_move', 0.72, e);
   }
+  if (hitCount > 0) rumblePlayerGamepadPokemonHitDealt();
   return { hit: hitCount > 0, hitCount };
 }
 

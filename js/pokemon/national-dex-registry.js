@@ -4,6 +4,7 @@
  *
  * Pipeline de assets: `docs/NATIONAL-DEX-PIPELINE.md`.
  */
+import { PluginRegistry } from '../core/plugin-registry.js';
 
 /** Hoenn cap (dex #386). */
 export const NATIONAL_DEX_HOENN_MAX = 386;
@@ -557,40 +558,47 @@ for (let i = 0; i < NATIONAL_DEX_LINES.length; i++) {
 /** ecodex.js uses plain "Nidoran" → male line */
 NAME_TO_DEX.set('Nidoran', 32);
 
-/**
- * @param {string} encounterName from getEncounters()
- * @returns {number | null} national dex, or null if unknown / MissingNo
- */
 export function encounterNameToDex(encounterName) {
   const n = String(encounterName || '').trim();
   if (!n || n === 'MissingNo') return null;
-  return NAME_TO_DEX.get(n) ?? null;
+  const native = NAME_TO_DEX.get(n);
+  if (native !== undefined) return native;
+  for (const [modId, config] of PluginRegistry.pokemon.entries()) {
+    if (config.name === n) return modId;
+  }
+  return null;
 }
 
 /**
- * @param {number} dex
+ * @param {number|string} dex
  * @returns {string} three-digit folder id for `tilesets/pokemon/NNN_*.png` (fits up to dex 999).
  */
 export function padDex3(dex) {
+  if (PluginRegistry.hasPokemon(dex)) return String(dex);
   const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Number(dex) || 1));
   return String(d).padStart(3, '0');
 }
 
 /**
- * @param {number} dex 1..NATIONAL_DEX_MAX
+ * @param {number|string} dex 1..NATIONAL_DEX_MAX or mod id
  * @returns {string} English species name
  */
 export function getNationalSpeciesName(dex) {
+  if (PluginRegistry.hasPokemon(dex)) return PluginRegistry.getPokemon(dex).name || `Mod Species ${dex}`;
   const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Number(dex) || 1));
   return NATIONAL_DEX_LINES[d - 1] || `Species ${d}`;
 }
 
 /**
  * Pokemon Showdown cry URL stem (e.g. bulbasaur.mp3).
- * @param {number} dex
+ * @param {number|string} dex
  * @returns {string}
  */
 export function getNationalShowdownCrySlug(dex) {
+  if (PluginRegistry.hasPokemon(dex)) {
+    const p = PluginRegistry.getPokemon(dex);
+    return p.crySlug || String(dex).toLowerCase();
+  }
   const d = Math.max(1, Math.min(NATIONAL_DEX_MAX, Number(dex) || 1));
   const o = SHOWDOWN_CRY_SLUG_OVERRIDES.get(d);
   if (o) return o;

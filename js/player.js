@@ -43,6 +43,7 @@ import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
 import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
 import { advanceRainFootstepFxForDistance } from './weather/rain-footstep-fx.js';
 import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
+import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
@@ -397,6 +398,7 @@ export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false,
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
   player.hp = Math.max(0, cur - amount);
+  rumblePlayerGamepadPokemonHitTaken();
   player.projIFrameSec = 0.55;
   if (applyPoisonVisual) player.poisonVisualSec = 3;
   const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
@@ -749,9 +751,10 @@ export function updatePlayer(dt, data, gameTimeSec) {
       ? FLIGHT_HORIZONTAL_MOVE_SPEED_MULT
       : 1;
 
-  if (strengthCarryBlocksWalk(player)) {
-    player.inputX = 0;
-    player.inputY = 0;
+  const carryBlocksWalk = strengthCarryBlocksWalk(player);
+  const blockedTurnInputX = carryBlocksWalk ? Number(player.inputX) || 0 : 0;
+  const blockedTurnInputY = carryBlocksWalk ? Number(player.inputY) || 0 : 0;
+  if (carryBlocksWalk) {
     player.runMode = false;
     player.flameChargeDashSec = 0;
   }
@@ -772,7 +775,16 @@ export function updatePlayer(dt, data, gameTimeSec) {
     !player.digBurrowMode;
 
   // 1. Horizontal Input & Physics
-  if (flameChargeActive) {
+  if (carryBlocksWalk) {
+    // Heavy carry can block translation, but still allow facing/rotation in place.
+    if (blockedTurnInputX !== 0 || blockedTurnInputY !== 0) {
+      setPlayerFacingFromWalkInput(blockedTurnInputX, blockedTurnInputY);
+    }
+    player.inputX = 0;
+    player.inputY = 0;
+    player.vx = 0;
+    player.vy = 0;
+  } else if (flameChargeActive) {
     player.inputX = 0;
     player.inputY = 0;
     player.runMode = false;

@@ -1,4 +1,6 @@
 import { BIOMES } from '../biomes.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
+
 
 /** Site-root-relative Suno originals (same origin as index.html). */
 const SUNO_BASE = 'audio/suno-original-bgm';
@@ -265,5 +267,7 @@ export const BIOME_BGM_TRACK_URLS = Object.freeze({
  * @returns {readonly string[] | undefined}
  */
 export function getBiomeBgmUrlsForBiome(biomeId) {
+  const mod = PluginRegistry.getBiomeById(biomeId);
+  if (mod?.bgm) return Array.isArray(mod.bgm) ? mod.bgm : [mod.bgm];
   return BIOME_BGM_TRACK_URLS[biomeId];
 }

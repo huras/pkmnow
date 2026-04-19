@@ -259,20 +259,33 @@ export function drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx) {
 /**
  * Dashed ellipse around the base footprint of the current Strength grab target.
  * @param {CanvasRenderingContext2D} ctx
- * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number } | null} prompt
+ * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null} prompt
  * @param {number} timeSec
  */
 export function drawStrengthGrabTargetOutline(ctx, prompt, tileW, tileH, snapPx, timeSec = 0) {
-  if (!prompt || prompt.kind !== 'rock') return;
+  if (!prompt || (prompt.kind !== 'rock' && prompt.kind !== 'faintedWild')) return;
   const ox = Math.floor(Number(prompt.ox) || 0);
   const oy = Math.floor(Number(prompt.oy) || 0);
   const cols = Math.max(1, Math.floor(Number(prompt.cols) || 1));
   const rows = Math.max(1, Math.floor(Number(prompt.rows) || 1));
+  const hasCenter = Number.isFinite(Number(prompt.cx)) && Number.isFinite(Number(prompt.cy));
 
-  const cx = snapPx((ox + cols * 0.5) * tileW);
-  const cy = snapPx((oy + rows - 0.5) * tileH);
-  const rx = Math.max(tileW * 0.3, cols * tileW * 0.46);
-  const ry = Math.max(tileH * 0.12, tileH * 0.22);
+  const cx =
+    prompt.kind === 'faintedWild'
+      ? snapPx((hasCenter ? Number(prompt.cx) : ox + 0.5) * tileW)
+      : snapPx((hasCenter ? Number(prompt.cx) : ox + cols * 0.5) * tileW);
+  const cy =
+    prompt.kind === 'faintedWild'
+      ? snapPx((hasCenter ? Number(prompt.cy) : oy + 0.5) * tileH)
+      : snapPx((hasCenter ? Number(prompt.cy) : oy + rows - 0.5) * tileH);
+  const rx =
+    prompt.kind === 'faintedWild'
+      ? Math.max(tileW * 0.34, cols * tileW * 0.42)
+      : Math.max(tileW * 0.3, cols * tileW * 0.46);
+  const ry =
+    prompt.kind === 'faintedWild'
+      ? Math.max(tileH * 0.2, tileH * 0.28)
+      : Math.max(tileH * 0.12, tileH * 0.22);
   const pulse = 0.84 + 0.16 * Math.sin((Number(timeSec) || 0) * 7.5);
 
   ctx.save();

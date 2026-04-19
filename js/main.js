@@ -102,6 +102,8 @@ import {
   wrapHours
 } from './main/world-time-of-day.js';
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
+import { initMods } from './core/mod-loader.js';
+
 
 if (isPlayShell()) {
   setPlayPointerMode('game');
@@ -208,6 +210,7 @@ const debugContent = document.getElementById('tile-debug-content');
 const btnDebugClose = document.getElementById('tile-debug-close');
 const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
+const playBgmNowPlayingEl = document.getElementById('play-bgm-now-playing');
 const playBgmNowPlayingTrackEl = document.getElementById('play-bgm-now-playing-track');
 const playBgmNowPlayingStatusEl = document.getElementById('play-bgm-now-playing-status');
 const playBgmToastEl = document.getElementById('play-bgm-toast');
@@ -225,6 +228,11 @@ const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weathe
 const chkRotas = document.getElementById('chkRotas');
 const chkGrafo = document.getElementById('chkGrafo');
 const chkCurvas = document.getElementById('chkCurvas');
+
+if (playBgmNowPlayingEl) {
+  playBgmNowPlayingEl.hidden = true;
+  playBgmNowPlayingEl.style.display = 'none';
+}
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -480,30 +488,30 @@ function refreshPlayModeInfoBar(force = false) {
           `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Throw</span><span class="play-immersive-hint__key">LMB</span></div>` +
           `${carryMobility ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__warn">${carryMobility.message}</span></div>` : ''}`
         : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
-      playImmersiveHintEl.innerHTML =
+      const immersiveHtml =
         `<div class="play-immersive-hint__row">` +
         `${strengthHudObjectPreviewHtmlImmersive(ctxPrompt)}` +
         `<span>(${label})</span>` +
         `${actionHtml}` +
         `</div>`;
+      if (playImmersiveHintEl.innerHTML !== immersiveHtml) {
+        playImmersiveHintEl.innerHTML = immersiveHtml;
+      }
       playImmersiveHintEl.classList.add('play-immersive-hint--visible');
     } else {
-      playImmersiveHintEl.innerHTML = '';
+      if (playImmersiveHintEl.innerHTML) playImmersiveHintEl.innerHTML = '';
       playImmersiveHintEl.classList.remove('play-immersive-hint--visible');
     }
   }
-  if (immersive) return;
   const carryHint = carryPrompt
     ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${strengthHudObjectPreviewHtml(carryPrompt)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
       `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Place [E]</span>` +
       `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
       `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
     : '';
-  const grabHint = grabPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${strengthHudObjectPreviewHtml(grabPrompt)}(${String(grabPrompt.displayName || detailLabelFromItemKey(grabPrompt.itemKey) || 'Detail')}) Grab [E]</span>`
-    : '';
   const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
-  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${grabHint}${telem}`;
+  const infoHtml = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${telem}`;
+  if (infoBar.innerHTML !== infoHtml) infoBar.innerHTML = infoHtml;
 }
 
 function readWorldHoursPerRealSec() {
@@ -1207,6 +1215,8 @@ document.getElementById('chkForceLod0')?.addEventListener('change', () => {
   updateView();
 });
 syncForceLod0FromUi();
+
+void initMods();
 
 loadTilesetImages().then(async () => {
   if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {

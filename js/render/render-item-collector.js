@@ -59,6 +59,14 @@ import { isGhostPhaseShiftBurrowEligibleDex } from '../wild-pokemon/ghost-phase-
 import { speciesHasFlyingType } from '../pokemon/pokemon-type-helpers.js';
 import { markWildMinimapSpeciesKnown } from '../wild-pokemon/wild-minimap-species-known.js';
 
+function facingUnitFromPlayer(player) {
+  const f = String(player?.facing || 'down');
+  if (f === 'up') return { nx: 0, ny: -1 };
+  if (f === 'left') return { nx: -1, ny: 0 };
+  if (f === 'right') return { nx: 1, ny: 0 };
+  return { nx: 0, ny: 1 };
+}
+
 /**
  * Collects all items that need to be rendered in the current frame, sorted by Y.
  */
@@ -499,6 +507,28 @@ export function collectRenderItems(options) {
 
   // 6. Specialist Injections (Strength, Tree Falling)
   appendStrengthThrowRenderItems(renderItems, startX, startY, endX, endY);
+
+  if (player._strengthCarry && data) {
+    const hasActiveThrowAim =
+      !!playInputState.gamepadAimActive ||
+      (playInputState.throwAimInputMode === 'mouse' && !!playInputState.mouseValid);
+    if (!hasActiveThrowAim) {
+      const px = player.visualX ?? player.x;
+      const py = player.visualY ?? player.y;
+      const { nx, ny } = facingUnitFromPlayer(player);
+      const sx = px + 0.5;
+      const sy = py + 0.5;
+      const sc = player._strengthCarry;
+      renderItems.push({
+        type: 'strengthThrowIdleTarget',
+        sortY: sy + ny + 0.72,
+        landX: sx + nx,
+        landY: sy + ny,
+        cols: sc.cols,
+        rows: sc.rows
+      });
+    }
+  }
 
   if (playInputState.strengthCarryLmbAim && player._strengthCarry && data) {
     const { tx, ty } = aimAtCursor(player);

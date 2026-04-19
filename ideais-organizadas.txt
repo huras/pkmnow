@@ -1,0 +1,251 @@
+My ideias organizadas por tópico
+================================
+
+1) Visão do jogo e direção criativa
+-----------------------------------
+- Cada tile no mapa é uma "graminha" no caminho do jogador.
+- Em vez de batalha randômica por turnos, cada interação deve gerar descoberta (social, ambiental, etc).
+- Cada pedaço de bioma deve ser um "parquinho" novo para o player.
+- Usar o sistema dinâmico de pokémons summonados ao máximo para fazer coisas que os jogos clássicos não fazem.
+- It would be genius and fresh to tackle pokemon moves in a different way than turn-based games.
+- You start a village with your partner and start doing quests with pokemon around trying to recruit them to your BASES.
+
+
+2) Mundo, biomas e exploração
+-----------------------------
+- Rotas onde passa até carro.
+- Rotas com estrada de terra ou estrada normal.
+- Soltar o jogador no mapa com construções fixas em locais aleatórios, com conteúdo e "caminho de balas" guiando.
+- Wikipédia do mundo gerado:
+  - Cidades
+  - Líderes de ginásio
+  - Insígnias
+  - Equipes Pokémon
+  - Rotas
+  - NPCs notáveis
+  - Quests
+  - Biomes and Flora (talvez procedural no talo)
+  - Estruturas naturais (florestas, lagos, montanhas, mares)
+- Biome Inspiration:
+  - https://www.deviantart.com/yuysusl/gallery
+  - https://www.deviantart.com/chromecr/gallery
+  - https://www.deviantart.com/kyle-dove/gallery
+  - https://www.deviantart.com/snakemasterz
+
+
+3) Spawn, encontros e comportamento selvagem
+--------------------------------------------
+- Ao invés de random battle no matinho:
+  - mostrar animação de exclamação antes do encontro;
+  - o pokémon emerge do mato para atacar.
+- Tratar matinhos como poços de mini-eventos aleatórios envolvendo pokémons.
+- Pokémon pode spawnar e te atacar ao quebrar árvores ou rochas.
+- Shiny pokémon pode fugir.
+- Wild battling:
+  - quando atacado, pokémon vira aggro;
+  - range de visão atual dos selvagens parece curto.
+- A chunk onde o pokémon spawna é domínio/habitat dele:
+  - defende de outros pokémons;
+  - defende de voadores querendo pousar;
+  - tenta dominar território alheio.
+- Spawn determinístico ou random:
+  - alguns fixos e outros random?
+- Spawns possíveis:
+  - 1 pokémon (por chance)
+  - 2 básicos iguais
+  - 2 básicos diferentes
+  - 1 básico + 1 estágio 1
+  - 2 básicos + 1 estágio 1
+  - 4 básicos + 2 estágio 1 + 1 estágio 2
+
+
+4) Eventos emergentes e sociais
+-------------------------------
+- Events:
+  - Fight over food
+  - Fight over disagreement
+  - Fight over territory
+  - Successful Love declaration
+  - Failed Love declaration
+  - Two pokemon talking (joke / falando de outro pokémon)
+  - Pokémon selvagem recolhendo details colocados pelo player para otimizar memória (até 30 tiles)
+  - Korok events (marcados no minimapa, procedural porém determinísticos)
+  - Tempestade global e terremoto (Groudon vs Kyogre)
+- Revoada interativa (Butterfree, Pidgey etc) circulando o player, pousando às vezes e indo embora.
+- Ghost attack at night.
+- Silph Scope protege.
+- Em certas regiões perigosas, pokémons selvagens e capturados ficam berserk.
+
+
+5) Recursos, crafting e sobrevivência
+-------------------------------------
+- Craft estilo Zelda BOTW:
+  - poções
+  - comidas
+  - pokébolas
+- Árvores de berry naturais e em grupo (self-cleanse de status):
+  - Oran Berry
+  - Cherri Berry
+  - Pecha Berry
+- Pokémons de planta coletam grama em materiais úteis ao invés de só destruir.
+- Árvores idem, porém mais complexo por causa do tronco.
+- Fazenda com pokémons e produtos:
+  - Gloom -> acid
+  - Miltank -> leite
+  - Mareep -> lã
+  - Tauros -> força
+  - Pidgey -> ovos
+- Construir pontes.
+- Plantar sementes.
+
+
+6) Interações elementais e físicas no ambiente
+----------------------------------------------
+- Fogo queima grama e árvores para abrir caminho.
+- Magnemite e Magneton com ataque único "Screw Bullet" para ativar máquinas antigas.
+- Cristais azuis com propriedades elétricas para puzzles (ex: quebrar cristal que alimenta circuito e trava porta).
+- Quebrar rochas jogando de altura para obter conteúdo.
+- Quebrar nozes jogando de altura.
+- Pokémon precisando que você acenda algo.
+- Pokémon precisando apagar fogo (ou salvar ovos do incêndio).
+
+
+7) Montaria, travessia e risco
+------------------------------
+- Riding pokemon serves to avoid aggressive pokemon on your path.
+- Alguns pokémons ainda conseguem te alcançar mesmo montado; planejar rota.
+- Riding pokemon can jump small cliffs up to 2 tiles high depending on the pokemon.
+
+
+8) Pontos de interesse e estruturas especiais
+---------------------------------------------
+- Hanging bridges connecting points of interest in mountains.
+- Snorlax bloqueando corredores naturais entre relevos altos.
+- Ghost Ship que navega terra e mar, escondendo/aparecendo no mapa.
+  - Quem está dentro do navio ignora física externa (magia do navio).
+- Cemitério com pokémons fantasma.
+- Pokémon nests:
+  - Beedrill Hive (chão de mel, labirinto de cera, Beedrill/Kakuna/Weedle)
+  - Venusaur Nest (deep forest, shallow caves)
+  - Charizard Nest (topo da montanha, shallow caves)
+  - Blastoise Nest (fundo do oceano, águas profundas)
+  - Meganium Nest (deep forest, shallow water)
+  - Typhlosion Nest
+
+
+9) Korok-like eventos e microquests
+-----------------------------------
+- Koroks (precisa de sistema de diálogo + sistema melhor de eventos selvagens).
+- Posicionamento procedural porém determinístico; salvo para impedir duplicidade.
+- Tipos de evento:
+  - Árvore balança em velocidade 2x ao usar tackle/cut/burn:
+    - cai Ekans e Rattata; Rattata pede ajuda
+    - derrotar Ekans -> ganha korok; Rattata vira wild
+    - pode cair Meowth preso na árvore; xinga e agradece
+    - depois viram wild ou somem após sair da tela
+  - 0014 + 0015:
+    - Kakuna pede ajuda para chegar numa Beedrill hive
+    - ao colocar no chão, dá korok e Beedrill leva embora
+  - 0011:
+    - Metapod pede ajuda para achar árvore grande de certa cor
+    - sobe e some após recompensa
+  - Marowak procurando até 3 Cubone babies
+    - 1 korok seed por bebê (entrega só quando todos forem encontrados)
+  - Levar crystal/rock para pokémon e completar formas pixeladas (círculo, quadrado)
+    - não faltar mais de 2 pedras para não ficar chato
+- Outros eventos de NPC:
+  - treinadores buscando batalha
+  - treinadores buscando capturar pokémon específico
+  - NPCs coletando itens no campo
+  - NPCs buscando vegetação/rocha/cristal raro
+
+
+10) Dungeons, templos e design de abordagem
+-------------------------------------------
+- Temples:
+  - Puzzle de Strength com pedra cúbica que desliza (details especiais)
+  - Puzzle de gelo com sliding; usar fogo/força para quebrar cristais de gelo (regeneram em 30s)
+- Dungeons inspiradas em BOTW:
+  - labirintos gigantes e altos
+  - lugar totalmente escuro
+  - ilha afastada que exige glider
+- Fazer dungeons que podem ser abordadas por vários ângulos.
+- Referência: Hyrule Castle em Zelda BOTW.
+- Link: https://youtu.be/TI7X27QLFdQ?si=W6VIEjiVblQISt_j&t=1128
+- Vídeo citado: "The Two Zelda Formulas Need to Have a Baby".
+
+
+11) Sistema de combate/moves reimaginado por elemento
+-----------------------------------------------------
+- Fire: Embers, Flames, Explosions, Heat.
+- Grass: Leafs, Vines, Sunlight, Seeds, Flowers, Fruits, Plants.
+- Water: Splashes, Streams, Waves, Mist, Bubbles.
+- Electric: Sparks, Bolts, Storm, Charge, ElectroMagnetism.
+- Rock: Pebbles, Boulders, Impact, Minerals.
+- Ground: Dust, Quick Sand, Quake.
+- Flying: Wind Spirals, Wind Cuts, Horizontal Line Wind, Dashes, Updrafts.
+- Ice: Shards, Freeze, Blizzard, Slip.
+- Psychic: Force Fields, Telekinesis, Psychic Raw Power, Pulses, Control.
+- Ghost: Phasing, Curses, Shadows.
+- Dark: Strikes, Corruption, Fear.
+- Steel: Blades, Armor, Impact.
+- Fairy: Light, Glitter, Burst.
+- Dragon: Breath, Roar, Fury.
+- Fighting: Punches, Throws, Focus.
+- Poison: Toxins, Clouds, Acid.
+- Bug: Swarm, Silk, Bite.
+- Exemplo de analogia com armas do Zelda:
+  - Lança = lança-chamas
+  - Claymore = Fire Spin?
+  - Sword = Ember?
+
+
+12) Progressão, controle e utilidades
+-------------------------------------
+- Upar o número de pokémons que pode controlar fora da pokébola.
+- Item para impedir pokémons berserk de saírem da pokébola e te atacarem.
+- Runes:
+  - Remote Bombs
+  - Magnesis
+  - Stasis
+  - Cryonis
+- Navis: mostra minimapa.
+- Radaris: mostra pokémons no minimapa.
+- Auto e manual add marks no mapa para pontos de interesse (emoji).
+
+
+13) Ferramentas de desenvolvimento e documentação técnica
+---------------------------------------------------------
+- Element Interactions Debug Page:
+  - mini mundos com pokémons testando mecânicas sociais e fogo na grama;
+  - uma chunk isolada por caso;
+  - tudo pausado, pronto para play imediato;
+  - usar o MESMO código do jogo final.
+- Terminologia recomendada:
+  - Macro Cell (macro): grade grossa do gerador (bioma/elevação base)
+    - índices: macroX, macroY
+    - tamanho: MACRO_TILE_STRIDE micro-tiles por lado
+    - fonte: data.width, data.height, data.biomes[...]
+  - Micro Tile (micro): menor unidade jogável (colisão, walkability, spawn, path)
+    - coords: mx, my ou x/y em espaço micro
+    - funções: getMicroTile(...), canWalkMicroTile(...)
+    - hoje MACRO_TILE_STRIDE = 32 (não 48)
+  - Render/Atlas Tile (atlas/spriteTile): tile visual do tileset/autotile
+    - IDs/roles tipo CENTER e EDGE_*
+    - não é distância de mundo, é lookup/render
+    - exemplos: getBaseTerrainSpriteId, TERRAIN_SETS[*].roles[...]
+- Notas rápidas de constantes:
+  - MACRO_TILE_STRIDE (terrain + wild biome grid — single source)
+  - WILD_WANDER_RADIUS_TILES (wild/constants.js only; tune wander, not grid)
+  - GRASS_FIRE_BURN_PHASE_SEC
+
+
+14) Referências, links e notas externas
+---------------------------------------
+- Projeto de referência local: H:\cursor\zelda-BOTW-map-generator-and-player
+- Ao terminar o projeto Pokémon, mandar para:
+  - Palworld
+  - Snulch (https://www.youtube.com/@gamer.snulch)
+  - Nintendo
+  - Michael
+  - Hunf

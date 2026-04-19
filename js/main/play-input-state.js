@@ -20,11 +20,22 @@ export const playInputState = {
   gamepadFieldRmbHeld: false,
   /** LT / ZL held — mirrors MMB field slot (bind slot 3). */
   gamepadFieldMmbHeld: false,
+  /** RB / R1 held — dedicated Strength carry throw button on gamepad. */
+  gamepadThrowHeld: false,
   /**
    * True while the move bind wheel is driven by the right stick this frame
    * (skips mouse-based hover in `updateBindWheelHover`).
    */
   gamepadWheelAimActive: false,
+  /** Right-stick world-aim direction (normalized) for throw/field helpers when mouse aim is unavailable. */
+  gamepadAimNx: 0,
+  gamepadAimNy: 1,
+  /** 0..1 right-stick magnitude after deadzone (used as throw distance scaler). */
+  gamepadAimMag01: 0,
+  /** True when right stick has enough deflection for directional aiming. */
+  gamepadAimActive: false,
+  /** Last throw-aim source preference while in play. */
+  throwAimInputMode: /** @type {'mouse' | 'gamepad'} */ ('mouse'),
   /** When the dual gamepad bind wheels are open: world sim runs at 5% speed (UI/canvas still real-time). */
   dualBindWheelSlowMo: false,
   /** Left Ctrl held — combat modifier (counter slots). */

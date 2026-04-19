@@ -1,3 +1,5 @@
+import { PluginRegistry } from './core/plugin-registry.js';
+
 export const WILD_POKEMON = {
   0: ['Tentacool', 'Magikarp', 'Staryu', 'Horsea', 'Shellder', 'Wingull', 'Corphish', 'Wailmer', 'Chinchou', 'Remoraid', 'Buizel', 'Finneon'], // OCEAN
   1: ['Krabby', 'Slowpoke', 'Shellder', 'Psyduck', 'Tentacool', 'Horsea', 'Barboach', 'Marill', 'Corphish', 'Corsola', 'Buizel', 'Shellos'], // BEACH
@@ -107,5 +109,7 @@ export const WILD_POKEMON = {
 };
 
 export function getEncounters(biomeId) {
+  const mod = PluginRegistry.getBiomeById(biomeId);
+  if (mod?.encounters) return mod.encounters;
   return WILD_POKEMON[biomeId] || ['MissingNo'];
 }

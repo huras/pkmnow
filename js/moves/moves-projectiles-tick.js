@@ -40,6 +40,7 @@ import {
 } from '../play-grass-fire.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { spawnWaterGunImpactWaveParticles } from './water-gun-ball.js';
+import { rumblePlayerGamepadPokemonHitDealt } from '../main/play-gamepad-rumble.js';
 
 /**
  * @param {{
@@ -129,6 +130,7 @@ export function tickActiveProjectiles(ctx) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
           if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(hx, hy, z);
           set.add(wild);
@@ -274,6 +276,7 @@ export function tickActiveProjectiles(ctx) {
           const lastDmg = wild._prismaticStreamDmgSec;
           if (Number.isFinite(lastDmg) && nowSecWild - lastDmg < PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC) return;
           if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           wild._prismaticStreamDmgSec = nowSecWild;
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(hx, hy, z);
@@ -368,6 +371,7 @@ export function tickActiveProjectiles(ctx) {
           len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
         if (dist > r + hurtR) return;
         if (wild.takeDamage) wild.takeDamage(proj.damage);
+        if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
         spawnHitParticles(hx, hy, z);
         set.add(wild);
       });
@@ -614,6 +618,7 @@ export function tickActiveProjectiles(ctx) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (!checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) return;
           if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(proj.x, proj.y, z);
           if (proj.type === 'incinerateCore' || proj.type === 'fireBlastCore' || proj.type === 'confusionOrb') {

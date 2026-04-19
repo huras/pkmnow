@@ -3,6 +3,7 @@ import { parseShape, seededHash } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
 import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
+import { rumblePlayerGamepadPickupSoft } from './play-gamepad-rumble.js';
 import { setPlayerSpeechBubbleForDetailPickup } from '../social/speech-bubble-state.js';
 
 /** Ground pickup radius for dropped crystal items (tiles). */
@@ -285,6 +286,7 @@ export function updateCrystalDropsAndPickup(dt, player) {
         collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
         if (isCrystalItemKey(key)) crystalLootCount += stack;
         playItemPickupSfx(player);
+        rumblePlayerGamepadPickupSoft();
         setPlayerSpeechBubbleForDetailPickup(player, key, stack);
         activeCrystalDrops.splice(i, 1);
       }

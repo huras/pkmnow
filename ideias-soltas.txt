@@ -29,6 +29,7 @@ Arvores mesma coisa so que mais complexo pq tem tronco tbm
 Mecanicas pokemon
 	Magnemite e Magneton terão "Screw Bullet" unique attack that turns some ancient machines on the world.
 		Puzzle Temples!
+	Cristais azuis que tem propriedades elétricas pra serem usados nos puzzles. (tipo quebrar um que tá alimentando um cirtcuito que tá fechando uma porta)
 
 Points of interest:
 	Hanging bridges connectin points of interest on mounts
@@ -178,6 +179,7 @@ Koroks	(needs dialog system, better wild pokemon event system)
 		Other trainners looking to catch a certain pokemon
 		Other NPCs collecting things on the field
 		Other NPCs looking for a certain rare vegetation item or rock or crystal or any detail
+		Revoada interativa circling back passando algumas vezes sobre o player de butterfrees, pidgey ou outro pokemon voador, talvez até pousem antes de ir voar e ir embora e sumir do mapa
 
 Temples
 	Puzzles de Strength, joga a pedra cubica de e ela desliza (pois sãod etails especiais para puzzles)
@@ -332,3 +334,25 @@ Ex:
 	Lança = Lança chamas
 	Claymore = Fire Spin?
 	Sword = Ember?
+
+A chunk onde o pokemon spawna é o dminio/habitat dele
+ele defende d eoutros pokemon, de pokemon voador querendo pousar (gatoas faze misso e cachorro tbm)
+tenta domindar o territorio dos outros
+spawn deterministico ou random? hmmmm
+	alguns fixos e outros random?
+
+Runes
+	Remote Bombs
+	Magnesis
+	Stasis
+	Cryonis
+
+	Navis - Mostra minimapa
+	Radaris - Mostra pokemon no minimapa
+
+
+Biome Inspration
+	https://www.deviantart.com/yuysusl/gallery
+	https://www.deviantart.com/chromecr/gallery
+	https://www.deviantart.com/kyle-dove/gallery
+	https://www.deviantart.com/snakemasterz

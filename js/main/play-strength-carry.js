@@ -462,7 +462,7 @@ export function updateStrengthCarryInteraction(dt, player, data) {
 /**
  * Returns a grab prompt payload when a liftable Strength detail is in range.
  * Includes footprint metadata used by world-space UI highlights.
- * @returns {{ itemKey: string, displayName: string | null, wildDexId?: number, kind?: 'rock' | 'faintedWild', ox?: number, oy?: number, cols?: number, rows?: number } | null}
+ * @returns {{ itemKey: string, displayName: string | null, wildDexId?: number, kind?: 'rock' | 'faintedWild', ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null}
  */
 export function getStrengthGrabPromptInfo(player, data) {
   if (!player || !data) return null;
@@ -486,7 +486,9 @@ export function getStrengthGrabPromptInfo(player, data) {
           ox: Math.floor(Number(cand.ox) || 0),
           oy: Math.floor(Number(cand.oy) || 0),
           cols,
-          rows
+          rows,
+          cx: Number(p.cx),
+          cy: Number(p.cy)
         };
       }
     }
@@ -503,7 +505,9 @@ export function getStrengthGrabPromptInfo(player, data) {
     ox: Math.floor(Number(fainted.x) || 0),
     oy: Math.floor(Number(fainted.y) || 0),
     cols: 1,
-    rows: Math.max(1, Math.round((Number(cfg?.heightTiles) || 1.1) / 1.8))
+    rows: Math.max(1, Math.round((Number(cfg?.heightTiles) || 1.1) / 1.8)),
+    cx: Number(fainted.x),
+    cy: Number(fainted.y)
   };
 }
 
