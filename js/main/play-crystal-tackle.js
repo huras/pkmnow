@@ -914,6 +914,17 @@ export function strengthDropCarriedAsPickup(liftOx, liftOy, cols, rows, itemKey,
   clearScatterSolidBlockCache();
 }
 
+/** Decorative grass scatter tiles only — skipped by Earthquake radial breaks. */
+function scatterItemKeyIsPureGrassDecoration(itemKey) {
+  const k = String(itemKey || '').toLowerCase();
+  return (
+    k.includes('grass [1x1]') ||
+    k.includes('small-grass') ||
+    k.includes('sand-grass') ||
+    k.includes('snow-grass')
+  );
+}
+
 function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
   const dx = bx - ax;
   const dy = by - ay;
@@ -1092,7 +1103,11 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  *   worldHitOnceSet?: Set<string>,
  *   spawnedHitOnceSet?: Set<number>,
  *   hitSource?: 'tackle' | 'cut' | 'other',
- *   detailCharge01?: number | null
+ *   detailCharge01?: number | null,
+ *   excludePureGrassScatterHits?: boolean,
+ *   reusedConsumedWorld?: Set<string>,
+ *   reusedConsumedSpawned?: Set<number>,
+ *   originScanStepTiles?: number
  * }} [opts]
  */
 export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
@@ -1123,7 +1138,11 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   const microH = data.height * MACRO_TILE_STRIDE;
   /** @type {Array<any>} */
   const hits = [];
-  const steps = Math.max(2, Math.ceil(segLen / TACKLE_ORIGIN_SCAN_STEP_TILES));
+  const stepTiles =
+    Number.isFinite(opts.originScanStepTiles) && opts.originScanStepTiles > 0.08
+      ? opts.originScanStepTiles
+      : TACKLE_ORIGIN_SCAN_STEP_TILES;
+  const steps = Math.max(2, Math.ceil(segLen / stepTiles));
   const sampledOriginKeys = new Set();
   const originMemo = new Map();
   const tileMemo = new Map();
@@ -1183,6 +1202,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
           const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
           const ht = segmentCircleFirstHitT(px, py, ex, ey, p.cx, p.cy, rr);
           if (ht == null) continue;
+          if (opts.excludePureGrassScatterHits && scatterItemKeyIsPureGrassDecoration(p.itemKey)) continue;
           hits.push({
             type: 'worldDetail',
             rootOx: ox,
@@ -1240,6 +1260,7 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
         const ht = segmentCircleFirstHitT(px, py, ex, ey, cx0, cy0, rr);
         if (ht == null) continue;
+        if (opts.excludePureGrassScatterHits && scatterItemKeyIsPureGrassDecoration(itemKey)) continue;
         hits.push({
           type: 'worldDetail',
           rootOx: ox,
@@ -1257,8 +1278,9 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     return;
   }
   hits.sort((a, b) => a.t - b.t);
-  const consumedSpawned = new Set();
-  const consumedWorld = new Set();
+  const consumedSpawned =
+    opts.reusedConsumedSpawned instanceof Set ? opts.reusedConsumedSpawned : new Set();
+  const consumedWorld = opts.reusedConsumedWorld instanceof Set ? opts.reusedConsumedWorld : new Set();
 
   for (const hit of hits) {
     if (hit.type === 'spawnedSmall') {
@@ -1457,6 +1479,57 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     }
   }
   endChunkRebakeBatch();
+}
+
+/**
+ * Circular ground shock: many short tackle sweeps from the epicenter share consumed sets so each
+ * prop is damaged at most once. Ray count scales with radius (still an approximation vs a true ring).
+ *
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} radiusTiles
+ * @param {object | null | undefined} data
+ * @param {Parameters<typeof tryBreakDetailsAlongSegment>[5]} [opts]
+ */
+export function tryBreakDetailsInCircle(cx, cy, radiusTiles, data, opts = {}) {
+  if (!data) return;
+  const px = Number(cx);
+  const py = Number(cy);
+  const R = Math.max(0.08, Number(radiusTiles) || 0);
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(R)) return;
+  const consumedWorld = new Set();
+  const consumedSpawned = new Set();
+  /** Coarser stepping on long rays keeps huge quakes from freezing the main thread. */
+  const originScanStepTiles =
+    R > 9 ? 0.55 : R > 6.5 ? 0.42 : R > 4.5 ? 0.32 : TACKLE_ORIGIN_SCAN_STEP_TILES;
+  const base = {
+    ...opts,
+    reusedConsumedWorld: consumedWorld,
+    reusedConsumedSpawned: consumedSpawned,
+    originScanStepTiles
+  };
+  /**
+   * One outer batch: each segment used to end its own rebake batch, so large rings flushed
+   * chunk rebakes hundreds of times per impact (major hitch). Nested depth defers one flush.
+   */
+  beginChunkRebakeBatch();
+  try {
+    /** Huge AoE: one dense ring; smaller shocks keep inner+outer ring for coverage. */
+    const ringFrac = /** @type {const} */ (R > 9.5 ? [0.94] : [1, 0.52]);
+    for (let ri = 0; ri < ringFrac.length; ri++) {
+      const rEff = R * ringFrac[ri];
+      const n = Math.min(56, Math.max(18, Math.ceil(12 + rEff * 8.5)));
+      const phase = ri * 0.5;
+      for (let i = 0; i < n; i++) {
+        const a = ((i + phase) / n) * Math.PI * 2;
+        const ex = px + Math.cos(a) * rEff;
+        const ey = py + Math.sin(a) * rEff;
+        tryBreakDetailsAlongSegment(px, py, ex, ey, data, base);
+      }
+    }
+  } finally {
+    endChunkRebakeBatch();
+  }
 }
 
 /**

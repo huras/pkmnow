@@ -1,9 +1,10 @@
 /**
- * Wild "boss" rolls: promote base encounter dex to a strong Gen-1 stage + extra HP.
- * Only species with a real Gen-1 evolution target are eligible.
+ * Wild "boss" rolls: promote base encounter dex to a strong evolution stage + extra HP.
+ * Only species with a mapped evolution target are eligible.
  */
 
 import { seededHashInt } from '../tessellation-logic.js';
+import { NATIONAL_DEX_MAX } from '../pokemon/gen1-name-to-dex.js';
 
 /** Chance 0..255 that a spawn eligible for promotion becomes a boss (evolved + high HP). */
 export const WILD_BOSS_ROLL_THRESHOLD = 52; // ~20%
@@ -12,11 +13,11 @@ export const WILD_BOSS_ROLL_THRESHOLD = 52; // ~20%
 export const WILD_BOSS_HP_MULT = 4.6;
 
 /** Dex IDs that never become boss *targets* (stay rare spawns as themselves). */
-const BOSS_PROMOTE_TARGET_BLOCK = new Set([144, 145, 146, 150, 151]);
+const BOSS_PROMOTE_TARGET_BLOCK = new Set([144, 145, 146, 150, 151, 243, 244, 245, 249, 250, 251]);
 
 /**
- * Base dex → final (or strongest) Gen-1 evolution in the same family.
- * Singles / no Gen-1 evolution: omit key → no boss promotion from that base.
+ * Base dex → final (or strongest) evolution in the same family (Gen 1–2 scope).
+ * Singles / no evolution: omit key → no boss promotion from that base.
  */
 export const WILD_BOSS_EVOLVE_TO = {
   1: 3,
@@ -88,7 +89,37 @@ export const WILD_BOSS_EVOLVE_TO = {
   138: 139,
   140: 141,
   147: 149,
-  148: 149
+  148: 149,
+  152: 154,
+  153: 154,
+  155: 157,
+  156: 157,
+  158: 160,
+  159: 160,
+  161: 162,
+  163: 164,
+  165: 166,
+  167: 168,
+  170: 171,
+  175: 176,
+  177: 178,
+  179: 181,
+  183: 184,
+  187: 189,
+  191: 192,
+  194: 195,
+  204: 205,
+  209: 210,
+  216: 217,
+  218: 219,
+  220: 221,
+  223: 224,
+  228: 229,
+  231: 232,
+  236: 237,
+  239: 125,
+  240: 126,
+  246: 248
 };
 
 /**
@@ -102,7 +133,7 @@ export const WILD_BOSS_EVOLVE_TO = {
  */
 export function rollBossPromotedDex(baseDex, mx, my, sx, sy, worldSeed) {
   const d0 = Math.floor(Number(baseDex)) || 0;
-  if (d0 < 1 || d0 > 151) return { dex: d0, isBoss: false, hp: 50, maxHp: 50 };
+  if (d0 < 1 || d0 > NATIONAL_DEX_MAX) return { dex: d0, isBoss: false, hp: 50, maxHp: 50 };
 
   let target = WILD_BOSS_EVOLVE_TO[d0];
   if (target == null || target === d0) {

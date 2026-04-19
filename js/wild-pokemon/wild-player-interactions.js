@@ -213,8 +213,9 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
 
 /**
  * Circular melee hit used by field skills like Cut (and charged spin when `opts` matches).
- * @param {{ damage?: number, knockback?: number, cutWildHitSound?: boolean }} [opts]
+ * @param {{ damage?: number, knockback?: number, cutWildHitSound?: boolean, ignoreProjectileZForGroundWave?: boolean }} [opts]
  *   When `cutWildHitSound` is true, each wild hit plays Cut contact SFX (not used for tackle spin).
+ *   `ignoreProjectileZForGroundWave`: Earthquake-style floor wave — hit any wild in horizontal radius regardless of float height.
  * @returns {{ hit: boolean, hitCount: number }}
  */
 export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radiusTiles, opts = {}) {
@@ -229,11 +230,12 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_CUT_WILD_KNOCKBACK);
   const playCutHitSfx = !!opts.cutWildHitSound;
   const pz = Number(player.z) || 0;
+  const skipZ = !!opts.ignoreProjectileZForGroundWave;
   let hitCount = 0;
   for (const e of entitiesByKey.values()) {
     if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
     const dex = e.dexId ?? 1;
-    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
+    if (!skipZ && !projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
     const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
     const rr = radius + getPokemonHurtboxRadiusTiles(dex);
     const dx = hx - cx;

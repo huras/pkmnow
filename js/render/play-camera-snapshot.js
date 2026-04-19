@@ -7,18 +7,31 @@ import { worldContinuousFromCanvasPixelsPlayCam } from '../main/play-pointer-wor
  * Last camera used for play render — screen→world picking must use this so it matches
  * what is drawn (and so `mousemove` does not call `computePlayViewState` extra times
  * and advance smoothing out of sync with the frame).
- * @type {{ effTileW: number, effTileH: number, currentTransX: number, currentTransY: number, cw: number, ch: number } | null}
+ * @type {{
+ *   effTileW: number,
+ *   effTileH: number,
+ *   currentTransX: number,
+ *   currentTransY: number,
+ *   cw: number,
+ *   ch: number,
+ *   earthquakeOffXPx: number,
+ *   earthquakeOffYPx: number
+ * } | null}
  */
 let lastSnapshot = null;
 
 export function setPlayCameraSnapshot(cam) {
+  const eqx = Number(cam.earthquakeOffXPx) || 0;
+  const eqy = Number(cam.earthquakeOffYPx) || 0;
   lastSnapshot = {
     effTileW: cam.effTileW,
     effTileH: cam.effTileH,
     currentTransX: cam.currentTransX,
     currentTransY: cam.currentTransY,
     cw: cam.cw,
-    ch: cam.ch
+    ch: cam.ch,
+    earthquakeOffXPx: eqx,
+    earthquakeOffYPx: eqy
   };
 }
 
@@ -42,12 +55,21 @@ export function clearPlayCameraSnapshot() {
 export function isWorldTileOnPlayCanvas(worldX, worldY) {
   const snap = lastSnapshot;
   if (!snap || !Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
-  const { effTileW: W, effTileH: H, currentTransX: tx, currentTransY: ty, cw, ch } = snap;
+  const {
+    effTileW: W,
+    effTileH: H,
+    currentTransX: tx,
+    currentTransY: ty,
+    cw,
+    ch,
+    earthquakeOffXPx: eqx = 0,
+    earthquakeOffYPx: eqy = 0
+  } = snap;
   if (!(W > 0) || !(H > 0) || !(cw > 0) || !(ch > 0)) return null;
-  const minX = (0 - tx) / W;
-  const maxX = (cw - tx) / W;
-  const minY = (0 - ty) / H;
-  const maxY = (ch - ty) / H;
+  const minX = (0 - tx - eqx) / W;
+  const maxX = (cw - tx - eqx) / W;
+  const minY = (0 - ty - eqy) / H;
+  const maxY = (ch - ty - eqy) / H;
   return worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY;
 }
 

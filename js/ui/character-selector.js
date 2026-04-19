@@ -1,6 +1,6 @@
 import { player, setPlayerSpecies } from '../player.js';
 import { summonDebugWildPokemon } from '../wild-pokemon/index.js';
-import { getGen1SpeciesName, padDex3 } from '../pokemon/gen1-name-to-dex.js';
+import { getGen1SpeciesName, padDex3, NATIONAL_DEX_MAX } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
@@ -117,7 +117,7 @@ export class CharacterSelector {
       this.updatePlayItemsHud();
     });
 
-    for (let i = 1; i <= 151; i++) {
+    for (let i = 1; i <= NATIONAL_DEX_MAX; i++) {
       this.allSpecies.push({
         id: i,
         name: getGen1SpeciesName(i)

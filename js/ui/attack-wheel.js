@@ -8,6 +8,7 @@ const TYPE_ORDER = /** @type {const string[]} */ ([
   'water',
   'grass',
   'electric',
+  'ground',
   'ice',
   'psychic',
   'poison',
@@ -23,6 +24,7 @@ const TYPE_LABELS = /** @type {Record<string, string>} */ ({
   water: 'Water',
   grass: 'Grass',
   electric: 'Electric',
+  ground: 'Ground',
   ice: 'Ice',
   psychic: 'Psychic',
   poison: 'Poison',
@@ -73,6 +75,8 @@ function getMoveType(moveId) {
     case 'thunderShock':
     case 'thunderbolt':
       return 'electric';
+    case 'earthquake':
+      return 'ground';
     case 'confusion':
     case 'psychic':
     case 'psywave':

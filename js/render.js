@@ -128,6 +128,7 @@ import {
 } from './main/play-crystal-tackle.js';
 import { playInputState } from './main/play-input-state.js';
 import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
+import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
@@ -246,12 +247,23 @@ export function render(canvas, data, options = {}) {
       flightActive: !!player.flightActive,
       framingHeightTiles: POKEMON_HEIGHTS[playerDexForCam] || 1.1
     });
-    setPlayCameraSnapshot({ ...playCam, cw, ch });
-    applyPlayPointerWithPlayCam(canvas, playCam);
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
     const time = options.settings?.time || 0;
+    const earthquakeShakePx = getEarthquakeShakePx(
+      time,
+      getEarthquakeActiveIntensity01(),
+      playCam.effTileW
+    );
+    setPlayCameraSnapshot({
+      ...playCam,
+      cw,
+      ch,
+      earthquakeOffXPx: earthquakeShakePx.x,
+      earthquakeOffYPx: earthquakeShakePx.y
+    });
+    applyPlayPointerWithPlayCam(canvas, playCam, earthquakeShakePx);
     const smoothLev = player.flightLevelVisual ?? (player.z || 0);
     const flightHudActive = speciesHasFlyingType(playerDexForCam) && player.flightActive;
     const isPlayerWalkingAnim =
@@ -324,8 +336,8 @@ export function render(canvas, data, options = {}) {
       setPlayChunk(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
     }
 
-    const currentTransX = playCam.currentTransX;
-    const currentTransY = playCam.currentTransY;
+    const currentTransX = playCam.currentTransX + earthquakeShakePx.x;
+    const currentTransY = playCam.currentTransY + earthquakeShakePx.y;
     const chunkDrawScale = playCam.viewScale;
     const prevSmoothing = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = chunkDrawScale < 0.999;
@@ -852,7 +864,8 @@ export function render(canvas, data, options = {}) {
       windDirRad: options.settings?.weatherWindDirRad ?? 0,
       screenTint: options.settings?.weatherScreenTint,
       splashTargets,
-      entityShadowSprites
+      entityShadowSprites,
+      earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0
     });
 
     const minimapCanvas = document.getElementById('minimap');

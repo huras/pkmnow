@@ -18,6 +18,8 @@ import {
   tryReleasePlayerPsybeam,
   castFireSpinMove,
   castFireSpinCharged,
+  castEarthquakeMove,
+  castEarthquakeCharged,
   pushParticle
 } from '../moves/moves-manager.js';
 import { tickFireSpinHold } from '../moves/fire-spin-move.js';
@@ -89,6 +91,8 @@ function getMoveTypeClass(moveId) {
     case 'incinerate':
     case 'sunnyDay':
       return 'type-fire';
+    case 'earthquake':
+      return 'type-ground';
     case 'absorb':
     case 'megaDrain':
     case 'petalDance':
@@ -781,6 +785,14 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
       castFireSpinMove(sx, sy, tx, ty, pl);
     } else {
       castFireSpinCharged(sx, sy, tx, ty, pl, charge01 || 0);
+    }
+    return;
+  }
+  if (moveId === 'earthquake') {
+    if (heldMs < TAP_MS) {
+      castEarthquakeMove(sx, sy, tx, ty, pl);
+    } else {
+      castEarthquakeCharged(sx, sy, tx, ty, pl, charge01 || 0);
     }
     return;
   }

@@ -2,6 +2,7 @@ import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape, seededHash } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
+import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
 import { setPlayerSpeechBubbleForDetailPickup } from '../social/speech-bubble-state.js';
 
 /** Ground pickup radius for dropped crystal items (tiles). */
@@ -167,6 +168,31 @@ export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
     ...visual,
     itemKey: resolvedItemKey
   });
+}
+
+/**
+ * Break visible crystal pickups in a world-tile radius (Earthquake etc.).
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} radiusTiles
+ * @param {object | null} data
+ */
+export function shatterCrystalDropsInRadius(cx, cy, radiusTiles, data) {
+  if (!data) return;
+  const px = Number(cx);
+  const py = Number(cy);
+  const r = Math.max(0.05, Number(radiusTiles) || 0);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+  const r2 = r * r;
+  for (let i = activeCrystalDrops.length - 1; i >= 0; i--) {
+    const d = activeCrystalDrops[i];
+    const dx = Number(d.x) - px;
+    const dy = Number(d.y) - py;
+    if (dx * dx + dy * dy > r2) continue;
+    playRockSmashingSfx({ x: d.x, y: d.y });
+    spawnCrystalShards(Math.floor(d.x), Math.floor(d.y), String(d.itemKey || 'small-blue-crystal [1x1]'), data);
+    activeCrystalDrops.splice(i, 1);
+  }
 }
 
 export function spawnCrystalShards(rootOx, rootOy, itemKey, data) {

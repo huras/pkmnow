@@ -29,6 +29,7 @@ import {
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
 import { syncWeatherAmbientAudio } from '../audio/weather-ambient-audio.js';
+import { syncEarthquakeAmbientAudio } from '../audio/earthquake-ambient-audio.js';
 import { syncFireLoopAudio } from '../audio/fire-loop-sfx.js';
 import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
@@ -66,7 +67,8 @@ function isPlayMovementKeyEvent(e) {
  *   getPlayFpsCompact?: () => boolean,
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
- *   advanceWorldTime?: (dt: number) => void
+ *   advanceWorldTime?: (dt: number) => void,
+ *   getGameTimeSec?: () => number
  * }} api When `getPlayFpsCompact` is true, `#play-fps` shows only the rolling FPS (minimal / immersive UI).
  */
 export function createGameLoop(api) {
@@ -80,7 +82,8 @@ export function createGameLoop(api) {
     getPlayFpsCompact,
     player,
     onPlayHudFrame,
-    advanceWorldTime
+    advanceWorldTime,
+    getGameTimeSec
   } = api;
 
   function gameLoop(timestamp) {
@@ -132,7 +135,7 @@ export function createGameLoop(api) {
 
     const currentData = getCurrentData();
     const tUpdPlayer0 = performance.now();
-    updatePlayer(dt, currentData);
+    updatePlayer(dt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
     updatePlayGrassRustle(dt, player, getAppMode() === 'play' ? currentData : null);
 
@@ -177,6 +180,7 @@ export function createGameLoop(api) {
       const tBgm0 = performance.now();
       syncBiomeBgm(currentData, player);
       syncWeatherAmbientAudio();
+      syncEarthquakeAmbientAudio(getGameTimeSec?.() ?? 0);
       syncFireLoopAudio(currentData, player);
       updateBreakdown.updBgmMs = performance.now() - tBgm0;
       const tHud0 = performance.now();

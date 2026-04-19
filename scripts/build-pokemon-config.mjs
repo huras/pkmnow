@@ -1,8 +1,8 @@
 /**
  * Regenerates js/pokemon/pokemon-config.js from:
- * - PokeAPI (base Speed + default typings)
- * - js/pokemon/pokemon-heights.js (heightTiles — hand-tuned)
- * - js/pokemon/gen1-name-to-dex.js (display names)
+ * - PokeAPI (base Speed + default typings + height in decimeters for Gen 2+ fallbacks)
+ * - Existing js/pokemon/pokemon-config.js (heightTiles for dex already present — preserves Gen 1 tuning)
+ * - js/pokemon/national-dex-registry.js (display names)
  *
  * Gen 1 type chart fixes (Red/Blue): no Steel; Clefairy/Jiggly lines are Normal;
  * Magnemite line pure Electric; Mr. Mime is Psychic-only.
@@ -10,12 +10,15 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
-const heightsPath = path.join(root, 'js', 'pokemon', 'pokemon-heights.js');
-const namesPath = path.join(root, 'js', 'pokemon', 'gen1-name-to-dex.js');
+const configPath = path.join(root, 'js', 'pokemon', 'pokemon-config.js');
+const registryPath = path.join(root, 'js', 'pokemon', 'national-dex-registry.js');
 const outPath = path.join(root, 'js', 'pokemon', 'pokemon-config.js');
+
+const { NATIONAL_DEX_MAX } = await import(pathToFileURL(path.join(root, 'js', 'pokemon', 'national-dex-registry.js')).href);
 
 /** @type {Record<number, string[]>} */
 const GEN1_TYPE_OVERRIDES = {
@@ -28,10 +31,10 @@ const GEN1_TYPE_OVERRIDES = {
   122: ['psychic']
 };
 
-function parseHeights(src) {
+function parseHeightsFromPokemonConfig(src) {
   /** @type {Record<number, number>} */
   const h = {};
-  const re = /^\s*(\d+)\s*:\s*([\d.]+)/gm;
+  const re = /^\s*(\d+)\s*:\s*\{[^}]*heightTiles:\s*([\d.]+)/gm;
   let m;
   while ((m = re.exec(src))) {
     h[Number(m[1])] = Number(m[2]);
@@ -39,23 +42,25 @@ function parseHeights(src) {
   return h;
 }
 
-function parseGen1Names(src) {
-  const m = src.match(/GEN1_LINES = `([\s\S]*?)`/);
-  if (!m) throw new Error('GEN1_LINES block not found');
-  return m[1].trim().replace(/\r\n/g, '\n').split('\n');
+/** Heuristic heightTiles when not present in existing config (Gen 2+); PokeAPI `height` is decimeters. */
+function heightTilesFromApiHeightDm(heightDm) {
+  const hd = Math.max(1, Number(heightDm) || 1);
+  const raw = hd * 0.22 + 1.1;
+  return Math.max(1.0, Math.min(9.0, Math.round(raw * 10) / 10));
 }
 
-async function fetchRows() {
+async function fetchRows(maxDex) {
   const rows = [];
-  for (let dex = 1; dex <= 151; dex++) {
-    const p = await fetch(`https://pokeapi.co/api/v2/pokemon/${dex}/`).then(
-      (r) => r.json()
-    );
+  for (let dex = 1; dex <= maxDex; dex++) {
+    const p = await fetch(`https://pokeapi.co/api/v2/pokemon/${dex}/`).then((r) => {
+      if (!r.ok) throw new Error(`PokeAPI ${dex}: ${r.status}`);
+      return r.json();
+    });
     const types = [...p.types]
       .sort((a, b) => a.slot - b.slot)
       .map((t) => t.type.name);
     const speed = p.stats.find((s) => s.stat.name === 'speed').base_stat;
-    rows.push({ dex, types, speed });
+    rows.push({ dex, types, speed, height: p.height });
   }
   return rows;
 }
@@ -65,15 +70,18 @@ function esc(str) {
 }
 
 async function main() {
-  const heightsSrc = fs.readFileSync(heightsPath, 'utf8');
-  const namesSrc = fs.readFileSync(namesPath, 'utf8');
-  const heights = parseHeights(heightsSrc);
-  const names = parseGen1Names(namesSrc);
-  const api = await fetchRows();
+  const configSrc = fs.readFileSync(configPath, 'utf8');
+  const heights = parseHeightsFromPokemonConfig(configSrc);
+  const { NATIONAL_DEX_LINES } = await import(pathToFileURL(registryPath).href);
+  if (!Array.isArray(NATIONAL_DEX_LINES) || NATIONAL_DEX_LINES.length !== NATIONAL_DEX_MAX) {
+    throw new Error(`Expected ${NATIONAL_DEX_MAX} national dex names`);
+  }
+
+  const api = await fetchRows(NATIONAL_DEX_MAX);
 
   const lines = [];
   lines.push(`/**
- * Gen 1 (#1–151) species data for gameplay tuning (height, motion, type logic).
+ * National Dex #1–${NATIONAL_DEX_MAX} species data for gameplay tuning (height, motion, type logic).
  * Regenerate: \`node scripts/build-pokemon-config.mjs\` (needs network).
  *
  * @typedef {'bug'|'dark'|'dragon'|'electric'|'fairy'|'fighting'|'fire'|'flying'|'ghost'|'grass'|'ground'|'ice'|'normal'|'poison'|'psychic'|'rock'|'steel'|'water'} PokemonTypeSlug
@@ -84,9 +92,9 @@ async function main() {
  * @property {number} [turnBias] — −1..1 AI turn randomness bias (reserved)
  *
  * @typedef {Object} PokemonSpeciesConfig
- * @property {string} name — matches \`gen1-name-to-dex.js\` encounter strings where possible
+ * @property {string} name — matches encounter strings in national-dex-registry.js where possible
  * @property {PokemonTypeSlug[]} types — slot order primary → secondary; Gen 1 chart overrides baked in (see script)
- * @property {number} heightTiles — visual / collider height in tile units (from former \`pokemon-heights.js\`)
+ * @property {number} heightTiles — visual / collider height in tile units
  * @property {number} baseSpeed — main-series base Speed (for motion / turn order tuning)
  * @property {PokemonBehaviorTuning} [behavior] — optional per-species behavior overrides
  */
@@ -96,13 +104,11 @@ export const POKEMON_CONFIG = {`);
 
   for (const row of api) {
     const d = row.dex;
-    const h = heights[d];
-    if (h === undefined) {
-      throw new Error(`Missing height for dex ${d} in pokemon-heights.js`);
-    }
-    const name = names[d - 1];
+    const hExisting = heights[d];
+    const h = hExisting !== undefined ? hExisting : heightTilesFromApiHeightDm(row.height);
+    const name = NATIONAL_DEX_LINES[d - 1];
     if (!name) throw new Error(`Missing name for dex ${d}`);
-    const types = GEN1_TYPE_OVERRIDES[d] ?? row.types;
+    const types = d <= 151 && GEN1_TYPE_OVERRIDES[d] ? GEN1_TYPE_OVERRIDES[d] : row.types;
     const typesStr = types.map((t) => `'${t}'`).join(', ');
     lines.push(
       `  ${d}: { name: '${esc(name)}', types: [${typesStr}], heightTiles: ${h}, baseSpeed: ${row.speed} },`
@@ -127,7 +133,7 @@ export function getPokemonConfig(dexId) {
   const n = Number(dexId);
   if (!Number.isFinite(n)) return null;
   const dex = Math.floor(n);
-  if (dex < 1 || dex > 151) return null;
+  if (dex < 1 || dex > ${NATIONAL_DEX_MAX}) return null;
   const row = POKEMON_CONFIG[dex];
   if (!row) return null;
   const behavior = {

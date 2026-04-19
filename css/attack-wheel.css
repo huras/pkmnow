@@ -289,6 +289,7 @@
 .play-field-skill-wheel__item.type-water { border-color: rgba(68, 136, 255, 0.4); background: rgba(20, 45, 85, 0.8); }
 .play-field-skill-wheel__item.type-grass { border-color: rgba(68, 255, 68, 0.4); background: rgba(20, 85, 20, 0.8); }
 .play-field-skill-wheel__item.type-electric { border-color: rgba(255, 255, 68, 0.4); background: rgba(85, 85, 20, 0.8); }
+.play-field-skill-wheel__item.type-ground { border-color: rgba(214, 181, 90, 0.45); background: rgba(72, 56, 28, 0.82); }
 .play-field-skill-wheel__item.type-psychic { border-color: rgba(255, 68, 255, 0.4); background: rgba(85, 20, 85, 0.8); }
 .play-field-skill-wheel__item.type-ice { border-color: rgba(68, 255, 255, 0.4); background: rgba(20, 85, 85, 0.8); }
 .play-field-skill-wheel__item.type-poison { border-color: rgba(187, 68, 255, 0.4); background: rgba(62, 20, 85, 0.8); }

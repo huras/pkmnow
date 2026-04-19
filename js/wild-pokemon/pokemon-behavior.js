@@ -34,7 +34,7 @@ export const DEFAULT_BEHAVIOR = Object.freeze({
 });
 
 /**
- * Per-species overrides keyed by National Dex number (1-151).
+ * Per-species overrides keyed by National Dex number (defaults apply outside this map).
  * Only species that appear in ecodex.js need entries, but extras don't hurt.
  * @type {Map<number, BehaviorProfile>}
  */
@@ -151,9 +151,17 @@ SPECIES_BEHAVIOR.set(63,  skittish(10, 5.0)); // Abra — teleports away (fastes
 SPECIES_BEHAVIOR.set(137, neutral(6));       // Porygon — digital, curious
 SPECIES_BEHAVIOR.set(151, skittish(12, 5.5)); // Mew — extremely elusive
 
+// ── Gen 2 (selected) ─────────────────────────────────────────────────────────
+SPECIES_BEHAVIOR.set(155, neutral(5)); // Cyndaquil
+SPECIES_BEHAVIOR.set(152, neutral(5)); // Chikorita
+SPECIES_BEHAVIOR.set(158, neutral(5)); // Totodile
+SPECIES_BEHAVIOR.set(246, timid(5, 2.8)); // Larvitar
+SPECIES_BEHAVIOR.set(248, aggressive(9, 1.35, 2.9)); // Tyranitar
+SPECIES_BEHAVIOR.set(251, skittish(12, 5.2)); // Celebi — rare, elusive
+
 /**
  * Get the behavior profile for a species.
- * @param {number} dexId  National dex number (1-151)
+ * @param {number} dexId  National dex number
  * @returns {Readonly<BehaviorProfile>}
  */
 export function getSpeciesBehavior(dexId) {

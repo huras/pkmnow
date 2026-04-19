@@ -3,7 +3,7 @@
  */
 import { PMD_ANIM_METADATA } from './pokemon/pmd-anim-metadata.js';
 import { PMD_MON_SHEET, PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
-import { padDex3, getGen1SpeciesName } from './pokemon/gen1-name-to-dex.js';
+import { padDex3, getGen1SpeciesName, NATIONAL_DEX_MAX } from './pokemon/gen1-name-to-dex.js';
 import { imageCache } from './image-cache.js';
 import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { BIOMES } from './biomes.js';
@@ -14,7 +14,7 @@ import { getRoleForCell } from './tessellation-logic.js';
 import { loadTilesetImages } from './render.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 
-const GEN1_COUNT = 151;
+const SPECIES_LAB_COUNT = NATIONAL_DEX_MAX;
 
 /** Mesmo “tile” lógico que no jogo (16px na folha). */
 const LAB_TILE = 16;
@@ -486,7 +486,7 @@ function defaultSpeciesEntry(dex) {
 
 function buildInitialState() {
   const species = {};
-  for (let d = 1; d <= GEN1_COUNT; d++) {
+  for (let d = 1; d <= SPECIES_LAB_COUNT; d++) {
     species[padDex3(d)] = defaultSpeciesEntry(d);
   }
   return {
@@ -626,7 +626,7 @@ function wireSpeciesInputs(trDetail, dexKey) {
 
 function buildTable() {
   elTbody.innerHTML = '';
-  for (let d = 1; d <= GEN1_COUNT; d++) {
+  for (let d = 1; d <= SPECIES_LAB_COUNT; d++) {
     const key = padDex3(d);
     const st = state.species[key];
     const trM = document.createElement('tr');
@@ -838,13 +838,13 @@ function importJson(obj) {
 
 async function loadAllSheets() {
   const batch = 24;
-  for (let i = 1; i <= GEN1_COUNT; i += batch) {
+  for (let i = 1; i <= SPECIES_LAB_COUNT; i += batch) {
     const slice = [];
-    for (let j = i; j < i + batch && j <= GEN1_COUNT; j++) slice.push(ensurePokemonSheetsLoaded(imageCache, j));
+    for (let j = i; j < i + batch && j <= SPECIES_LAB_COUNT; j++) slice.push(ensurePokemonSheetsLoaded(imageCache, j));
     await Promise.all(slice);
-    elStatus.textContent = `Imagens: ${Math.min(i + batch - 1, GEN1_COUNT)} / ${GEN1_COUNT}`;
+    elStatus.textContent = `Imagens: ${Math.min(i + batch - 1, SPECIES_LAB_COUNT)} / ${SPECIES_LAB_COUNT}`;
   }
-  elStatus.textContent = `${GEN1_COUNT} folhas carregadas (fallback Gengar onde faltar ficheiro).`;
+  elStatus.textContent = `${SPECIES_LAB_COUNT} folhas carregadas (fallback Gengar onde faltar ficheiro).`;
 }
 
 function onGlobalScaleInput() {

@@ -3,7 +3,27 @@ import { seededHashInt } from '../tessellation-logic.js';
 /** @typedef {'male'|'female'|'genderless'} WildSex */
 
 const GENDERLESS_DEX = new Set([
-  81, 82, 100, 101, 120, 132, 137, 144, 145, 146, 150, 151
+  81,
+  82,
+  100,
+  101,
+  120,
+  132,
+  137,
+  144,
+  145,
+  146,
+  150,
+  151,
+  201,
+  202,
+  233,
+  243,
+  244,
+  245,
+  249,
+  250,
+  251
 ]);
 
 /** Approx. Gen-1 female ratios where species-specific; default 0.5. */

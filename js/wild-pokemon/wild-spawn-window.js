@@ -48,7 +48,19 @@ export const SKY_SPECIES = new Set([
   144,
   145,
   146, // Birds
-  149 // Dragonite
+  149, // Dragonite
+  164, // Noctowl
+  169, // Crobat
+  176, // Togetic
+  178, // Xatu
+  189, // Jumpluff
+  193, // Yanma
+  198, // Murkrow
+  225, // Delibird
+  226, // Mantine
+  227, // Skarmory
+  249, // Lugia
+  250 // Ho-Oh
 ]);
 
 export const WILD_WINDOW_RADIUS = 2;

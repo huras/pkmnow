@@ -41,9 +41,14 @@ import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
-import { updatePlayerCombatTimers } from '../player.js';
+import { updatePlayerCombatTimers, tryJumpPlayer } from '../player.js';
 import { strengthCarryBlocksWalk } from '../main/play-strength-carry.js';
-import { isChargeStrongAttackEligible, getWeakPartialChargeT, getChargeLevel } from '../main/play-charge-levels.js';
+import {
+  isChargeStrongAttackEligible,
+  getWeakPartialChargeT,
+  getChargeLevel,
+  CHARGE_FIELD_RELEASE_MIN_01
+} from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
@@ -77,6 +82,16 @@ import {
   PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
 } from './moves-player-config.js';
+
+/** Cooldown after Earthquake, by charge level (4-bar meter). */
+const PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL = Object.freeze({
+  1: 0.92,
+  2: 1.12,
+  3: 1.38,
+  4: 1.68
+});
+
+const EARTHQUAKE_JUMP_SCALE_BY_LEVEL = Object.freeze([1, 1.08, 1.2, 1.38]);
 
 /** Latest `data` from `updateMoves` — used when enqueuing Thunderbolt L4 chain hops (tree search). */
 let lastMovesTickData = null;
@@ -115,6 +130,7 @@ let playerIncinerateCooldown = 0;
 let playerFireBlastCooldown = 0;
 let playerFlameChargeCooldown = 0;
 let playerFireSpinCooldown = 0;
+let playerEarthquakeCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
@@ -321,6 +337,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
   if (moveId === 'fireBlast') return castFireBlastMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'flameCharge') return castFlameChargeMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'fireSpin') return castFireSpinMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'earthquake') return castEarthquakeMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -343,6 +360,7 @@ export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, 
   if (moveId === 'fireBlast') return castFireBlastCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'flameCharge') return castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'fireSpin') return castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'earthquake') return castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
@@ -361,7 +379,8 @@ export function moveSupportsChargedRelease(moveId) {
     resolved === 'thunderbolt' ||
     resolved === 'fireBlast' ||
     resolved === 'flameCharge' ||
-    resolved === 'fireSpin'
+    resolved === 'fireSpin' ||
+    resolved === 'earthquake'
   );
 }
 
@@ -791,6 +810,39 @@ export function castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEn
   return true;
 }
 
+function tryBeginPlayerEarthquakeJump(sourceEntity, charge01) {
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  const level = Math.max(1, Math.min(4, getChargeLevel(cp) || 1));
+  const scale = EARTHQUAKE_JUMP_SCALE_BY_LEVEL[level - 1] ?? 1;
+  if (!tryJumpPlayer(null, { vzScale: scale })) return false;
+  sourceEntity.earthquakeAwaitingLand = true;
+  sourceEntity.earthquakeStoredCharge01 = cp;
+  return true;
+}
+
+/** Earthquake tap — tier 1 jump; impact on landing. */
+export function castEarthquakeMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerEarthquakeCooldown > 0) return false;
+  const cp = Math.max(CHARGE_FIELD_RELEASE_MIN_01, 0);
+  if (!tryBeginPlayerEarthquakeJump(sourceEntity, cp)) return false;
+  playerEarthquakeCooldown = PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/** Charged Earthquake — jump height scales with 4-bar level; landing radius + aftershocks scale with charge. */
+export function castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerEarthquakeCooldown > 0) return false;
+  const cp = Math.max(CHARGE_FIELD_RELEASE_MIN_01, Math.min(1, charge01 || 0));
+  if (!tryBeginPlayerEarthquakeJump(sourceEntity, cp)) return false;
+  const level = Math.max(1, Math.min(4, getChargeLevel(cp) || 1));
+  playerEarthquakeCooldown =
+    PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[level] ?? PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
 export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerSilkShootCooldown > 0) return false;
   playerSilkShootCooldown = 0.72;
@@ -1065,6 +1117,13 @@ export function getPlayerMoveCooldownUiMax(moveId) {
         PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[2],
         PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[3]
       );
+    case 'earthquake':
+      return Math.max(
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[1],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[2],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[3],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4]
+      );
     case 'silkShoot':
       return 0.72;
     case 'thunder':
@@ -1129,6 +1188,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerFlameChargeCooldown;
     case 'fireSpin':
       return playerFireSpinCooldown;
+    case 'earthquake':
+      return playerEarthquakeCooldown;
     case 'silkShoot':
       return playerSilkShootCooldown;
     case 'thunder':
@@ -1175,6 +1236,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerFireBlastCooldown = Math.max(0, playerFireBlastCooldown - dt);
   playerFlameChargeCooldown = Math.max(0, playerFlameChargeCooldown - dt);
   playerFireSpinCooldown = Math.max(0, playerFireSpinCooldown - dt);
+  playerEarthquakeCooldown = Math.max(0, playerEarthquakeCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);

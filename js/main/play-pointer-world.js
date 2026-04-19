@@ -31,15 +31,24 @@ export function clientToCanvasPixels(canvas, clientX, clientY) {
  *
  * @param {number} mousePxX
  * @param {number} mousePxY
- * @param {{ effTileW: number, effTileH: number, currentTransX: number, currentTransY: number }} cam
+ * @param {{
+ *   effTileW: number,
+ *   effTileH: number,
+ *   currentTransX: number,
+ *   currentTransY: number,
+ *   earthquakeOffXPx?: number,
+ *   earthquakeOffYPx?: number
+ * }} cam
  * @returns {{ worldX: number, worldY: number }}
  */
 export function worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, cam) {
   const W = cam.effTileW;
   const H = cam.effTileH;
+  const eqx = Number(cam.earthquakeOffXPx) || 0;
+  const eqy = Number(cam.earthquakeOffYPx) || 0;
   return {
-    worldX: (mousePxX - cam.currentTransX) / W - 0.5,
-    worldY: (mousePxY - cam.currentTransY) / H - 0.5
+    worldX: (mousePxX - cam.currentTransX - eqx) / W - 0.5,
+    worldY: (mousePxY - cam.currentTransY - eqy) / H - 0.5
   };
 }
 
@@ -48,15 +57,26 @@ export function worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, cam) 
  *
  * @param {HTMLCanvasElement} canvas
  * @param {{ effTileW: number, effTileH: number, currentTransX: number, currentTransY: number }} playCam
+ * @param {{ x?: number, y?: number }} [earthquakeShakePx] same offset applied to chunk draw + translate in `render()`
  */
-export function applyPlayPointerWithPlayCam(canvas, playCam) {
+export function applyPlayPointerWithPlayCam(canvas, playCam, earthquakeShakePx) {
   if (!canvas || !playCam) return;
   if (!playInputState.mouseValid) {
     playHoverMicroTile = null;
     return;
   }
+  const eqx = Number(earthquakeShakePx?.x) || 0;
+  const eqy = Number(earthquakeShakePx?.y) || 0;
+  const camForPick =
+    eqx !== 0 || eqy !== 0
+      ? {
+          ...playCam,
+          earthquakeOffXPx: eqx,
+          earthquakeOffYPx: eqy
+        }
+      : playCam;
   const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, lastClientX, lastClientY);
-  const { worldX, worldY } = worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, playCam);
+  const { worldX, worldY } = worldContinuousFromCanvasPixelsPlayCam(mousePxX, mousePxY, camForPick);
   playInputState.mouseX = worldX;
   playInputState.mouseY = worldY;
   playHoverMicroTile = { x: Math.floor(worldX), y: Math.floor(worldY) };

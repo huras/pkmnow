@@ -1,5 +1,5 @@
 /**
- * Gen 1 (#1–151) species data for gameplay tuning (height, motion, type logic).
+ * National Dex #1–251 species data for gameplay tuning (height, motion, type logic).
  * Regenerate: `node scripts/build-pokemon-config.mjs` (needs network).
  *
  * @typedef {'bug'|'dark'|'dragon'|'electric'|'fairy'|'fighting'|'fire'|'flying'|'ghost'|'grass'|'ground'|'ice'|'normal'|'poison'|'psychic'|'rock'|'steel'|'water'} PokemonTypeSlug
@@ -10,9 +10,9 @@
  * @property {number} [turnBias] — −1..1 AI turn randomness bias (reserved)
  *
  * @typedef {Object} PokemonSpeciesConfig
- * @property {string} name — matches `gen1-name-to-dex.js` encounter strings where possible
+ * @property {string} name — matches encounter strings in national-dex-registry.js where possible
  * @property {PokemonTypeSlug[]} types — slot order primary → secondary; Gen 1 chart overrides baked in (see script)
- * @property {number} heightTiles — visual / collider height in tile units (from former `pokemon-heights.js`)
+ * @property {number} heightTiles — visual / collider height in tile units
  * @property {number} baseSpeed — main-series base Speed (for motion / turn order tuning)
  * @property {PokemonBehaviorTuning} [behavior] — optional per-species behavior overrides
  */
@@ -170,6 +170,106 @@ export const POKEMON_CONFIG = {
   149: { name: 'Dragonite', types: ['dragon', 'flying'], heightTiles: 4.4, baseSpeed: 80 },
   150: { name: 'Mewtwo', types: ['psychic'], heightTiles: 4.1, baseSpeed: 130 },
   151: { name: 'Mew', types: ['psychic'], heightTiles: 3.5, baseSpeed: 100 },
+  152: { name: 'Chikorita', types: ['grass'], heightTiles: 3.1, baseSpeed: 45 },
+  153: { name: 'Bayleef', types: ['grass'], heightTiles: 3.7, baseSpeed: 60 },
+  154: { name: 'Meganium', types: ['grass'], heightTiles: 5.1, baseSpeed: 80 },
+  155: { name: 'Cyndaquil', types: ['fire'], heightTiles: 2.2, baseSpeed: 65 },
+  156: { name: 'Quilava', types: ['fire'], heightTiles: 3.1, baseSpeed: 80 },
+  157: { name: 'Typhlosion', types: ['fire'], heightTiles: 4.8, baseSpeed: 100 },
+  158: { name: 'Totodile', types: ['water'], heightTiles: 2.4, baseSpeed: 43 },
+  159: { name: 'Croconaw', types: ['water'], heightTiles: 3.5, baseSpeed: 58 },
+  160: { name: 'Feraligatr', types: ['water'], heightTiles: 6.2, baseSpeed: 78 },
+  161: { name: 'Sentret', types: ['normal'], heightTiles: 2.9, baseSpeed: 20 },
+  162: { name: 'Furret', types: ['normal'], heightTiles: 5.1, baseSpeed: 90 },
+  163: { name: 'Hoothoot', types: ['normal', 'flying'], heightTiles: 1.85, baseSpeed: 50 },
+  164: { name: 'Noctowl', types: ['normal', 'flying'], heightTiles: 4.6, baseSpeed: 70 },
+  165: { name: 'Ledyba', types: ['bug', 'flying'], heightTiles: 2.3, baseSpeed: 55 },
+  166: { name: 'Ledian', types: ['bug', 'flying'], heightTiles: 3.2, baseSpeed: 85 },
+  167: { name: 'Spinarak', types: ['bug', 'poison'], heightTiles: 1.2, baseSpeed: 30 },
+  168: { name: 'Ariados', types: ['bug', 'poison'], heightTiles: 3.5, baseSpeed: 40 },
+  169: { name: 'Crobat', types: ['poison', 'flying'], heightTiles: 4.8, baseSpeed: 130 },
+  170: { name: 'Chinchou', types: ['water', 'electric'], heightTiles: 2.2, baseSpeed: 67 },
+  171: { name: 'Lanturn', types: ['water', 'electric'], heightTiles: 3.7, baseSpeed: 67 },
+  172: { name: 'Pichu', types: ['electric'], heightTiles: 1.8, baseSpeed: 60 },
+  173: { name: 'Cleffa', types: ['fairy'], heightTiles: 1.1, baseSpeed: 15 },
+  174: { name: 'Igglybuff', types: ['normal', 'fairy'], heightTiles: 1.1, baseSpeed: 15 },
+  175: { name: 'Togepi', types: ['fairy'], heightTiles: 1.8, baseSpeed: 20 },
+  176: { name: 'Togetic', types: ['fairy', 'flying'], heightTiles: 2.7, baseSpeed: 40 },
+  177: { name: 'Natu', types: ['psychic', 'flying'], heightTiles: 1.5, baseSpeed: 70 },
+  178: { name: 'Xatu', types: ['psychic', 'flying'], heightTiles: 2.5, baseSpeed: 95 },
+  179: { name: 'Mareep', types: ['electric'], heightTiles: 2.4, baseSpeed: 35 },
+  180: { name: 'Flaaffy', types: ['electric'], heightTiles: 3.0, baseSpeed: 45 },
+  181: { name: 'Ampharos', types: ['electric'], heightTiles: 4.2, baseSpeed: 55 },
+  182: { name: 'Bellossom', types: ['grass'], heightTiles: 1.5, baseSpeed: 50 },
+  183: { name: 'Marill', types: ['water', 'fairy'], heightTiles: 2, baseSpeed: 40 },
+  184: { name: 'Azumarill', types: ['water', 'fairy'], heightTiles: 2.9, baseSpeed: 50 },
+  185: { name: 'Sudowoodo', types: ['rock'], heightTiles: 3.5, baseSpeed: 30 },
+  186: { name: 'Politoed', types: ['water'], heightTiles: 3.5, baseSpeed: 70 },
+  187: { name: 'Hoppip', types: ['grass', 'flying'], heightTiles: 2.6, baseSpeed: 50 },
+  188: { name: 'Skiploom', types: ['grass', 'flying'], heightTiles: 2.0, baseSpeed: 80 },
+  189: { name: 'Jumpluff', types: ['grass', 'flying'], heightTiles: 2.1, baseSpeed: 110 },
+  190: { name: 'Aipom', types: ['normal'], heightTiles: 2.1, baseSpeed: 85 },
+  191: { name: 'Sunkern', types: ['grass'], heightTiles: 1.8, baseSpeed: 30 },
+  192: { name: 'Sunflora', types: ['grass'], heightTiles: 2.9, baseSpeed: 30 },
+  193: { name: 'Yanma', types: ['bug', 'flying'], heightTiles: 3.0, baseSpeed: 95 },
+  194: { name: 'Wooper', types: ['water', 'ground'], heightTiles: 1.75, baseSpeed: 15 },
+  195: { name: 'Quagsire', types: ['water', 'ground'], heightTiles: 3.7, baseSpeed: 35 },
+  196: { name: 'Espeon', types: ['psychic'], heightTiles: 3.1, baseSpeed: 110 },
+  197: { name: 'Umbreon', types: ['dark'], heightTiles: 3.3, baseSpeed: 65 },
+  198: { name: 'Murkrow', types: ['dark', 'flying'], heightTiles: 2.2, baseSpeed: 91 },
+  199: { name: 'Slowking', types: ['water', 'psychic'], heightTiles: 3.7, baseSpeed: 30 },
+  200: { name: 'Misdreavus', types: ['ghost'], heightTiles: 2.6, baseSpeed: 85 },
+  201: { name: 'Unown', types: ['psychic'], heightTiles: 2.2, baseSpeed: 48 },
+  202: { name: 'Wobbuffet', types: ['psychic'], heightTiles: 2.4, baseSpeed: 33 },
+  203: { name: 'Girafarig', types: ['normal', 'psychic'], heightTiles: 4.4, baseSpeed: 85 },
+  204: { name: 'Pineco', types: ['bug'], heightTiles: 2.5, baseSpeed: 15 },
+  205: { name: 'Forretress', types: ['bug', 'steel'], heightTiles: 3.3, baseSpeed: 40 },
+  206: { name: 'Dunsparce', types: ['normal'], heightTiles: 1.4, baseSpeed: 45 },
+  207: { name: 'Gligar', types: ['ground', 'flying'], heightTiles: 3.5, baseSpeed: 85 },
+  208: { name: 'Steelix', types: ['steel', 'ground'], heightTiles: 10, baseSpeed: 30 },
+  209: { name: 'Snubbull', types: ['fairy'], heightTiles: 2.4, baseSpeed: 30 },
+  210: { name: 'Granbull', types: ['fairy'], heightTiles: 4.2, baseSpeed: 45 },
+  211: { name: 'Qwilfish', types: ['water', 'poison'], heightTiles: 2.2, baseSpeed: 85 },
+  212: { name: 'Scizor', types: ['bug', 'steel'], heightTiles: 5.1, baseSpeed: 65 },
+  213: { name: 'Shuckle', types: ['bug', 'rock'], heightTiles: 2.4, baseSpeed: 5 },
+  214: { name: 'Heracross', types: ['bug', 'fighting'], heightTiles: 4.4, baseSpeed: 85 },
+  215: { name: 'Sneasel', types: ['dark', 'ice'], heightTiles: 3.1, baseSpeed: 115 },
+  216: { name: 'Teddiursa', types: ['normal'], heightTiles: 2.4, baseSpeed: 40 },
+  217: { name: 'Ursaring', types: ['normal'], heightTiles: 5.1, baseSpeed: 55 },
+  218: { name: 'Slugma', types: ['fire'], heightTiles: 2.6, baseSpeed: 20 },
+  219: { name: 'Magcargo', types: ['fire', 'rock'], heightTiles: 2.9, baseSpeed: 30 },
+  220: { name: 'Swinub', types: ['ice', 'ground'], heightTiles: 2, baseSpeed: 50 },
+  221: { name: 'Piloswine', types: ['ice', 'ground'], heightTiles: 3.5, baseSpeed: 50 },
+  222: { name: 'Corsola', types: ['water', 'rock'], heightTiles: 2.4, baseSpeed: 35 },
+  223: { name: 'Remoraid', types: ['water'], heightTiles: 2.4, baseSpeed: 65 },
+  224: { name: 'Octillery', types: ['water'], heightTiles: 3.1, baseSpeed: 45 },
+  225: { name: 'Delibird', types: ['ice', 'flying'], heightTiles: 3.1, baseSpeed: 75 },
+  226: { name: 'Mantine', types: ['water', 'flying'], heightTiles: 5.7, baseSpeed: 70 },
+  227: { name: 'Skarmory', types: ['steel', 'flying'], heightTiles: 4.8, baseSpeed: 70 },
+  228: { name: 'Houndour', types: ['dark', 'fire'], heightTiles: 2.4, baseSpeed: 65 },
+  229: { name: 'Houndoom', types: ['dark', 'fire'], heightTiles: 4.2, baseSpeed: 95 },
+  230: { name: 'Kingdra', types: ['water', 'dragon'], heightTiles: 5.1, baseSpeed: 85 },
+  231: { name: 'Phanpy', types: ['ground'], heightTiles: 2.2, baseSpeed: 40 },
+  232: { name: 'Donphan', types: ['ground'], heightTiles: 3.5, baseSpeed: 50 },
+  233: { name: 'Porygon2', types: ['normal'], heightTiles: 2.4, baseSpeed: 60 },
+  234: { name: 'Stantler', types: ['normal'], heightTiles: 4.2, baseSpeed: 85 },
+  235: { name: 'Smeargle', types: ['normal'], heightTiles: 3.7, baseSpeed: 75 },
+  236: { name: 'Tyrogue', types: ['fighting'], heightTiles: 2.6, baseSpeed: 35 },
+  237: { name: 'Hitmontop', types: ['fighting'], heightTiles: 4.2, baseSpeed: 70 },
+  238: { name: 'Smoochum', types: ['ice', 'psychic'], heightTiles: 2, baseSpeed: 65 },
+  239: { name: 'Elekid', types: ['electric'], heightTiles: 2.4, baseSpeed: 95 },
+  240: { name: 'Magby', types: ['fire'], heightTiles: 2.6, baseSpeed: 83 },
+  241: { name: 'Miltank', types: ['normal'], heightTiles: 3.7, baseSpeed: 100 },
+  242: { name: 'Blissey', types: ['normal'], heightTiles: 4.4, baseSpeed: 55 },
+  243: { name: 'Raikou', types: ['electric'], heightTiles: 3.3, baseSpeed: 115 },
+  244: { name: 'Entei', types: ['fire'], heightTiles: 3.5, baseSpeed: 100 },
+  245: { name: 'Suicune', types: ['water'], heightTiles: 3.3, baseSpeed: 85 },
+  246: { name: 'Larvitar', types: ['rock', 'ground'], heightTiles: 2.6, baseSpeed: 41 },
+  247: { name: 'Pupitar', types: ['rock', 'ground'], heightTiles: 3.6, baseSpeed: 51 },
+  248: { name: 'Tyranitar', types: ['rock', 'dark'], heightTiles: 4.0, baseSpeed: 61 },
+  249: { name: 'Lugia', types: ['psychic', 'flying'], heightTiles: 7, baseSpeed: 110 },
+  250: { name: 'Ho-Oh', types: ['fire', 'flying'], heightTiles: 7, baseSpeed: 90 },
+  251: { name: 'Celebi', types: ['psychic', 'grass'], heightTiles: 2.6, baseSpeed: 100 },
 };
 
 const _heightEntries = Object.entries(POKEMON_CONFIG).map(([dex, c]) => [
@@ -188,7 +288,7 @@ export function getPokemonConfig(dexId) {
   const n = Number(dexId);
   if (!Number.isFinite(n)) return null;
   const dex = Math.floor(n);
-  if (dex < 1 || dex > 151) return null;
+  if (dex < 1 || dex > 251) return null;
   const row = POKEMON_CONFIG[dex];
   if (!row) return null;
   const behavior = {

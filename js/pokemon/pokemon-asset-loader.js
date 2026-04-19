@@ -126,7 +126,7 @@ async function probeSpriteCollabTumblePath(dexId) {
 /**
  * Lazy-load species sheets (same layout as Gengar). Missing files fall back to Gengar assets.
  * @param {Map<string, HTMLImageElement>} imageCache same as render.imageCache
- * @param {number} dexId 1..151
+ * @param {number} dexId 1..251 (national dex; missing sheets fall back to Gengar)
  */
 export function ensurePokemonSheetsLoaded(imageCache, dexId) {
   const id = padDex3(dexId);

@@ -788,6 +788,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {{r:number,g:number,b:number,a:number}} [options.screenTint] — extra multiply tint applied after day tint.
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
+ * @param {number} [options.earthquakeVisual01=0] — smoothed 0..1 ground-shake layer (independent of sky weather).
  */
 export function drawEnvironmentalEffects(ctx, options) {
   const {
@@ -816,7 +817,8 @@ export function drawEnvironmentalEffects(ctx, options) {
     windDirRad = 0,
     screenTint,
     splashTargets,
-    entityShadowSprites
+    entityShadowSprites,
+    earthquakeVisual01 = 0
   } = options;
   // Clouds go gray with rain. Scales 0..~0.55 so even light rain starts feeling overcast.
   const rainI01 = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
@@ -915,6 +917,56 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();
   }
+
+  const eqVis = Math.max(0, Math.min(1, Number(earthquakeVisual01) || 0));
+  if (eqVis > 0.008) {
+    drawEarthquakeScreenFx(ctx, cw, ch, time, eqVis);
+  }
+}
+
+/**
+ * Cheap full-screen multiply vignette + a few horizontal scanlines (32-bit era vibe).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {number} timeSec
+ * @param {number} intensity01
+ */
+function drawEarthquakeScreenFx(ctx, cw, ch, timeSec, intensity01) {
+  const t = Math.max(0, Math.min(1, intensity01));
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const tScroll = Math.floor(time * 3.1);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  const vignetteA = 0.035 * t + 0.11 * t * t;
+  if (vignetteA > 0.002) {
+    const cx = cw * 0.5;
+    const cy = ch * 0.52;
+    const r0 = Math.min(cw, ch) * (0.1 + 0.04 * t);
+    const r1 = Math.max(cw, ch) * (0.62 + 0.08 * t);
+    const g = ctx.createRadialGradient(cx, cy, r0, cx, cy, r1);
+    g.addColorStop(0, 'rgba(72, 58, 48, 0)');
+    g.addColorStop(1, `rgba(22, 18, 14, ${vignetteA})`);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cw, ch);
+  }
+
+  const nLines = 11;
+  ctx.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < nLines; i++) {
+    const hy = hash01Cell(i, tScroll, 0x5e77 + i) * (ch - 2) + 1;
+    const flicker =
+      (0.012 + 0.055 * t) * (0.45 + 0.55 * hash01Cell(i * 3, Math.floor(time * 17.3), 0x91a3));
+    const phase = (time * (3.8 + i * 0.55) + i * 2.17) % (Math.PI * 2);
+    const alpha = flicker * (0.25 + 0.75 * Math.abs(Math.sin(phase)));
+    ctx.fillStyle = `rgba(18, 16, 14, ${Math.max(0, Math.min(0.22, alpha))})`;
+    ctx.fillRect(0, hy, cw, 1);
+  }
+  ctx.restore();
 }
 
 function wrapToSpan(v, min, max) {

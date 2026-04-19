@@ -25,6 +25,9 @@ const DEX_OVERRIDE = new Map([
   [63, 'confusion'],
   [150, 'prismaticLaser'],
   [151, 'prismaticLaser'],
+  [249, 'prismaticLaser'],
+  [250, 'prismaticLaser'],
+  [251, 'prismaticLaser'],
   [7, 'bubble'],
   [8, 'waterGun'],
   [9, 'waterGun'],
@@ -72,6 +75,9 @@ export function resolveWildMoveIdForDex(dexId) {
   if (types.includes('fire')) return 'flamethrower';
   if (types.includes('water')) return 'waterBurst';
   if (types.includes('psychic')) return 'confusion';
+  if (types.includes('steel')) return 'incinerate';
+  if (types.includes('dark')) return 'incinerate';
+  if (types.includes('fairy')) return 'bubble';
   if (types.includes('poison') || types.includes('bug')) return 'poisonSting';
   return 'poisonSting';
 }

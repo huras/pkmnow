@@ -41,6 +41,12 @@ import {
   getActiveWeatherPresetBlend,
   addWeatherTargetChangeListener
 } from './main/weather-system.js';
+import {
+  initEarthquakeLayer,
+  tickEarthquakeLayer,
+  setEarthquakeTargetIntensity01,
+  getEarthquakeActiveIntensity01
+} from './main/earthquake-layer.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
@@ -72,6 +78,7 @@ import { parseShape } from './tessellation-logic.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
+import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
 import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
@@ -205,6 +212,7 @@ const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 const chkRotas = document.getElementById('chkRotas');
@@ -233,6 +241,7 @@ let worldTimeRunning = true;
 // DOM panel + the tick call. Initial seed here so the first `getActiveWeatherParams()`
 // read (during `getSettings()` before the first tick) returns the correct shape.
 initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
+initEarthquakeLayer({ intensity01: 0 });
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -606,7 +615,8 @@ function getSettings() {
     weatherBlizzardBlend01: getActiveWeatherPresetBlend('blizzard'),
     weatherCloudNoiseSeed,
     weatherWindIntensity: getWindFeltIntensity(),
-    weatherWindDirRad: getWindDirectionRad()
+    weatherWindDirRad: getWindDirectionRad(),
+    weatherEarthquakeIntensity: getEarthquakeActiveIntensity01()
   };
 }
 
@@ -655,7 +665,9 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
     tickWeather(dt, gameTime);
+    tickEarthquakeLayer(dt, gameTime);
   },
+  getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
@@ -869,6 +881,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 btnBackToMap?.addEventListener('click', () => {
   stopBiomeBgm();
   stopWeatherAmbientAudio();
+  stopEarthquakeAmbientAudio();
   stopFireLoopAudio();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
@@ -1124,6 +1137,11 @@ for (const btn of playWeatherPresetBtns) {
 playWeatherIntensityEl?.addEventListener('input', () => {
   const v = Number(playWeatherIntensityEl.value);
   setWeatherTarget({ intensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui');
+});
+
+playEarthquakeIntensityEl?.addEventListener('input', () => {
+  const v = Number(playEarthquakeIntensityEl.value);
+  setEarthquakeTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
 });
 
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {

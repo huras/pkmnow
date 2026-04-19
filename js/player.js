@@ -33,6 +33,7 @@ import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from './world-movement-constants.j
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
+import { NATIONAL_DEX_MAX } from './pokemon/gen1-name-to-dex.js';
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
@@ -41,6 +42,7 @@ import { playJumpSfx } from './audio/jump-sfx.js';
 import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
 import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
 import { advanceRainFootstepFxForDistance } from './weather/rain-footstep-fx.js';
+import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
@@ -101,7 +103,10 @@ const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 /** Default species when nothing valid is stored (Charmander). */
 const DEFAULT_PLAYER_DEX_ID = 4;
 const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
-const initialDex = Number.isFinite(_savedDex) && _savedDex >= 1 ? _savedDex : DEFAULT_PLAYER_DEX_ID;
+const initialDex =
+  Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
+    ? _savedDex
+    : DEFAULT_PLAYER_DEX_ID;
 
 export const player = {
   x: 0,
@@ -202,16 +207,20 @@ export const player = {
   /** Fire Spin: seconds held this channel (caps in move module). */
   fireSpinChannelSec: 0,
   fireSpinOrbitAngle: 0,
-  fireSpinParticleAcc: 0
+  fireSpinParticleAcc: 0,
+  /** Earthquake move: waiting for landing to apply ring damage + quake pulse. */
+  earthquakeAwaitingLand: false,
+  earthquakeStoredCharge01: 0
 };
 
 export function setPlayerSpecies(dexId) {
-  player.dexId = dexId;
+  const d = Math.floor(Number(dexId)) || DEFAULT_PLAYER_DEX_ID;
+  player.dexId = Math.max(1, Math.min(NATIONAL_DEX_MAX, d));
   player.runMode = false;
-  if (!speciesHasFlyingType(dexId)) player.flightActive = false;
-  localStorage.setItem(SAVED_DEX_KEY, dexId);
-  if (speciesUsesBorrowedDiglettDigVisual(dexId) || speciesHasGroundType(dexId)) {
-    void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(dexId));
+  if (!speciesHasFlyingType(player.dexId)) player.flightActive = false;
+  localStorage.setItem(SAVED_DEX_KEY, String(player.dexId));
+  if (speciesUsesBorrowedDiglettDigVisual(player.dexId) || speciesHasGroundType(player.dexId)) {
+    void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(player.dexId));
   }
   player.digBurrowMode = false;
   player.digCharge01 = 0;
@@ -252,8 +261,12 @@ export function setPlayerSpecies(dexId) {
   player.fireSpinChannelSec = 0;
   player.fireSpinOrbitAngle = 0;
   player.fireSpinParticleAcc = 0;
+  player.earthquakeAwaitingLand = false;
+  player.earthquakeStoredCharge01 = 0;
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('pkmn-player-species-changed', { detail: { dexId } }));
+    window.dispatchEvent(
+      new CustomEvent('pkmn-player-species-changed', { detail: { dexId: player.dexId } })
+    );
   }
 }
 
@@ -323,6 +336,8 @@ export function setPlayerPos(x, y) {
   player.fireSpinChannelSec = 0;
   player.fireSpinOrbitAngle = 0;
   player.fireSpinParticleAcc = 0;
+  player.earthquakeAwaitingLand = false;
+  player.earthquakeStoredCharge01 = 0;
 }
 
 /**
@@ -585,7 +600,11 @@ export function tryMovePlayer(dx, dy, data) {
  * - Se estiver de frente para um "Muro" (EDGE_S, EDGE_W, EDGE_E), tenta saltar por cima: pula 2 tiles.
  * - Se estiver no plano, faz apenas um pulinho (hop) no lugar para feedback visual.
  */
-export function tryJumpPlayer(data) {
+/**
+ * @param {object} [_data] reserved / parity with callers that pass map data
+ * @param {{ vzScale?: number }} [opts]
+ */
+export function tryJumpPlayer(_data, opts = {}) {
   if ((player.cutThirdHitLockoutSec || 0) > 0) return false;
   const canFly = speciesHasFlyingType(player.dexId ?? 0);
   if (canFly && player.flightActive) return false;
@@ -596,7 +615,8 @@ export function tryJumpPlayer(data) {
     player.digBurrowMode = false;
     player.digCharge01 = 0;
   }
-  player.vz = JUMP_IMPULSE;
+  const vzScale = Math.max(0.35, Math.min(2.5, Number(opts?.vzScale) || 1));
+  player.vz = JUMP_IMPULSE * vzScale;
   player.grounded = false;
   player.jumping = true;
   player.jumpsUsed = (player.jumpsUsed || 0) + 1;
@@ -617,7 +637,7 @@ export function isPlayerIdleOnWaitingFrame() {
  * @param {number} dt - delta time em segundos
  * @param {number} multiplier - multiplicador de velocidade (não afeta o tempo da animação interna do PMD)
  */
-export function updatePlayer(dt, data) {
+export function updatePlayer(dt, data, gameTimeSec) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
   const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
@@ -929,6 +949,8 @@ export function updatePlayer(dt, data) {
   } else if (!player.grounded) {
     const zJumpPrev = player.z;
     player.vz -= GRAVITY * dt;
+    /** Used by Earthquake: high falls can cross z=0 in one step from z < 0.04 (tunneling). */
+    const vzBeforePositionStep = player.vz;
     player.z += player.vz * dt;
 
     if (player.z <= 0) {
@@ -938,6 +960,13 @@ export function updatePlayer(dt, data) {
       player.jumping = false;
       player.jumpsUsed = 0;
       if (zJumpPrev > 0.04) playFloorHit2Sfx(player);
+      const gt =
+        gameTimeSec != null && Number.isFinite(gameTimeSec)
+          ? gameTimeSec
+          : typeof performance !== 'undefined'
+            ? performance.now() * 0.001
+            : 0;
+      onPlayerEarthquakeLanding(player, data, zJumpPrev, gt, vzBeforePositionStep);
     }
   }
 
