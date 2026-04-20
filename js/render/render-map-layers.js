@@ -74,9 +74,6 @@ export function drawOceanPass(ctx, options) {
   ctx.restore();
 }
 
-/**
- * PASS 5a: Animated grass rendering for the entire viewport.
- */
 export function drawAnimatedGrassPass(ctx, options) {
   const {
     lodDetail,
@@ -90,7 +87,7 @@ export function drawAnimatedGrassPass(ctx, options) {
     drawGrass5aForCell
   } = options;
 
-  if (lodDetail >= 2) return;
+  // LOD2 grass now allowed per user request (optimized via caching)
 
   forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
     if (mx === playerTileMx && my === playerTileMy) {
@@ -127,7 +124,6 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
   } = options;
 
   const playerTopOverlay = mode === 'playerTopOverlay';
-  if (lodDetail >= 2 && !playerTopOverlay) return;
   const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
   const blitGrassQuad = (surf, destYTop, destHFull) => {
@@ -210,7 +206,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
           blitGrassQuad(frame, ty - tileH, tileH * 2);
         }
       }
-      if (lodDetail < 2 && layers.top) {
+      if (layers.top) {
         const vt = getGrassVariant(tile.biomeId);
         const vTiles = GRASS_TILES[vt];
         const topId = vTiles.originalTop;
@@ -298,7 +294,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
     }
   }
 
-  if (lodDetail < 2 && layers.top) {
+  if (layers.top) {
     const vt = getGrassVariant(tile.biomeId);
     const vTiles = GRASS_TILES[vt];
     const topId = vTiles.originalTop;

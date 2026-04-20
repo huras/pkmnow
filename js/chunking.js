@@ -70,11 +70,37 @@ export function getHeightStepAt(mx, my, macroData) {
     return elevationToStep(e, waterLevel);
 }
 
+let microTileCache = null;
+const microTileCacheStorage = new Map();
+
+/**
+ * Call at start of frame (or AI batch) to enable O(1) reuse of computed micro tiles.
+ */
+export function beginMicroTileCache() {
+  microTileCacheStorage.clear();
+  microTileCache = microTileCacheStorage;
+}
+
+/**
+ * Disables and clears the micro tile memo.
+ */
+export function endMicroTileCache() {
+  microTileCache = null;
+  microTileCacheStorage.clear();
+}
+
 /**
  * Função Dinâmica e Determinística para gerar um Micro-Tile na hora.
  * NUNCA salva estado na memória. Usa a interpolação do Macro-Grid para computar infinito.
  */
 export function getMicroTile(mx, my, macroData) {
+    if (microTileCache) {
+      // Bitpack mx,my into a 32-bit integer key for Map speed (safe up to ~32k wide map)
+      const key = (mx << 15) | (my & 0x7fff);
+      const cached = microTileCache.get(key);
+      if (cached !== undefined) return cached;
+    }
+
     const { width, height, cells, temperature, moisture, anomaly, seed, config } = macroData;
     const waterLevel = resolveWaterLevel(config || {});
 
@@ -373,7 +399,7 @@ export function getMicroTile(mx, my, macroData) {
     }
     const fType = seededHash(mx, my, seed + 9993);
 
-    return {
+    const res = {
         biomeId: bId,
         elevation: e,
         heightStep,
@@ -384,6 +410,12 @@ export function getMicroTile(mx, my, macroData) {
         foliageDensity: fDensity,
         foliageType: fType
     };
+
+    if (microTileCache) {
+      const key = (mx << 15) | (my & 0x7fff);
+      microTileCache.set(key, res);
+    }
+    return res;
 }
 
 export function foliageDensity(mx, my, seed, scale) {

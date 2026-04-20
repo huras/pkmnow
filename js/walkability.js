@@ -38,6 +38,10 @@ import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/sca
 let walkProbeCache = null;
 const walkProbeCacheStorage = new Map();
 
+/** Frame-global cache for wild Pokémon walkability probes. */
+let wildWalkProbeCache = null;
+const wildWalkProbeCacheStorage = new Map();
+
 /**
  * Call before a tight sequence of `canWalk` / `canWalkMicroTile` with `ignoreTreeTrunks: true`
  * (e.g. bisection in `updatePlayer`). Clears any prior batch.
@@ -51,6 +55,20 @@ export function beginWalkProbeCache() {
 export function endWalkProbeCache() {
   walkProbeCache = null;
   walkProbeCacheStorage.clear();
+}
+
+/**
+ * Senior Optimization: Shared frame-global cache for all Wild Pokémon probes.
+ * Avoids O(N_mons * N_samples) redundant procedural sampling.
+ */
+export function beginWildWalkProbeCache() {
+  wildWalkProbeCacheStorage.clear();
+  wildWalkProbeCache = wildWalkProbeCacheStorage;
+}
+
+export function endWildWalkProbeCache() {
+  wildWalkProbeCache = null;
+  wildWalkProbeCacheStorage.clear();
 }
 
 /**
@@ -901,10 +919,25 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
     return false;
   }
 
-  const targetTile = getMicroTile(mx, my, data);
-  if (!targetTile) return false;
+  /** @type {number | null} */
+  let cacheKey = null;
+  if (wildWalkProbeCache) {
+    // 32-bit bitpack: mx (11), my (11), airborne (1), ignoreTrunks (1) -> 24 bits used.
+    // Safe for maps up to 2048 macro tiles (64k micro tiles).
+    cacheKey = (mx << 13) | (my << 2) | (isAirborne ? 2 : 0) | (ignoreTreeTrunks ? 1 : 0);
+    const cached = wildWalkProbeCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
 
-  // 1. Height Context Check (no ar: pode atravessar diferença de degrau num frame, como o jogador com impulso)
+  const finish = (ok) => {
+    if (cacheKey !== null && wildWalkProbeCache) wildWalkProbeCache.set(cacheKey, ok);
+    return ok;
+  };
+
+  const targetTile = getMicroTile(mx, my, data);
+  if (!targetTile) return finish(false);
+
+  // 1. Height Context Check
   if (!isAirborne && srcX !== undefined && srcY !== undefined) {
     const smx = Math.floor(srcX);
     const smy = Math.floor(srcY);
@@ -912,22 +945,22 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
       if (!okHeightStepTransition(sourceTile, targetTile)) {
-        return false;
+        return finish(false);
       }
     }
   }
 
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return false;
+    if (WALL_ROLES.has(role)) return finish(false);
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  if (sid === null) return false;
+  if (sid === null) return finish(false);
 
   let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
   if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
-  if (!isAirborne && setName.startsWith('altura ')) return false;
+  if (!isAirborne && setName.startsWith('altura ')) return finish(false);
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
 
@@ -937,16 +970,16 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
       targetTile.biomeId === BIOMES.OCEAN.id ||
       lakeWalkRole != null ||
       lavaSprite;
-    if (!swimOk) return false;
+    if (!swimOk) return finish(false);
   }
 
-  if (isPropBlocking(mx, my, data)) return false;
-  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return false;
+  if (isPropBlocking(mx, my, data)) return finish(false);
+  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return finish(false);
   if (!ignoreTreeTrunks && !isAirborne && scatterPhysicsCirclesBlockWorldPoint(x, y, data, 'any')) {
-    return false;
+    return finish(false);
   }
 
-  return true;
+  return finish(true);
 }
 
 /**

@@ -155,7 +155,7 @@ export function drawScatter(ctx, item, options) {
         atlasCols,
         tileW,
         tileH,
-        lodDetail === 0 && wind
+        wind
       );
       const px = snapPx(originX * tileW + (cols * tileW) / 2);
       const py = snapPx(originY * tileH + tileH);
@@ -771,35 +771,52 @@ export function drawWildLeaderRoamTarget(ctx, item, options) {
   const ringR = Math.max(5, tileW * (0.24 + pulse * 0.06));
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(255, 224, 132, 0.95)';
-  ctx.lineWidth = 1.8;
+  // 1. Dashed Line (High Contrast: Black outline + White inner)
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(cx, cy);
+  
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.lineWidth = 3.2;
+  ctx.stroke();
+  
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 1.4;
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = 'rgba(255, 208, 100, 0.14)';
+  // 2. Pulse Background
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
   ctx.beginPath();
   ctx.arc(cx, cy, ringR * 1.2, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255, 184, 88, 0.95)';
-  ctx.lineWidth = 2;
+  // 3. Target Ring (High Contrast)
   ctx.beginPath();
   ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 1.8;
   ctx.stroke();
 
+  // 4. Target Cross (High Contrast)
   const cross = ringR * 0.56;
-  ctx.strokeStyle = 'rgba(255, 241, 188, 0.92)';
-  ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.moveTo(cx - cross, cy);
   ctx.lineTo(cx + cross, cy);
   ctx.moveTo(cx, cy - cross);
   ctx.lineTo(cx, cy + cross);
+  
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.lineWidth = 3.0;
   ctx.stroke();
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
   ctx.restore();
 }
 

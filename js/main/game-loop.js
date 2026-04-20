@@ -40,6 +40,7 @@ import { tickPlayGamepadFrame } from './play-gamepad.js';
 import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
 import { PluginRegistry } from '../core/plugin-registry.js';
 import { canEntityStartSprint } from '../entity-stamina.js';
+import { beginMicroTileCache, endMicroTileCache } from '../chunking.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -170,7 +171,10 @@ export function createGameLoop(api) {
       updHudMs: 0
     };
 
-    const currentData = getCurrentData();
+    beginMicroTileCache();
+    try {
+
+      const currentData = getCurrentData();
     const tUpdPlayer0 = performance.now();
     updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
@@ -239,8 +243,11 @@ export function createGameLoop(api) {
       tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
     }
 
-    // --- Plugin Hooks: postUpdate ---
-    PluginRegistry.executeHooks('postUpdate', simDt);
+      // --- Plugin Hooks: postUpdate ---
+      PluginRegistry.executeHooks('postUpdate', simDt);
+    } finally {
+      endMicroTileCache();
+    }
 
     const tRenderStart = performance.now();
     updateView();
