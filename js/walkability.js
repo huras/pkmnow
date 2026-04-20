@@ -23,7 +23,8 @@ import {
   usesPoolAutotileMaskForFoliage,
   getTreeType,
   TREE_DENSITY_THRESHOLD,
-  TREE_NOISE_SCALE
+  TREE_NOISE_SCALE,
+  BERRY_PATCH_THRESHOLD
 } from './biome-tiles.js';
 import {
   TRUNK_STRIP_WIDTH_FRAC,
@@ -38,6 +39,15 @@ import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/sca
 let walkProbeCache = null;
 const walkProbeCacheStorage = new Map();
 
+/** Frame-global cache for wild Pokémon walkability probes. */
+let wildWalkProbeCache = null;
+const wildWalkProbeCacheStorage = new Map();
+
+/** Cache for scatter origin analysis within a probe session. */
+let probeOriginMemo = null;
+/** Cache for formal tree trunk spans within a probe session. */
+let probeFormalMemo = null;
+
 /**
  * Call before a tight sequence of `canWalk` / `canWalkMicroTile` with `ignoreTreeTrunks: true`
  * (e.g. bisection in `updatePlayer`). Clears any prior batch.
@@ -45,12 +55,34 @@ const walkProbeCacheStorage = new Map();
 export function beginWalkProbeCache() {
   walkProbeCacheStorage.clear();
   walkProbeCache = walkProbeCacheStorage;
+  probeOriginMemo = new Map();
+  probeFormalMemo = new Map();
 }
 
 /** Clears the walk probe memo; call after the movement batch (typically in `finally`). */
 export function endWalkProbeCache() {
   walkProbeCache = null;
   walkProbeCacheStorage.clear();
+  probeOriginMemo = null;
+  probeFormalMemo = null;
+}
+
+/**
+ * Senior Optimization: Shared frame-global cache for all Wild Pokémon probes.
+ * Avoids O(N_mons * N_samples) redundant procedural sampling.
+ */
+export function beginWildWalkProbeCache() {
+  wildWalkProbeCacheStorage.clear();
+  wildWalkProbeCache = wildWalkProbeCacheStorage;
+  probeOriginMemo = new Map();
+  probeFormalMemo = new Map();
+}
+
+export function endWildWalkProbeCache() {
+  wildWalkProbeCache = null;
+  wildWalkProbeCacheStorage.clear();
+  probeOriginMemo = null;
+  probeFormalMemo = null;
 }
 
 /**
@@ -431,30 +463,40 @@ export function getFormalTreeTrunkCircle(rootX, my, data) {
   return { cx, cy, r };
 }
 
-/**
- * World-space (micro tile coords, float): true if point lies inside a formal trunk circle.
- * `radiusMult` scales the hit radius (defaults to 1 = physical collider). Pass
- * {@link TREE_MOVE_HITBOX_RADIUS_MULT} from `scatter-collider-config.js` for move-impact checks.
- */
-export function formalTreeTrunkBlocksWorldPoint(wx, wy, data, radiusMult = 1) {
+/** World-space: point inside a formal broadleaf trunk circle. */
+export function formalTreeTrunkBlocksWorldPoint(wx, wy, data) {
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return false;
 
   const ix = Math.floor(wx);
   const iy = Math.floor(wy);
-  const mult = Number.isFinite(radiusMult) && radiusMult > 0 ? radiusMult : 1;
 
-  for (let my = iy - 1; my <= iy + 1; my++) {
-    if (my < 0 || my >= microH) continue;
-    for (let rootX = ix - 1; rootX <= ix; rootX++) {
-      if (rootX < 0 || rootX + 1 >= microW) continue;
-      const c = getFormalTreeTrunkCircle(rootX, my, data);
-      if (!c) continue;
-      const dx = wx - c.cx;
-      const dy = wy - c.cy;
-      const effR = c.r * mult;
-      if (dx * dx + dy * dy <= effR * effR) return true;
+  for (let ox0 = Math.max(0, ix - 1); ox0 <= ix; ox0++) {
+    for (let oy0 = Math.max(0, iy - 2); oy0 <= iy + 1; oy0++) {
+      const span = getFormalTreeTrunkWorldXSpan(ox0, oy0, data, probeFormalMemo);
+      if (!span) continue;
+      const dx = wx - span.cx;
+      const dy = wy - span.cy;
+      if (dx * dx + dy * dy <= span.radius * span.radius) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True if a formal broadleaf trunk circle intersects the micro-cell [mx, mx+1) × [my, my+1).
+ */
+export function formalTreeTrunkOverlapsMicroCell(mx, my, data) {
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
+
+  for (let ox0 = Math.max(0, mx - 1); ox0 <= mx; ox0++) {
+    for (let oy0 = Math.max(0, my - 2); oy0 <= my + 1; oy0++) {
+      const span = getFormalTreeTrunkWorldXSpan(ox0, oy0, data, probeFormalMemo);
+      if (!span) continue;
+      if (circleIntersectsUnitSquare(span.cx, span.cy, span.radius, mx, my)) return true;
     }
   }
   return false;
@@ -463,30 +505,15 @@ export function formalTreeTrunkBlocksWorldPoint(wx, wy, data, radiusMult = 1) {
 /**
  * Horizontal span + circle params (for overlays / JSON). `left`/`right` are the circle's x-extent.
  */
-export function getFormalTreeTrunkWorldXSpan(rootX, my, data) {
+export function getFormalTreeTrunkWorldXSpan(rootX, my, data, memo = null) {
+  const key = memo ? `${rootX},${my}` : null;
+  if (key && memo.has(key)) return memo.get(key);
+
   const c = getFormalTreeTrunkCircle(rootX, my, data);
-  if (!c) return null;
-  return { left: c.cx - c.r, right: c.cx + c.r, cx: c.cx, cy: c.cy, radius: c.r };
-}
+  const res = c ? { left: c.cx - c.r, right: c.cx + c.r, cx: c.cx, cy: c.cy, radius: c.r } : null;
 
-/**
- * True if the narrow formal trunk intersects the micro-cell [mx, mx+1) × [my, my+1).
- * (Tile center can be clear while the strip still clips the cell — matches gameplay samples.)
- */
-export function formalTreeTrunkOverlapsMicroCell(mx, my, data) {
-  const microW = data.width * MACRO_TILE_STRIDE;
-  const microH = data.height * MACRO_TILE_STRIDE;
-  if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
-
-  for (let trunkMy = Math.max(0, my - 2); trunkMy <= Math.min(microH - 1, my + 2); trunkMy++) {
-    for (let rootX = mx - 1; rootX <= mx; rootX++) {
-      if (rootX < 0 || rootX + 1 >= microW) continue;
-      const c = getFormalTreeTrunkCircle(rootX, trunkMy, data);
-      if (!c) continue;
-      if (circleIntersectsUnitSquare(c.cx, c.cy, c.r, mx, my)) return true;
-    }
-  }
-  return false;
+  if (key) memo.set(key, res);
+  return res;
 }
 
 /**
@@ -563,9 +590,18 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
 
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
   if (!itemsO.length) return null;
+
+  const isBerryPatchO = nTile.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
+  const filteredO = itemsO.filter(ik => {
+    const isB = ik.includes('berry-tree-');
+    return isBerryPatchO ? isB : !isB;
+  });
+  if (!filteredO.length) return null;
+
   const forcedItemKey = getScatterItemKeyOverride(ox0, oy0);
   const itemKey =
-    forcedItemKey || itemsO[Math.floor(seededHash(ox0, oy0, seed + 222) * itemsO.length)];
+    forcedItemKey || filteredO[Math.floor(seededHash(ox0, oy0, seed + 222) * filteredO.length)];
+
   const isTree = scatterItemKeyIsTree(itemKey);
   const isSolid = scatterItemKeyIsSolid(itemKey);
   if (!isTree && !(EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER && isSolid && !isTree)) return null;
@@ -649,12 +685,12 @@ function scatterPhysicsCirclesBlockWorldPoint(wx, wy, data, which, radiusMult = 
 
   const ix = Math.floor(wx);
   const iy = Math.floor(wy);
-  const originMemo = new Map();
+  const memo = probeOriginMemo || new Map();
   const mult = Number.isFinite(radiusMult) && radiusMult > 0 ? radiusMult : 1;
 
   for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
     for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
-      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, memo);
       if (!p) continue;
       if (which === 'tree' && !scatterItemKeyIsTree(p.itemKey)) continue;
       if (
@@ -696,10 +732,10 @@ function scatterPhysicsCirclesOverlapMicroCell(mx, my, data, which) {
   const microH = data.height * MACRO_TILE_STRIDE;
   if (mx < 0 || my < 0 || mx >= microW || my >= microH) return false;
 
-  const originMemo = new Map();
+  const memo = probeOriginMemo || new Map();
   for (let ox0 = Math.max(0, mx - 8); ox0 <= Math.min(microW - 1, mx + 2); ox0++) {
     for (let oy0 = Math.max(0, my - 5); oy0 <= Math.min(microH - 1, my + 2); oy0++) {
-      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, memo);
       if (!p) continue;
       if (which === 'tree' && !scatterItemKeyIsTree(p.itemKey)) continue;
       if (
@@ -901,10 +937,25 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
     return false;
   }
 
-  const targetTile = getMicroTile(mx, my, data);
-  if (!targetTile) return false;
+  /** @type {number | null} */
+  let cacheKey = null;
+  if (wildWalkProbeCache) {
+    // 32-bit bitpack: mx (11), my (11), airborne (1), ignoreTrunks (1) -> 24 bits used.
+    // Safe for maps up to 2048 macro tiles (64k micro tiles).
+    cacheKey = (mx << 13) | (my << 2) | (isAirborne ? 2 : 0) | (ignoreTreeTrunks ? 1 : 0);
+    const cached = wildWalkProbeCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
 
-  // 1. Height Context Check (no ar: pode atravessar diferença de degrau num frame, como o jogador com impulso)
+  const finish = (ok) => {
+    if (cacheKey !== null && wildWalkProbeCache) wildWalkProbeCache.set(cacheKey, ok);
+    return ok;
+  };
+
+  const targetTile = getMicroTile(mx, my, data);
+  if (!targetTile) return finish(false);
+
+  // 1. Height Context Check
   if (!isAirborne && srcX !== undefined && srcY !== undefined) {
     const smx = Math.floor(srcX);
     const smy = Math.floor(srcY);
@@ -912,22 +963,22 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
       if (!okHeightStepTransition(sourceTile, targetTile)) {
-        return false;
+        return finish(false);
       }
     }
   }
 
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return false;
+    if (WALL_ROLES.has(role)) return finish(false);
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  if (sid === null) return false;
+  if (sid === null) return finish(false);
 
   let setName = BIOME_TO_TERRAIN[targetTile.biomeId] || 'grass';
   if (targetTile.isRoad && targetTile.roadFeature) setName = targetTile.roadFeature;
-  if (!isAirborne && setName.startsWith('altura ')) return false;
+  if (!isAirborne && setName.startsWith('altura ')) return finish(false);
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
 
@@ -937,16 +988,16 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
       targetTile.biomeId === BIOMES.OCEAN.id ||
       lakeWalkRole != null ||
       lavaSprite;
-    if (!swimOk) return false;
+    if (!swimOk) return finish(false);
   }
 
-  if (isPropBlocking(mx, my, data)) return false;
-  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return false;
+  if (isPropBlocking(mx, my, data)) return finish(false);
+  if (!ignoreTreeTrunks && !isAirborne && formalTreeTrunkBlocksWorldPoint(x, y, data)) return finish(false);
   if (!ignoreTreeTrunks && !isAirborne && scatterPhysicsCirclesBlockWorldPoint(x, y, data, 'any')) {
-    return false;
+    return finish(false);
   }
 
-  return true;
+  return finish(true);
 }
 
 /**

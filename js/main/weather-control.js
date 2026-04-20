@@ -15,15 +15,27 @@
 /** @type {WeatherPresetId | null} */
 let pendingPreset = null;
 /** @type {number | null} */
-let pendingIntensity01 = null;
+let pendingCloudIntensity01 = null;
+/** @type {number | null} */
+let pendingPrecipIntensity01 = null;
+
+function clamp01(n) {
+  const x = Number(n);
+  return Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : null;
+}
 
 /**
  * Queue a weather change. Either argument may be `null`/omitted to keep the current
- * value. Intensity is clamped to `[0, 1]`; invalid presets are ignored silently.
+ * value. Intensities are clamped to `[0, 1]`; invalid presets are ignored silently.
+ *
+ * When `precipIntensity01` is provided and `cloudIntensity01` is omitted, cloud mirrors
+ * precip (Rain Dance / Sunny Day keep sky and particles aligned).
+ *
  * @param {WeatherPresetId | null | undefined} preset
- * @param {number | null | undefined} intensity01
+ * @param {number | null | undefined} precipIntensity01
+ * @param {number | null | undefined} [cloudIntensity01]
  */
-export function requestWeatherChange(preset, intensity01) {
+export function requestWeatherChange(preset, precipIntensity01, cloudIntensity01) {
   if (
     preset === 'clear' ||
     preset === 'cloudy' ||
@@ -33,23 +45,37 @@ export function requestWeatherChange(preset, intensity01) {
   ) {
     pendingPreset = preset;
   }
-  if (intensity01 != null) {
-    const n = Number(intensity01);
-    if (Number.isFinite(n)) {
-      pendingIntensity01 = Math.max(0, Math.min(1, n));
+  if (precipIntensity01 != null) {
+    const c = clamp01(precipIntensity01);
+    if (c != null) {
+      pendingPrecipIntensity01 = c;
+      if (cloudIntensity01 === undefined || cloudIntensity01 === null) {
+        pendingCloudIntensity01 = c;
+      }
     }
+  }
+  if (cloudIntensity01 != null) {
+    const c = clamp01(cloudIntensity01);
+    if (c != null) pendingCloudIntensity01 = c;
   }
 }
 
 /**
  * Pop any queued change. Returns `null` when nothing's pending. After calling this the
  * queue is empty; callers are expected to apply the change immediately.
- * @returns {{ preset: WeatherPresetId | null, intensity01: number | null } | null}
+ * @returns {{ preset: WeatherPresetId | null, cloudIntensity01: number | null, precipIntensity01: number | null } | null}
  */
 export function consumeWeatherChangeRequest() {
-  if (pendingPreset == null && pendingIntensity01 == null) return null;
-  const out = { preset: pendingPreset, intensity01: pendingIntensity01 };
+  if (pendingPreset == null && pendingCloudIntensity01 == null && pendingPrecipIntensity01 == null) {
+    return null;
+  }
+  const out = {
+    preset: pendingPreset,
+    cloudIntensity01: pendingCloudIntensity01,
+    precipIntensity01: pendingPrecipIntensity01
+  };
   pendingPreset = null;
-  pendingIntensity01 = null;
+  pendingCloudIntensity01 = null;
+  pendingPrecipIntensity01 = null;
   return out;
 }

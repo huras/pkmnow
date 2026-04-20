@@ -44,8 +44,10 @@ const TINT_ALPHA_EPSILON = 0.002;
 
 /** @type {WeatherPresetId} */
 let targetPreset = 'cloudy';
-/** 0..1 intensity scalar (UI slider target). */
-let targetIntensity01 = 0.75;
+/** 0..1 cloud / overcast ramp (UI). */
+let targetCloudIntensity01 = 0.75;
+/** 0..1 rain · snow · sand particles + gameplay rain meter (UI). */
+let targetPrecipIntensity01 = 0.75;
 /** @type {WeatherRenderParams | null} — smoothed display state; lazily allocated. */
 let activeParams = null;
 /** Smoothed categorical blend (one-hot target eased over time) used by systems with discrete behavior. */
@@ -57,25 +59,42 @@ const activePresetBlend = {
   sandstorm: 0
 };
 
-/** @type {Set<(ev: { preset: WeatherPresetId, intensity01: number, source: WeatherTargetChangeSource }) => void>} */
+/** @type {Set<(ev: { preset: WeatherPresetId, cloudIntensity01: number, precipIntensity01: number, source: WeatherTargetChangeSource }) => void>} */
 const targetChangeListeners = new Set();
 
-/** @typedef {'init' | 'ui' | 'mailbox' | 'external'} WeatherTargetChangeSource */
+/** @typedef {'init' | 'ui-cloud' | 'ui-precip' | 'mailbox' | 'external'} WeatherTargetChangeSource */
 
 /**
  * Seed the engine before the first tick. Safe to call multiple times; each call fires
  * one `'init'` listener event so UI panels can paint their initial state from whatever
  * was loaded (save file, URL param, default).
  *
- * @param {{ preset?: WeatherPresetId, intensity01?: number }} [opts]
+ * @param {{ preset?: WeatherPresetId, intensity01?: number, cloudIntensity01?: number, precipIntensity01?: number }} [opts]
+ *   When only `intensity01` is set, both targets mirror it. If either cloud or precip is set,
+ *   the other falls back to `intensity01` when provided, else keeps the previous default.
  */
 export function initWeatherSystem(opts = {}) {
   if (opts.preset && isWeatherPreset(opts.preset)) targetPreset = opts.preset;
-  if (opts.intensity01 != null) {
-    const n = Number(opts.intensity01);
-    if (Number.isFinite(n)) targetIntensity01 = Math.max(0, Math.min(1, n));
+  const clamp01 = (x, fallback) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+  };
+  const hasCloud = opts.cloudIntensity01 != null;
+  const hasPrecip = opts.precipIntensity01 != null;
+  const legacy = opts.intensity01;
+  if (hasCloud || hasPrecip) {
+    if (hasCloud) targetCloudIntensity01 = clamp01(opts.cloudIntensity01, targetCloudIntensity01);
+    else if (legacy != null) targetCloudIntensity01 = clamp01(legacy, targetCloudIntensity01);
+    if (hasPrecip) targetPrecipIntensity01 = clamp01(opts.precipIntensity01, targetPrecipIntensity01);
+    else if (legacy != null) targetPrecipIntensity01 = clamp01(legacy, targetPrecipIntensity01);
+  } else if (legacy != null) {
+    const v = clamp01(legacy, 0.75);
+    targetCloudIntensity01 = v;
+    targetPrecipIntensity01 = v;
   }
-  activeParams = cloneWeatherParams(resolveWeatherParams(targetPreset, targetIntensity01));
+  activeParams = cloneWeatherParams(
+    resolveWeatherParams(targetPreset, targetCloudIntensity01, targetPrecipIntensity01)
+  );
   for (const id of WEATHER_PRESETS) {
     activePresetBlend[id] = id === targetPreset ? 1 : 0;
   }
@@ -86,7 +105,8 @@ export function initWeatherSystem(opts = {}) {
  * Update the target preset and/or intensity. Missing fields keep their current value.
  * Always fires a target-change event (listener responsibility to dedupe if they care).
  *
- * @param {{ preset?: WeatherPresetId, intensity01?: number }} next
+ * @param {{ preset?: WeatherPresetId, intensity01?: number, cloudIntensity01?: number, precipIntensity01?: number }} next
+ *   `intensity01` alone sets both cloud and precip to the same value (moves, session restore).
  * @param {WeatherTargetChangeSource} [source='external'] Distinguishes programmatic calls
  *   from UI drags, so listeners (e.g. debug panel) can skip no-op DOM writes when they
  *   were the originator.
@@ -97,22 +117,50 @@ export function setWeatherTarget(next, source = 'external') {
     targetPreset = next.preset;
     changed = true;
   }
-  if (next?.intensity01 != null) {
+  const hasCloud = next?.cloudIntensity01 != null;
+  const hasPrecip = next?.precipIntensity01 != null;
+  if (next?.intensity01 != null && !hasCloud && !hasPrecip) {
     const n = Number(next.intensity01);
     if (Number.isFinite(n)) {
       const clamped = Math.max(0, Math.min(1, n));
-      if (clamped !== targetIntensity01) {
-        targetIntensity01 = clamped;
+      if (clamped !== targetCloudIntensity01 || clamped !== targetPrecipIntensity01) {
+        targetCloudIntensity01 = clamped;
+        targetPrecipIntensity01 = clamped;
         changed = true;
+      }
+    }
+  } else {
+    if (hasCloud) {
+      const n = Number(next.cloudIntensity01);
+      if (Number.isFinite(n)) {
+        const clamped = Math.max(0, Math.min(1, n));
+        if (clamped !== targetCloudIntensity01) {
+          targetCloudIntensity01 = clamped;
+          changed = true;
+        }
+      }
+    }
+    if (hasPrecip) {
+      const n = Number(next.precipIntensity01);
+      if (Number.isFinite(n)) {
+        const clamped = Math.max(0, Math.min(1, n));
+        if (clamped !== targetPrecipIntensity01) {
+          targetPrecipIntensity01 = clamped;
+          changed = true;
+        }
       }
     }
   }
   if (changed) emitTargetChanged(source);
 }
 
-/** @returns {{ preset: WeatherPresetId, intensity01: number }} */
+/** @returns {{ preset: WeatherPresetId, cloudIntensity01: number, precipIntensity01: number }} */
 export function getWeatherTarget() {
-  return { preset: targetPreset, intensity01: targetIntensity01 };
+  return {
+    preset: targetPreset,
+    cloudIntensity01: targetCloudIntensity01,
+    precipIntensity01: targetPrecipIntensity01
+  };
 }
 
 /**
@@ -122,14 +170,16 @@ export function getWeatherTarget() {
  */
 export function getActiveWeatherParams() {
   if (!activeParams) {
-    activeParams = cloneWeatherParams(resolveWeatherParams(targetPreset, targetIntensity01));
+    activeParams = cloneWeatherParams(
+      resolveWeatherParams(targetPreset, targetCloudIntensity01, targetPrecipIntensity01)
+    );
   }
   return activeParams;
 }
 
 /**
  * Subscribe to target changes. Returns an unsubscribe function.
- * @param {(ev: { preset: WeatherPresetId, intensity01: number, source: WeatherTargetChangeSource }) => void} listener
+ * @param {(ev: { preset: WeatherPresetId, cloudIntensity01: number, precipIntensity01: number, source: WeatherTargetChangeSource }) => void} listener
  */
 export function addWeatherTargetChangeListener(listener) {
   targetChangeListeners.add(listener);
@@ -149,11 +199,18 @@ export function tickWeather(dt, gameTime) {
   //    re-sync, then the smoother eases toward the new preset naturally.
   const req = consumeWeatherChangeRequest();
   if (req) {
-    setWeatherTarget({ preset: req.preset ?? undefined, intensity01: req.intensity01 ?? undefined }, 'mailbox');
+    setWeatherTarget(
+      {
+        preset: req.preset ?? undefined,
+        cloudIntensity01: req.cloudIntensity01 ?? undefined,
+        precipIntensity01: req.precipIntensity01 ?? undefined
+      },
+      'mailbox'
+    );
   }
 
   // 2. Resolve the full target params once; ease active toward them.
-  const target = resolveWeatherParams(targetPreset, targetIntensity01);
+  const target = resolveWeatherParams(targetPreset, targetCloudIntensity01, targetPrecipIntensity01);
   const active = getActiveWeatherParams();
   const k = 1 - Math.exp(-dt / Math.max(0.05, WEATHER_SMOOTH_TAU_SEC));
   const lerpN = (a, b) => a + (b - a) * k;
@@ -256,7 +313,12 @@ export function getActiveWeatherPresetBlend(preset) {
 /** @param {WeatherTargetChangeSource} source */
 function emitTargetChanged(source) {
   if (targetChangeListeners.size === 0) return;
-  const ev = { preset: targetPreset, intensity01: targetIntensity01, source };
+  const ev = {
+    preset: targetPreset,
+    cloudIntensity01: targetCloudIntensity01,
+    precipIntensity01: targetPrecipIntensity01,
+    source
+  };
   for (const listener of targetChangeListeners) {
     try {
       listener(ev);

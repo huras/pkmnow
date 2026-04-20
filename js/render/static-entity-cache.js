@@ -19,7 +19,8 @@ import {
   TREE_NOISE_SCALE,
   isSortableScatter,
   tileSurfaceAllowsScatterVegetation,
-  scatterHasWindSway
+  scatterHasWindSway,
+  BERRY_PATCH_THRESHOLD
 } from '../biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity } from '../chunking.js';
 import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
@@ -112,7 +113,17 @@ export function getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH) {
 
       // --- b. Scatters ---
       const items = BIOME_VEGETATION[t.biomeId] || [];
-      const proceduralItem = items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+      
+      // Filter items based on berry patch density
+      const isBerryPatch = t.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
+      const filteredItems = items.filter(ik => {
+        const isBerry = ik.includes('berry-tree-');
+        return isBerryPatch ? isBerry : !isBerry;
+      });
+
+      const proceduralItem = filteredItems.length > 0 
+        ? filteredItems[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * filteredItems.length)]
+        : null;
 
       if (proceduralItem && isSortableScatter(proceduralItem)) {
         if (validScatterOriginMicro(mxScan, myScan, data.seed, fullW, fullH, directGet, _scatterMemo)) {

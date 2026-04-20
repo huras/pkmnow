@@ -1,5 +1,8 @@
 import { resolveConcConvDrawRole } from '../tessellation-logic.js';
 
+/** Master switch: when false, terrain role mirroring is disabled. */
+export const ENABLE_TERRAIN_MIRROR_OPTIMIZATION = false;
+
 /**
  * Tile index + horizontal flip for drawing conc-conv(a|b|c) terrain from the sheet.
  * Other set types: passthrough (tileId for `role`, no flip).
@@ -12,6 +15,9 @@ export function getConcConvATerrainTileSpec(terrainSet, role) {
   const centerId = terrainSet?.roles?.CENTER ?? terrainSet?.centerId ?? null;
   if (!terrainSet || role == null || role === '') {
     return { tileId: centerId, flipX: false };
+  }
+  if (!ENABLE_TERRAIN_MIRROR_OPTIMIZATION) {
+    return { tileId: terrainSet.roles?.[role] ?? centerId, flipX: false };
   }
   const { drawRole, flipX } = resolveConcConvDrawRole(terrainSet.type, role);
   return { tileId: terrainSet.roles?.[drawRole] ?? centerId, flipX };

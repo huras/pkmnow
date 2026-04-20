@@ -7,7 +7,8 @@ import {
   getTreeType,
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
-  tileSurfaceAllowsScatterVegetation
+  tileSurfaceAllowsScatterVegetation,
+  BERRY_PATCH_THRESHOLD
 } from './biome-tiles.js';
 
 const MAX_SCATTER_ROWS_PASS2 = 8;
@@ -46,7 +47,15 @@ function scatterOriginStrictUpToFootprintScan(mx, my, seed, microW, microH, getT
     ) {
       const itemsAtWest = BIOME_VEGETATION[tileWest.biomeId] || [];
       if (itemsAtWest.length === 0) continue;
-      const ik = itemsAtWest[Math.floor(seededHash(nxw, my, seed + 222) * itemsAtWest.length)];
+
+      const isBerryPatchWest = tileWest.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
+      const filteredWest = itemsAtWest.filter(ik => {
+        const isB = ik.includes('berry-tree-');
+        return isBerryPatchWest ? isB : !isB;
+      });
+      if (filteredWest.length === 0) continue;
+
+      const ik = filteredWest[Math.floor(seededHash(nxw, my, seed + 222) * filteredWest.length)];
       const os = OBJECT_SETS[ik];
       if (os) {
         const { cols: cWest } = parseShape(os.shape);
@@ -67,7 +76,14 @@ function scatterOriginStrictUpToFootprintScan(mx, my, seed, microW, microH, getT
   const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
   if (itemsO.length === 0) return false;
 
-  const itemKeyO = itemsO[Math.floor(seededHash(mx, my, seed + 222) * itemsO.length)];
+  const isBerryPatchO = nTile.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
+  const filteredO = itemsO.filter(ik => {
+    const isB = ik.includes('berry-tree-');
+    return isBerryPatchO ? isB : !isB;
+  });
+  if (filteredO.length === 0) return false;
+
+  const itemKeyO = filteredO[Math.floor(seededHash(mx, my, seed + 222) * filteredO.length)];
   const objSetO = OBJECT_SETS[itemKeyO];
   if (!objSetO) return false;
   const { rows: rowsO, cols: colsO } = parseShape(objSetO.shape);

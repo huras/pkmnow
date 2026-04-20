@@ -60,6 +60,8 @@ const JUMP_IMPULSE = 4.5;
 const GROUND_R = 0.32; // Raio de colisão
 const PLAYER_BASE_MAX_JUMPS = 2;
 const PLAYER_FLYING_MAX_JUMPS = 6;
+/** Player stamina is intentionally higher than generic entity default. */
+const PLAYER_STAMINA_MAX = ENTITY_STAMINA_MAX * 2;
 
 /** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
 /** Creative flight ceiling (world tile units); HUD / UI may import this. */
@@ -160,8 +162,8 @@ export const player = {
   hp: 100,
   maxHp: 100,
   /** Sprint / wild sprint-speed drain; regens when not draining. */
-  stamina: ENTITY_STAMINA_MAX,
-  maxStamina: ENTITY_STAMINA_MAX,
+  stamina: PLAYER_STAMINA_MAX,
+  maxStamina: PLAYER_STAMINA_MAX,
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
@@ -1008,8 +1010,6 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player.vx = r.vx;
     player.vy = r.vy;
   }
-
-  clampPlayerToPlayColliderBoundsIfActive(player);
 
   const movedWorldTiles = Math.hypot(player.x - ox, player.y - oy);
   const wantFootFloorSfx =

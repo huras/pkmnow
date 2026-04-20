@@ -74,9 +74,6 @@ export function drawOceanPass(ctx, options) {
   ctx.restore();
 }
 
-/**
- * PASS 5a: Animated grass rendering for the entire viewport.
- */
 export function drawAnimatedGrassPass(ctx, options) {
   const {
     lodDetail,
@@ -87,12 +84,14 @@ export function drawAnimatedGrassPass(ctx, options) {
     isGrassDeferredAroundPlayer,
     isGrassDeferredEwNeighbor,
     skipPlayerGrassOverlayDuringFlight,
-    drawGrass5aForCell
+    drawGrass5aForCell,
+    isTileVisible
   } = options;
 
-  if (lodDetail >= 2) return;
+  // LOD2 grass now allowed per user request (optimized via caching)
 
   forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+    if (typeof isTileVisible === 'function' && !isTileVisible(mx, my)) return;
     if (mx === playerTileMx && my === playerTileMy) {
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
       return;
@@ -127,7 +126,6 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
   } = options;
 
   const playerTopOverlay = mode === 'playerTopOverlay';
-  if (lodDetail >= 2 && !playerTopOverlay) return;
   const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
   const blitGrassQuad = (surf, destYTop, destHFull) => {
@@ -205,17 +203,17 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
           baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
         }
         if (baseId != null) {
-          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
           const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
           blitGrassQuad(frame, ty - tileH, tileH * 2);
         }
       }
-      if (lodDetail < 2 && layers.top) {
+      if (layers.top) {
         const vt = getGrassVariant(tile.biomeId);
         const vTiles = GRASS_TILES[vt];
         const topId = vTiles.originalTop;
         if (topId) {
-          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
           const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
           blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
         }
@@ -292,18 +290,18 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
     }
     if (baseId != null) {
-      const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+      const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
       const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH, tileH * 2);
     }
   }
 
-  if (lodDetail < 2 && layers.top) {
+  if (layers.top) {
     const vt = getGrassVariant(tile.biomeId);
     const vTiles = GRASS_TILES[vt];
     const topId = vTiles.originalTop;
     if (topId) {
-      const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+      const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
       const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
     }

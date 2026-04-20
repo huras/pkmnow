@@ -1,4 +1,4 @@
-import { AnimationRenderer, resolveWindSwayBake, WIND_BAKE_ANGLES } from '../animation-renderer.js';
+import { AnimationRenderer, resolveWindSwayBake, getWindBakeAngle } from '../animation-renderer.js';
 import { VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
 
 const snap = (n) => Math.round(n);
@@ -125,7 +125,7 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
   }
   const logicalIdx = AnimationRenderer.getFrameIndex(time, originX, originY);
   const { bakeSlot, flipX } = resolveWindSwayBake(logicalIdx);
-  const angle = WIND_BAKE_ANGLES[bakeSlot] || 0;
+  const angle = getWindBakeAngle(bakeSlot);
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
   const canopyCols = 2;
@@ -184,7 +184,7 @@ export function getScatterTopCanopyComposite(
   }
   const logicalIdx = windSway ? AnimationRenderer.getFrameIndex(time, originX, originY) : 1;
   const { bakeSlot, flipX } = resolveWindSwayBake(logicalIdx);
-  const angle = WIND_BAKE_ANGLES[bakeSlot] || 0;
+  const angle = getWindBakeAngle(bakeSlot);
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
   const topRows = Math.ceil(topPart.ids.length / cols);

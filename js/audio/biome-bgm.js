@@ -598,6 +598,33 @@ export function getBiomeBgmUiState() {
   };
 }
 
+/**
+ * Forces a smooth transition to the next shuffled track for the current biome intent.
+ * @returns {boolean} true when a transition was started
+ */
+export function forceNextBiomeBgmTrack() {
+  const targetBiome = transitionTargetBiome ?? stableDesiredBiomeId ?? playingBiomeId;
+  if (targetBiome == null || !Number.isFinite(targetBiome)) return false;
+
+  const urls = getBiomeBgmUrlsForBiome(targetBiome);
+  if (!urls?.length) return false;
+
+  chainEpoch++;
+  clearTimeouts();
+  const ep = chainEpoch;
+  transitionTargetBiome = targetBiome;
+
+  if (activeSlot == null) {
+    sequenceFadeGapPlay({ prevSlot: null, nextSlot: 0, biomeId: targetBiome, epoch: ep });
+    return true;
+  }
+
+  const prev = activeSlot;
+  const nextS = /** @type {0|1} */ (1 - prev);
+  sequenceFadeGapPlay({ prevSlot: prev, nextSlot: nextS, biomeId: targetBiome, epoch: ep });
+  return true;
+}
+
 /** Call when leaving play mode. */
 export function stopBiomeBgm() {
   biomeCandidate = null;

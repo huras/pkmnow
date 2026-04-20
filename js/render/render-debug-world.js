@@ -5,7 +5,9 @@ import {
   getFormalTreeTrunkWorldXSpan,
   scatterPhysicsCircleOverlapsMicroCellAny,
   scatterPhysicsCircleAtOrigin,
-  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER
+  EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
+  beginWildWalkProbeCache,
+  endWildWalkProbeCache
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from '../main/play-collider-overlay-cache.js';
@@ -648,46 +650,50 @@ export function drawWorldColliderOverlay(ctx, options) {
       const oy1 = Math.min(endY, cy + COLL_OVERLAY_RAD + 1);
       const overlayFeetDex = player.dexId || 94;
 
-      for (let my = oy0; my < oy1; my++) {
-        for (let mx = ox0; mx < ox1; mx++) {
-          const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, isPlayerWalkingAnim);
-          const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
-          const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
-          const scatterPhy = scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data);
-          if (!feetOk) {
-            ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
-            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
-          } else if (formalTrunk || scatterPhy) {
-            ctx.fillStyle = formalTrunk ? 'rgba(90, 220, 255, 0.26)' : 'rgba(160, 170, 255, 0.24)';
-            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+      beginWildWalkProbeCache();
+      try {
+        for (let my = oy0; my < oy1; my++) {
+          for (let mx = ox0; mx < ox1; mx++) {
+            const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, isPlayerWalkingAnim);
+            const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
+            const formalTrunk = formalTreeTrunkOverlapsMicroCell(mx, my, data);
+            const scatterPhy = scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data);
+            if (!feetOk) {
+              ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            } else if (formalTrunk || scatterPhy) {
+              ctx.fillStyle = formalTrunk ? 'rgba(90, 220, 255, 0.26)' : 'rgba(160, 170, 255, 0.24)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            }
           }
         }
-      }
 
-      ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
-      ctx.lineWidth = 2;
-      for (let my = oy0; my < oy1; my++) {
-        for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
-          const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
-          if (!span) continue;
-          ctx.beginPath();
-          ctx.ellipse(snapPx(span.cx * tileW), snapPx(span.cy * tileH), Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
-          ctx.stroke();
+        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
+        ctx.lineWidth = 2;
+        for (let my = oy0; my < oy1; my++) {
+          for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
+            const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+            if (!span) continue;
+            ctx.beginPath();
+            ctx.ellipse(snapPx(span.cx * tileW), snapPx(span.cy * tileH), Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
-      }
 
-      const scatterPhyMemo = new Map();
-      for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
-        if (oxS < 0 || oxS >= data.width * MACRO_TILE_STRIDE) continue;
-        for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
-          const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, scatterPhyMemo, getCached);
-          if (!p) continue;
-          if (p.cx + p.radius <= ox0 || p.cx - p.radius >= ox1 || p.cy + p.radius <= oy0 || p.cy - p.radius >= oy1) continue;
-          ctx.strokeStyle = scatterItemKeyIsTree(p.itemKey) ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
-          ctx.beginPath();
-          ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
-          ctx.stroke();
+        for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
+          if (oxS < 0 || oxS >= data.width * MACRO_TILE_STRIDE) continue;
+          for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
+            const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, null, getCached);
+            if (!p) continue;
+            if (p.cx + p.radius <= ox0 || p.cx - p.radius >= ox1 || p.cy + p.radius <= oy0 || p.cy - p.radius >= oy1) continue;
+            ctx.strokeStyle = scatterItemKeyIsTree(p.itemKey) ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
+            ctx.beginPath();
+            ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         }
+      } finally {
+        endWildWalkProbeCache();
       }
     }
 

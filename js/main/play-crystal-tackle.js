@@ -10,6 +10,7 @@ import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
 import { invalidateStaticEntityCache } from '../render/static-entity-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
+import { harvestBerryTree, getBerryTreeState } from './berry-tree-system.js';
 import {
   setScatterItemKeyOverride,
   clearScatterItemKeyOverrides,
@@ -40,6 +41,7 @@ import {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export {
@@ -52,6 +54,7 @@ export {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export { appendTreeTopFallRenderItems } from './play-tree-top-fall.js';
@@ -209,6 +212,10 @@ export function isPlayCrystalScatterOriginDestroyed(ox, oy) {
 
 export function isPlayDetailScatterOriginDestroyed(ox, oy) {
   return isPlayCrystalScatterOriginDestroyed(ox, oy);
+}
+
+export function isBerryTreeKey(itemKey) {
+  return String(itemKey || '').toLowerCase().includes('berry-tree');
 }
 
 export function isPlayFormalTreeRootDestroyed(rootX, my) {
@@ -1054,6 +1061,75 @@ export function strengthRelocateCarriedDetailNear(
 }
 
 /**
+ * Places one inventory item back into the world as a scatter detail (not pickup drop).
+ * Resulting detail is breakable again via normal map-detail combat flow.
+ * @param {number} landX
+ * @param {number} landY
+ * @param {string} itemKey
+ * @param {object | null | undefined} data
+ * @param {number} [chebRadius]
+ * @returns {boolean}
+ */
+export function placeInventoryItemAsScatterDetailNear(landX, landY, itemKey, data, chebRadius = 8) {
+  if (!data) return false;
+  const resolvedItemKey = String(itemKey || '');
+  if (!resolvedItemKey) return false;
+  const objSet = OBJECT_SETS[resolvedItemKey];
+  if (!objSet) return false;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const cx = Math.max(0.5, Math.min(microW - 0.5, Number(landX) || 0.5));
+  const cy = Math.max(0.5, Math.min(microH - 0.5, Number(landY) || 0.5));
+  const ix = Math.floor(cx);
+  const iy = Math.floor(cy);
+  const R = Math.max(0, Math.floor(Number(chebRadius) || 0));
+  /** @type {{ ox: number, oy: number, d2: number }[]} */
+  const cand = [];
+  for (let oy = iy - R; oy <= iy + R; oy++) {
+    for (let ox = ix - R; ox <= ix + R; ox++) {
+      if (ox < 0 || oy < 0 || ox >= microW || oy >= microH) continue;
+      const ddx = ox + 0.5 - cx;
+      const ddy = oy + 0.5 - cy;
+      cand.push({ ox, oy, d2: ddx * ddx + ddy * ddy });
+    }
+  }
+  cand.sort((a, b) => a.d2 - b.d2);
+  const nowSec = performance.now() * 0.001;
+  for (const c of cand) {
+    const tile = getMicroTile(c.ox, c.oy, data);
+    if (!tile || !tileSurfaceAllowsScatterVegetation(tile)) continue;
+    if (isPlayScatterTreeOriginCharred(c.ox, c.oy) || isPlayScatterTreeOriginBurning(c.ox, c.oy)) continue;
+    if (scatterPhysicsCircleAtOrigin(c.ox, c.oy, data)) continue;
+    const key = `${c.ox},${c.oy}`;
+    const exSt = detailBreakStateByOrigin.get(key);
+    if (exSt && !exSt.destroyed) continue;
+    strengthCarriedBlockRegenKeys.delete(key);
+    detailBreakStateByOrigin.delete(key);
+    detailHitHpBars.delete(key);
+    detailHitShakeAtSec.delete(key);
+    unregisterDestroyedDetailOrigin(c.ox, c.oy);
+    burnedScatterTreeOrigins.delete(key);
+    harvestedBurnedScatterTreeOrigins.delete(key);
+    burningScatterTreeEndsAtSecByOrigin.delete(key);
+    scatterTreeBurnMeterByOrigin.delete(key);
+    scatterTreeFireSpreadDepthByOrigin.delete(key);
+    const st = getOrCreateDetailBreakState(c.ox, c.oy, resolvedItemKey, objSet, nowSec);
+    st.hitsRemaining = Math.max(1, Math.floor(Number(st.hitsMax) || 1));
+    st.destroyed = false;
+    st.regenAtSec = 0;
+    st.lastHitAtSec = nowSec;
+    st.strengthReloPlaced = true;
+    destroyedCrystalScatterOrigins.delete(key);
+    setScatterItemKeyOverride(c.ox, c.oy, resolvedItemKey);
+    invalidateChunksOverlappingFootprint(c.ox, c.oy, st.cols, st.rows);
+    clearScatterSolidBlockCache();
+    invalidateStaticEntityCache();
+    return true;
+  }
+  return false;
+}
+
+/**
  * Strength: cancel carry — clear lift hole and spawn a pickup drop (no world re-embed).
  */
 export function strengthDropCarriedAsPickup(liftOx, liftOy, cols, rows, itemKey, dropX, dropY) {
@@ -1461,6 +1537,17 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
         playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
       }
     }
+
+    if (isBerryTreeKey(hit.itemKey) && (hitSource === 'cut' || hitSource === 'tackle')) {
+      const harvestedCount = harvestBerryTree(hit.rootOx, hit.rootOy, null, data, hit.itemKey);
+      if (harvestedCount > 0) {
+        // Berry trees don't get "destroyed" in the traditional sense, they just reset to stage 0.
+        // We can add some visual feedback here if needed.
+        if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+        continue;
+      }
+    }
+
     if (opts.gamepadRumblePlayer && !scatterItemKeyIsPureGrassDecoration(hit.itemKey)) {
       if (isTreeHit && treeDamage > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
         tryPlayerGamepadRumbleForHit(opts, 'tree');

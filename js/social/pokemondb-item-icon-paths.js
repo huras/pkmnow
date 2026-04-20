@@ -34,6 +34,21 @@ export async function getPokemondbItemIconPath(slug) {
 }
 
 /**
+ * Synchronous version for use in the render loop (only works if manifest already loaded).
+ * @param {string} slug 
+ */
+export function getPokemondbItemIconPathSync(slug) {
+  // We use a private internal reference to the map if it's already resolved.
+  // Actually, we can just check if the promise is resolved.
+  // But let's just use the loadPromise's resolved value if available.
+  if (!resolvedMap) return null;
+  return resolvedMap.get(String(slug || '').toLowerCase()) ?? null;
+}
+
+let resolvedMap = null;
+getPokemondbItemIconPathMap().then(m => { resolvedMap = m; });
+
+/**
  * Loads the PNG into `imageCache` under its manifest path key (same as tilesets).
  * @param {string} slug
  * @returns {Promise<{ path: string, img: HTMLImageElement | null } | null>}

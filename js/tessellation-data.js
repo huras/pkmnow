@@ -1589,6 +1589,216 @@ export const OBJECT_SETS = {
       }
     ]
   },
+  "berry-tree-cheri [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [198], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-chesto [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [204], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-pecha [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [211], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-rawst [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [216], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-aspear [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [222], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-leppa [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [163], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-oran [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [238], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-persim [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [244], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-lum [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [250], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-sitrus [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [256], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-figy [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [262], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-wiki [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [466], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-mago [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [472], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-aguav [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [478], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-iapapa [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [484], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-razz [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [490], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-bluk [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [496], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-pinap [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [514], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-pomeg [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [520], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-kelpsy [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [526], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-qualot [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [730], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-hondew [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [736], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-grepa [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [742], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-tamato [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [748], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-cornn [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [754], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-magost [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [760], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-rabuta [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [766], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-nomel [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [772], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-spelon [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [778], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-pamtre [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [784], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-watmel [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [790], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-durin [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [994], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-belue [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [1000], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-nanab [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [502], "walkable": false, "abovePlayer": false }]
+  },
+  "berry-tree-wepear [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [508], "walkable": false, "abovePlayer": false }]
+  },
+  "cheri-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [132], "walkable": true, "abovePlayer": false }]
+  },
+  "chesto-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [138], "walkable": true, "abovePlayer": false }]
+  },
+  "pecha-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [210], "walkable": true, "abovePlayer": false }]
+  },
+  "rawst-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [216], "walkable": true, "abovePlayer": false }]
+  },
+  "aspear-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [156], "walkable": true, "abovePlayer": false }]
+  },
+  "leppa-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [162], "walkable": true, "abovePlayer": false }]
+  },
+  "oran-berry": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [168], "walkable": true, "abovePlayer": false }]
+  },
   "palm-tree-with-coconuts [2x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "shape": "2x2",

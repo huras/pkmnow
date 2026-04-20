@@ -8,6 +8,7 @@ import {
   updateWildMotion
 } from './wild-motion-ai.js';
 import { tickWildGroupLeaderPhaseWhenMotionSkipped } from './wild-group-behavior.js';
+import { beginWildWalkProbeCache, endWildWalkProbeCache } from '../walkability.js';
 
 /** Skip heavy wander pathing when far (sleep/flee/approach/alert still run every frame). */
 const WILD_WANDER_LOD_SKIP_DIST = 40;
@@ -58,93 +59,105 @@ export function resetWildUpdateFrameCounter() {
   wildUpdateFrameCounter = 0;
 }
 
-export function updateWildPokemon(dt, data, playerX, playerY) {
+export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
   if (!data) return;
-  updateWorldReactions(dt, data, playerX, playerY);
-  wildUpdatePerfLast.miscMs = 0;
-  wildUpdatePerfLast.verticalMs = 0;
-  wildUpdatePerfLast.socialMs = 0;
-  wildUpdatePerfLast.motionMs = 0;
-  wildUpdatePerfLast.postMs = 0;
+  
+  const ignorePlayer = !!options.ignorePlayer;
+  const aiPlayerX = ignorePlayer ? -99999 : playerX;
+  const aiPlayerY = ignorePlayer ? -99999 : playerY;
 
-  const toDelete = [];
-  const frameNo = nextWildUpdateFrame();
-  for (const [k, e] of entitiesByKey.entries()) {
-    if (e?._strengthCarryHidden) continue;
-    const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
-    const distanceInactivated =
-      distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
-      e.aiState === 'wander' &&
-      !e.isDespawning &&
-      (e.spawnPhase ?? 1) >= 0.5;
-    e._distanceInactivated = distanceInactivated;
-    let mark = performance.now();
-    const isCloseEnough = distToPlayer < 24;
-    const fullRate = wildNeedsFullRateUpdate(e, distToPlayer);
-    const cadence = fullRate ? 1 : wildCadenceForDistance(distToPlayer);
-    const lodOffset = e._lodOffset ?? 0;
-    const processThisFrame = cadence === 1 || (frameNo + lodOffset) % cadence === 0;
-    e._lodDtAccum = (e._lodDtAccum || 0) + dt;
-    if (!processThisFrame) continue;
-    const stepDt = Math.min(WILD_LOD_DT_CAP, e._lodDtAccum);
-    e._lodDtAccum = 0;
-    const skipWanderMotion = distanceInactivated;
+  beginWildWalkProbeCache();
 
-    wildUpdatePerfLast.miscMs += performance.now() - mark;
-    mark = performance.now();
+  try {
+    updateWorldReactions(dt, data, playerX, playerY);
+    wildUpdatePerfLast.miscMs = 0;
+    wildUpdatePerfLast.verticalMs = 0;
+    wildUpdatePerfLast.socialMs = 0;
+    wildUpdatePerfLast.motionMs = 0;
+    wildUpdatePerfLast.postMs = 0;
 
-    if (e.isDespawning) {
-      if (e.deadTimer > 0) {
-        e.deadTimer = Math.max(0, e.deadTimer - stepDt);
+    const toDelete = [];
+    const frameNo = nextWildUpdateFrame();
+    for (const [k, e] of entitiesByKey.entries()) {
+      if (e?._strengthCarryHidden) continue;
+      const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
+      const distToAiPlayer = ignorePlayer ? 99999 : distToPlayer;
+
+      const distanceInactivated =
+        distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
+        e.aiState === 'wander' &&
+        !e.isDespawning &&
+        (e.spawnPhase ?? 1) >= 0.5;
+      e._distanceInactivated = distanceInactivated;
+      let mark = performance.now();
+      const isCloseEnough = distToPlayer < 24;
+      const fullRate = wildNeedsFullRateUpdate(e, distToAiPlayer);
+      const cadence = fullRate ? 1 : wildCadenceForDistance(distToAiPlayer);
+      const lodOffset = e._lodOffset ?? 0;
+      const processThisFrame = cadence === 1 || (frameNo + lodOffset) % cadence === 0;
+      e._lodDtAccum = (e._lodDtAccum || 0) + dt;
+      if (!processThisFrame) continue;
+      const stepDt = Math.min(WILD_LOD_DT_CAP, e._lodDtAccum);
+      e._lodDtAccum = 0;
+      const skipWanderMotion = distanceInactivated;
+
+      wildUpdatePerfLast.miscMs += performance.now() - mark;
+      mark = performance.now();
+
+      if (e.isDespawning) {
+        if (e.deadTimer > 0) {
+          e.deadTimer = Math.max(0, e.deadTimer - stepDt);
+        }
+        if (e.deadTimer <= 0) {
+          e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - stepDt * 2.0);
+        }
+        if (e.spawnPhase <= 0) toDelete.push(k);
+      } else {
+        if (isCloseEnough || e.spawnPhase > 0) {
+          e.spawnPhase = Math.min(1, (e.spawnPhase ?? 0) + stepDt * 0.7);
+        }
       }
-      if (e.deadTimer <= 0) {
-        e.spawnPhase = Math.max(0, (e.spawnPhase ?? 1) - stepDt * 2.0);
+
+      wildUpdatePerfLast.miscMs += performance.now() - mark;
+      mark = performance.now();
+
+      integrateWildPokemonVertical(e, stepDt);
+
+      wildUpdatePerfLast.verticalMs += performance.now() - mark;
+      mark = performance.now();
+
+      decaySocialMemory(e, stepDt);
+      trackPlayerProximitySignals(e, distToAiPlayer, stepDt);
+
+      wildUpdatePerfLast.socialMs += performance.now() - mark;
+      mark = performance.now();
+
+      if (!skipWanderMotion) {
+        updateWildMotion(e, stepDt, data, aiPlayerX, aiPlayerY);
+      } else {
+        e.vx = 0;
+        e.vy = 0;
+        e.animMoving = false;
+        ensureEntityStamina(e);
+        tickEntityStamina(e, stepDt, false);
+        tickWildGroupLeaderPhaseWhenMotionSkipped(e, stepDt, entitiesByKey);
       }
-      if (e.spawnPhase <= 0) toDelete.push(k);
-    } else {
-      if (isCloseEnough || e.spawnPhase > 0) {
-        e.spawnPhase = Math.min(1, (e.spawnPhase ?? 0) + stepDt * 0.7);
+
+      wildUpdatePerfLast.motionMs += performance.now() - mark;
+      mark = performance.now();
+
+      if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - stepDt);
+      advanceWildPokemonAnim(e, stepDt);
+
+      if (e.hitFlashTimer > 0) {
+        e.hitFlashTimer -= stepDt;
+        if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
       }
+
+      wildUpdatePerfLast.postMs += performance.now() - mark;
     }
-
-    wildUpdatePerfLast.miscMs += performance.now() - mark;
-    mark = performance.now();
-
-    integrateWildPokemonVertical(e, stepDt);
-
-    wildUpdatePerfLast.verticalMs += performance.now() - mark;
-    mark = performance.now();
-
-    decaySocialMemory(e, stepDt);
-    trackPlayerProximitySignals(e, distToPlayer, stepDt);
-
-    wildUpdatePerfLast.socialMs += performance.now() - mark;
-    mark = performance.now();
-
-    if (!skipWanderMotion) {
-      updateWildMotion(e, stepDt, data, playerX, playerY);
-    } else {
-      e.vx = 0;
-      e.vy = 0;
-      e.animMoving = false;
-      ensureEntityStamina(e);
-      tickEntityStamina(e, stepDt, false);
-      tickWildGroupLeaderPhaseWhenMotionSkipped(e, stepDt, entitiesByKey);
-    }
-
-    wildUpdatePerfLast.motionMs += performance.now() - mark;
-    mark = performance.now();
-
-    if (e.hurtTimer > 0) e.hurtTimer = Math.max(0, e.hurtTimer - stepDt);
-    advanceWildPokemonAnim(e, stepDt);
-
-    if (e.hitFlashTimer > 0) {
-      e.hitFlashTimer -= stepDt;
-      if (e.hitFlashTimer < 0) e.hitFlashTimer = 0;
-    }
-
-    wildUpdatePerfLast.postMs += performance.now() - mark;
+    for (const k of toDelete) entitiesByKey.delete(k);
+  } finally {
+    endWildWalkProbeCache();
   }
-  for (const k of toDelete) entitiesByKey.delete(k);
 }
-

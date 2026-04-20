@@ -8,28 +8,31 @@ import {
   isBgmTrackChangeToastSuppressed,
   setBgmTrackChangeToastSuppressed
 } from '../audio/play-audio-mix-settings.js';
-import { getBiomeBgmUiState, applyBgmUserMixFromStorage } from '../audio/biome-bgm.js';
+import {
+  getBiomeBgmUiState,
+  applyBgmUserMixFromStorage,
+  forceNextBiomeBgmTrack
+} from '../audio/biome-bgm.js';
 import { applySpatialAudioMuteFromStorage } from '../audio/spatial-audio.js';
-import { BIOMES } from '../biomes.js';
+import { getBiomeNameById, onLocaleChanged, t } from '../i18n/index.js';
 
 /** @param {ReturnType<typeof getBiomeBgmUiState>} st */
 function formatBgmStatusLine(st) {
   const biomeLabel = biomeName(st.playingBiomeId);
   if (st.status === 'playing') {
-    return `Tocando · ${biomeLabel}`;
+    return t('play.bgmStatusPlayingBiome', { biome: biomeLabel });
   }
   if (st.status === 'transitioning') {
     const tgt = biomeName(st.transitionTargetBiome);
-    return `Transição · ${tgt}`;
+    return t('play.bgmStatusTransitionBiome', { biome: tgt });
   }
-  return 'Parado';
+  return t('play.bgmStatusStopped');
 }
 
 /** @param {number | null | undefined} biomeId */
 function biomeName(biomeId) {
   if (biomeId == null || !Number.isFinite(biomeId)) return '—';
-  const b = Object.values(BIOMES).find((x) => x.id === biomeId);
-  return b?.name ?? String(biomeId);
+  return getBiomeNameById(biomeId);
 }
 
 export function installMinimapAudioUi() {
@@ -40,6 +43,9 @@ export function installMinimapAudioUi() {
   const muteChk = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-audio-mute'));
   const toastSuppressChk = /** @type {HTMLInputElement | null} */ (
     document.getElementById('minimap-bgm-toast-suppress')
+  );
+  const nextTrackBtn = /** @type {HTMLButtonElement | null} */ (
+    document.getElementById('minimap-bgm-next-track')
   );
   const trackEl = document.getElementById('minimap-audio-track');
   const statusEl = document.getElementById('minimap-audio-status');
@@ -98,6 +104,11 @@ export function installMinimapAudioUi() {
     }
   });
 
+  nextTrackBtn?.addEventListener('click', () => {
+    forceNextBiomeBgmTrack();
+    syncNowPlayingText();
+  });
+
   function syncNowPlayingText() {
     const st = getBiomeBgmUiState();
     const title = st.currentTrackName || '—';
@@ -117,8 +128,13 @@ export function installMinimapAudioUi() {
   if (toastSuppressChk) toastSuppressChk.checked = isBgmTrackChangeToastSuppressed();
   mutating = false;
 
+  const unlistenLocale = onLocaleChanged(() => {
+    syncNowPlayingText();
+  });
+
   return {
     syncMinimapAudioPopover,
-    forceCloseMinimapAudioPopover: () => setOpen(false)
+    forceCloseMinimapAudioPopover: () => setOpen(false),
+    destroy: () => unlistenLocale()
   };
 }

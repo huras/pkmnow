@@ -29,6 +29,8 @@ const STORAGE_KEY = 'pkmn_play_session_save_v1';
  * @property {number} [worldHours] — [0,24) day clock
  * @property {import('./weather-presets.js').WeatherPresetId} [weatherPreset]
  * @property {number} [weatherIntensity01]
+ * @property {number} [weatherCloudIntensity01]
+ * @property {number} [weatherPrecipIntensity01]
  * @property {number} [earthquakeIntensity01]
  */
 
@@ -169,7 +171,7 @@ function readSavedWeatherPreset(saved) {
 /**
  * Weather + clock block for cold resume (v2+).
  * @param {PlaySessionSaveV2 | null | undefined} saved
- * @returns {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, earthquakeIntensity01: number } | null}
+ * @returns {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number } | null}
  */
 export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!saved || saved.version < 2) return null;
@@ -177,11 +179,22 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!preset) return null;
   const whRaw = Number(saved.worldHours);
   const worldHours = Number.isFinite(whRaw) ? wrapHours(whRaw) : 12;
-  const wi = Number(saved.weatherIntensity01);
-  const weatherIntensity01 = Number.isFinite(wi) ? Math.max(0, Math.min(1, wi)) : 1;
+  const legacyRaw = Number(saved.weatherIntensity01);
+  const legacy = Number.isFinite(legacyRaw) ? Math.max(0, Math.min(1, legacyRaw)) : 1;
+  const wcRaw = Number(saved.weatherCloudIntensity01);
+  const wpRaw = Number(saved.weatherPrecipIntensity01);
+  const weatherCloudIntensity01 = Number.isFinite(wcRaw) ? Math.max(0, Math.min(1, wcRaw)) : legacy;
+  const weatherPrecipIntensity01 = Number.isFinite(wpRaw) ? Math.max(0, Math.min(1, wpRaw)) : legacy;
   const eq = Number(saved.earthquakeIntensity01);
   const earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
-  return { worldHours, weatherPreset: preset, weatherIntensity01, earthquakeIntensity01 };
+  return {
+    worldHours,
+    weatherPreset: preset,
+    weatherIntensity01: legacy,
+    weatherCloudIntensity01,
+    weatherPrecipIntensity01,
+    earthquakeIntensity01
+  };
 }
 
 /**
@@ -233,7 +246,7 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
 }
 
 /**
- * @typedef {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, earthquakeIntensity01: number }} PlaySessionPersistExtra
+ * @typedef {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} PlaySessionPersistExtra
  */
 
 /**
@@ -268,8 +281,26 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   } else {
     out.weatherPreset = wt.preset;
   }
-  const wi = Number(persistExtra?.weatherIntensity01 ?? wt.intensity01);
-  out.weatherIntensity01 = Number.isFinite(wi) ? Math.max(0, Math.min(1, wi)) : 1;
+  const legacyW = Number(persistExtra?.weatherIntensity01);
+  const legacyOk = Number.isFinite(legacyW);
+  const wcRaw = Number(persistExtra?.weatherCloudIntensity01);
+  const wpRaw = Number(persistExtra?.weatherPrecipIntensity01);
+  const wcSrc = Number.isFinite(wcRaw)
+    ? wcRaw
+    : legacyOk
+      ? legacyW
+      : Number(wt.cloudIntensity01);
+  const wpSrc = Number.isFinite(wpRaw)
+    ? wpRaw
+    : legacyOk
+      ? legacyW
+      : Number(wt.precipIntensity01);
+  const weatherCloudIntensity01 = Number.isFinite(wcSrc) ? Math.max(0, Math.min(1, wcSrc)) : 1;
+  const weatherPrecipIntensity01 = Number.isFinite(wpSrc) ? Math.max(0, Math.min(1, wpSrc)) : 1;
+  out.weatherCloudIntensity01 = weatherCloudIntensity01;
+  out.weatherPrecipIntensity01 = weatherPrecipIntensity01;
+  const wiLegacy = Number(persistExtra?.weatherIntensity01 ?? weatherPrecipIntensity01);
+  out.weatherIntensity01 = Number.isFinite(wiLegacy) ? Math.max(0, Math.min(1, wiLegacy)) : 1;
   const eq = Number(persistExtra?.earthquakeIntensity01 ?? getEarthquakeActiveIntensity01());
   out.earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
   return out;

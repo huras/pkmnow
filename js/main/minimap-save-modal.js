@@ -3,6 +3,7 @@ import {
   clearPlaySessionSave,
   peekPlaySessionSaveForMap
 } from './play-session-persist.js';
+import { onLocaleChanged, t } from '../i18n/index.js';
 
 /**
  * Minimap header control: modal to save now or clear browser session storage for this map.
@@ -32,13 +33,13 @@ export function installMinimapSaveModal(opts) {
     if (!statusEl) return;
     const data = getData?.();
     if (!data) {
-      statusEl.textContent = 'Gere um mapa e entre no modo jogo para usar o salvamento.';
+      statusEl.textContent = t('play.saveStatusNeedMap');
       return;
     }
     const saved = peekPlaySessionSaveForMap(data);
     statusEl.textContent = saved
-      ? 'Há dados salvos para esta região (mesma seed e tamanho). Você pode sobrescrever ou limpar.'
-      : 'Nenhum dado salvo ainda — “Salvar agora” grava posição, inventário, hora do mundo e clima.';
+      ? t('play.saveStatusHasData')
+      : t('play.saveStatusNoData');
   }
 
   function setOpen(v) {
@@ -76,9 +77,13 @@ export function installMinimapSaveModal(opts) {
     clearPlaySessionSave();
     syncStatus();
   });
+  const unlistenLocale = onLocaleChanged(() => {
+    if (open) syncStatus();
+  });
 
   return {
     forceClose,
-    isOpen: () => open
+    isOpen: () => open,
+    destroy: () => unlistenLocale()
   };
 }

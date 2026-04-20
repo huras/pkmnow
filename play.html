@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-app-shell="play">
+<html lang="ja-JP" data-app-shell="play">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jogar — região procedural</title>
+    <title>プレイ — プロシージャルリージョン</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,25 +17,26 @@
   <body>
     <div class="app">
       <div id="character-selector-container"></div>
-      <h1 class="play-shell-title">Explorar região</h1>
+      <h1 class="play-shell-title" data-i18n="play.shellTitle">リージョン探索</h1>
 
       <div class="toolbar play-shell-toolbar">
         <div class="field">
-          <label for="seed">Seed</label>
-          <input type="text" id="seed" value="demo" autocomplete="off" spellcheck="false" />
+          <label for="seed" data-i18n="play.seedLabel">シード</label>
+          <input type="text" id="seed" value="青沼英二" autocomplete="off" spellcheck="false" />
         </div>
-        <button type="button" id="generate">Gerar</button>
-        <button type="button" id="btnBackToMap" class="btn-secondary hidden">Voltar ao mapa</button>
-        <a href="debug-play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Ferramentas / debug</a>
-        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Início</a>
+        <button type="button" id="generate" data-i18n="play.generate">生成</button>
+        <button type="button" id="btnBackToMap" class="btn-secondary hidden" data-i18n="play.backToMap">マップへ戻る</button>
+        <a href="debug-play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;" data-i18n="play.toolsDebug">ツール / デバッグ</a>
+        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;" data-i18n="play.home">ホーム</a>
       </div>
 
       <div class="map-wrap">
-        <div id="hud-info">Gere o mundo e clique no mapa para entrar no modo jogo.</div>
+        <div id="hud-info" data-i18n="play.hudHintMap">地形情報を見るにはマップ上にマウスを移動してください</div>
         <div id="play-immersive-hint" class="play-immersive-hint" aria-live="polite" aria-label="Context actions"></div>
-        <canvas id="map" width="512" height="512" aria-label="Mapa e jogo"></canvas>
+        <canvas id="map" width="512" height="512" data-i18n-aria-label="play.mapCanvasLabel" aria-label="マップとゲーム"></canvas>
+        <svg id="map-overlay-svg" class="map-overlay-svg hidden" aria-hidden="true"></svg>
         <div id="minimap-panel" class="minimap-panel hidden">
-          <div id="minimap-audio-popover" class="minimap-audio-popover hidden" role="dialog" aria-label="Volume e música">
+          <div id="minimap-audio-popover" class="minimap-audio-popover hidden" role="dialog" data-i18n-aria-label="play.volumeMusic" aria-label="音量と音楽">
             <div class="minimap-audio-popover__row">
               <label class="minimap-audio-popover__label" for="minimap-mix-bgm">BGM</label>
               <input type="range" id="minimap-mix-bgm" class="minimap-audio-popover__range" min="0" max="100" step="1" value="100" />
@@ -46,27 +47,58 @@
             </div>
             <div class="minimap-audio-popover__row minimap-audio-popover__check-row">
               <input type="checkbox" id="minimap-audio-mute" />
-              <label class="minimap-audio-popover__check-label" for="minimap-audio-mute">Mute</label>
+              <label class="minimap-audio-popover__check-label" for="minimap-audio-mute" data-i18n="play.mute">ミュート</label>
             </div>
             <div class="minimap-audio-popover__row minimap-audio-popover__check-row">
               <input type="checkbox" id="minimap-bgm-toast-suppress" />
-              <label class="minimap-audio-popover__check-label" for="minimap-bgm-toast-suppress">Não mostrar aviso ao trocar a música</label>
+              <label class="minimap-audio-popover__check-label" for="minimap-bgm-toast-suppress" data-i18n="play.suppressBgmToast">曲変更トーストを表示しない</label>
             </div>
             <div class="minimap-audio-popover__now" aria-live="polite">
-              <div class="minimap-audio-popover__now-title">Música</div>
+              <div class="minimap-audio-popover__now-title" data-i18n="play.music">音楽</div>
               <div id="minimap-audio-track" class="minimap-audio-popover__track"></div>
               <div id="minimap-audio-status" class="minimap-audio-popover__status"></div>
             </div>
+            <div class="minimap-audio-popover__row">
+              <button type="button" id="minimap-bgm-next-track" class="minimap-audio-popover__btn">
+                <span data-i18n="play.nextTrack">次の曲</span>
+              </button>
+            </div>
+          </div>
+          <div id="minimap-language-popover" class="minimap-language-popover hidden" role="dialog" data-i18n-aria-label="play.minimapLanguageLabel" aria-label="言語">
+            <div class="minimap-language-popover__row">
+              <label class="minimap-language-popover__label" for="minimap-language-select" data-i18n="play.minimapLanguageLabel">言語</label>
+              <select id="minimap-language-select" class="minimap-language-popover__select" data-i18n-aria-label="play.minimapLanguageLabel" aria-label="言語"></select>
+            </div>
           </div>
           <header class="minimap-panel__header">
-            <span class="minimap-panel__title">Região</span>
-            <div class="minimap-panel__header-actions">
+            <div class="minimap-panel__header-row minimap-panel__header-row--top">
+              <span class="minimap-panel__title" data-i18n="play.minimapTitle">リージョン</span>
+              <div class="minimap-panel__header-actions">
+                <button
+                type="button"
+                id="minimap-berries-toggle"
+                class="minimap-panel__berries-btn"
+                title="Berry Tree Status"
+                aria-label="Berry Tree Status"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__berries-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+                  <path d="M12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16Z"/>
+                  <path d="M12 8V2"/>
+                  <path d="M12 22V16"/>
+                  <path d="M8 12H2"/>
+                  <path d="M22 12H16"/>
+                </svg>
+              </button>
               <button
                 type="button"
                 id="minimap-groups-toggle"
                 class="minimap-panel__groups-btn"
-                title="Grupos de Pokémon selvagens ativos"
-                aria-label="Grupos de Pokémon selvagens ativos"
+                data-i18n-title="play.minimapGroupsToggle"
+                data-i18n-aria-label="play.minimapGroupsToggle"
+                title="野生ポケモングループ"
+                aria-label="野生ポケモングループ"
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__groups-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -81,8 +113,10 @@
                 type="button"
                 id="minimap-help-toggle"
                 class="minimap-panel__help-btn"
-                title="Ajuda — controles e interface"
-                aria-label="Ajuda — controles e interface"
+                data-i18n-title="play.minimapHelpToggle"
+                data-i18n-aria-label="play.minimapHelpToggle"
+                title="ヘルプ — 操作とUI"
+                aria-label="ヘルプ — 操作とUI"
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__help-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -94,8 +128,10 @@
                 type="button"
                 id="minimap-save-toggle"
                 class="minimap-panel__save-btn"
-                title="Salvar ou limpar progresso deste mapa"
-                aria-label="Salvar ou limpar progresso deste mapa"
+                data-i18n-title="play.minimapSaveToggle"
+                data-i18n-aria-label="play.minimapSaveToggle"
+                title="このマップの進行を保存または削除"
+                aria-label="このマップの進行を保存または削除"
               >
                 <svg class="minimap-panel__save-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -107,8 +143,10 @@
                 type="button"
                 id="minimap-time-toggle"
                 class="minimap-panel__time-btn"
-                title="Tempo do mundo"
-                aria-label="Tempo do mundo"
+                data-i18n-title="play.minimapTimeToggle"
+                data-i18n-aria-label="play.minimapTimeToggle"
+                title="ワールド時間"
+                aria-label="ワールド時間"
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__time-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -116,12 +154,34 @@
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
               </button>
-              <button
+              </div>
+            </div>
+            <div class="minimap-panel__header-row minimap-panel__header-row--bottom">
+              <div class="minimap-panel__header-actions">
+                <button
+                type="button"
+                id="minimap-language-toggle"
+                class="minimap-panel__language-btn"
+                data-i18n-title="play.minimapLanguageLabel"
+                data-i18n-aria-label="play.minimapLanguageLabel"
+                title="言語"
+                aria-label="言語"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__language-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M2 12h20"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              </button>
+                <button
                 type="button"
                 id="minimap-weather-toggle"
                 class="minimap-panel__weather-btn"
-                title="Clima"
-                aria-label="Clima"
+                data-i18n-title="play.minimapWeatherToggle"
+                data-i18n-aria-label="play.minimapWeatherToggle"
+                title="天候"
+                aria-label="天候"
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__weather-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -132,8 +192,10 @@
                 type="button"
                 id="minimap-social-toggle"
                 class="minimap-panel__social-btn"
-                title="Social actions (numpad)"
-                aria-label="Social actions (numpad)"
+                data-i18n-title="play.minimapSocialToggle"
+                data-i18n-aria-label="play.minimapSocialToggle"
+                title="ソーシャルアクション (テンキー)"
+                aria-label="ソーシャルアクション (テンキー)"
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__social-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -147,8 +209,10 @@
                 type="button"
                 id="minimap-audio-toggle"
                 class="minimap-panel__music-btn"
-                title="Volume BGM e gritos"
-                aria-label="Volume BGM e gritos"
+                data-i18n-title="play.minimapAudioToggle"
+                data-i18n-aria-label="play.minimapAudioToggle"
+                title="BGMと鳴き声の音量"
+                aria-label="BGMと鳴き声の音量"
                 aria-pressed="false"
               >
                 <svg
@@ -166,32 +230,60 @@
                   <circle cx="6" cy="18" r="3" />
                   <circle cx="18" cy="16" r="3" />
                 </svg>
+                </button>
+              <button
+                type="button"
+                id="minimap-adaptive-perf-toggle"
+                class="minimap-panel__adaptive-perf-btn"
+                title="Adaptive performance caps"
+                aria-label="Adaptive performance caps"
+                aria-pressed="false"
+              >
+                <svg
+                  class="minimap-panel__adaptive-perf-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 14a8 8 0 1 1 16 0" />
+                  <path d="M12 14l4-4" />
+                  <circle cx="12" cy="14" r="1.3" />
+                </svg>
               </button>
+              </div>
             </div>
           </header>
-          <canvas id="minimap" width="230" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+          <canvas id="minimap" width="230" height="192" data-zoom="close" data-i18n-aria-label="play.minimapCanvasLabel" aria-label="リージョンミニマップ"></canvas>
           <footer
             class="minimap-panel__footer minimap-panel__footer--biome"
             role="status"
             aria-live="polite"
-            aria-label="Bioma atual e posição (X, Y, Z)"
+            data-i18n-aria-label="play.minimapBiomeStatus"
+            aria-label="現在のバイオームと座標 (X, Y, Z)"
           >
             <div class="minimap-panel__biome-footer-inner">
               <div class="minimap-panel__biome-readout-row">
                 <span id="minimap-biome-swatch" class="minimap-panel__biome-swatch" aria-hidden="true"></span>
                 <span id="minimap-biome-readout" class="minimap-panel__biome-readout">—</span>
               </div>
-              <div id="minimap-coords-readout" class="minimap-panel__coords-readout">X — · Y — · Z —</div>
+            <div id="minimap-coords-readout" class="minimap-panel__coords-readout" data-i18n="play.minimapCoordsEmpty">X — · Y — · Z —</div>
             </div>
           </footer>
           <footer class="minimap-panel__footer minimap-panel__footer--zoom">
-            <div class="minimap-panel__footer-zoom" role="group" aria-label="Zoom do minimapa">
+            <div class="minimap-panel__footer-zoom" role="group" data-i18n-aria-label="play.minimapZoomGroup" aria-label="ミニマップズーム">
               <button
                 type="button"
                 id="minimap-zoom-out-btn"
                 class="minimap-panel__zoom-out-btn"
-                title="Afastar o minimapa (menos zoom)"
-                aria-label="Afastar o minimapa"
+                data-i18n-title="play.minimapZoomOut"
+                data-i18n-aria-label="play.minimapZoomOut"
+                title="ミニマップを縮小"
+                aria-label="ミニマップを縮小"
               >
                 <svg class="minimap-panel__zoom-out-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8"/>
@@ -211,8 +303,10 @@
                 type="button"
                 id="minimap-zoom-in-btn"
                 class="minimap-panel__zoom-in-btn"
-                title="Aproximar o minimapa (mais zoom)"
-                aria-label="Aproximar o minimapa"
+                data-i18n-title="play.minimapZoomIn"
+                data-i18n-aria-label="play.minimapZoomIn"
+                title="ミニマップを拡大"
+                aria-label="ミニマップを拡大"
               >
                 <svg class="minimap-panel__zoom-in-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8"/>
@@ -226,8 +320,10 @@
               type="button"
               id="minimap-back-to-map"
               class="minimap-panel__back-btn minimap-panel__back-btn--footer"
-              title="Voltar ao mapa global"
-              aria-label="Voltar ao mapa global"
+              data-i18n-title="play.minimapBack"
+              data-i18n-aria-label="play.minimapBack"
+              title="ワールドマップへ戻る"
+              aria-label="ワールドマップへ戻る"
             >
               <svg
                 class="minimap-panel__back-icon"
@@ -247,67 +343,92 @@
             </button>
           </footer>
 
-          <div id="minimap-time-popover" class="minimap-time-popover hidden" role="dialog" aria-label="Tempo do mundo">
-            <div id="play-world-time" class="play-world-time" aria-label="Tempo do mundo">
+          <div id="minimap-time-popover" class="minimap-time-popover hidden" role="dialog" data-i18n-aria-label="play.worldTime" aria-label="ワールド時間">
+            <div id="play-world-time" class="play-world-time" data-i18n-aria-label="play.worldTime" aria-label="ワールド時間">
               <div class="play-world-time__section">
-                <div class="play-world-time-title">World time</div>
-                <div id="play-world-time-phase" class="play-world-time-phase">Day</div>
+                <div class="play-world-time-title" data-i18n="play.worldTime">ワールド時間</div>
+                <div id="play-world-time-phase" class="play-world-time-phase" data-i18n="play.day">昼</div>
                 <div id="play-world-time-hour" class="play-world-time-hour">12.00 h</div>
                 <input type="range" id="play-world-time-slider" min="0" max="24" step="0.05" value="12" />
                 <div class="play-world-time-presets">
-                  <button type="button" class="play-world-time-preset" id="play-world-preset-dawn">Dawn</button>
-                  <button type="button" class="play-world-time-preset" id="play-world-preset-day">Day</button>
-                  <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon">Afternoon</button>
-                  <button type="button" class="play-world-time-preset" id="play-world-preset-night">Night</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-dawn" data-i18n="play.dawn">夜明け</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-day" data-i18n="play.day">昼</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-afternoon" data-i18n="play.afternoon">夕方</button>
+                  <button type="button" class="play-world-time-preset" id="play-world-preset-night" data-i18n="play.night">夜</button>
                 </div>
-                <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> Advance (realtime)</label>
-                <label class="play-world-time-row">Game h / real s <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
+                <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> <span data-i18n="play.advanceRealtime">進行 (リアルタイム)</span></label>
+                <label class="play-world-time-row"><span data-i18n="play.gameHoursPerRealSecond">ゲーム時間 / 実秒</span> <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
               </div>
             </div>
           </div>
 
-          <div id="minimap-weather-popover" class="minimap-weather-popover hidden" role="dialog" aria-label="Clima">
-            <div id="play-weather" class="play-world-time__section play-weather" aria-label="Clima">
-              <div class="play-weather-title">Weather</div>
-              <div id="play-weather-current" class="play-weather-current">Clear</div>
+          <div id="minimap-weather-popover" class="minimap-weather-popover hidden" role="dialog" data-i18n-aria-label="play.weather" aria-label="天候">
+            <div id="play-weather" class="play-world-time__section play-weather" data-i18n-aria-label="play.weather" aria-label="天候">
+              <div class="play-weather-title" data-i18n="play.weather">天候</div>
+              <div id="play-weather-current" class="play-weather-current" data-i18n="play.weatherClear">晴れ</div>
               <div class="play-weather-presets">
-                <button type="button" class="play-weather-preset is-active" data-weather="clear">Clear</button>
-                <button type="button" class="play-weather-preset" data-weather="cloudy">Cloudy</button>
-                <button type="button" class="play-weather-preset" data-weather="rain">Rain</button>
-                <button type="button" class="play-weather-preset" data-weather="blizzard">Blizzard</button>
-                <button type="button" class="play-weather-preset" data-weather="sandstorm">Sandstorm</button>
+                <button type="button" class="play-weather-preset is-active" data-weather="clear" data-i18n="play.weatherClear">晴れ</button>
+                <button type="button" class="play-weather-preset" data-weather="cloudy" data-i18n="play.weatherCloudy">曇り</button>
+                <button type="button" class="play-weather-preset" data-weather="rain" data-i18n="play.weatherRain">雨</button>
+                <button type="button" class="play-weather-preset" data-weather="blizzard" data-i18n="play.weatherBlizzard">吹雪</button>
+                <button type="button" class="play-weather-preset" data-weather="sandstorm" data-i18n="play.weatherSandstorm">砂嵐</button>
               </div>
-              <label class="play-weather-row">Intensity
-                <input type="range" id="play-weather-intensity" min="0" max="100" step="1" value="100" />
+              <label class="play-weather-row"><span data-i18n="play.cloudIntensity">雲の強さ</span>
+                <input type="range" id="play-weather-cloud-intensity" min="0" max="100" step="1" value="75" />
               </label>
-              <label class="play-weather-row">Earthquake layer
+              <label class="play-weather-row"><span data-i18n="play.rainIntensity">降水強度</span>
+                <input type="range" id="play-weather-rain-intensity" min="0" max="100" step="1" value="75" title="Rain, snow, or sand particles depending on preset" />
+              </label>
+              <label class="play-weather-row"><span data-i18n="play.earthquakeLayer">地震レイヤー</span>
                 <input type="range" id="play-earthquake-intensity" min="0" max="100" step="1" value="0" title="Independent ground shake; stacks with sky weather" />
               </label>
-              <button type="button" id="play-weather-lightning" class="play-weather-lightning" title="Force-trigger a ground lightning strike near you">
-                Strike now
+              <label class="play-weather-row"><input type="checkbox" id="play-vision-fog-toggle" /> <span data-i18n="play.fogOfWar">Fog of War</span></label>
+              <button type="button" id="play-weather-lightning" class="play-weather-lightning" data-i18n-title="play.weatherLightningTitle" title="プレイヤー付近に落雷を発生">
+                <span data-i18n="play.strikeNow">今すぐ落雷</span>
               </button>
             </div>
           </div>
 
-          <div id="minimap-social-popover" class="minimap-social-popover hidden" role="dialog" aria-label="Ações sociais">
+          <div id="minimap-social-popover" class="minimap-social-popover hidden" role="dialog" data-i18n-aria-label="play.minimapSocialToggle" aria-label="ソーシャルアクション (テンキー)">
             <div id="character-social-numpad" class="play-social-overlay play-social-overlay--popover social-numpad-box"></div>
           </div>
 
-          <div id="minimap-groups-popover" class="minimap-groups-popover hidden" role="dialog" aria-label="Grupos de Pokémon selvagens">
+          <div id="minimap-groups-popover" class="minimap-groups-popover hidden" role="dialog" data-i18n-aria-label="play.minimapGroupsToggle" aria-label="野生ポケモングループ">
             <div class="minimap-groups-popover__head">
-              <span>Grupos simulados</span>
-              <button
-                type="button"
-                id="minimap-groups-leader-target-toggle"
-                class="minimap-groups-popover__head-toggle"
-                aria-pressed="false"
-                title="Mostrar alvo do líder apenas quando em ROAM"
-                aria-label="Mostrar alvo do líder apenas quando em ROAM"
-              >
-                Alvo líder
-              </button>
+              <span data-i18n="play.groupsSimulated">シミュレート中のグループ</span>
+              <div class="minimap-groups-popover__head-actions">
+                <button
+                  type="button"
+                  id="minimap-groups-far-cry-trigger"
+                  class="minimap-groups-popover__head-toggle"
+                  data-i18n-title="play.nextFarCry"
+                  data-i18n-aria-label="play.nextFarCry"
+                  title="次のFar Cry"
+                  aria-label="次のFar Cry"
+                >
+                  Next Far Cry
+                </button>
+                <button
+                  type="button"
+                  id="minimap-groups-leader-target-toggle"
+                  class="minimap-groups-popover__head-toggle"
+                  aria-pressed="false"
+                  data-i18n-title="play.leaderTarget"
+                  data-i18n-aria-label="play.leaderTarget"
+                  title="リーダー目標"
+                  aria-label="リーダー目標"
+                >
+                  <span data-i18n="play.leaderTarget">リーダー目標</span>
+                </button>
+              </div>
             </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
+          </div>
+          <div id="minimap-berries-popover" class="minimap-berries-popover hidden" role="dialog" aria-label="Berry Trees on Map">
+            <div class="minimap-berries-popover__head">
+              <span>Berry Trees on Map</span>
+            </div>
+            <div id="minimap-berries-popover-list" class="minimap-berries-popover__list"></div>
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
@@ -319,17 +440,17 @@
           aria-hidden="true"
         >
           <span class="play-save-indicator__spinner" aria-hidden="true"></span>
-          <span class="play-save-indicator__label">Salvando…</span>
+          <span class="play-save-indicator__label" data-i18n="play.saveIndicator">保存中...</span>
         </div>
-        <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" aria-label="Now playing music">
-          <div class="play-bgm-now-playing-title">Now playing</div>
+        <div id="play-bgm-now-playing" class="play-bgm-now-playing" aria-live="polite" data-i18n-aria-label="play.nowPlayingMusicLabel" aria-label="再生中の音楽">
+          <div class="play-bgm-now-playing-title" data-i18n="play.nowPlaying">再生中</div>
           <div id="play-bgm-now-playing-track" class="play-bgm-now-playing-track">—</div>
-          <div id="play-bgm-now-playing-status" class="play-bgm-now-playing-status">Idle</div>
+          <div id="play-bgm-now-playing-status" class="play-bgm-now-playing-status" data-i18n="play.idle">待機中</div>
         </div>
-        <div id="play-bgm-toast" class="play-bgm-toast" role="dialog" aria-live="polite" aria-label="Troca de música">
+        <div id="play-bgm-toast" class="play-bgm-toast" role="dialog" aria-live="polite" data-i18n-aria-label="play.toastMusicChange" aria-label="楽曲変更">
           <div class="play-bgm-toast__head">
-            <span class="play-bgm-toast-title">Now playing</span>
-            <button type="button" id="play-bgm-toast-close" class="play-bgm-toast-close" aria-label="Fechar">×</button>
+            <span class="play-bgm-toast-title" data-i18n="play.nowPlaying">再生中</span>
+            <button type="button" id="play-bgm-toast-close" class="play-bgm-toast-close" data-i18n-aria-label="play.close" aria-label="閉じる">×</button>
           </div>
           <div id="play-bgm-toast-track" class="play-bgm-toast-track"></div>
           <div id="play-bgm-toast-status" class="play-bgm-toast-status"></div>
@@ -349,16 +470,14 @@
       <div class="minimap-save-modal__backdrop" aria-hidden="true"></div>
       <div class="minimap-save-modal__card">
         <header class="minimap-save-modal__header">
-          <h2 id="minimap-save-modal-title" class="minimap-save-modal__title">Progresso no mapa</h2>
-          <button type="button" id="minimap-save-modal-close" class="minimap-save-modal__close" aria-label="Fechar">×</button>
+          <h2 id="minimap-save-modal-title" class="minimap-save-modal__title" data-i18n="play.saveModalTitle">マップ進行</h2>
+          <button type="button" id="minimap-save-modal-close" class="minimap-save-modal__close" data-i18n-aria-label="play.close" aria-label="閉じる">×</button>
         </header>
-        <p class="minimap-save-modal__desc">
-          Grava no navegador a <strong>posição</strong> e o <strong>inventário</strong> desta região (mesma seed e tamanho). Ao reentrar nela, o jogo pode restaurar. “Limpar” remove só o armazenamento — não zera o inventário da partida atual.
-        </p>
+        <p class="minimap-save-modal__desc" data-i18n="play.saveModalDesc">同じシードとサイズのリージョンに対して、位置とインベントリをブラウザへ保存します。再入場時に復元できます。削除は保存データのみを消去します。</p>
         <p id="minimap-save-modal-status" class="minimap-save-modal__status" aria-live="polite"></p>
         <div class="minimap-save-modal__actions">
-          <button type="button" id="minimap-save-modal-save">Salvar agora</button>
-          <button type="button" id="minimap-save-modal-clear">Limpar salvamento</button>
+          <button type="button" id="minimap-save-modal-save" data-i18n="play.saveNow">今すぐ保存</button>
+          <button type="button" id="minimap-save-modal-clear" data-i18n="play.clearSave">保存を削除</button>
         </div>
       </div>
     </div>
@@ -374,11 +493,11 @@
       <div class="play-help-wiki__backdrop" aria-hidden="true"></div>
       <div class="play-help-wiki__card">
         <header class="play-help-wiki__header">
-          <h1 id="play-help-wiki-title" class="play-help-wiki__title">Ajuda</h1>
-          <button type="button" id="play-help-wiki-close" class="play-help-wiki__close" aria-label="Fechar ajuda">×</button>
+          <h1 id="play-help-wiki-title" class="play-help-wiki__title" data-i18n="play.helpTitle">ヘルプ</h1>
+          <button type="button" id="play-help-wiki-close" class="play-help-wiki__close" data-i18n-aria-label="play.helpClose" aria-label="ヘルプを閉じる">×</button>
         </header>
         <div class="play-help-wiki__body">
-          <nav id="play-help-wiki-nav" class="play-help-wiki__nav" aria-label="Índice"></nav>
+          <nav id="play-help-wiki-nav" class="play-help-wiki__nav" data-i18n-aria-label="play.helpIndex" aria-label="目次"></nav>
           <div id="play-help-wiki-article" class="play-help-wiki__article"></div>
         </div>
       </div>

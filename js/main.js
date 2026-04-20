@@ -26,7 +26,14 @@ import {
 } from './main/tile-debug-modal.js';
 import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
-import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import {
+  createGameLoop,
+  registerPlayKeyboard,
+  playFpsSampleTimes,
+  getPlayAdaptivePerfConfig,
+  patchPlayAdaptivePerfConfig,
+  resetPlayAdaptivePerfConfig
+} from './main/game-loop.js';
 import { registerPlayGamepadListeners } from './main/play-gamepad.js';
 import {
   tryApplyPlaySessionResumeOnEnter,
@@ -36,7 +43,7 @@ import {
   getPlayResumeMacroTileFromSave
 } from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
-import { WEATHER_PRESET_LABELS } from './main/weather-presets.js';
+import { getWeatherPresetLabel } from './main/weather-presets.js';
 import {
   initWeatherSystem,
   tickWeather,
@@ -56,7 +63,8 @@ import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
   clearPlayCrystalTackleState,
-  spawnPickableCrystalDropAt,
+  placeInventoryItemAsScatterDetailNear,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
@@ -87,7 +95,17 @@ import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { installMinimapSaveModal } from './main/minimap-save-modal.js';
+import { renderMapOverlaySvg } from './render/render-map-overlay-svg.js';
 import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
+import {
+  configureWorldMapCamera,
+  getWorldMapCamera,
+  panWorldMapByScreenDelta,
+  resetWorldMapCamera,
+  screenPxToWorldMacro,
+  tickWorldMapCamera,
+  zoomWorldMapByFactorAtScreenPoint
+} from './main/world-map-camera-state.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -100,13 +118,30 @@ import {
 } from './main/world-time-of-day.js';
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
 import { initMods } from './core/mod-loader.js';
+import { resetFarCrySystem } from './main/far-cry-system.js';
+import {
+  applyI18nDom,
+  formatNumber,
+  getBiomeNameById,
+  getLocale,
+  getSupportedLocales,
+  initI18n,
+  onLocaleChanged,
+  setLocale,
+  t
+} from './i18n/index.js';
 
 
 if (isPlayShell()) {
   setPlayPointerMode('game');
 }
 
+initI18n();
+
 const canvas = document.getElementById('map');
+const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementById('map-overlay-svg'));
+const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
+const WORLD_MAP_USE_SVG_OVERLAY = false;
 
 /** Blur inputs / buttons so WASD and hotkeys go to the game after clicking the map. */
 function blurFocusedUiAwayFromCanvas() {
@@ -154,6 +189,10 @@ const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
+const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
+  document.getElementById('minimap-language-select')
+);
 
 function syncMinimapZoomReadout() {
   if (!minimap) return;
@@ -180,7 +219,33 @@ function wireMinimapZoomStepButtons() {
   });
 }
 
+function syncMinimapLanguageSelect() {
+  if (!minimapLanguageSelect) return;
+  minimapLanguageSelect.textContent = '';
+  const labels = {
+    'pt-BR': 'Portugues (BR)',
+    'en-US': 'English (US)',
+    'ja-JP': '日本語'
+  };
+  for (const locale of getSupportedLocales()) {
+    const option = document.createElement('option');
+    option.value = locale;
+    option.textContent = labels[locale] || locale;
+    minimapLanguageSelect.appendChild(option);
+  }
+  minimapLanguageSelect.value = getLocale();
+}
+
+function wireMinimapLanguageSelect() {
+  if (!minimapLanguageSelect) return;
+  syncMinimapLanguageSelect();
+  minimapLanguageSelect.addEventListener('change', () => {
+    setLocale(minimapLanguageSelect.value);
+  });
+}
+
 wireMinimapZoomStepButtons();
+wireMinimapLanguageSelect();
 syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
@@ -217,8 +282,10 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
-const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
+const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
+const playVisionFogToggleEl = document.getElementById('play-vision-fog-toggle');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 const chkRotas = document.getElementById('chkRotas');
@@ -266,12 +333,532 @@ let lastBgmToastTrackKey = null;
 let playBgmToastHideTimer = 0;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
+let worldMapCameraRaf = 0;
+let mapDragPointerId = -1;
+let mapDragMovedPx = 0;
+let mapDragLastClientX = 0;
+let mapDragLastClientY = 0;
+let suppressNextMapClick = false;
 
 const PLAY_BGM_TOAST_MS = 4600;
 
 function isPlayImmersiveMinimalUi() {
   return document.querySelector('.app')?.classList.contains('app--play-immersive') ?? false;
 }
+
+function installAdaptivePerfDebugPanel() {
+  const host = document.body;
+  if (!host) return;
+  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v1';
+  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v1';
+  const panel = document.createElement('details');
+  panel.id = 'play-adaptive-perf-debug-panel';
+  panel.style.position = 'fixed';
+  panel.style.right = '10px';
+  panel.style.bottom = '10px';
+  panel.style.zIndex = '1200';
+  panel.style.maxWidth = '460px';
+  panel.style.width = 'min(460px, calc(100vw - 20px))';
+  panel.style.background = 'rgba(16,22,28,0.92)';
+  panel.style.color = '#d7e0ea';
+  panel.style.border = '1px solid rgba(255,255,255,0.2)';
+  panel.style.borderRadius = '8px';
+  panel.style.padding = '6px 8px';
+  panel.style.font = '12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  panel.style.backdropFilter = 'blur(2px)';
+  panel.style.display = 'none';
+  panel.dataset.open = '0';
+
+  const summary = document.createElement('summary');
+  summary.textContent = 'Adaptive perf caps';
+  summary.style.cursor = 'pointer';
+  summary.style.userSelect = 'none';
+  summary.style.fontWeight = '600';
+  summary.style.margin = '0 0 6px 0';
+  panel.appendChild(summary);
+
+  const status = document.createElement('div');
+  status.style.marginBottom = '6px';
+  status.style.opacity = '0.9';
+  panel.appendChild(status);
+
+  const tabs = document.createElement('div');
+  tabs.style.display = 'flex';
+  tabs.style.gap = '6px';
+  tabs.style.marginBottom = '6px';
+  panel.appendChild(tabs);
+
+  const mkTabBtn = (label) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.flex = '1';
+    b.style.padding = '4px 6px';
+    b.style.borderRadius = '6px';
+    b.style.border = '1px solid rgba(255,255,255,0.25)';
+    b.style.background = 'rgba(255,255,255,0.08)';
+    b.style.color = 'inherit';
+    b.style.cursor = 'pointer';
+    return b;
+  };
+  const tabJson = mkTabBtn('JSON');
+  const tabControls = mkTabBtn('Controles');
+  tabs.append(tabJson, tabControls);
+
+  const jsonView = document.createElement('div');
+  const controlsView = document.createElement('div');
+  panel.append(jsonView, controlsView);
+
+  const text = document.createElement('textarea');
+  text.id = 'play-adaptive-perf-debug-json';
+  text.rows = 12;
+  text.style.width = '100%';
+  text.style.resize = 'vertical';
+  text.style.boxSizing = 'border-box';
+  text.style.background = 'rgba(0,0,0,0.25)';
+  text.style.color = 'inherit';
+  text.style.border = '1px solid rgba(255,255,255,0.18)';
+  text.style.borderRadius = '6px';
+  text.style.padding = '6px';
+  jsonView.appendChild(text);
+
+  const controlsGrid = document.createElement('div');
+  controlsGrid.style.display = 'grid';
+  controlsGrid.style.gridTemplateColumns = '1fr 110px';
+  controlsGrid.style.gap = '6px';
+  controlsGrid.style.maxHeight = '360px';
+  controlsGrid.style.overflow = 'auto';
+  controlsGrid.style.paddingRight = '2px';
+  controlsView.appendChild(controlsGrid);
+
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.style.gap = '6px';
+  row.style.marginTop = '6px';
+  panel.appendChild(row);
+
+  const mkBtn = (label) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.flex = '1';
+    b.style.padding = '4px 6px';
+    b.style.borderRadius = '6px';
+    b.style.border = '1px solid rgba(255,255,255,0.25)';
+    b.style.background = 'rgba(255,255,255,0.08)';
+    b.style.color = 'inherit';
+    b.style.cursor = 'pointer';
+    return b;
+  };
+  const btnApply = mkBtn('Apply JSON');
+  const btnRefresh = mkBtn('Refresh');
+  const btnReset = mkBtn('Reset defaults');
+  row.append(btnApply, btnRefresh, btnReset);
+
+  const note = document.createElement('div');
+  note.style.marginTop = '6px';
+  note.style.opacity = '0.8';
+  note.textContent = 'JSON e Controles editam o mesmo estado. Tooltips nos labels.';
+  panel.appendChild(note);
+
+  const ADAPTIVE_PRESETS = {
+    low: {
+      label: 'Low',
+      tip: 'Max performance: caps mais agressivos (menos atualizacoes por segundo).',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 5400,
+        thresholds: {
+          updateModerateMs: 5.2,
+          updateHeavyMs: 6.2,
+          updateVeryHeavyMs: 7.8,
+          renderModerateMs: 5.8,
+          renderHeavyMs: 7.0,
+          wildModerateMs: 1.9,
+          wildHeavyMs: 3.0,
+          hudHeavyMs: 0.75,
+          bgmHeavyMs: 0.55
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.08, hud: 0.16, farCry: 0.16, autosave: 0.8 },
+          audioCadenceMs: { biomeBgm: 240, weatherAmbient: 200 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.14, hud: 0.22, farCry: 0.26, autosave: 1.4 },
+          audioCadenceMs: { biomeBgm: 340, weatherAmbient: 290 }
+        }
+      }
+    },
+    medium: {
+      label: 'Medium',
+      tip: 'Balanceado: proximo dos defaults.',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 4200,
+        thresholds: {
+          updateModerateMs: 6.8,
+          updateHeavyMs: 8.0,
+          updateVeryHeavyMs: 10.5,
+          renderModerateMs: 7.2,
+          renderHeavyMs: 9.0,
+          wildModerateMs: 2.5,
+          wildHeavyMs: 4.0,
+          hudHeavyMs: 1.2,
+          bgmHeavyMs: 0.8
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.05, hud: 0.1, farCry: 0.1, autosave: 0.5 },
+          audioCadenceMs: { biomeBgm: 170, weatherAmbient: 140 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.1, hud: 0.16, farCry: 0.2, autosave: 1.0 },
+          audioCadenceMs: { biomeBgm: 260, weatherAmbient: 220 }
+        }
+      }
+    },
+    high: {
+      label: 'High',
+      tip: 'Prioriza responsividade: aciona caps so sob carga mais alta.',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 3200,
+        thresholds: {
+          updateModerateMs: 7.9,
+          updateHeavyMs: 9.6,
+          updateVeryHeavyMs: 12.0,
+          renderModerateMs: 8.4,
+          renderHeavyMs: 10.2,
+          wildModerateMs: 3.1,
+          wildHeavyMs: 4.9,
+          hudHeavyMs: 1.45,
+          bgmHeavyMs: 1.0
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.04, hud: 0.08, farCry: 0.08, autosave: 0.4 },
+          audioCadenceMs: { biomeBgm: 150, weatherAmbient: 120 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.08, hud: 0.12, farCry: 0.16, autosave: 0.8 },
+          audioCadenceMs: { biomeBgm: 210, weatherAmbient: 180 }
+        }
+      }
+    },
+    ultra: {
+      label: 'Ultra',
+      tip: 'Max quality: quase sem cap (usa cap so em emergencias).',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 2400,
+        thresholds: {
+          updateModerateMs: 9.5,
+          updateHeavyMs: 11.4,
+          updateVeryHeavyMs: 13.5,
+          renderModerateMs: 9.8,
+          renderHeavyMs: 11.5,
+          wildModerateMs: 4.0,
+          wildHeavyMs: 6.0,
+          hudHeavyMs: 1.9,
+          bgmHeavyMs: 1.35
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.02, hud: 0.05, farCry: 0.05, autosave: 0.25 },
+          audioCadenceMs: { biomeBgm: 110, weatherAmbient: 95 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.05, hud: 0.08, farCry: 0.1, autosave: 0.5 },
+          audioCadenceMs: { biomeBgm: 150, weatherAmbient: 130 }
+        }
+      }
+    }
+  };
+  /** @type {'low'|'medium'|'high'|'ultra'|'custom'} */
+  let activePreset = 'medium';
+
+  function loadPersistedAdaptivePerfState() {
+    const rawCfg = localStorage.getItem(LS_ADAPTIVE_CFG);
+    if (rawCfg) {
+      try {
+        const parsed = JSON.parse(rawCfg);
+        if (parsed && typeof parsed === 'object') {
+          patchPlayAdaptivePerfConfig(parsed);
+        }
+      } catch {
+        /* ignore invalid storage payload */
+      }
+    }
+    const rawPreset = localStorage.getItem(LS_ADAPTIVE_PRESET);
+    if (
+      rawPreset === 'low' ||
+      rawPreset === 'medium' ||
+      rawPreset === 'high' ||
+      rawPreset === 'ultra' ||
+      rawPreset === 'custom'
+    ) {
+      activePreset = rawPreset;
+    }
+  }
+
+  function persistAdaptivePerfState() {
+    try {
+      const cfg = getPlayAdaptivePerfConfig();
+      const editable = { ...cfg };
+      delete editable.runtime;
+      localStorage.setItem(LS_ADAPTIVE_CFG, JSON.stringify(editable));
+      localStorage.setItem(LS_ADAPTIVE_PRESET, activePreset);
+    } catch {
+      /* ignore localStorage failures */
+    }
+  }
+
+  const FIELD_SCHEMA = [
+    { path: 'enabled', type: 'bool', label: 'enabled', tip: 'Liga/desliga cap adaptativo.' },
+    { path: 'relaxAfterMs', type: 'num', label: 'relaxAfterMs', tip: 'Tempo minimo para aliviar nivel de pressao.' },
+    {
+      section: 'Thresholds (ms)',
+      tip: 'Quando p95 passar destes valores, aumenta score de pressao.'
+    },
+    { path: 'thresholds.updateModerateMs', type: 'num', label: 'updateModerateMs', tip: 'update p95 inicia cap moderado.' },
+    { path: 'thresholds.updateHeavyMs', type: 'num', label: 'updateHeavyMs', tip: 'update p95 empurra para mais forte.' },
+    { path: 'thresholds.updateVeryHeavyMs', type: 'num', label: 'updateVeryHeavyMs', tip: 'update p95 muito alto, score maximo.' },
+    { path: 'thresholds.renderModerateMs', type: 'num', label: 'renderModerateMs', tip: 'render p95 contribui score moderado.' },
+    { path: 'thresholds.renderHeavyMs', type: 'num', label: 'renderHeavyMs', tip: 'render p95 contribui score alto.' },
+    { path: 'thresholds.wildModerateMs', type: 'num', label: 'wildModerateMs', tip: 'wild p95 para cap moderado.' },
+    { path: 'thresholds.wildHeavyMs', type: 'num', label: 'wildHeavyMs', tip: 'wild p95 para cap pesado.' },
+    { path: 'thresholds.hudHeavyMs', type: 'num', label: 'hudHeavyMs', tip: 'HUD p95 adiciona score.' },
+    { path: 'thresholds.bgmHeavyMs', type: 'num', label: 'bgmHeavyMs', tip: 'Audio sync p95 adiciona score.' },
+    { section: 'Moderate cadences', tip: 'Cadencias no nivel p1.' },
+    { path: 'moderate.subsystemCadenceSec.wildUpdate', type: 'num', label: 'p1 wildUpdateSec', tip: '0.05 = 20Hz.' },
+    { path: 'moderate.subsystemCadenceSec.hud', type: 'num', label: 'p1 hudSec', tip: 'Cadencia de HUD auxiliar.' },
+    { path: 'moderate.subsystemCadenceSec.farCry', type: 'num', label: 'p1 farCrySec', tip: 'Cadencia do sistema Far Cry.' },
+    { path: 'moderate.subsystemCadenceSec.autosave', type: 'num', label: 'p1 autosaveSec', tip: 'Intervalo de checagem de autosave.' },
+    { path: 'moderate.audioCadenceMs.biomeBgm', type: 'num', label: 'p1 biomeBgmMs', tip: 'Polling BGM por biome.' },
+    { path: 'moderate.audioCadenceMs.weatherAmbient', type: 'num', label: 'p1 weatherAmbientMs', tip: 'Polling audio ambiente clima.' },
+    { section: 'Heavy cadences', tip: 'Cadencias no nivel p2.' },
+    { path: 'heavy.subsystemCadenceSec.wildUpdate', type: 'num', label: 'p2 wildUpdateSec', tip: '0.1 = 10Hz.' },
+    { path: 'heavy.subsystemCadenceSec.hud', type: 'num', label: 'p2 hudSec', tip: 'HUD mais desacoplado em carga alta.' },
+    { path: 'heavy.subsystemCadenceSec.farCry', type: 'num', label: 'p2 farCrySec', tip: 'Far Cry em carga alta.' },
+    { path: 'heavy.subsystemCadenceSec.autosave', type: 'num', label: 'p2 autosaveSec', tip: 'Autosave mais espaçado em carga alta.' },
+    { path: 'heavy.audioCadenceMs.biomeBgm', type: 'num', label: 'p2 biomeBgmMs', tip: 'Polling BGM em carga alta.' },
+    { path: 'heavy.audioCadenceMs.weatherAmbient', type: 'num', label: 'p2 weatherAmbientMs', tip: 'Polling ambiente em carga alta.' }
+  ];
+
+  const controlsByPath = new Map();
+  const presetButtons = new Map();
+
+  const getByPath = (obj, path) =>
+    String(path)
+      .split('.')
+      .reduce((acc, k) => (acc && Object.prototype.hasOwnProperty.call(acc, k) ? acc[k] : undefined), obj);
+  const setByPath = (obj, path, value) => {
+    const keys = String(path).split('.');
+    let ptr = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k = keys[i];
+      if (!ptr[k] || typeof ptr[k] !== 'object') ptr[k] = {};
+      ptr = ptr[k];
+    }
+    ptr[keys[keys.length - 1]] = value;
+  };
+
+  function buildControlsForm() {
+    for (const f of FIELD_SCHEMA) {
+      if (f.section) {
+        const sec = document.createElement('div');
+        sec.style.gridColumn = '1 / -1';
+        sec.style.marginTop = '4px';
+        sec.style.paddingTop = '4px';
+        sec.style.borderTop = '1px solid rgba(255,255,255,0.12)';
+        sec.title = f.tip || '';
+        sec.textContent = f.section;
+        sec.style.fontWeight = '600';
+        controlsGrid.appendChild(sec);
+        continue;
+      }
+      const label = document.createElement('label');
+      label.textContent = f.label;
+      label.style.alignSelf = 'center';
+      label.title = f.tip || '';
+      controlsGrid.appendChild(label);
+      const input = document.createElement('input');
+      input.title = f.tip || '';
+      input.style.width = '100%';
+      input.style.boxSizing = 'border-box';
+      input.style.borderRadius = '5px';
+      input.style.border = '1px solid rgba(255,255,255,0.2)';
+      input.style.background = 'rgba(0,0,0,0.24)';
+      input.style.color = 'inherit';
+      input.style.padding = '3px 5px';
+      if (f.type === 'bool') {
+        input.type = 'checkbox';
+        input.style.width = '18px';
+        input.style.height = '18px';
+        input.style.padding = '0';
+      } else {
+        input.type = 'number';
+        input.step = '0.01';
+      }
+      controlsByPath.set(f.path, { input, field: f });
+      controlsGrid.appendChild(input);
+    }
+  }
+
+  const presetRow = document.createElement('div');
+  presetRow.style.display = 'grid';
+  presetRow.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+  presetRow.style.gap = '6px';
+  presetRow.style.marginBottom = '6px';
+  controlsView.insertBefore(presetRow, controlsGrid);
+
+  buildControlsForm();
+
+  function renderPresetButtons() {
+    presetRow.textContent = '';
+    presetButtons.clear();
+    for (const key of ['low', 'medium', 'high', 'ultra']) {
+      const def = ADAPTIVE_PRESETS[key];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = def.label;
+      b.title = def.tip;
+      b.style.padding = '4px 6px';
+      b.style.borderRadius = '6px';
+      b.style.border = '1px solid rgba(255,255,255,0.25)';
+      b.style.background = 'rgba(255,255,255,0.08)';
+      b.style.color = 'inherit';
+      b.style.cursor = 'pointer';
+      b.addEventListener('click', () => {
+        const cfg = patchPlayAdaptivePerfConfig(def.patch);
+        activePreset = /** @type {any} */ (key);
+        text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+        persistAdaptivePerfState();
+        refreshFromRuntime();
+      });
+      presetButtons.set(key, b);
+      presetRow.appendChild(b);
+    }
+  }
+  renderPresetButtons();
+
+  function refreshPresetButtons() {
+    for (const [key, btn] of presetButtons.entries()) {
+      const active = key === activePreset;
+      btn.style.background = active ? 'rgba(86,154,255,0.35)' : 'rgba(255,255,255,0.08)';
+      btn.style.borderColor = active ? 'rgba(120,180,255,0.8)' : 'rgba(255,255,255,0.25)';
+      btn.style.fontWeight = active ? '700' : '500';
+    }
+  }
+
+  function syncControlsFromConfig(cfg) {
+    for (const [path, meta] of controlsByPath.entries()) {
+      if (document.activeElement === meta.input) continue;
+      const v = getByPath(cfg, path);
+      if (meta.field.type === 'bool') {
+        meta.input.checked = !!v;
+      } else {
+        meta.input.value = Number.isFinite(Number(v)) ? String(v) : '';
+      }
+    }
+  }
+
+  function buildPatchFromControls() {
+    const patch = {};
+    for (const [path, meta] of controlsByPath.entries()) {
+      if (meta.field.type === 'bool') {
+        setByPath(patch, path, !!meta.input.checked);
+      } else {
+        const n = Number(meta.input.value);
+        if (Number.isFinite(n)) setByPath(patch, path, n);
+      }
+    }
+    return patch;
+  }
+
+  function toEditableConfig(cfg) {
+    const editable = { ...cfg };
+    delete editable.runtime;
+    return editable;
+  }
+
+  const setActiveTab = (tab) => {
+    const isJson = tab === 'json';
+    jsonView.style.display = isJson ? '' : 'none';
+    controlsView.style.display = isJson ? 'none' : '';
+    tabJson.style.background = isJson ? 'rgba(86,154,255,0.35)' : 'rgba(255,255,255,0.08)';
+    tabControls.style.background = isJson ? 'rgba(255,255,255,0.08)' : 'rgba(86,154,255,0.35)';
+  };
+
+  function refreshFromRuntime() {
+    const cfg = getPlayAdaptivePerfConfig();
+    const rt = cfg.runtime || {};
+    status.textContent =
+      `pressure p${rt.pressureLevel ?? 0}` +
+      ` · enabled ${cfg.enabled ? 'yes' : 'no'}` +
+      ` · relax ${cfg.relaxAfterMs}ms`;
+    if (document.activeElement !== text) {
+      text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    }
+    syncControlsFromConfig(cfg);
+    refreshPresetButtons();
+  }
+
+  btnApply.addEventListener('click', () => {
+    try {
+      const parsed = JSON.parse(text.value || '{}');
+      if (parsed && typeof parsed === 'object' && 'runtime' in parsed) delete parsed.runtime;
+      const cfg = patchPlayAdaptivePerfConfig(parsed);
+      activePreset = 'custom';
+      text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+      persistAdaptivePerfState();
+      refreshFromRuntime();
+    } catch (err) {
+      status.textContent = `JSON parse error: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  });
+  btnRefresh.addEventListener('click', refreshFromRuntime);
+  btnReset.addEventListener('click', () => {
+    const cfg = resetPlayAdaptivePerfConfig();
+    activePreset = 'medium';
+    text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    persistAdaptivePerfState();
+    refreshFromRuntime();
+  });
+  tabJson.addEventListener('click', () => setActiveTab('json'));
+  tabControls.addEventListener('click', () => setActiveTab('controls'));
+
+  const btnApplyControls = mkBtn('Apply controls');
+  btnApplyControls.style.marginTop = '6px';
+  controlsView.appendChild(btnApplyControls);
+  btnApplyControls.addEventListener('click', () => {
+    const cfg = patchPlayAdaptivePerfConfig(buildPatchFromControls());
+    activePreset = 'custom';
+    text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    persistAdaptivePerfState();
+    refreshFromRuntime();
+  });
+
+  loadPersistedAdaptivePerfState();
+  host.appendChild(panel);
+  setActiveTab('controls');
+  refreshFromRuntime();
+  setInterval(refreshFromRuntime, 900);
+
+  const setPanelOpen = (nextOpen) => {
+    const open = !!nextOpen;
+    panel.style.display = open ? '' : 'none';
+    panel.dataset.open = open ? '1' : '0';
+    if (open) panel.open = true;
+    if (btnMinimapAdaptivePerfToggle) {
+      btnMinimapAdaptivePerfToggle.setAttribute('aria-pressed', open ? 'true' : 'false');
+    }
+  };
+
+  btnMinimapAdaptivePerfToggle?.addEventListener('click', () => {
+    const open = panel.dataset.open === '1';
+    setPanelOpen(!open);
+  });
+}
+
+installAdaptivePerfDebugPanel();
 
 function dismissPlayBgmToast() {
   if (playBgmToastHideTimer) {
@@ -334,7 +921,7 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
-const minimapHudPopovers = installMinimapHudPopovers({ imageCache });
+const minimapHudPopovers = installMinimapHudPopovers({ imageCache, getCurrentData: () => currentData });
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
   getPlayer: () => player,
@@ -419,14 +1006,18 @@ function syncMinimapPlayFooter(bio, px, py, pz) {
   const nameEl = root.querySelector('#minimap-biome-readout');
   const swatchEl = root.querySelector('#minimap-biome-swatch');
   const coordsEl = root.querySelector('#minimap-coords-readout');
-  const biomeLabel = bio?.name ?? '—';
+  const biomeLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
   if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
   if (swatchEl) {
     const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
     const bg = sw && /^#[0-9a-fA-F]{6}$/.test(sw) ? sw : '#3a3a44';
     if (swatchEl.style.background !== bg) swatchEl.style.background = bg;
   }
-  const coordsLine = `X ${px.toFixed(1)} · Y ${py.toFixed(1)} · Z ${pz.toFixed(2)}`;
+  const coordsLine = t('play.minimapCoords', {
+    x: formatNumber(px, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    y: formatNumber(py, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    z: formatNumber(pz, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  });
   if (coordsEl && coordsEl.textContent !== coordsLine) coordsEl.textContent = coordsLine;
 }
 
@@ -438,7 +1029,7 @@ function resetMinimapPlayFooter() {
   const coordsEl = root.querySelector('#minimap-coords-readout');
   if (nameEl) nameEl.textContent = '—';
   if (swatchEl) swatchEl.style.background = '#3a3a44';
-  if (coordsEl) coordsEl.textContent = 'X — · Y — · Z —';
+  if (coordsEl) coordsEl.textContent = t('play.minimapCoordsEmpty');
 }
 
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
@@ -482,12 +1073,14 @@ function refreshPlayModeInfoBar(force = false) {
   if (playImmersiveHintEl) {
     if (immersive && (carryPrompt || grabPrompt)) {
       const ctxPrompt = carryPrompt || grabPrompt;
-      const label = String(ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || 'Detail');
+      const label = String(
+        ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || t('play.detailLabelFallback')
+      );
       const actionHtml = carryPrompt
-        ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Place</span><span class="play-immersive-hint__key">E</span></div>` +
-          `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Throw</span><span class="play-immersive-hint__key">LMB</span></div>` +
+        ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">${t('play.actionPlace')}</span><span class="play-immersive-hint__key">E</span></div>` +
+          `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">${t('play.actionThrow')}</span><span class="play-immersive-hint__key">LMB</span></div>` +
           `${carryMobility ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__warn">${carryMobility.message}</span></div>` : ''}`
-        : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
+        : `<span class="play-immersive-hint__action">${t('play.actionGrab')}</span><span class="play-immersive-hint__key">E</span>`;
       const immersiveHtml =
         `<div class="play-immersive-hint__row">` +
         `${strengthHudObjectPreviewHtmlImmersive(ctxPrompt)}` +
@@ -520,7 +1113,9 @@ function syncPlayWorldTimePanel() {
     lastWorldTimePanelPhase = phase;
     playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   }
-  playWorldTimeHourEl.textContent = `${wh.toFixed(2)} h`;
+  playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
+    hours: formatNumber(wh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  });
   if (playWorldTimeSlider) {
     const stepped = Math.round(wh / 0.05) * 0.05;
     const sVal = parseFloat(playWorldTimeSlider.value);
@@ -535,14 +1130,16 @@ function buildPlaySessionPersistExtra() {
   return {
     worldHours: wrapHours(worldHours),
     weatherPreset: wt.preset,
-    weatherIntensity01: wt.intensity01,
+    weatherCloudIntensity01: wt.cloudIntensity01,
+    weatherPrecipIntensity01: wt.precipIntensity01,
+    weatherIntensity01: wt.precipIntensity01,
     earthquakeIntensity01: getEarthquakeActiveIntensity01()
   };
 }
 
 /**
  * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
- * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01: number, earthquakeIntensity01: number }} env
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} env
  */
 function applyRestoredPlayEnvironmentFromSave(env) {
   if (!env) return;
@@ -552,9 +1149,24 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   const phase = getDayPhaseFromHours(worldHours);
   lastWorldTimePanelPhase = phase;
   if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
-  if (playWorldTimeHourEl) playWorldTimeHourEl.textContent = `${worldHours.toFixed(2)} h`;
+  if (playWorldTimeHourEl) {
+    playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
+      hours: formatNumber(worldHours, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    });
+  }
   snapDayCycleTintSmoothToHours(worldHours);
-  setWeatherTarget({ preset: env.weatherPreset, intensity01: env.weatherIntensity01 }, 'external');
+  const legacy = Number(env.weatherIntensity01);
+  const fallback = Number.isFinite(legacy) ? Math.max(0, Math.min(1, legacy)) : 1;
+  const wc = Number(env.weatherCloudIntensity01);
+  const wp = Number(env.weatherPrecipIntensity01);
+  setWeatherTarget(
+    {
+      preset: env.weatherPreset,
+      cloudIntensity01: Number.isFinite(wc) ? wc : fallback,
+      precipIntensity01: Number.isFinite(wp) ? wp : fallback
+    },
+    'external'
+  );
   syncWeatherUi();
   setEarthquakeTargetIntensity01(env.earthquakeIntensity01);
   if (playEarthquakeIntensityEl) {
@@ -569,10 +1181,10 @@ function syncPlayBgmNowPlayingPanel() {
   const title = st.currentTrackName || '—';
   const statusText =
     st.status === 'playing'
-      ? `Playing · biome ${st.playingBiomeId ?? '?'}`
+      ? t('play.bgmStatusPlayingBiomeId', { biomeId: st.playingBiomeId ?? '?' })
       : st.status === 'transitioning'
-        ? `Transitioning · target biome ${st.transitionTargetBiome ?? '?'}`
-        : 'Idle';
+        ? t('play.bgmStatusTransitionBiomeId', { biomeId: st.transitionTargetBiome ?? '?' })
+        : t('play.idle');
   const sig = `${title}|${statusText}`;
   if (sig === lastBgmUiSignature) return;
   lastBgmUiSignature = sig;
@@ -589,6 +1201,41 @@ function syncPlayBgmNowPlayingPanel() {
       showPlayBgmTrackToast(title, statusText);
     }
   }
+}
+
+function updateWorldMapCameraBounds() {
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || !currentData || !canvas || appMode !== 'map') return;
+  configureWorldMapCamera(currentData.width, currentData.height, canvas.width, canvas.height);
+}
+
+function requestWorldMapCameraFrame() {
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || appMode !== 'map') return;
+  if (worldMapCameraRaf) return;
+  worldMapCameraRaf = requestAnimationFrame(() => {
+    worldMapCameraRaf = 0;
+    const moving = tickWorldMapCamera(performance.now());
+    updateView();
+    if (moving) requestWorldMapCameraFrame();
+  });
+}
+
+function mapClientToCanvasPx(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const x = ((clientX - rect.left) / Math.max(1, rect.width)) * canvas.width;
+  const y = ((clientY - rect.top) / Math.max(1, rect.height)) * canvas.height;
+  return { x, y, rect };
+}
+
+function mapClientToMacro(clientX, clientY) {
+  if (!currentData) return { gx: -1, gy: -1 };
+  const { x, y, rect } = mapClientToCanvasPx(clientX, clientY);
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) {
+    const gx = Math.floor(((clientX - rect.left) / Math.max(1, rect.width)) * currentData.width);
+    const gy = Math.floor(((clientY - rect.top) / Math.max(1, rect.height)) * currentData.height);
+    return { gx, gy };
+  }
+  const p = screenPxToWorldMacro(x, y);
+  return { gx: Math.floor(p.x), gy: Math.floor(p.y) };
 }
 
 function getSettings() {
@@ -613,6 +1260,10 @@ function getSettings() {
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
+  const worldMapCamera =
+    appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
+      ? getWorldMapCamera()
+      : null;
 
   // Rain dims the ambient day tint — overcast sky blocks daylight proportionally to intensity.
   // R/G are dimmed more than B so heavy rain also pulls the scene slightly cool, not just dark.
@@ -645,7 +1296,8 @@ function getSettings() {
     worldHours: hoursWrapped,
     dayCycleTint,
     weatherPreset: weatherTarget.preset,
-    weatherIntensity: weatherTarget.intensity01,
+    weatherCloudIntensity01: weatherTarget.cloudIntensity01,
+    weatherPrecipIntensity01: weatherTarget.precipIntensity01,
     weatherCloudPresence: weather.cloudPresence,
     weatherCloudThreshold: weather.cloudThreshold,
     weatherCloudMinMul: weather.cloudMinMul,
@@ -666,7 +1318,10 @@ function getSettings() {
     weatherVolumetricWindCarry: weather.volumetricWindCarry,
     weatherVolumetricTurbulence: weather.volumetricTurbulence,
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
-    weatherVolumetricSplashBias: weather.volumetricSplashBias
+    weatherVolumetricSplashBias: weather.volumetricSplashBias,
+    worldMapCamera,
+    worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
+    visionFogEnabled: playVisionFogToggleEl?.checked ?? false
   };
 }
 
@@ -675,20 +1330,22 @@ function getSettings() {
  * `setWeatherTarget` calls keep the UI in lockstep without scattering `syncWeatherUi()`
  * calls throughout the file.
  *
- * The `ui` source is skipped for the slider because the user is actively dragging it —
- * writing back would fight their input and cause jitter on some browsers.
- * @param {{ preset: import('./main/weather-presets.js').WeatherPresetId, intensity01: number, source: string }} [ev]
+ * `ui-cloud` / `ui-precip` skip the matching range so the active drag is not overwritten.
+ * @param {{ preset: import('./main/weather-presets.js').WeatherPresetId, cloudIntensity01: number, precipIntensity01: number, source: string }} [ev]
  */
 function syncWeatherUi(ev) {
-  const { preset, intensity01 } = ev ?? getWeatherTarget();
+  const { preset, cloudIntensity01, precipIntensity01 } = ev ?? getWeatherTarget();
   for (const btn of playWeatherPresetBtns) {
     btn.classList.toggle('is-active', btn.dataset.weather === preset);
   }
   if (playWeatherCurrentEl) {
-    playWeatherCurrentEl.textContent = WEATHER_PRESET_LABELS[preset] || '—';
+    playWeatherCurrentEl.textContent = getWeatherPresetLabel(preset);
   }
-  if (playWeatherIntensityEl && ev?.source !== 'ui') {
-    playWeatherIntensityEl.value = String(Math.round(intensity01 * 100));
+  if (playWeatherCloudIntensityEl && ev?.source !== 'ui-cloud') {
+    playWeatherCloudIntensityEl.value = String(Math.round(cloudIntensity01 * 100));
+  }
+  if (playWeatherRainIntensityEl && ev?.source !== 'ui-precip') {
+    playWeatherRainIntensityEl.value = String(Math.round(precipIntensity01 * 100));
   }
 }
 
@@ -696,8 +1353,23 @@ addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
   const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
-  if (currentData) render(canvas, currentData, { settings: getSettings(), hover });
+  if (appMode === 'map') updateWorldMapCameraBounds();
+  const settings = getSettings();
+  if (currentData) {
+    render(canvas, currentData, { settings, hover });
+    renderMapOverlaySvg(mapOverlaySvg, currentData, {
+      canvas,
+      appMode,
+      overlayPaths: settings.overlayPaths,
+      overlayGraph: settings.overlayGraph,
+      useSvgOverlay: settings.worldMapUseSvgOverlay,
+      camera: settings.worldMapCamera
+    });
+  }
 }
+
+const PLAY_AUX_HUD_SYNC_CADENCE_MS = 120;
+let lastPlayAuxHudSyncAtMs = 0;
 
 const { startGameLoop, stopGameLoop } = createGameLoop({
   getAppMode: () => appMode,
@@ -720,6 +1392,9 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
+    const nowMs = performance.now();
+    if (nowMs - lastPlayAuxHudSyncAtMs < PLAY_AUX_HUD_SYNC_CADENCE_MS) return;
+    lastPlayAuxHudSyncAtMs = nowMs;
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
     playCharacterSelector?.updatePlayFieldMoveChargeHud();
@@ -780,7 +1455,9 @@ installPlayContextMenu({
 
 function run() {
   resizeCanvas();
+  resetWorldMapCamera();
   sessionEnteredPlayOnCurrentMap = false;
+  resetFarCrySystem();
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
@@ -810,6 +1487,46 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
+let lastMapNoiseProgressRenderTs = 0;
+
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (!currentData || appMode !== 'map' || !WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) return;
+    e.preventDefault();
+    const { x, y } = mapClientToCanvasPx(e.clientX, e.clientY);
+    const zoomFactor = Math.exp(-e.deltaY * 0.0017);
+    zoomWorldMapByFactorAtScreenPoint(zoomFactor, x, y);
+    requestWorldMapCameraFrame();
+  },
+  { passive: false }
+);
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (!currentData || appMode !== 'map' || !WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) return;
+  if (e.button !== 0) return;
+  mapDragPointerId = e.pointerId;
+  mapDragMovedPx = 0;
+  mapDragLastClientX = e.clientX;
+  mapDragLastClientY = e.clientY;
+  suppressNextMapClick = false;
+  canvas.setPointerCapture?.(e.pointerId);
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (appMode !== 'map' || e.pointerId !== mapDragPointerId) return;
+  suppressNextMapClick = mapDragMovedPx > 7;
+  mapDragPointerId = -1;
+  mapDragMovedPx = 0;
+  canvas.releasePointerCapture?.(e.pointerId);
+});
+
+canvas.addEventListener('pointercancel', (e) => {
+  if (e.pointerId !== mapDragPointerId) return;
+  mapDragPointerId = -1;
+  mapDragMovedPx = 0;
+  canvas.releasePointerCapture?.(e.pointerId);
+});
 
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
@@ -820,14 +1537,21 @@ canvas.addEventListener('mousemove', (e) => {
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const mouseClientX = e.clientX - rect.left;
-  const mouseClientY = e.clientY - rect.top;
-  const mousePxX = (mouseClientX / rect.width) * canvas.width;
-  const mousePxY = (mouseClientY / rect.height) * canvas.height;
+  if (WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && mapDragPointerId !== -1 && (e.buttons & 1) === 1) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - mapDragLastClientX) * (canvas.width / Math.max(1, rect.width));
+    const sy = (e.clientY - mapDragLastClientY) * (canvas.height / Math.max(1, rect.height));
+    mapDragMovedPx += Math.hypot(sx, sy);
+    mapDragLastClientX = e.clientX;
+    mapDragLastClientY = e.clientY;
+    if (Math.abs(sx) > 0.001 || Math.abs(sy) > 0.001) {
+      panWorldMapByScreenDelta(sx, sy);
+      requestWorldMapCameraFrame();
+    }
+    return;
+  }
 
-  const gx = Math.floor((mouseClientX / rect.width) * currentData.width);
-  const gy = Math.floor((mouseClientY / rect.height) * currentData.height);
+  const { gx, gy } = mapClientToMacro(e.clientX, e.clientY);
   if (lastHoverTile && lastHoverTile.x === gx && lastHoverTile.y === gy) return;
   lastHoverTile = { x: gx, y: gy };
   const now = performance.now();
@@ -876,7 +1600,10 @@ canvas.addEventListener('drop', (e) => {
     mousePxY,
     player
   );
-  spawnPickableCrystalDropAt(worldX, worldY, spent.itemKey, 1);
+  const placed = placeInventoryItemAsScatterDetailNear(worldX, worldY, spent.itemKey, currentData, 12);
+  if (!placed) {
+    refundOneInventoryUnitFromGroundDrop(spent.itemKey);
+  }
   playCharacterSelector?.invalidatePlayItemsHudSignature?.();
   playCharacterSelector?.updatePlayItemsHud?.();
   focusGameCanvas();
@@ -888,6 +1615,14 @@ canvas.addEventListener('mouseleave', () => {
     invalidatePlayPointerHover();
   }
   if (currentData && appMode === 'map') updateView();
+});
+
+window.addEventListener('pkmn-map-overview-noise-progress', () => {
+  if (appMode !== 'map' || !currentData) return;
+  const now = performance.now();
+  if (now - lastMapNoiseProgressRenderTs < 33) return;
+  lastMapNoiseProgressRenderTs = now;
+  updateView();
 });
 
 /**
@@ -927,7 +1662,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   minimapHudPopovers.forceCloseAllPopovers();
   if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
-  if (playFpsEl) playFpsEl.textContent = '…';
+  if (playFpsEl) playFpsEl.textContent = t('play.fpsPlaceholder');
 
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
@@ -955,6 +1690,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
+  resetFarCrySystem();
   stopBiomeBgm();
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
@@ -970,7 +1706,7 @@ btnBackToMap?.addEventListener('click', () => {
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
   minimapSaveModal.forceClose();
-  if (infoBar) infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  if (infoBar) infoBar.innerHTML = t('play.hudHintMap');
   resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
@@ -986,7 +1722,7 @@ btnBackToMap?.addEventListener('click', () => {
   lastBgmToastTrackKey = null;
   dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
-  if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = 'Idle';
+  if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = t('play.idle');
   resizeCanvas();
   updateView();
 });
@@ -1021,9 +1757,11 @@ window.addEventListener('resize', () => {
 
 canvas.addEventListener('click', (e) => {
   if (!currentData || appMode !== 'map') return;
-  const rect = canvas.getBoundingClientRect();
-  const gx = Math.floor(((e.clientX - rect.left) / rect.width) * currentData.width);
-  const gy = Math.floor(((e.clientY - rect.top) / rect.height) * currentData.height);
+  if (suppressNextMapClick) {
+    suppressNextMapClick = false;
+    return;
+  }
+  const { gx, gy } = mapClientToMacro(e.clientX, e.clientY);
 
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     enterPlayMode(gx, gy);
@@ -1213,9 +1951,13 @@ for (const btn of playWeatherPresetBtns) {
     setWeatherTarget({ preset: next }, 'ui');
   });
 }
-playWeatherIntensityEl?.addEventListener('input', () => {
-  const v = Number(playWeatherIntensityEl.value);
-  setWeatherTarget({ intensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui');
+playWeatherCloudIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherCloudIntensityEl.value);
+  setWeatherTarget({ cloudIntensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui-cloud');
+});
+playWeatherRainIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherRainIntensityEl.value);
+  setWeatherTarget({ precipIntensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui-precip');
 });
 
 playEarthquakeIntensityEl?.addEventListener('input', () => {
@@ -1231,6 +1973,20 @@ document.getElementById('play-weather-lightning')?.addEventListener('click', () 
 });
 
 syncWeatherUi();
+
+onLocaleChanged(() => {
+  applyI18nDom(document);
+  syncMinimapLanguageSelect();
+  syncMinimapZoomReadout();
+  syncWeatherUi();
+  syncPlayWorldTimePanel();
+  syncPlayBgmNowPlayingPanel();
+  if (appMode === 'map' && infoBar) {
+    infoBar.innerHTML = t('play.hudHintMap');
+    resetMinimapPlayFooter();
+  }
+  refreshPlayModeInfoBar(true);
+});
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
 document.getElementById('chkPlayColliders')?.addEventListener('change', () => {

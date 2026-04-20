@@ -7,7 +7,9 @@
     "crawl:pokemondb-items": "node scripts/crawl-pokemondb-items.mjs",
     "download:pokemondb-item-images": "node scripts/download-pokemondb-item-images.mjs",
     "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git fetch ; git checkout dev ; git pull'",
-    "export:unity-height": "node scripts/export-unity-heightfield.mjs"
+    "export:unity-height": "node scripts/export-unity-heightfield.mjs",
+    "newgrounds:publish": "node scripts/newgrounds/publish.mjs",
+    "publish:newgrounds": "npm run newgrounds:publish"
   },
   "devDependencies": {
     "cheerio": "^1.2.0",

@@ -1,8 +1,13 @@
 import { renderWildGroupsPopoverList } from './minimap-wild-groups-popover.js';
+import { renderBerriesPopoverList } from './minimap-berries-popover.js';
 import {
   isWildLeaderRoamTargetVisible,
   setWildLeaderRoamTargetVisible
 } from './wild-groups-visual-toggle-state.js';
+import { clearHoveredWildGroupEntityKey } from './wild-groups-hover-state.js';
+import { player } from '../player.js';
+import { triggerNextFarCryNow } from './far-cry-system.js';
+import { onLocaleChanged, t } from '../i18n/index.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -10,10 +15,15 @@ import {
  */
 export function installMinimapHudPopovers(options = {}) {
   const { imageCache } = options;
+  const getCurrentData = typeof options.getCurrentData === 'function' ? options.getCurrentData : () => null;
   const groupsToggle = document.getElementById('minimap-groups-toggle');
   const groupsPop = document.getElementById('minimap-groups-popover');
   const groupsList = document.getElementById('minimap-groups-popover-list');
   const groupsLeaderTargetToggle = document.getElementById('minimap-groups-leader-target-toggle');
+  const groupsFarCryTriggerBtn = document.getElementById('minimap-groups-far-cry-trigger');
+  const berriesToggle = document.getElementById('minimap-berries-toggle');
+  const berriesPop = document.getElementById('minimap-berries-popover');
+  const berriesList = document.getElementById('minimap-berries-popover-list');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -22,6 +32,8 @@ export function installMinimapHudPopovers(options = {}) {
   const socialPop = document.getElementById('minimap-social-popover');
   const audioToggle = document.getElementById('minimap-audio-toggle');
   const audioPop = document.getElementById('minimap-audio-popover');
+  const languageToggle = document.getElementById('minimap-language-toggle');
+  const languagePop = document.getElementById('minimap-language-popover');
 
   if (!timeToggle || !timePop || !weatherToggle || !weatherPop || !socialToggle || !socialPop) {
     return { forceCloseAllPopovers: () => {} };
@@ -48,16 +60,31 @@ export function installMinimapHudPopovers(options = {}) {
     renderWildGroupsPopoverList(groupsList, imageCache, { showLeaderRoamTarget });
   }
 
+  function refreshBerriesPanel() {
+    if (!berriesList) return;
+    renderBerriesPopoverList(berriesList, player);
+  }
+
+  function syncTranslatableButtons() {
+    if (groupsFarCryTriggerBtn) groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
+    if (groupsLeaderTargetToggle) groupsLeaderTargetToggle.textContent = t('play.leaderTarget');
+  }
+
   const popovers = [
     ...(groupsToggle && groupsPop ? [{ toggle: groupsToggle, pop: groupsPop, name: 'groups' }] : []),
+    ...(berriesToggle && berriesPop ? [{ toggle: berriesToggle, pop: berriesPop, name: 'berries' }] : []),
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
+    ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : [])
   ];
 
   function closeAllExcept(activeName) {
-    if (activeName !== 'groups') stopGroupsRefresh();
+    if (activeName !== 'groups') {
+      stopGroupsRefresh();
+      clearHoveredWildGroupEntityKey();
+    }
     popovers.forEach((p) => {
       if (p.name !== activeName) {
         p.pop?.classList.add('hidden');
@@ -74,7 +101,10 @@ export function installMinimapHudPopovers(options = {}) {
     if (isOpen) {
       p.pop.classList.add('hidden');
       p.toggle?.setAttribute('aria-pressed', 'false');
-      if (name === 'groups') stopGroupsRefresh();
+      if (name === 'groups') {
+        stopGroupsRefresh();
+        clearHoveredWildGroupEntityKey();
+      }
     } else {
       closeAllExcept(name);
       p.pop.classList.remove('hidden');
@@ -84,8 +114,16 @@ export function installMinimapHudPopovers(options = {}) {
         stopGroupsRefresh();
         groupsRefreshTimer = setInterval(refreshGroupsPanel, 380);
       }
+      if (name === 'berries') {
+        refreshBerriesPanel();
+      }
     }
   }
+
+  berriesToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('berries');
+  });
 
   groupsToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -98,6 +136,16 @@ export function installMinimapHudPopovers(options = {}) {
     setWildLeaderRoamTargetVisible(showLeaderRoamTarget);
     syncGroupsLeaderTargetToggleUi();
     refreshGroupsPanel();
+  });
+
+  groupsFarCryTriggerBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const ok = triggerNextFarCryNow(player, getCurrentData());
+    groupsFarCryTriggerBtn.textContent = ok ? t('play.farCryNow') : t('play.noTarget');
+    setTimeout(() => {
+      if (!groupsFarCryTriggerBtn.isConnected) return;
+      groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
+    }, 900);
   });
 
   timeToggle.addEventListener('click', (e) => {
@@ -115,6 +163,11 @@ export function installMinimapHudPopovers(options = {}) {
     togglePopover('social');
   });
 
+  languageToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('language');
+  });
+
   // Audio toggle is handled by minimap-audio-ui.js, but we should close others when it opens.
   // We'll add a listener to the audio toggle to close our popovers.
   audioToggle?.addEventListener('click', () => {
@@ -126,6 +179,11 @@ export function installMinimapHudPopovers(options = {}) {
   });
 
   // Global click handler to close popovers when clicking outside
+  syncTranslatableButtons();
+  const unlistenLocale = onLocaleChanged(() => {
+    syncTranslatableButtons();
+    refreshGroupsPanel();
+  });
   syncGroupsLeaderTargetToggleUi();
   document.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
@@ -138,7 +196,12 @@ export function installMinimapHudPopovers(options = {}) {
   return {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
+      clearHoveredWildGroupEntityKey();
       closeAllExcept(null);
+    },
+    destroy: () => {
+      clearHoveredWildGroupEntityKey();
+      unlistenLocale();
     }
   };
 }
