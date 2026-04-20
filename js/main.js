@@ -59,6 +59,12 @@ import {
   setEarthquakeTargetIntensity01,
   getEarthquakeActiveIntensity01
 } from './main/earthquake-layer.js';
+import {
+  initSunLightRaysLayer,
+  tickSunLightRaysLayer,
+  setSunLightRaysTargetIntensity01,
+  getSunLightRaysActiveIntensity01
+} from './main/sun-light-rays-layer.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
@@ -285,6 +291,7 @@ const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
 const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
+const playSunLightRaysIntensityEl = document.getElementById('play-sun-light-rays-intensity');
 const playVisionFogToggleEl = document.getElementById('play-vision-fog-toggle');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
@@ -307,7 +314,7 @@ let playSocialOverlay = {
 };
 
 let currentData = null;
-/** One-shot: auto-enter play at saved position after first map load (page session). */
+/** One-shot: after first region load, auto-enter play (save resume or random city). */
 let didAutoResumePlayOnInitialLoad = false;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
 let playCharacterSelector = null;
@@ -324,6 +331,7 @@ let sessionEnteredPlayOnCurrentMap = false;
 // read (during `getSettings()` before the first tick) returns the correct shape.
 initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
 initEarthquakeLayer({ intensity01: 0 });
+initSunLightRaysLayer({ intensity01: 0 });
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -572,7 +580,7 @@ function installAdaptivePerfDebugPanel() {
     }
   };
   /** @type {'low'|'medium'|'high'|'ultra'|'custom'} */
-  let activePreset = 'medium';
+  let activePreset = 'ultra';
 
   function loadPersistedAdaptivePerfState() {
     const rawCfg = localStorage.getItem(LS_ADAPTIVE_CFG);
@@ -817,7 +825,7 @@ function installAdaptivePerfDebugPanel() {
   btnRefresh.addEventListener('click', refreshFromRuntime);
   btnReset.addEventListener('click', () => {
     const cfg = resetPlayAdaptivePerfConfig();
-    activePreset = 'medium';
+    activePreset = 'ultra';
     text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
     persistAdaptivePerfState();
     refreshFromRuntime();
@@ -1133,13 +1141,14 @@ function buildPlaySessionPersistExtra() {
     weatherCloudIntensity01: wt.cloudIntensity01,
     weatherPrecipIntensity01: wt.precipIntensity01,
     weatherIntensity01: wt.precipIntensity01,
-    earthquakeIntensity01: getEarthquakeActiveIntensity01()
+    earthquakeIntensity01: getEarthquakeActiveIntensity01(),
+    sunLightRaysIntensity01: getSunLightRaysActiveIntensity01()
   };
 }
 
 /**
  * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
- * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} env
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} env
  */
 function applyRestoredPlayEnvironmentFromSave(env) {
   if (!env) return;
@@ -1172,6 +1181,12 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playEarthquakeIntensityEl) {
     playEarthquakeIntensityEl.value = String(Math.round(env.earthquakeIntensity01 * 100));
   }
+  const sunR = Number(env.sunLightRaysIntensity01);
+  const sun01 = Number.isFinite(sunR) ? Math.max(0, Math.min(1, sunR)) : 0;
+  setSunLightRaysTargetIntensity01(sun01);
+  if (playSunLightRaysIntensityEl) {
+    playSunLightRaysIntensityEl.value = String(Math.round(sun01 * 100));
+  }
 }
 
 function syncPlayBgmNowPlayingPanel() {
@@ -1201,6 +1216,41 @@ function syncPlayBgmNowPlayingPanel() {
       showPlayBgmTrackToast(title, statusText);
     }
   }
+}
+
+function syncRegionViewShell() {
+  const appEl = document.querySelector('.app');
+  if (!appEl) return;
+  if (appMode === 'play') {
+    document.body.classList.add('play-mode-active');
+    document.body.classList.remove('region-atlas-active');
+    appEl.classList.add('play-mode-active');
+    appEl.classList.remove('region-atlas-active');
+  } else if (appMode === 'map' && currentData) {
+    document.body.classList.remove('play-mode-active');
+    document.body.classList.add('region-atlas-active');
+    appEl.classList.remove('play-mode-active');
+    appEl.classList.add('region-atlas-active');
+  } else {
+    document.body.classList.remove('play-mode-active', 'region-atlas-active');
+    appEl.classList.remove('play-mode-active', 'region-atlas-active');
+  }
+}
+
+/**
+ * @param {object} data
+ * @returns {{ gx: number, gy: number }}
+ */
+function pickRandomCityMacroForPlayStart(data) {
+  const nodes = data?.graph?.nodes;
+  if (nodes?.length) {
+    const u = (Number(data.seed) >>> 0) ^ 0x243f6a88;
+    const n = nodes[u % nodes.length];
+    return { gx: n.x, gy: n.y };
+  }
+  const w = Math.max(1, data.width | 0);
+  const h = Math.max(1, data.height | 0);
+  return { gx: Math.floor(w / 2), gy: Math.floor(h / 2) };
 }
 
 function updateWorldMapCameraBounds() {
@@ -1311,6 +1361,7 @@ function getSettings() {
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
+    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(),
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
@@ -1389,6 +1440,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
     tickWeather(dt, gameTime);
     tickEarthquakeLayer(dt, gameTime);
+    tickSunLightRaysLayer(dt);
   },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
@@ -1454,7 +1506,6 @@ installPlayContextMenu({
 });
 
 function run() {
-  resizeCanvas();
   resetWorldMapCamera();
   sessionEnteredPlayOnCurrentMap = false;
   resetFarCrySystem();
@@ -1464,6 +1515,8 @@ function run() {
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   playDetailColliderHighlight = null;
+  syncRegionViewShell();
+  resizeCanvas();
   updateView();
 }
 
@@ -1673,12 +1726,11 @@ function enterPlayMode(gx, gy, opts = {}) {
   dismissPlayBgmToast();
   syncPlayBgmNowPlayingPanel();
 
-  document.body.classList.add('play-mode-active');
-  document.querySelector('.app').classList.add('play-mode-active');
   playSocialOverlay.clearActive();
 
   playCharacterSelector?.syncPlayPointerModeRadios();
 
+  syncRegionViewShell();
   resizeCanvas();
   startGameLoop();
   refreshPlayModeInfoBar(true);
@@ -1710,8 +1762,6 @@ btnBackToMap?.addEventListener('click', () => {
   resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
-  document.body.classList.remove('play-mode-active');
-  document.querySelector('.app').classList.remove('play-mode-active');
   playSocialOverlay.clearActive();
 
   stopGameLoop();
@@ -1723,29 +1773,20 @@ btnBackToMap?.addEventListener('click', () => {
   dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
   if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = t('play.idle');
+  syncRegionViewShell();
   resizeCanvas();
   updateView();
 });
 
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  if (appMode === 'play') {
-    const wrap = document.querySelector('.map-wrap');
-    const w = Math.max(1, Math.floor(wrap.clientWidth || window.innerWidth));
-    const h = Math.max(1, Math.floor(wrap.clientHeight || window.innerHeight));
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.width = Math.max(1, Math.floor(w * dpr));
-    canvas.height = Math.max(1, Math.floor(h * dpr));
-  } else {
-    const wrap = document.querySelector('.map-wrap');
-    const cssW = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
-    const cssH = cssW;
-    canvas.style.width = `${cssW}px`;
-    canvas.style.height = `${cssH}px`;
-    canvas.width = Math.max(1, Math.floor(cssW * dpr));
-    canvas.height = Math.max(1, Math.floor(cssH * dpr));
-  }
+  const wrap = document.querySelector('.map-wrap');
+  const w = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
+  const h = Math.max(1, Math.floor(wrap?.clientHeight || window.innerHeight));
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  canvas.width = Math.max(1, Math.floor(w * dpr));
+  canvas.height = Math.max(1, Math.floor(h * dpr));
 }
 
 window.addEventListener('resize', () => {
@@ -1965,6 +2006,11 @@ playEarthquakeIntensityEl?.addEventListener('input', () => {
   setEarthquakeTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
 });
 
+playSunLightRaysIntensityEl?.addEventListener('input', () => {
+  const v = Number(playSunLightRaysIntensityEl.value);
+  setSunLightRaysTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
+});
+
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {
   if (appMode !== 'play') return;
   const pvx = player.visualX ?? player.x;
@@ -2043,9 +2089,15 @@ function tryAutoResumePlayFromSave() {
   if (didAutoResumePlayOnInitialLoad) return;
   if (appMode !== 'map' || !currentData) return;
   const saved = peekPlaySessionSaveForMap(currentData);
-  if (!saved) return;
-  const tile = getPlayResumeMacroTileFromSave(saved, currentData);
-  if (!tile) return;
+  if (saved) {
+    const tile = getPlayResumeMacroTileFromSave(saved, currentData);
+    if (tile) {
+      didAutoResumePlayOnInitialLoad = true;
+      enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+      return;
+    }
+  }
+  const city = pickRandomCityMacroForPlayStart(currentData);
   didAutoResumePlayOnInitialLoad = true;
-  enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+  enterPlayMode(city.gx, city.gy, { resumePosition: false });
 }

@@ -74,34 +74,35 @@ const PLAY_SUBSYSTEM_BASE_CADENCE_SEC = {
 };
 let playSubsystemCadenceSec = { ...PLAY_SUBSYSTEM_BASE_CADENCE_SEC };
 
+/** Built-in default = adaptive perf "Ultra" preset (main.js ADAPTIVE_PRESETS.ultra) merged onto full cadence shape. */
 const PLAY_ADAPTIVE_DEFAULT = {
   enabled: true,
-  relaxAfterMs: 4200,
+  relaxAfterMs: 2400,
   thresholds: {
-    updateModerateMs: 6.8,
-    updateHeavyMs: 8.0,
-    updateVeryHeavyMs: 10.5,
-    renderModerateMs: 7.2,
-    renderHeavyMs: 9.0,
-    wildModerateMs: 2.5,
-    wildHeavyMs: 4.0,
-    hudHeavyMs: 1.2,
-    bgmHeavyMs: 0.8
+    updateModerateMs: 9.5,
+    updateHeavyMs: 11.4,
+    updateVeryHeavyMs: 13.5,
+    renderModerateMs: 9.8,
+    renderHeavyMs: 11.5,
+    wildModerateMs: 4.0,
+    wildHeavyMs: 6.0,
+    hudHeavyMs: 1.9,
+    bgmHeavyMs: 1.35
   },
   moderate: {
     subsystemCadenceSec: {
       wildWindow: 0.05,
-      wildUpdate: 0.05,
+      wildUpdate: 0.02,
       breakableRegen: 0.08,
       berryTrees: 0.12,
       thrownDetails: 0.05,
-      hud: 0.1,
-      farCry: 0.1,
-      autosave: 0.5
+      hud: 0.05,
+      farCry: 0.05,
+      autosave: 0.25
     },
     audioCadenceMs: {
-      biomeBgm: 170,
-      weatherAmbient: 140,
+      biomeBgm: 110,
+      weatherAmbient: 95,
       earthquakeAmbient: 120,
       fireLoop: 140
     }
@@ -109,17 +110,17 @@ const PLAY_ADAPTIVE_DEFAULT = {
   heavy: {
     subsystemCadenceSec: {
       wildWindow: 0.1,
-      wildUpdate: 0.1,
+      wildUpdate: 0.05,
       breakableRegen: 0.16,
       berryTrees: 0.2,
       thrownDetails: 0.1,
-      hud: 0.16,
-      farCry: 0.2,
-      autosave: 1.0
+      hud: 0.08,
+      farCry: 0.1,
+      autosave: 0.5
     },
     audioCadenceMs: {
-      biomeBgm: 260,
-      weatherAmbient: 220,
+      biomeBgm: 150,
+      weatherAmbient: 130,
       earthquakeAmbient: 180,
       fireLoop: 220
     }

@@ -1865,6 +1865,7 @@ export function render(canvas, data, options = {}) {
       splashTargets,
       entityShadowSprites,
       earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
+      sunLightRaysIntensity01: options.settings?.weatherSunLightRaysIntensity ?? 0,
       cloudWhiteLayerAlphaMul
     });
     addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);

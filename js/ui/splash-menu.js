@@ -5,6 +5,7 @@ import { BIOMES } from '../biomes.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { initWeatherSystem, tickWeather, getActiveWeatherParams, getWeatherTarget } from '../main/weather-system.js';
 import { initEarthquakeLayer, tickEarthquakeLayer } from '../main/earthquake-layer.js';
+import { initSunLightRaysLayer, tickSunLightRaysLayer, getSunLightRaysActiveIntensity01 } from '../main/sun-light-rays-layer.js';
 import { getWindDirectionRad, getWindFeltIntensity } from '../main/wind-state.js';
 import { resetWildPokemonManager, syncWildPokemonWindow, updateWildPokemon, getWildPokemonEntities } from '../wild-pokemon/index.js';
 import { resetThrownMapDetailEntities } from '../main/thrown-map-detail-entities.js';
@@ -88,7 +89,8 @@ async function init() {
   // Initialize systems
   initWeatherSystem({ preset: 'clear', intensity01: 0.5 });
   initEarthquakeLayer({ intensity01: 0 });
-  
+  initSunLightRaysLayer({ intensity01: 0 });
+
   startSplashSequence();
 }
 
@@ -256,7 +258,8 @@ function loop(t) {
 
   tickWeather(dt, gameTime);
   tickEarthquakeLayer(dt, gameTime);
-  
+  tickSunLightRaysLayer(dt);
+
   // Update pokemon around the focus point, but ignore player reactions (to allow normal wild behavior)
   updateWildPokemon(dt, currentData, focusX, focusY, { ignorePlayer: true });
 
@@ -291,6 +294,7 @@ function loop(t) {
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: 0,
+    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(),
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,

@@ -1606,6 +1606,54 @@ body.play-mode-active {
   border-radius: 0;
 }
 
+/* World map overview: same viewport shell as play — full map-wrap, no square canvas */
+body.region-atlas-active {
+  overflow: hidden;
+  background: #000;
+}
+
+.app.region-atlas-active {
+  max-width: 100vw;
+  padding: 0;
+  height: 100vh;
+  max-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.app.region-atlas-active h1.play-shell-title {
+  display: none;
+}
+
+.app.region-atlas-active .play-shell-toolbar,
+.app.region-atlas-active .toolbar-secondary {
+  flex-shrink: 0;
+}
+
+.app.region-atlas-active #character-selector-container {
+  flex-shrink: 0;
+}
+
+.app.region-atlas-active .map-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.app.region-atlas-active #map {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  border-radius: 0;
+}
+
 /* FPS — modo play (HUD oculto: canto superior direito) */
 .play-fps {
   display: none;

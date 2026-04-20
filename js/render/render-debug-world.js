@@ -816,6 +816,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
  * @param {number} [options.earthquakeVisual01=0] — smoothed 0..1 ground-shake layer (independent of sky weather).
+ * @param {number} [options.sunLightRaysIntensity01=0] — smoothed 0..1 additive sun-beam layer (independent of sky weather).
  * @param {number} [options.cloudWhiteLayerAlphaMul=1] — 0..1 scales procedural *white* clouds (shadows unchanged). Play passes altitude ramp from `render.js`.
  */
 export function drawEnvironmentalEffects(ctx, options) {
@@ -847,6 +848,7 @@ export function drawEnvironmentalEffects(ctx, options) {
     splashTargets,
     entityShadowSprites,
     earthquakeVisual01 = 0,
+    sunLightRaysIntensity01 = 0,
     cloudWhiteLayerAlphaMul = 1
   } = options;
   // Clouds go gray with rain. Scales 0..~0.55 so even light rain starts feeling overcast.
@@ -942,6 +944,12 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.fillStyle = `rgb(${screenTint.r | 0},${screenTint.g | 0},${screenTint.b | 0})`;
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();
+  }
+
+  const sunRayI = Math.max(0, Math.min(1, Number(sunLightRaysIntensity01) || 0));
+  if (sunRayI > 0.004) {
+    const cloudP = Math.max(0, Math.min(1, Number(cloudPresence) || 0));
+    drawSunLightRaysScreenFx(ctx, cw, ch, time, sunRayI, cloudP, lodDetail);
   }
 
   const eqVis = Math.max(0, Math.min(1, Number(earthquakeVisual01) || 0));
@@ -1058,6 +1066,82 @@ export function drawVolumetricEnvironmentalLayer(ctx, options) {
       weatherMode: weatherVolumetricMode
     });
   });
+}
+
+/**
+ * Additive sun shafts (PS1-era: few hard-edged wedges, chunky motion, warm screen).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {number} timeSec
+ * @param {number} intensity01
+ * @param {number} [cloudPresence01=0]
+ * @param {number} [lodDetail=0]
+ */
+function drawSunLightRaysScreenFx(ctx, cw, ch, timeSec, intensity01, cloudPresence01 = 0, lodDetail = 0) {
+  const inten = Math.max(0, Math.min(1, Number(intensity01) || 0));
+  if (inten < 0.003) return;
+  const clouds = Math.max(0, Math.min(1, Number(cloudPresence01) || 0));
+  const cloudDamp = 1 - clouds * 0.42;
+  const lod = Number(lodDetail) || 0;
+  const nRays = lod >= 2 ? 5 : lod >= 1 ? 7 : 9;
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const tick = Math.floor(time * 8);
+  const swayRaw = Math.sin(time * 0.38) * 10 + Math.sin(time * 0.73 + 1.1) * 5;
+  const sway = Math.round(swayRaw / 4) * 4;
+  const reach = Math.hypot(cw, ch) * 1.55;
+  const sx = -cw * 0.14 + sway * 0.35;
+  const sy = -ch * 0.1 + Math.round(Math.sin(time * 0.21) * 3);
+
+  const baseAlpha = (0.11 + inten * 0.2) * inten * cloudDamp;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'screen';
+
+  for (let i = 0; i < nRays; i++) {
+    const u = nRays <= 1 ? 0.5 : i / (nRays - 1);
+    const j = hash01Cell(i, tick, 0x71e4);
+    const ang0 = 0.48 + u * 0.62 + (j - 0.5) * 0.06;
+    const wedge = (0.038 + inten * 0.05) * (0.85 + 0.15 * hash01Cell(i * 5, tick, 0x88c1));
+    const ang1 = ang0 + wedge;
+    const c0 = Math.cos(ang0);
+    const s0 = Math.sin(ang0);
+    const c1 = Math.cos(ang1);
+    const s1 = Math.sin(ang1);
+    const x0 = sx + c0 * reach;
+    const y0 = sy + s0 * reach;
+    const x1 = sx + c1 * reach;
+    const y1 = sy + s1 * reach;
+    const mx = (x0 + x1) * 0.5;
+    const my = (y0 + y1) * 0.5;
+    const g = ctx.createLinearGradient(sx, sy, mx, my);
+    const peak = baseAlpha * (0.55 + 0.45 * hash01Cell(i * 13, tick + 3, 0x4a39));
+    g.addColorStop(0, 'rgba(255,252,240,0)');
+    g.addColorStop(0.22, `rgba(255,244,210,${peak * 0.35})`);
+    g.addColorStop(0.45, `rgba(255,236,175,${peak})`);
+    g.addColorStop(0.72, `rgba(255,228,160,${peak * 0.55})`);
+    g.addColorStop(1, 'rgba(255,215,140,0)');
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = Math.min(1, baseAlpha * 0.85);
+  const wx0 = Math.round(sway * 0.5 / 8) * 8;
+  const wash = ctx.createLinearGradient(wx0, 0, cw * 0.62 + wx0, ch);
+  wash.addColorStop(0, 'rgba(255,248,220,0.42)');
+  wash.addColorStop(0.28, 'rgba(255,238,190,0.14)');
+  wash.addColorStop(0.55, 'rgba(255,230,170,0.05)');
+  wash.addColorStop(1, 'rgba(255,220,150,0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.restore();
 }
 
 /**

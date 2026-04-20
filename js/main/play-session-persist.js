@@ -11,6 +11,7 @@ import { applyPlayerWorldResumePosition } from '../player.js';
 import { flashPlaySessionSaveIndicator } from './play-save-indicator-ui.js';
 import { getWeatherTarget } from './weather-system.js';
 import { getEarthquakeActiveIntensity01 } from './earthquake-layer.js';
+import { getSunLightRaysActiveIntensity01 } from './sun-light-rays-layer.js';
 import { isWeatherPreset } from './weather-presets.js';
 import { wrapHours } from './world-time-of-day.js';
 
@@ -32,6 +33,7 @@ const STORAGE_KEY = 'pkmn_play_session_save_v1';
  * @property {number} [weatherCloudIntensity01]
  * @property {number} [weatherPrecipIntensity01]
  * @property {number} [earthquakeIntensity01]
+ * @property {number} [sunLightRaysIntensity01]
  */
 
 /** First autosave after entering play (seconds). */
@@ -171,7 +173,7 @@ function readSavedWeatherPreset(saved) {
 /**
  * Weather + clock block for cold resume (v2+).
  * @param {PlaySessionSaveV2 | null | undefined} saved
- * @returns {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number } | null}
+ * @returns {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number, sunLightRaysIntensity01: number } | null}
  */
 export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!saved || saved.version < 2) return null;
@@ -187,13 +189,16 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
   const weatherPrecipIntensity01 = Number.isFinite(wpRaw) ? Math.max(0, Math.min(1, wpRaw)) : legacy;
   const eq = Number(saved.earthquakeIntensity01);
   const earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
+  const sr = Number(saved.sunLightRaysIntensity01);
+  const sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
   return {
     worldHours,
     weatherPreset: preset,
     weatherIntensity01: legacy,
     weatherCloudIntensity01,
     weatherPrecipIntensity01,
-    earthquakeIntensity01
+    earthquakeIntensity01,
+    sunLightRaysIntensity01
   };
 }
 
@@ -246,7 +251,7 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
 }
 
 /**
- * @typedef {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} PlaySessionPersistExtra
+ * @typedef {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} PlaySessionPersistExtra
  */
 
 /**
@@ -303,6 +308,8 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   out.weatherIntensity01 = Number.isFinite(wiLegacy) ? Math.max(0, Math.min(1, wiLegacy)) : 1;
   const eq = Number(persistExtra?.earthquakeIntensity01 ?? getEarthquakeActiveIntensity01());
   out.earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
+  const sr = Number(persistExtra?.sunLightRaysIntensity01 ?? getSunLightRaysActiveIntensity01());
+  out.sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
   return out;
 }
 

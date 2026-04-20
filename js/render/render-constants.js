@@ -2,7 +2,7 @@
 export const VEG_MULTITILE_OVERLAP_PX = 1;
 
 /** Máx. linhas (altura) de um objecto scatter em células micro — 2C/2A varrem origens (ox, oy) acima do tile. */
-export const MAX_SCATTER_ROWS_PASS2 = 8;
+export const MAX_SCATTER_ROWS_PASS2 = 6;
 
 /** Faixa vertical 16×(16×N) em tilesets/water-tile.png — animação de ondas no oceano (modo play). */
 export const WATER_ANIM_SRC_W = 16;
@@ -16,13 +16,13 @@ export const WATER_ANIM_SRC_H = 16;
 export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
 
 /** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles. */
-export const PLAY_CHUNK_SIZE = 8;
+export const PLAY_CHUNK_SIZE = 6;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
-export const PLAY_BAKE_TILE_PX = 40;
+export const PLAY_BAKE_TILE_PX = 41;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
-export const PLAY_CAMERA_Z_REF = 28;
+export const PLAY_CAMERA_Z_REF = 58;
 
 /**
  * E / W / S / SE / SW from player tile (+y = south). S / SE / SW: full grass only after the sprite.
