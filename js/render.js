@@ -568,11 +568,14 @@ function recordGlobalMapTrailPoint(data, playerRef, appMode) {
  * @param {object} data
  * @param {number} cw
  * @param {number} ch
+ * @param {{ scale: number, ox: number, oy: number } | null} [mapCamera]
  */
-function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch) {
+function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch, mapCamera = null) {
   if (!Array.isArray(trailMicro) || trailMicro.length < 2 || !data?.width || !data?.height) return;
-  const tileW = cw / data.width;
-  const tileH = ch / data.height;
+  const tileW = mapCamera?.scale ? mapCamera.scale : cw / data.width;
+  const tileH = mapCamera?.scale ? mapCamera.scale : ch / data.height;
+  const ox = mapCamera?.ox || 0;
+  const oy = mapCamera?.oy || 0;
   const lineW = Math.max(1.3, Math.min(3.2, Math.min(tileW, tileH) * 0.2));
   const teleportJumpSq = GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO * GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO;
   const pts = [];
@@ -586,8 +589,8 @@ function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch) {
     pts.push({
       mx,
       my,
-      px: (gx + 0.5) * tileW,
-      py: (gy + 0.5) * tileH
+      px: (gx - ox + 0.5) * tileW,
+      py: (gy - oy + 0.5) * tileH
     });
   }
   if (pts.length < 2) return;
@@ -756,14 +759,17 @@ export function render(canvas, data, options = {}) {
   if (appMode === 'map') {
     clearPlayCameraSnapshot();
     const tMap0 = performance.now();
+    const worldMapCamera = options.settings?.worldMapCamera || null;
+    const useSvgOverlay = !!options.settings?.worldMapUseSvgOverlay;
     drawCachedMapOverview(ctx, {
       data,
       cw,
       ch,
       viewType,
-      overlayPaths,
-      overlayGraph,
+      overlayPaths: useSvgOverlay ? false : overlayPaths,
+      overlayGraph: useSvgOverlay ? false : overlayGraph,
       overlayContours,
+      camera: worldMapCamera,
       startX,
       startY,
       endX,
@@ -777,14 +783,16 @@ export function render(canvas, data, options = {}) {
     );
     if (mapPlayerMicro && data.width > 0 && data.height > 0) {
       if (globalMapTrailFingerprint === mapFp && globalMapPlayerTrailMicro.length > 1) {
-        drawGlobalMapPlayerTrail(ctx, globalMapPlayerTrailMicro, data, cw, ch);
+        drawGlobalMapPlayerTrail(ctx, globalMapPlayerTrailMicro, data, cw, ch, worldMapCamera);
       }
       const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
       const gy = mapPlayerMicro.y / MACRO_TILE_STRIDE;
-      const tileW = cw / data.width;
-      const tileH = ch / data.height;
-      const px = (gx + 0.5) * tileW;
-      const py = (gy + 0.5) * tileH;
+      const tileW = worldMapCamera?.scale ? worldMapCamera.scale : cw / data.width;
+      const tileH = worldMapCamera?.scale ? worldMapCamera.scale : ch / data.height;
+      const ox = worldMapCamera?.ox || 0;
+      const oy = worldMapCamera?.oy || 0;
+      const px = (gx - ox + 0.5) * tileW;
+      const py = (gy - oy + 0.5) * tileH;
       const r = Math.max(4, Math.min(8, Math.min(tileW, tileH) * 0.42));
       ctx.save();
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
@@ -1784,7 +1792,16 @@ export function render(canvas, data, options = {}) {
     const { x, y } = options.hover;
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+    const mapCam = options.settings?.appMode === 'map' ? options.settings?.worldMapCamera : null;
+    if (mapCam?.scale) {
+      const sx = Math.floor((x - mapCam.ox) * mapCam.scale);
+      const sy = Math.floor((y - mapCam.oy) * mapCam.scale);
+      const sW = Math.max(1, Math.ceil(mapCam.scale));
+      const sH = Math.max(1, Math.ceil(mapCam.scale));
+      ctx.strokeRect(sx, sy, sW, sH);
+    } else {
+      ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+    }
     addRenderFramePhaseMs('rndHoverMs', performance.now() - th0);
   }
 

@@ -88,7 +88,17 @@ import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { installMinimapSaveModal } from './main/minimap-save-modal.js';
+import { renderMapOverlaySvg } from './render/render-map-overlay-svg.js';
 import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
+import {
+  configureWorldMapCamera,
+  getWorldMapCamera,
+  panWorldMapByScreenDelta,
+  resetWorldMapCamera,
+  screenPxToWorldMacro,
+  tickWorldMapCamera,
+  zoomWorldMapByFactorAtScreenPoint
+} from './main/world-map-camera-state.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -122,6 +132,9 @@ if (isPlayShell()) {
 initI18n();
 
 const canvas = document.getElementById('map');
+const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementById('map-overlay-svg'));
+const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
+const WORLD_MAP_USE_SVG_OVERLAY = true;
 
 /** Blur inputs / buttons so WASD and hotkeys go to the game after clicking the map. */
 function blurFocusedUiAwayFromCanvas() {
@@ -311,6 +324,12 @@ let lastBgmToastTrackKey = null;
 let playBgmToastHideTimer = 0;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
+let worldMapCameraRaf = 0;
+let mapDragPointerId = -1;
+let mapDragMovedPx = 0;
+let mapDragLastClientX = 0;
+let mapDragLastClientY = 0;
+let suppressNextMapClick = false;
 
 const PLAY_BGM_TOAST_MS = 4600;
 
@@ -661,6 +680,41 @@ function syncPlayBgmNowPlayingPanel() {
   }
 }
 
+function updateWorldMapCameraBounds() {
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || !currentData || !canvas || appMode !== 'map') return;
+  configureWorldMapCamera(currentData.width, currentData.height, canvas.width, canvas.height);
+}
+
+function requestWorldMapCameraFrame() {
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || appMode !== 'map') return;
+  if (worldMapCameraRaf) return;
+  worldMapCameraRaf = requestAnimationFrame(() => {
+    worldMapCameraRaf = 0;
+    const moving = tickWorldMapCamera(performance.now());
+    updateView();
+    if (moving) requestWorldMapCameraFrame();
+  });
+}
+
+function mapClientToCanvasPx(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const x = ((clientX - rect.left) / Math.max(1, rect.width)) * canvas.width;
+  const y = ((clientY - rect.top) / Math.max(1, rect.height)) * canvas.height;
+  return { x, y, rect };
+}
+
+function mapClientToMacro(clientX, clientY) {
+  if (!currentData) return { gx: -1, gy: -1 };
+  const { x, y, rect } = mapClientToCanvasPx(clientX, clientY);
+  if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) {
+    const gx = Math.floor(((clientX - rect.left) / Math.max(1, rect.width)) * currentData.width);
+    const gy = Math.floor(((clientY - rect.top) / Math.max(1, rect.height)) * currentData.height);
+    return { gx, gy };
+  }
+  const p = screenPxToWorldMacro(x, y);
+  return { gx: Math.floor(p.x), gy: Math.floor(p.y) };
+}
+
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = chkRotas?.checked ?? true;
@@ -683,6 +737,10 @@ function getSettings() {
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
+  const worldMapCamera =
+    appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
+      ? getWorldMapCamera()
+      : null;
 
   // Rain dims the ambient day tint — overcast sky blocks daylight proportionally to intensity.
   // R/G are dimmed more than B so heavy rain also pulls the scene slightly cool, not just dark.
@@ -737,7 +795,9 @@ function getSettings() {
     weatherVolumetricWindCarry: weather.volumetricWindCarry,
     weatherVolumetricTurbulence: weather.volumetricTurbulence,
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
-    weatherVolumetricSplashBias: weather.volumetricSplashBias
+    weatherVolumetricSplashBias: weather.volumetricSplashBias,
+    worldMapCamera,
+    worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY
   };
 }
 
@@ -769,7 +829,19 @@ addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
   const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
-  if (currentData) render(canvas, currentData, { settings: getSettings(), hover });
+  if (appMode === 'map') updateWorldMapCameraBounds();
+  const settings = getSettings();
+  if (currentData) {
+    render(canvas, currentData, { settings, hover });
+    renderMapOverlaySvg(mapOverlaySvg, currentData, {
+      canvas,
+      appMode,
+      overlayPaths: settings.overlayPaths,
+      overlayGraph: settings.overlayGraph,
+      useSvgOverlay: settings.worldMapUseSvgOverlay,
+      camera: settings.worldMapCamera
+    });
+  }
 }
 
 const { startGameLoop, stopGameLoop } = createGameLoop({
@@ -853,6 +925,7 @@ installPlayContextMenu({
 
 function run() {
   resizeCanvas();
+  resetWorldMapCamera();
   sessionEnteredPlayOnCurrentMap = false;
   resetFarCrySystem();
   currentData = generate(seedInput.value, currentConfig);
@@ -885,6 +958,45 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
 
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (!currentData || appMode !== 'map' || !WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) return;
+    e.preventDefault();
+    const { x, y } = mapClientToCanvasPx(e.clientX, e.clientY);
+    const zoomFactor = Math.exp(-e.deltaY * 0.0017);
+    zoomWorldMapByFactorAtScreenPoint(zoomFactor, x, y);
+    requestWorldMapCameraFrame();
+  },
+  { passive: false }
+);
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (!currentData || appMode !== 'map' || !WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) return;
+  if (e.button !== 0) return;
+  mapDragPointerId = e.pointerId;
+  mapDragMovedPx = 0;
+  mapDragLastClientX = e.clientX;
+  mapDragLastClientY = e.clientY;
+  suppressNextMapClick = false;
+  canvas.setPointerCapture?.(e.pointerId);
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (appMode !== 'map' || e.pointerId !== mapDragPointerId) return;
+  suppressNextMapClick = mapDragMovedPx > 7;
+  mapDragPointerId = -1;
+  mapDragMovedPx = 0;
+  canvas.releasePointerCapture?.(e.pointerId);
+});
+
+canvas.addEventListener('pointercancel', (e) => {
+  if (e.pointerId !== mapDragPointerId) return;
+  mapDragPointerId = -1;
+  mapDragMovedPx = 0;
+  canvas.releasePointerCapture?.(e.pointerId);
+});
+
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
 
@@ -894,14 +1006,21 @@ canvas.addEventListener('mousemove', (e) => {
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const mouseClientX = e.clientX - rect.left;
-  const mouseClientY = e.clientY - rect.top;
-  const mousePxX = (mouseClientX / rect.width) * canvas.width;
-  const mousePxY = (mouseClientY / rect.height) * canvas.height;
+  if (WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && mapDragPointerId !== -1 && (e.buttons & 1) === 1) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - mapDragLastClientX) * (canvas.width / Math.max(1, rect.width));
+    const sy = (e.clientY - mapDragLastClientY) * (canvas.height / Math.max(1, rect.height));
+    mapDragMovedPx += Math.hypot(sx, sy);
+    mapDragLastClientX = e.clientX;
+    mapDragLastClientY = e.clientY;
+    if (Math.abs(sx) > 0.001 || Math.abs(sy) > 0.001) {
+      panWorldMapByScreenDelta(sx, sy);
+      requestWorldMapCameraFrame();
+    }
+    return;
+  }
 
-  const gx = Math.floor((mouseClientX / rect.width) * currentData.width);
-  const gy = Math.floor((mouseClientY / rect.height) * currentData.height);
+  const { gx, gy } = mapClientToMacro(e.clientX, e.clientY);
   if (lastHoverTile && lastHoverTile.x === gx && lastHoverTile.y === gy) return;
   lastHoverTile = { x: gx, y: gy };
   const now = performance.now();
@@ -1099,9 +1218,11 @@ window.addEventListener('resize', () => {
 
 canvas.addEventListener('click', (e) => {
   if (!currentData || appMode !== 'map') return;
-  const rect = canvas.getBoundingClientRect();
-  const gx = Math.floor(((e.clientX - rect.left) / rect.width) * currentData.width);
-  const gy = Math.floor(((e.clientY - rect.top) / rect.height) * currentData.height);
+  if (suppressNextMapClick) {
+    suppressNextMapClick = false;
+    return;
+  }
+  const { gx, gy } = mapClientToMacro(e.clientX, e.clientY);
 
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
     enterPlayMode(gx, gy);

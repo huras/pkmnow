@@ -10,12 +10,13 @@ let mapOverviewCacheKey = '';
 export function drawCachedMapOverview(ctx, params) {
   const {
     data,
-    cw,
-    ch,
     viewType,
     overlayPaths,
     overlayGraph,
     overlayContours,
+    cw,
+    ch,
+    camera,
     startX,
     startY,
     endX,
@@ -31,18 +32,16 @@ export function drawCachedMapOverview(ctx, params) {
     configSig,
     width,
     height,
-    cw,
-    ch,
     viewType,
     overlayPaths ? 1 : 0,
     overlayGraph ? 1 : 0,
     overlayContours ? 1 : 0
   ].join('|');
 
-    if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
+  if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
     mapOverviewCacheCanvas = document.createElement('canvas');
-    mapOverviewCacheCanvas.width = cw;
-    mapOverviewCacheCanvas.height = ch;
+    mapOverviewCacheCanvas.width = Math.max(1, width);
+    mapOverviewCacheCanvas.height = Math.max(1, height);
     mapOverviewCacheKey = mapCacheKey;
     const mctx = mapOverviewCacheCanvas.getContext('2d');
     const wlOverview = resolveWaterLevel(data.config || {});
@@ -50,10 +49,10 @@ export function drawCachedMapOverview(ctx, params) {
       mctx.imageSmoothingEnabled = false;
       if (mctx.webkitImageSmoothingEnabled !== undefined) mctx.webkitImageSmoothingEnabled = false;
       mctx.fillStyle = '#111';
-      mctx.fillRect(0, 0, cw, ch);
+      mctx.fillRect(0, 0, width, height);
 
-      const tileW = cw / width;
-      const tileH = ch / height;
+      const tileW = 1;
+      const tileH = 1;
       const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
       for (let y = startY; y < endY; y++) {
         for (let x = startX; x < endX; x++) {
@@ -66,13 +65,13 @@ export function drawCachedMapOverview(ctx, params) {
           } else {
             mctx.fillStyle = biomeColorById.get(bId) || '#000';
           }
-          mctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+          mctx.fillRect(x, y, tileW, tileH);
         }
       }
 
       if (overlayPaths && paths) {
         mctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
-        mctx.lineWidth = Math.max(1.5, tileW * 0.45);
+        mctx.lineWidth = 0.35;
         mctx.lineJoin = 'round';
         mctx.lineCap = 'round';
         for (const path of paths) {
@@ -91,7 +90,7 @@ export function drawCachedMapOverview(ctx, params) {
         for (const node of graph.nodes) {
           const px = (node.x + 0.5) * tileW;
           const py = (node.y + 0.5) * tileH;
-          const r = Math.max(4, tileW * 0.75);
+          const r = 0.35;
           mctx.shadowBlur = 6;
           mctx.shadowColor = 'rgba(0,0,0,0.8)';
           mctx.fillStyle = node.isGym ? '#ff2222' : '#ffffff';
@@ -111,18 +110,18 @@ export function drawCachedMapOverview(ctx, params) {
           mctx.stroke();
           mctx.shadowBlur = 0;
           mctx.fillStyle = '#fff';
-          mctx.font = `bold ${Math.max(10, tileW * 1.0)}px Outfit, Inter, sans-serif`;
+          mctx.font = 'bold 1px Outfit, Inter, sans-serif';
           mctx.textAlign = 'center';
           mctx.lineWidth = 3;
           mctx.strokeStyle = '#000';
-          mctx.strokeText(node.name, px, py - r - 6);
-          mctx.fillText(node.name, px, py - r - 6);
+          mctx.strokeText(node.name, px, py - r - 0.55);
+          mctx.fillText(node.name, px, py - r - 0.55);
         }
       }
 
       if (overlayContours) {
         mctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        mctx.lineWidth = 1;
+        mctx.lineWidth = 0.08;
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
             const hStep = elevationToStep(cells[y * width + x], wlOverview);
@@ -130,8 +129,8 @@ export function drawCachedMapOverview(ctx, params) {
               const hr = elevationToStep(cells[y * width + (x + 1)], wlOverview);
               if (hStep !== hr) {
                 mctx.beginPath();
-                mctx.moveTo((x + 1) * tileW, y * tileH);
-                mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+                mctx.moveTo(x + 1, y);
+                mctx.lineTo(x + 1, y + 1);
                 mctx.stroke();
               }
             }
@@ -139,8 +138,8 @@ export function drawCachedMapOverview(ctx, params) {
               const hd = elevationToStep(cells[(y + 1) * width + x], wlOverview);
               if (hStep !== hd) {
                 mctx.beginPath();
-                mctx.moveTo(x * tileW, (y + 1) * tileH);
-                mctx.lineTo((x + 1) * tileW, (y + 1) * tileH);
+                mctx.moveTo(x, y + 1);
+                mctx.lineTo(x + 1, y + 1);
                 mctx.stroke();
               }
             }
@@ -151,6 +150,16 @@ export function drawCachedMapOverview(ctx, params) {
   }
 
   if (mapOverviewCacheCanvas) {
-    ctx.drawImage(mapOverviewCacheCanvas, 0, 0);
+    if (camera && Number.isFinite(camera.scale) && Number.isFinite(camera.ox) && Number.isFinite(camera.oy)) {
+      const scale = Math.max(1e-6, Number(camera.scale) || 0);
+      const ox = Number(camera.ox) || 0;
+      const oy = Number(camera.oy) || 0;
+      ctx.save();
+      ctx.translate(-ox * scale, -oy * scale);
+      ctx.drawImage(mapOverviewCacheCanvas, 0, 0, width * scale, height * scale);
+      ctx.restore();
+    } else {
+      ctx.drawImage(mapOverviewCacheCanvas, 0, 0, cw, ch);
+    }
   }
 }

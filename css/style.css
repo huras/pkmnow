@@ -311,6 +311,12 @@ button.btn-secondary:hover {
   image-rendering: crisp-edges;
 }
 
+.map-overlay-svg {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 /* Click-to-focus map: no ring on pointer focus; keep hint for keyboard Tab */
 #map:focus:not(:focus-visible) {
   outline: none;
