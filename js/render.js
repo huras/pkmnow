@@ -30,7 +30,9 @@ import {
 } from './play-grass-fire.js';
 import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from './play-grass-cut.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
+import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
+import { resolveMapGlobalPlayerMicroForMarker } from './main/play-session-persist.js';
 import { renderMinimap } from './render/render-minimap.js';
 import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
 import {
@@ -39,8 +41,14 @@ import {
   BURN_START_FRAME,
   BURN_START_FRAMES
 } from './moves/move-constants.js';
+import { getGroundWetness01 } from './main/weather-state.js';
 
-import { drawBatchedProjectile } from './render/render-projectiles.js';
+import {
+  drawBatchedProjectile,
+  drawPrismaticStreamGradientBeam,
+  drawSteelStreamGradientBeam,
+  drawWaterCannonStreamBeam
+} from './render/render-projectiles.js';
 import { drawBatchedParticle } from './render/render-particles.js';
 import {
   drawPlayEntityFootAndAirCollider,
@@ -49,9 +57,12 @@ import {
 import {
   drawDetailHitHpBar,
   drawDetailHitPulse,
+  drawStrengthGrabTargetOutline,
+  drawStrengthGrabTargetOutlineHalf,
   drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
-  drawWildHpBar
+  drawWildHpBar,
+  drawEntityStaminaBar
 } from './render/render-ui-world.js';
 import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
@@ -92,33 +103,47 @@ import {
   drawDigCompanion,
   drawPlayerAimIndicator,
   drawStrengthThrowAimPreview,
+  drawStrengthThrowIdleTarget,
   drawTreeTopFall,
   drawPsybeamChargeBall,
   drawCrystalShard,
   drawSpawnedSmallCrystal,
   drawStrengthThrowRock,
-  drawStrengthThrowFaintedWild
+  drawStrengthThrowFaintedWild,
+  drawWildLeaderRoamTarget
 } from './render/render-world-entities.js';
+import { isWildLeaderRoamTargetVisible } from './main/wild-groups-visual-toggle-state.js';
 import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
   drawEnvironmentalEffects,
-  drawDigChargeBar
+  drawVolumetricEnvironmentalLayer,
+  drawDigChargeBar,
+  drawFieldCombatChargeBar,
+  CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
+import { PluginRegistry } from './core/plugin-registry.js';
 
 import './render/render-debug-hotkeys.js';
 
 import { TessellationEngine } from './tessellation-engine.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-config.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
-import { BIOME_TO_TERRAIN } from './biome-tiles.js';
+import { BIOME_TO_TERRAIN, TREE_TILES } from './biome-tiles.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
+import { scatterItemKeyIsTree } from './scatter-pass2-debug.js';
 import { getRoleForCell } from './tessellation-logic.js';
 import {
   speciesHasFlyingType,
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
-import { activeProjectiles, activeParticles } from './moves/moves-manager.js';
+import {
+  activeProjectiles,
+  activeParticles,
+  getPlayerPrismaticMergedBeamVisual,
+  getPlayerSteelBeamMergedBeamVisual,
+  getPlayerWaterCannonMergedBeamVisual
+} from './moves/moves-manager.js';
 import {
   activeCrystalShards,
   activeSpawnedSmallCrystals,
@@ -126,9 +151,12 @@ import {
   getActiveDetailHitHpBars,
   getActiveDetailHitPulses
 } from './main/play-crystal-tackle.js';
-import { playInputState } from './main/play-input-state.js';
+import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
+import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
+import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
+import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { imageCache } from './image-cache.js';
 import {
@@ -136,7 +164,12 @@ import {
   resolveCanonicalPmdH
 } from './pokemon/pmd-layout-metrics.js';
 import { getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
-
+import {
+  beginRenderFrameProfile,
+  addRenderFramePhaseMs,
+  finalizeRenderFrameProfile,
+  clearRenderFrameBreakdown
+} from './render/render-frame-phases.js';
 
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -147,7 +180,27 @@ export {
 export { loadTilesetImages } from './render/load-tileset-images.js';
 export { getPlayChunkFrameStats };
 
+
 let didWarnTerrainSetRoles = false;
+
+// ---------------------------------------------------------------------------
+// Performance: module-level pools — allocated once, cleared per frame.
+// Avoids GC pressure from `new Map()` / string key allocation in the hot path.
+// ---------------------------------------------------------------------------
+/** Reused per-frame tile metadata Map (cleared at start of each render, never GC'd). */
+const _tileCachePool = new Map();
+/**
+ * Fast integer tile key identical to the one used inside bakeChunk.
+ * Safe for map sizes up to 32767×32767 micro-tiles.
+ * @param {number} mx @param {number} my @returns {number}
+ */
+const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
+
+/**
+ * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
+ * when the player is standing still. Invalidate when tile / facing / carry state changes.
+ */
+let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
 
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
@@ -157,7 +210,19 @@ export function spawnJumpRingAt(x, y) {
 
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
-  if (!ctx || !data) return;
+  if (!ctx || !data) {
+    clearRenderFrameBreakdown();
+    return;
+  }
+
+  // --- Plugin Hooks: preRender ---
+  PluginRegistry.executeHooks('preRender', ctx, data, options);
+
+  let tFrame0 = 0;
+  try {
+    tFrame0 = performance.now();
+    beginRenderFrameProfile(options.settings?.appMode || 'map');
+    const tPrep0 = performance.now();
 
   if (!didWarnTerrainSetRoles) {
     const terrainRoleProblems = TessellationEngine.validateAllTerrainSets();
@@ -215,10 +280,15 @@ export function render(canvas, data, options = {}) {
     clearGrassFireStateForNewMap();
     clearGrassCutStateForNewMap();
     resetPlayChunkBakeAutoTuner();
+    // Clear static entity descriptors so the new map is scanned fresh.
+    invalidateStaticEntityCache();
   }
+
+  addRenderFramePhaseMs('rndPrepMs', performance.now() - tPrep0);
 
   if (appMode === 'map') {
     clearPlayCameraSnapshot();
+    const tMap0 = performance.now();
     drawCachedMapOverview(ctx, {
       data,
       cw,
@@ -232,7 +302,33 @@ export function render(canvas, data, options = {}) {
       endX,
       endY
     });
+    const mapPlayerMicro = resolveMapGlobalPlayerMicroForMarker(
+      data,
+      options.settings?.player,
+      options.settings?.appMode ?? 'map',
+      { sessionEnteredPlayOnCurrentMap: !!options.settings?.sessionEnteredPlayOnCurrentMap }
+    );
+    if (mapPlayerMicro && data.width > 0 && data.height > 0) {
+      const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
+      const gy = mapPlayerMicro.y / MACRO_TILE_STRIDE;
+      const tileW = cw / data.width;
+      const tileH = ch / data.height;
+      const px = (gx + 0.5) * tileW;
+      const py = (gy + 0.5) * tileH;
+      const r = Math.max(4, Math.min(8, Math.min(tileW, tileH) * 0.42));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillStyle = 'rgba(120, 220, 255, 0.95)';
+      ctx.lineWidth = Math.max(1.5, r * 0.22);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
+    const tCam0 = performance.now();
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;
     const vy = player.visualY ?? player.y;
@@ -245,21 +341,42 @@ export function render(canvas, data, options = {}) {
       flightActive: !!player.flightActive,
       framingHeightTiles: POKEMON_HEIGHTS[playerDexForCam] || 1.1
     });
-    setPlayCameraSnapshot({ ...playCam, cw, ch });
     tileW = playCam.effTileW;
     tileH = playCam.effTileH;
     const lodDetail = playCam.lodDetail;
     const time = options.settings?.time || 0;
+    const earthquakeShakePx = getEarthquakeShakePx(
+      time,
+      getEarthquakeActiveIntensity01(),
+      playCam.effTileW
+    );
+    setPlayCameraSnapshot({
+      ...playCam,
+      cw,
+      ch,
+      earthquakeOffXPx: earthquakeShakePx.x,
+      earthquakeOffYPx: earthquakeShakePx.y
+    });
+    applyPlayPointerWithPlayCam(canvas, playCam, earthquakeShakePx);
     const smoothLev = player.flightLevelVisual ?? (player.z || 0);
     const flightHudActive = speciesHasFlyingType(playerDexForCam) && player.flightActive;
+    const zCloudTiles = Math.max(0, Number(smoothLev) || 0);
+    const cloudWhiteSkyContext =
+      speciesHasFlyingType(playerDexForCam) &&
+      (flightHudActive || (!player.jumping && zCloudTiles > 0.02));
+    const cloudWhiteRampT = Math.min(1, zCloudTiles / CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES);
+    const cloudWhiteRampU = Math.max(0, Math.min(1, cloudWhiteRampT));
+    const cloudWhiteLayerAlphaMul = cloudWhiteSkyContext
+      ? cloudWhiteRampU * cloudWhiteRampU * (3 - 2 * cloudWhiteRampU)
+      : 0;
     const isPlayerWalkingAnim =
       (!!player.grounded &&
         (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 || !!player.digActive)) ||
       (flightHudActive &&
         smoothLev &&
         (Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1 ||
-          !!playInputState.spaceHeld ||
-          !!playInputState.shiftLeftHeld ||
+          isPlaySpaceAscendHeld() ||
+          isPlayGroundDigShiftHeld() ||
           (player.z ?? 0) > 0.02));
     
     updateJumpRings(time);
@@ -269,8 +386,10 @@ export function render(canvas, data, options = {}) {
     startY = Math.max(0, playCam.startYTiles);
     endX = Math.min(width * MACRO_TILE_STRIDE, playCam.endXTiles);
     endY = Math.min(height * MACRO_TILE_STRIDE, playCam.endYTiles);
+    addRenderFramePhaseMs('rndCamMs', performance.now() - tCam0);
 
     // --- CHUNK BAKING & RENDERING ---
+    const tChunkQ0 = performance.now();
     const maxChunkXi = Math.floor((width * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const maxChunkYi = Math.floor((height * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const padC = playCam.chunkPad;
@@ -309,6 +428,7 @@ export function render(canvas, data, options = {}) {
         }
       }
     }
+    addRenderFramePhaseMs('rndChunkQMs', performance.now() - tChunkQ0);
 
     const chunkBakeBudget = getAdaptivePlayChunkBakeBudget({
       lodDetail, cachedVisibleChunks, missingVisibleChunks,
@@ -316,14 +436,17 @@ export function render(canvas, data, options = {}) {
       totalVisibleChunks: visibleChunkCoords.length
     });
 
+    const tChunkBake0 = performance.now();
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
     for (const req of bakeRequests) {
       if (hasPlayChunk(req.key) && !req.forceRebake) continue;
       setPlayChunk(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
     }
+    addRenderFramePhaseMs('rndChunkBakeMs', performance.now() - tChunkBake0);
 
-    const currentTransX = playCam.currentTransX;
-    const currentTransY = playCam.currentTransY;
+    const tChunkDraw0 = performance.now();
+    const currentTransX = playCam.currentTransX + earthquakeShakePx.x;
+    const currentTransY = playCam.currentTransY + earthquakeShakePx.y;
     const chunkDrawScale = playCam.viewScale;
     const prevSmoothing = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = chunkDrawScale < 0.999;
@@ -333,12 +456,14 @@ export function render(canvas, data, options = {}) {
       const chunk = getPlayChunk(key);
       if (!chunk) continue;
       drawnVisibleChunks++;
+      // Use GPU-resident ImageBitmap when available (zero-copy); fall back to canvas.
+      const src = chunk.bitmap || chunk.canvas;
       ctx.drawImage(
-        chunk.canvas, 0, 0, chunk.canvas.width, chunk.canvas.height,
+        src, 0, 0, chunk.w, chunk.h,
         currentTransX + cx * PLAY_CHUNK_SIZE * tileW,
         currentTransY + cy * PLAY_CHUNK_SIZE * tileH,
-        Math.max(1, Math.ceil(chunk.canvas.width * chunkDrawScale - 1e-6)),
-        Math.max(1, Math.ceil(chunk.canvas.height * chunkDrawScale - 1e-6))
+        Math.max(1, PLAY_CHUNK_SIZE * tileW),
+        Math.max(1, PLAY_CHUNK_SIZE * tileH)
       );
     }
     setLastPlayChunkFrameStats({
@@ -358,11 +483,15 @@ export function render(canvas, data, options = {}) {
     });
     ctx.imageSmoothingEnabled = prevSmoothing;
     ctx.translate(currentTransX, currentTransY);
+    addRenderFramePhaseMs('rndChunkDrawMs', performance.now() - tChunkDraw0);
 
     // --- TILE CACHE & WARMING ---
-    const tileCache = new Map();
+    const tTileWarm0 = performance.now();
+    // Reuse the module-level Map to avoid per-frame GC pressure.
+    _tileCachePool.clear();
+    const tileCache = _tileCachePool;
     const getCached = (mx, my) => {
-      const key = (mx << 16) | (my & 0xFFFF);
+      const key = _tileKeyInt(mx, my);
       let t = tileCache.get(key);
       if (!t) {
         t = getMicroTile(mx, my, data);
@@ -375,29 +504,52 @@ export function render(canvas, data, options = {}) {
         for (let mx = startX; mx < endX; mx++) getCached(mx, my);
       }
     }
+    addRenderFramePhaseMs('rndTileWarmMs', performance.now() - tTileWarm0);
 
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const vegAnimTime = lodDetail === 0 ? time : 0;
     const canopyAnimTime = vegAnimTime;
 
-    // PASS 0: Ocean
-    drawOceanPass(ctx, { 
-      waterImg: imageCache.get('tilesets/water-tile.png'), 
-      lodDetail, time, startX, startY, endX, endY, getCached, tileW, tileH 
-    });
-
-    const forEachAbovePlayerTile = (fn) => {
+    // Pre-compute the set of grass-eligible tiles ONCE per frame.
+    // Eliminates per-tile getRoleForCell calls inside forEachAbovePlayerTile
+    // and in the playerTopOverlay path (O(viewport) → O(1) lookup).
+    // Only needed at LOD 0/1 — at LOD 2 animated grass is fully skipped.
+    const grassEligibleSet = new Set();
+    if (lodDetail < 2) {
+      const _mH = height * MACRO_TILE_STRIDE;
+      const _mW = width * MACRO_TILE_STRIDE;
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
-          if (lodDetail >= 2 && (mx + my) % 2 !== 0) continue;
           const tile = getCached(mx, my);
           if (!tile || tile.heightStep < 1) continue;
           const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
           if (gateSet) {
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= tile.heightStep;
-            if (getRoleForCell(my, mx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
+            const _h = tile.heightStep;
+            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= _h;
+            if (getRoleForCell(my, mx, _mH, _mW, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
           }
+          grassEligibleSet.add(_tileKeyInt(mx, my));
+        }
+      }
+    }
+
+    // PASS 0: Ocean
+    const tOcean0 = performance.now();
+    drawOceanPass(ctx, { 
+      waterImg: imageCache.get('tilesets/water-tile.png'), 
+      lodDetail, time, startX, startY, endX, endY, getCached, tileW, tileH 
+    });
+    addRenderFramePhaseMs('rndOceanMs', performance.now() - tOcean0);
+
+    // forEachAbovePlayerTile iterates the pre-computed grassEligibleSet instead of
+    // calling getRoleForCell per tile per frame. At LOD >= 2, the animated-grass
+    // pass returns immediately anyway, so skip building the closure entirely.
+    const forEachAbovePlayerTile = lodDetail >= 2 ? (_fn) => {} : (fn) => {
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          if (!grassEligibleSet.has(_tileKeyInt(mx, my))) continue;
+          const tile = getCached(mx, my);
           fn(mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), Math.floor(mx * tileW), Math.floor(my * tileH));
         }
       }
@@ -427,6 +579,7 @@ export function render(canvas, data, options = {}) {
     };
 
     // PASS 5a: Animated Grass
+    const tGrass0 = performance.now();
     drawAnimatedGrassPass(ctx, { 
       lodDetail, forEachAbovePlayerTile, playerTileMx: overlayMx, playerTileMy: overlayMy, 
       playLodGrassSpriteOverlay, isGrassDeferredAroundPlayer, isGrassDeferredEwNeighbor, skipPlayerGrassOverlayDuringFlight,
@@ -434,8 +587,10 @@ export function render(canvas, data, options = {}) {
         drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
       }
     });
+    addRenderFramePhaseMs('rndGrassMs', performance.now() - tGrass0);
 
     // PASS 3.5: Entity Collection & Drawing
+    const tCollect0 = performance.now();
     const renderItems = collectRenderItems({ 
       data, player, startX, startY, endX, endY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
@@ -446,37 +601,111 @@ export function render(canvas, data, options = {}) {
     renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
     trackJumpStartRings(renderItems);
     trackRunningDust(renderItems, time);
+    addRenderFramePhaseMs('rndCollectMs', performance.now() - tCollect0);
 
-    const blockedGrassOverlayTiles = new Set();
-    const tileKey = (mx, my) => `${mx},${my}`;
-    const markBlockedTile = (mx, my) => {
+    const tEnt0 = performance.now();
+    /** Trunk / scatter footprint / building — skip PASS 5a-deferred cell entirely (no full grass redraw). */
+    const blockedGrassFootprintTiles = new Set();
+    /** Footprint ∪ tree/scatter canopy — blocks only `playerTopOverlay` (strip), not base animated grass. */
+    const blockedGrassStripOverlayTiles = new Set();
+    // Use integer keys (bitpacked) instead of template-string allocation per tile.
+    const markFootprintTile = (mx, my) => {
       if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
-      blockedGrassOverlayTiles.add(tileKey(Math.floor(mx), Math.floor(my)));
+      const k = _tileKeyInt(Math.floor(mx), Math.floor(my));
+      blockedGrassFootprintTiles.add(k);
+      blockedGrassStripOverlayTiles.add(k);
     };
-    const markBlockedRect = (ox, oy, cols, rows) => {
+    const markFootprintRect = (ox, oy, cols, rows) => {
       const bx = Math.floor(ox);
       const by = Math.floor(oy);
       const w = Math.max(1, Math.floor(cols || 1));
       const h = Math.max(1, Math.floor(rows || 1));
       for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) markBlockedTile(bx + dx, by + dy);
+        for (let dx = 0; dx < w; dx++) markFootprintTile(bx + dx, by + dy);
+      }
+    };
+    const markStripCanopyRect = (ox, oy, cols, rows) => {
+      const bx = Math.floor(ox);
+      const by = Math.floor(oy);
+      const w = Math.max(1, Math.floor(cols || 1));
+      const h = Math.max(1, Math.floor(rows || 1));
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          const mx = bx + dx;
+          const my = by + dy;
+          if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
+          blockedGrassStripOverlayTiles.add(_tileKeyInt(mx, my));
+        }
       }
     };
     for (const it of renderItems) {
       if (it.type === 'tree') {
-        // Formal tree trunk/base spans two ground tiles.
-        markBlockedRect(it.originX, it.originY, 2, 1);
+        markFootprintRect(it.originX, it.originY, 2, 1);
+        // Strip is drawn after all sortables; canopy tiles north of the trunk are not in the footprint set.
+        if (!it.isDestroyed) {
+          const tops = TREE_TILES[it.treeType]?.top;
+          const canopyRows = tops?.length ? Math.ceil(tops.length / 2) : 2;
+          const padX = 1;
+          markStripCanopyRect(it.originX - padX, it.originY - canopyRows, 2 + padX * 2, canopyRows);
+        }
       } else if (it.type === 'scatter') {
-        markBlockedRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+        markFootprintRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+        if (scatterItemKeyIsTree(it.itemKey) && !it.isCharred) {
+          const objSet = OBJECT_SETS[it.itemKey];
+          const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
+          const cols = Math.max(1, it.cols || 1);
+          if (topPart?.ids?.length) {
+            const topRows = Math.max(1, Math.ceil(topPart.ids.length / cols));
+            const padX = 1;
+            markStripCanopyRect(it.originX - padX, it.originY - topRows, cols + padX * 2, topRows);
+          }
+        }
       } else if (it.type === 'building') {
         const bCols = it.bData?.cols ?? (it.bData?.type === 'pokecenter' ? 5 : 4);
         const bRows = it.bData?.rows ?? (it.bData?.type === 'pokecenter' ? 6 : 5);
-        markBlockedRect(it.originX, it.originY, bCols, bRows);
+        markFootprintRect(it.originX, it.originY, bCols, bRows);
       }
     }
-    const isGrassOverlayBlocked = (mx, my) => blockedGrassOverlayTiles.has(tileKey(Math.floor(mx), Math.floor(my)));
+    const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
+    const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
+
+    let strengthGrabPrompt = null;
+    if (player._strengthCarry || player._strengthGrabAction) {
+      _strengthGrabPromptCache.key = '';
+      _strengthGrabPromptCache.prompt = null;
+    } else {
+      const vx = player.visualX ?? player.x;
+      const vy = player.visualY ?? player.y;
+      const grabK = `${String(data?.seed ?? '')}_${Math.floor(Number(vx) || 0)}_${Math.floor(Number(vy) || 0)}_${Number(player.tackleDirNx) || 0}_${Number(player.tackleDirNy) || 0}`;
+      if (grabK === _strengthGrabPromptCache.key) {
+        strengthGrabPrompt = _strengthGrabPromptCache.prompt;
+      } else {
+        strengthGrabPrompt = getStrengthGrabPromptInfo(player, data);
+        _strengthGrabPromptCache.key = grabK;
+        _strengthGrabPromptCache.prompt = strengthGrabPrompt;
+      }
+    }
+    let drewSplitStrengthGrabOutline = false;
+    const isStrengthGrabTargetItem = (item) => {
+      const p = strengthGrabPrompt;
+      if (!p) return false;
+      if (p.kind === 'rock' && item.type === 'scatter') {
+        return Math.floor(Number(item.originX) || 0) === Math.floor(Number(p.ox) || 0) &&
+          Math.floor(Number(item.originY) || 0) === Math.floor(Number(p.oy) || 0);
+      }
+      if (p.kind === 'faintedWild' && item.type === 'wild') {
+        if (item.deadState !== 'faint') return false;
+        const ix = Math.floor(Number(item.x) || 0);
+        const iy = Math.floor(Number(item.y) || 0);
+        const dex = Math.max(1, Math.floor(Number(item.dexId) || 1));
+        const pDex = Math.max(1, Math.floor(Number(p.wildDexId) || 1));
+        return ix === Math.floor(Number(p.ox) || 0) && iy === Math.floor(Number(p.oy) || 0) && dex === pDex;
+      }
+      return false;
+    };
 
     const batchedEffects = [];
+    const showLeaderRoamTargetOverlay = isWildLeaderRoamTargetVisible();
     for (const item of renderItems) {
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
@@ -487,6 +716,11 @@ export function render(canvas, data, options = {}) {
           if (item.spawnType === 'sky') spawnYOffset = (1 - item.spawnPhase) * (-4 * tileH);
           else if (item.spawnType === 'water') spawnYOffset = (1 - item.spawnPhase) * (0.8 * tileH);
           else spawnYOffset = (1 - item.spawnPhase) * (0.2 * tileH);
+        }
+
+        if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
+          drewSplitStrengthGrabOutline = true;
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
         // Shadow
@@ -537,21 +771,34 @@ export function render(canvas, data, options = {}) {
           ctx.stroke();
           ctx.restore();
         }
+        if (
+          showLeaderRoamTargetOverlay &&
+          item.type === 'wild' &&
+          item.groupId &&
+          String(item.groupLeaderKey || '') === String(item.key || '') &&
+          String(item.groupPhase || '') === 'ROAM'
+        ) {
+          drawWildLeaderRoamTarget(ctx, item, { snapPx, tileW, tileH, time });
+        }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
+        drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);
 
         // Terrain / grass depth cue (LOD 0)
         if (playLodGrassSpriteOverlay && (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight)) {
           const tx = Math.floor(item.x); const ty = Math.floor(item.y);
           if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-            if (!isGrassOverlayBlocked(tx, ty)) {
-              const t = getCached(tx, ty);
-              const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t?.biomeId] || 'grass'];
-              const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= (t?.heightStep ?? 0);
-              if (t?.heightStep > 0 && (!gateSet || getRoleForCell(ty, tx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) === 'CENTER')) {
+            if (!isGrassStripOverlayBlocked(tx, ty)) {
+              // Re-use pre-computed grassEligibleSet — avoids a second getRoleForCell call here.
+              if (grassEligibleSet.has(_tileKeyInt(tx, ty))) {
+                const t = getCached(tx, ty);
                 drawGrass5aForCell(ctx, tx, ty, t, Math.ceil(tileW), Math.ceil(tileH), tx * tileW, ty * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
               }
             }
           }
+        }
+
+        if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
         }
 
         // Strength carry visual (and lift-in-progress travel from origin -> above carrier).
@@ -654,7 +901,14 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'scatter') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        if (isStrengthGrabTargetItem(item)) {
+          drewSplitStrengthGrabOutline = true;
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
+        }
         drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached });
+        if (isStrengthGrabTargetItem(item)) {
+          drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
+        }
         ctx.restore();
       } else if (item.type === 'tree') {
         ctx.save();
@@ -678,6 +932,7 @@ export function render(canvas, data, options = {}) {
       else if (item.type === 'digCompanion') { ctx.save(); drawDigCompanion(ctx, item, { snapPx, PMD_MON_SHEET }); ctx.restore(); }
       else if (item.type === 'playerAimIndicator') { ctx.save(); drawPlayerAimIndicator(ctx, item, { snapPx, player, flightHudActive, tileW, tileH, aimAtCursor }); ctx.restore(); }
       else if (item.type === 'strengthThrowAimPreview') { ctx.save(); drawStrengthThrowAimPreview(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
+      else if (item.type === 'strengthThrowIdleTarget') { ctx.save(); drawStrengthThrowIdleTarget(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
       else if (item.type === 'psybeamChargeBall') { ctx.save(); drawPsybeamChargeBall(ctx, item, { snapPx, tileW, tileH }); ctx.restore(); }
       else if (
         item.type === 'formalTreeCanopyFall' ||
@@ -700,12 +955,26 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    if (batchedEffects.length > 0) {
+    const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
+    const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
+    const mergedWaterCannonBeam = getPlayerWaterCannonMergedBeamVisual();
+    if (batchedEffects.length > 0 || mergedPrismaticBeam || mergedSteelBeam) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      if (mergedPrismaticBeam) {
+        drawPrismaticStreamGradientBeam(ctx, mergedPrismaticBeam, tileW, tileH, snapPx, time);
+      }
+      if (mergedSteelBeam) {
+        drawSteelStreamGradientBeam(ctx, mergedSteelBeam, tileW, tileH, snapPx, time);
+      }
       for (const be of batchedEffects) {
         if (be.kind === 'projectile') drawBatchedProjectile(ctx, be.proj, tileW, tileH, snapPx, time);
         else drawBatchedParticle(ctx, be.part, tileW, tileH, snapPx);
       }
+      ctx.restore();
+    }
+    if (mergedWaterCannonBeam) {
+      ctx.save();
+      drawWaterCannonStreamBeam(ctx, mergedWaterCannonBeam, tileW, tileH, snapPx, time);
       ctx.restore();
     }
 
@@ -720,8 +989,13 @@ export function render(canvas, data, options = {}) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const pulse of getActiveDetailHitPulses()) drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx);
     ctx.restore();
+    if (strengthGrabPrompt && !drewSplitStrengthGrabOutline) {
+      drawStrengthGrabTargetOutline(ctx, strengthGrabPrompt, tileW, tileH, snapPx, time);
+    }
+    addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
     // PASS 5a-deferred (grass over spirits)
+    const tGrassDef0 = performance.now();
     if (playLodGrassSpriteOverlay && !skipPlayerGrassOverlayDuringFlight) {
         const passesPlayerGate = (mx, my, t) => {
             if (!t || t.heightStep < 1) return false;
@@ -736,21 +1010,31 @@ export function render(canvas, data, options = {}) {
         for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
             const mx = overlayMx + dx; const my = overlayMy + dy;
             if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
-            if (isGrassOverlayBlocked(mx, my)) continue;
+            if (isGrassFootprintBlocked(mx, my)) continue;
             const tile = getCached(mx, my);
             if (!passesPlayerGate(mx, my, tile)) continue;
-            drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode: (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0) ? 'playerTopOverlay' : undefined, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
+            let mode =
+              (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0)
+                ? 'playerTopOverlay'
+                : undefined;
+            if (mode === 'playerTopOverlay' && isGrassStripOverlayBlocked(mx, my)) {
+              if (isGrassDeferredEwNeighbor(mx, my)) continue;
+              mode = undefined;
+            }
+            drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
         if (
           shouldDrawPlayerOverlay &&
           !preferSouthBottomOverlay &&
-          !isGrassOverlayBlocked(overlayMx, overlayMy) &&
+          !isGrassStripOverlayBlocked(overlayMx, overlayMy) &&
           passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy))
         ) {
           drawGrass5aForCell(ctx, overlayMx, overlayMy, getCached(overlayMx, overlayMy), Math.ceil(tileW), Math.ceil(tileH), overlayMx * tileW, overlayMy * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
         }
     }
+    addRenderFramePhaseMs('rndGrassDeferMs', performance.now() - tGrassDef0);
 
+    const tDebug0 = performance.now();
     drawWorldColliderOverlay(ctx, { 
       showFullColliderOverlay: options.settings?.showPlayColliders || window.debugColliders, 
       detailColliderDbg: options.settings?.detailColliderDbg, 
@@ -769,7 +1053,11 @@ export function render(canvas, data, options = {}) {
       ch
     });
     
-    drawDigChargeBar(ctx, { latchGround, player, playInputState, cw, ch });
+    drawDigChargeBar(ctx, { latchGround, player, cw, ch });
+    drawFieldCombatChargeBar(ctx, { appMode, playInputState, cw, ch, timeSec: time });
+    addRenderFramePhaseMs('rndDebugMs', performance.now() - tDebug0);
+
+    const tWeather0 = performance.now();
     const rainI = Number(options.settings?.weatherRainIntensity) || 0;
     const cloudPresenceForShadowShift = Number(options.settings?.weatherCloudPresence) || 0;
     const splashTargets = [];
@@ -839,23 +1127,84 @@ export function render(canvas, data, options = {}) {
       cloudMinMul: options.settings?.weatherCloudMinMul,
       cloudMaxMul: options.settings?.weatherCloudMaxMul,
       cloudAlphaMul: options.settings?.weatherCloudAlphaMul,
+      weatherPreset: options.settings?.weatherPreset,
+      weatherBlizzardBlend01: options.settings?.weatherBlizzardBlend01 ?? 0,
       rainIntensity: rainI,
       windIntensity: options.settings?.weatherWindIntensity ?? 0,
       windDirRad: options.settings?.weatherWindDirRad ?? 0,
       screenTint: options.settings?.weatherScreenTint,
       splashTargets,
-      entityShadowSprites
+      entityShadowSprites,
+      earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
+      cloudWhiteLayerAlphaMul
+    });
+    addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);
+
+    drawVolumetricEnvironmentalLayer(ctx, {
+      cw,
+      ch,
+      time,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      lodDetail,
+      macroData: data,
+      weatherPreset: options.settings?.weatherPreset,
+      weatherBlizzardBlend01: options.settings?.weatherBlizzardBlend01 ?? 0,
+      weatherSandstormBlend01: options.settings?.weatherSandstormBlend01 ?? 0,
+      rainIntensity: rainI,
+      windIntensity: options.settings?.weatherWindIntensity ?? 0,
+      windDirRad: options.settings?.weatherWindDirRad ?? 0,
+      volumetricParticleDensity: options.settings?.weatherVolumetricParticleDensity ?? 0,
+      volumetricVolumeDepth: options.settings?.weatherVolumetricVolumeDepth ?? 0.5,
+      volumetricFallSpeed: options.settings?.weatherVolumetricFallSpeed ?? 0.5,
+      volumetricWindCarry: options.settings?.weatherVolumetricWindCarry ?? 0.5,
+      volumetricTurbulence: options.settings?.weatherVolumetricTurbulence ?? 0.2,
+      volumetricAbsorptionBias: options.settings?.weatherVolumetricAbsorptionBias ?? 0.5,
+      volumetricSplashBias: options.settings?.weatherVolumetricSplashBias ?? 0.5,
+      weatherVolumetricMode: options.settings?.weatherVolumetricMode ?? 'clear'
     });
 
+    // --- Wet Ground Sheen Pass ---
+    const wetness = getGroundWetness01();
+    if (wetness > 0.01) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // 1. Darken the ground
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgba(200, 210, 230, ${0.1 * wetness})`;
+      ctx.fillRect(0, 0, cw, ch);
+      // 2. Subtle specular sheen
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = 0.05 * wetness;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    }
+
+    const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
+    addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }
 
   if (options.hover) {
+    const th0 = performance.now();
     const { x, y } = options.hover;
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.strokeRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
+    addRenderFramePhaseMs('rndHoverMs', performance.now() - th0);
   }
+
+  // --- Plugin Hooks: postRender ---
+  PluginRegistry.executeHooks('postRender', ctx, data, options);
+
   ctx.restore();
+} finally {
+    finalizeRenderFrameProfile(performance.now() - tFrame0);
+  }
 }

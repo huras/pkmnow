@@ -1,4 +1,4 @@
-import { padDex3, getGen1ShowdownCrySlug } from './gen1-name-to-dex.js';
+import { padDex3, getGen1ShowdownCrySlug, NATIONAL_DEX_MAX } from './gen1-name-to-dex.js';
 import {
   resumeSpatialAudioContext,
   wireSpatialMediaElement,
@@ -34,7 +34,7 @@ const pools = new Map();
 const cryPreloadInflight = new Map();
 
 function clampDex(dex) {
-  return Math.max(1, Math.min(151, Number(dex) || 1));
+  return Math.max(1, Math.min(NATIONAL_DEX_MAX, Number(dex) || 1));
 }
 
 /** @type {WeakMap<object, number>} */
@@ -138,7 +138,10 @@ function attachCryEnvelope(audio, curve) {
 
 function cryUrlForDex(dex) {
   const d = clampDex(dex);
-  return `./audio/cries/gen1/${padDex3(d)}-${getGen1ShowdownCrySlug(d)}.mp3`;
+  const pad = padDex3(d);
+  const slug = getGen1ShowdownCrySlug(d);
+  if (d <= 151) return `./audio/cries/gen1/${pad}-${slug}.mp3`;
+  return `./audio/cries/national/${pad}-${slug}.mp3`;
 }
 
 /**

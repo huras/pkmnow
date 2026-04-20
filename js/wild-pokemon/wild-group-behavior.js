@@ -1,4 +1,5 @@
 /* --- Base Group Tuning --- */
+export const ENABLE_BOIDS = false;
 export const WILD_GROUP_RADIUS = 3.6;     // General radius for alignment and cohesion
 export const WILD_GROUP_TOLERANCE = 3.85; // How loosely others are allowed to drift (0.5 = tight, 1.5 = very loose)
 
@@ -119,6 +120,7 @@ export function resolveGroupFollowTarget(entity, entitiesByKey) {
  * @param {(value:number,min:number,max:number)=>number} clamp
  */
 export function resolveGroupCohesionTarget(entity, entitiesByKey, clamp) {
+  if (!ENABLE_BOIDS) return null;
   const groupId = String(entity.groupId || '');
   if (!groupId) return null;
   const ttl = Number(entity.groupCohesionSec) || 0;
@@ -159,6 +161,7 @@ export function resolveGroupCohesionTarget(entity, entitiesByKey, clamp) {
  * @param {(value:number,min:number,max:number)=>number} clamp
  */
 export function resolveGroupBoidsSteer(entity, entitiesByKey, clamp) {
+  if (!ENABLE_BOIDS) return null;
   const groupId = String(entity.groupId || '');
   if (!groupId) return null;
   if ((Number(entity.groupCohesionSec) || 0) <= 0) return null;
@@ -273,4 +276,114 @@ export function resolveGroupBoidsSteer(entity, entitiesByKey, clamp) {
     ),
     neighborCount: Math.ceil(cohCount)
   };
+}
+
+/**
+ * When the slot leader dies or starts despawning, followers still reference `groupLeaderKey`
+ * but `resolveGroupFollowTarget` returns null. Wander + slot-radius clamp then anchor to the
+ * **spawn slot** (`centerX`/`centerY`), not the world position — huge snap / “teleport”.
+ * Detach followers, clear group fields, and re-anchor wander to their current coordinates.
+ *
+ * Safe to call multiple times; only the entity whose `key === groupLeaderKey` triggers work.
+ *
+ * @param {object} leaderEntity
+ * @param {Map<string, any>} entitiesByKey
+ */
+/**
+ * ROAM/EXPLORE timer transitions for the **slot leader** only (`key === groupLeaderKey`).
+ * Scenario discovery and SCENIC remain in `updateWildMotion` (full AI).
+ *
+ * @param {object} entity
+ * @param {number} dt
+ */
+export function advanceWildGroupLeaderPhaseTimer(entity, dt) {
+  if (!entity || !dt) return;
+  const gid = entity.groupId;
+  if (!gid) return;
+  const lKey = String(entity.key || '');
+  if (String(entity.groupLeaderKey || '') !== lKey) return;
+
+  ensureGroupBehaviorState(entity);
+  entity.groupPhaseTimer = (entity.groupPhaseTimer || 0) - dt;
+
+  if (entity.groupPhase === 'ROAM' && entity.groupPhaseTimer <= 0) {
+    entity.groupPhase = 'EXPLORE';
+    entity.groupPhaseTimer =
+      PHASE_EXPLORE_MIN_SEC + Math.random() * (PHASE_EXPLORE_MAX_SEC - PHASE_EXPLORE_MIN_SEC);
+  } else if (entity.groupPhase === 'EXPLORE' && entity.groupPhaseTimer <= 0) {
+    entity.groupPhase = 'ROAM';
+    entity.groupPhaseTimer =
+      PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
+  }
+}
+
+/**
+ * Only the leader advances `groupPhase` / `groupPhaseTimer`; followers kept in sync for UI and debugging.
+ *
+ * @param {object} leader
+ * @param {Map<string, any>} entitiesByKey
+ */
+export function syncWildGroupPhaseFromLeader(leader, entitiesByKey) {
+  if (!leader || !entitiesByKey) return;
+  const gid = String(leader.groupId || '');
+  if (!gid) return;
+  const lKey = String(leader.key || '');
+  if (String(leader.groupLeaderKey || '') !== lKey) return;
+
+  const phase = leader.groupPhase;
+  const timer = leader.groupPhaseTimer;
+  for (const o of entitiesByKey.values()) {
+    if (!o || String(o.groupId || '') !== gid) continue;
+    o.groupPhase = phase;
+    o.groupPhaseTimer = timer;
+  }
+}
+
+/**
+ * When wander motion is LOD-skipped, world time should still advance group ROAM/EXPLORE.
+ *
+ * @param {object} entity
+ * @param {number} dt
+ * @param {Map<string, any>} entitiesByKey
+ */
+export function tickWildGroupLeaderPhaseWhenMotionSkipped(entity, dt, entitiesByKey) {
+  if (!entity || !dt) return;
+  if (entity.aiState !== 'wander') return;
+  advanceWildGroupLeaderPhaseTimer(entity, dt);
+  syncWildGroupPhaseFromLeader(entity, entitiesByKey);
+}
+
+export function releaseWildGroupFollowersFromLeader(leaderEntity, entitiesByKey) {
+  if (!leaderEntity || !entitiesByKey) return;
+  const gid = leaderEntity.groupId;
+  if (!gid) return;
+  const lKey = String(leaderEntity.key || '');
+  if (String(leaderEntity.groupLeaderKey || '') !== lKey) return;
+
+  const gidStr = String(gid);
+  for (const e of entitiesByKey.values()) {
+    if (!e || e === leaderEntity) continue;
+    if (String(e.groupId || '') !== gidStr) continue;
+
+    e.groupId = null;
+    e.groupLeaderKey = null;
+    e.groupMemberIndex = 0;
+    e.groupSize = 1;
+    e.groupCohesionSec = 0;
+    e.groupHomeX = null;
+    e.groupHomeY = null;
+    e.groupPhase = 'ROAM';
+    e.groupPhaseTimer = PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
+    e.discoveryCooldown = 0;
+    e.targetX = null;
+    e.targetY = null;
+    e.vx = 0;
+    e.vy = 0;
+
+    if (Number.isFinite(e.x) && Number.isFinite(e.y)) {
+      e.centerX = e.x;
+      e.centerY = e.y;
+    }
+    ensureGroupBehaviorState(e);
+  }
 }

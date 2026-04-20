@@ -3,7 +3,7 @@
  */
 import { PMD_ANIM_METADATA } from './pokemon/pmd-anim-metadata.js';
 import { PMD_MON_SHEET, PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
-import { padDex3, getGen1SpeciesName } from './pokemon/gen1-name-to-dex.js';
+import { padDex3, getGen1SpeciesName, NATIONAL_DEX_MAX } from './pokemon/gen1-name-to-dex.js';
 import { imageCache } from './image-cache.js';
 import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
 import { BIOMES } from './biomes.js';
@@ -11,10 +11,11 @@ import { BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE, TREE_TILES } from './biome-tiles.js
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 import { loadTilesetImages } from './render.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 
-const GEN1_COUNT = 151;
+const SPECIES_LAB_COUNT = NATIONAL_DEX_MAX;
 
 /** Mesmo “tile” lógico que no jogo (16px na folha). */
 const LAB_TILE = 16;
@@ -280,17 +281,18 @@ function drawTerrainTesselation(ctx, ox, oy, setName) {
     for (let c = 0; c < LAB_GRID; c++) {
       if (!labIsLandAt(r, c)) continue;
       const role = getRoleForCell(r, c, LAB_GRID, LAB_GRID, labIsLandAt, set.type);
-      const tileId = set.roles[role] ?? set.centerId;
-      ctx.drawImage(
+      const spec = getConcConvATerrainTileSpec(set, role);
+      drawTerrainCellFromSheet(
+        ctx,
         img,
-        (tileId % sheetCols) * LAB_TILE,
-        Math.floor(tileId / sheetCols) * LAB_TILE,
+        sheetCols,
         LAB_TILE,
-        LAB_TILE,
+        spec.tileId,
         ox + c * LAB_TILE,
         oy + r * LAB_TILE,
         LAB_TILE,
-        LAB_TILE
+        LAB_TILE,
+        spec.flipX
       );
     }
   }
@@ -307,17 +309,18 @@ function drawFoliageTesselation(ctx, ox, oy, setName) {
     for (let c = 0; c < LAB_GRID; c++) {
       if (!labIsLandAt(r, c)) continue;
       const role = getRoleForCell(r, c, LAB_GRID, LAB_GRID, labIsLandAt, set.type);
-      const tileId = set.roles[role] ?? set.centerId;
-      ctx.drawImage(
+      const spec = getConcConvATerrainTileSpec(set, role);
+      drawTerrainCellFromSheet(
+        ctx,
         img,
-        (tileId % sheetCols) * LAB_TILE,
-        Math.floor(tileId / sheetCols) * LAB_TILE,
+        sheetCols,
         LAB_TILE,
-        LAB_TILE,
+        spec.tileId,
         ox + c * LAB_TILE,
         oy + r * LAB_TILE,
         LAB_TILE,
-        LAB_TILE
+        LAB_TILE,
+        spec.flipX
       );
     }
   }
@@ -486,7 +489,7 @@ function defaultSpeciesEntry(dex) {
 
 function buildInitialState() {
   const species = {};
-  for (let d = 1; d <= GEN1_COUNT; d++) {
+  for (let d = 1; d <= SPECIES_LAB_COUNT; d++) {
     species[padDex3(d)] = defaultSpeciesEntry(d);
   }
   return {
@@ -626,7 +629,7 @@ function wireSpeciesInputs(trDetail, dexKey) {
 
 function buildTable() {
   elTbody.innerHTML = '';
-  for (let d = 1; d <= GEN1_COUNT; d++) {
+  for (let d = 1; d <= SPECIES_LAB_COUNT; d++) {
     const key = padDex3(d);
     const st = state.species[key];
     const trM = document.createElement('tr');
@@ -838,13 +841,13 @@ function importJson(obj) {
 
 async function loadAllSheets() {
   const batch = 24;
-  for (let i = 1; i <= GEN1_COUNT; i += batch) {
+  for (let i = 1; i <= SPECIES_LAB_COUNT; i += batch) {
     const slice = [];
-    for (let j = i; j < i + batch && j <= GEN1_COUNT; j++) slice.push(ensurePokemonSheetsLoaded(imageCache, j));
+    for (let j = i; j < i + batch && j <= SPECIES_LAB_COUNT; j++) slice.push(ensurePokemonSheetsLoaded(imageCache, j));
     await Promise.all(slice);
-    elStatus.textContent = `Imagens: ${Math.min(i + batch - 1, GEN1_COUNT)} / ${GEN1_COUNT}`;
+    elStatus.textContent = `Imagens: ${Math.min(i + batch - 1, SPECIES_LAB_COUNT)} / ${SPECIES_LAB_COUNT}`;
   }
-  elStatus.textContent = `${GEN1_COUNT} folhas carregadas (fallback Gengar onde faltar ficheiro).`;
+  elStatus.textContent = `${SPECIES_LAB_COUNT} folhas carregadas (fallback Gengar onde faltar ficheiro).`;
 }
 
 function onGlobalScaleInput() {

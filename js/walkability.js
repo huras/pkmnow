@@ -948,3 +948,31 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   return true;
 }
+
+/**
+ * Ensures the physical Z (height above ground) of an entity smoothly follows the 2.5D visual Y axis projection.
+ * When crossing a terrain tile boundary where `heightStep` changes, the entity's relative `z` is adjusted inversely 
+ * to maintain its absolute 3D height, simulating vertical cliffs natively without visual overshoot.
+ * @param {object} entity - Entity with `z` property
+ * @param {number} ox - Old world X (continuous)
+ * @param {number} oy - Old world Y (continuous)
+ * @param {number} nx - New world X (continuous)
+ * @param {number} ny - New world Y (continuous)
+ * @param {object|null} data - chunk grid data
+ */
+export function syncEntityZWithTerrain(entity, ox, oy, nx, ny, data) {
+  if (!data) return;
+  const oFeetY = Math.floor(oy + 0.5);
+  const nFeetY = Math.floor(ny + 0.5);
+  if (oFeetY === nFeetY) return;
+
+  const ot = getMicroTile(Math.floor(ox + 0.5), oFeetY, data);
+  const nt = getMicroTile(Math.floor(nx + 0.5), nFeetY, data);
+  
+  if (ot && nt && Number.isFinite(ot.heightStep) && Number.isFinite(nt.heightStep)) {
+    const dh = nt.heightStep - ot.heightStep;
+    if (dh !== 0) {
+      entity.z = Math.max(0, (entity.z || 0) - dh);
+    }
+  }
+}

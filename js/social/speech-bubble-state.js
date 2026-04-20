@@ -1,7 +1,7 @@
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { ensureSpriteCollabPortraitLoaded } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
-import { ensurePokemondbItemIconInCache } from './pokemondb-item-icon-paths.js';
+import { ensureInventoryStyleItemIconOnSpeechSegment } from './play-item-inventory-icon.js';
 import { normalizeSpeechBubbleSegments } from './speech-bubble-types.js';
 
 const DEFAULT_DURATION_SEC = 4.25;
@@ -15,11 +15,7 @@ async function preloadSpeechBubbleAssets(entity, segments) {
   const jobs = [];
   for (const s of segments) {
     if (s.kind === 'item') {
-      jobs.push(
-        ensurePokemondbItemIconInCache(s.slug).then((r) => {
-          if (r?.path) /** @type {{ _iconPath?: string }} */ (s)._iconPath = r.path;
-        })
-      );
+      jobs.push(ensureInventoryStyleItemIconOnSpeechSegment(/** @type {any} */ (s)));
     }
     if (s.kind === 'portrait') {
       const slug = String(/** @type {{ slug?: string }} */ (s).slug || 'Normal')
@@ -127,7 +123,7 @@ export function setPlayerSpeechBubbleForDetailPickup(player, itemKey, stack = 1)
     : /^[a-z][a-z0-9-]*$/i.test(slugCand)
       ? slugCand
       : null;
-  if (iconSlug) segs.push({ kind: 'item', slug: iconSlug });
+  if (iconSlug) segs.push({ kind: 'item', slug: iconSlug, itemKey: k });
   else if (label) segs.push({ kind: 'text', text: label });
   segs.push({ kind: 'text', text: n > 1 ? `×${n}` : 'Got it!' });
   setPlayerSpeechBubble(player, segs, { durationSec: 1.85, kind: 'say' });

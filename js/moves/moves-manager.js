@@ -3,11 +3,6 @@ import {
   MAX_PROJECTILES,
   EMBER_TRAIL_INTERVAL,
   WATER_TRAIL_INTERVAL,
-  PSY_TRAIL_INTERVAL,
-  POWDER_TRAIL_INTERVAL,
-  SILK_TRAIL_INTERVAL,
-  LASER_TRAIL_INTERVAL,
-  COLLISION_BROAD_PHASE_TILES,
   WILD_MOVE_COOLDOWN_DEFAULT,
   FIRE_FRAME_W,
   FIRE_FRAME_H
@@ -20,20 +15,47 @@ import {
   castConfusion,
   castBubble,
   castWaterGun,
+  castHydroPump,
   castBubbleBeam,
   castPsybeam,
   castPrismaticLaser,
+  computePrismaticPlayerStreamGeometry,
+  castSteelBeam,
+  computeSteelBeamPlayerStreamGeometry,
+  castWaterCannon,
+  computeWaterCannonPlayerStreamGeometry,
   castPoisonPowder,
   castIncinerate,
   castSilkShoot
 } from './zelda-ported-moves.js';
+import { castFireBlast, PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL } from './fire-blast-move.js';
+import {
+  beginPlayerFlameCharge,
+  tickPlayerFlameChargeDash,
+  PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL
+} from './flame-charge-move.js';
+import {
+  resetFireSpinChannel,
+  tickFireSpinHold,
+  spawnFireSpinReleaseBurst,
+  fireSpinTierFromCharge01,
+  PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL
+} from './fire-spin-move.js';
+import { castAbsorbMove } from './absorb-move.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
-import { tryDamagePlayerFromProjectile, updatePlayerCombatTimers } from '../player.js';
-import { isChargeStrongAttackEligible, getWeakPartialChargeT, getChargeLevel } from '../main/play-charge-levels.js';
+import { updatePlayerCombatTimers, tryJumpPlayer } from '../player.js';
+import { strengthCarryBlocksWalk } from '../main/play-strength-carry.js';
+import {
+  isChargeStrongAttackEligible,
+  getWeakPartialChargeT,
+  getChargeLevel,
+  getEarthquakeChargeLevel,
+  CHARGE_FIELD_RELEASE_MIN_01
+} from '../main/play-charge-levels.js';
 import { playWildAttackCry } from '../pokemon/pokemon-cries.js';
 import {
   grassFireTryExtinguishAt,
@@ -42,35 +64,49 @@ import {
   GRASS_FIRE_PARTICLE_SEC
 } from '../play-grass-fire.js';
 import {
-  getPokemonHurtboxCenterWorldXY,
-  getPokemonHurtboxRadiusTiles,
-  projectileZInPokemonHurtbox
-} from '../pokemon/pokemon-combat-hurtbox.js';
-import {
   getEffectiveWildBehavior,
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
-import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
-import {
-  buildWildSpatialIndex,
-  queryWildSpatialIndexInAabb,
-  applyWildKnockbackFromProjectile,
-  checkDamageHitCircle,
-  distPointToSegmentTiles,
-  broadPhaseOk,
-  isProjectileBlockedByTree,
-  emitProjectileWorldReactionOnce,
-  checkPlayerHit,
-  spawnIncinerateShards,
-  applySplashToWild
-} from './moves-projectile-collision.js';
+import { buildWildSpatialIndex } from './moves-projectile-collision.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
 import { castThundershock, THUNDERSHOCK_STREAM_INTERVAL_SEC } from './thunder-shock-move.js';
-import { castRainDance, castSunnyDay } from './weather-moves.js';
+import {
+  castThunderboltAtLevel,
+  tickThunderboltChains,
+  PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL
+} from './thunderbolt-move.js';
+import { castRainDance, castSunnyDay, castBlizzard } from './weather-moves.js';
+import { tickActiveProjectiles } from './moves-projectiles-tick.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
+import {
+  MOVE_CAST_VIS_SEC,
+  FLAMETHROWER_STREAM_INTERVAL,
+  FLAMETHROWER_STREAM_INTERVAL_MAX,
+  HYDRO_PUMP_STREAM_INTERVAL,
+  BUBBLE_BEAM_STREAM_INTERVAL,
+  PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL,
+  PRISMATIC_STREAM_INTERVAL,
+  STEEL_BEAM_STREAM_INTERVAL,
+  WATER_CANNON_STREAM_INTERVAL,
+  PLAYER_THUNDER_COOLDOWN_SEC,
+  PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
+  PLAYER_WEATHER_SWAP_COOLDOWN_SEC
+} from './moves-player-config.js';
 
-/** Visual window for optional `shoot` PMD slice after a successful player cast. */
-const MOVE_CAST_VIS_SEC = 0.48;
+/** Cooldown after Earthquake, by charge level (5-bar meter on play HUD). */
+const PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL = Object.freeze({
+  1: 0.92,
+  2: 1.12,
+  3: 1.38,
+  4: 1.68,
+  5: 2.02
+});
+
+const EARTHQUAKE_JUMP_SCALE_BY_LEVEL = Object.freeze([1, 1.08, 1.2, 1.38, 1.56]);
+
+/** Latest `data` from `updateMoves` — used when enqueuing Thunderbolt L4 chain hops (tree search). */
+let lastMovesTickData = null;
 
 function bumpPlayerMoveCastVisual(sourceEntity) {
   if (sourceEntity && sourceEntity.dexId != null) {
@@ -96,44 +132,30 @@ let playerFlamethrowerCooldown = 0;
 let playerConfusionCooldown = 0;
 let playerBubbleCooldown = 0;
 let playerWaterGunCooldown = 0;
+let playerHydroPumpCooldown = 0;
 let playerBubbleBeamCooldown = 0;
 let playerPsybeamCooldown = 0;
 let playerPrismaticLaserCooldown = 0;
+/** Single merged gradient beam while Prismatic Laser is held (see `updatePlayerPrismaticMergedBeamVisual`). */
+let playerPrismaticMergedBeam = null;
+let playerSteelBeamCooldown = 0;
+/** Merged hold beam for Steel Beam (silver). */
+let playerSteelBeamMergedBeam = null;
+let playerWaterCannonCooldown = 0;
+let playerWaterCannonMergedBeam = null;
 let playerPoisonPowderCooldown = 0;
 let playerIncinerateCooldown = 0;
+let playerFireBlastCooldown = 0;
+let playerFlameChargeCooldown = 0;
+let playerFireSpinCooldown = 0;
+let playerEarthquakeCooldown = 0;
 let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
-let playerRainDanceCooldown = 0;
-let playerSunnyDayCooldown = 0;
-
-/** Seconds between player flamethrower stream puffs (hold-to-spray). */
-const FLAMETHROWER_STREAM_INTERVAL = 0.104;
-/** Adaptive upper cadence under heavy projectile/particle load. */
-const FLAMETHROWER_STREAM_INTERVAL_MAX = 0.176;
-/** Collision cadence for flamethrower stream shots (render stays at full FPS). */
-const FLAMETHROWER_STREAM_HIT_TICK_SEC = 1 / 30;
-/** Water-gun stream cadence (hold-to-spray, like flamethrower). */
-const WATER_GUN_STREAM_INTERVAL = 0.074;
-/** Bubble-beam stream cadence (hold-to-spray, long-range water ring stream). */
-const BUBBLE_BEAM_STREAM_INTERVAL = 0.078;
-
-/** Player prismatic laser stream cadence (hold-to-spray rainbow beam). */
-const PRISMATIC_STREAM_INTERVAL = 0.076;
-
-/** Seconds between Thunder casts (covers cloud grow-in + bolt + settle). Default = Level 2 (tap / standard). */
-const PLAYER_THUNDER_COOLDOWN_SEC = 0.95;
-/**
- * Per-charge-level cooldowns. L1 fires faster (weak zap), L3 is the punishing mega strike.
- * Keys match the thunder-move.js level config; indices are (tap/L1), L2, L3.
- * UI max uses the L3 value so the cooldown clock never overflows when the heaviest tier lands.
- */
-const PLAYER_THUNDER_COOLDOWN_BY_LEVEL = { 1: 0.55, 2: 0.95, 3: 1.55 };
-
-/** Seconds between Rain Dance / Sunny Day casts. Long enough to make weather-swaps feel
- *  committed (no strobing clouds), short enough to let the player course-correct in a
- *  pinch — e.g. flipping to rain mid-fight to extinguish a spreading grass fire. */
-const PLAYER_WEATHER_SWAP_COOLDOWN_SEC = 4.5;
+let playerThunderboltCooldown = 0;
+let playerAbsorbCooldown = 0;
+/** Shared gate for Rain Dance / Sunny Day / Blizzard so weather cannot be spam-strobed. */
+let playerWeatherSwapCooldown = 0;
 
 function computeFlamethrowerStreamPressure01() {
   const projPressure = Math.max(0, activeProjectiles.length) / Math.max(1, MAX_PROJECTILES);
@@ -149,7 +171,7 @@ function pushProjectile(p) {
   activeProjectiles.push(p);
 }
 
-function pushParticle(p) {
+export function pushParticle(p) {
   // Same policy as projectiles to prevent reindex storms at particle cap.
   if (activeParticles.length >= MAX_PARTICLES) return;
   activeParticles.push(p);
@@ -176,18 +198,21 @@ function pushFieldCutArcParticle(type, centerX, centerY, headingRad, opts = {}) 
 export function spawnFieldCutVineSlashFx(centerX, centerY, headingRad, opts = {}) {
   pushFieldCutArcParticle('fieldCutVineArc', centerX, centerY, headingRad, {
     ...opts,
-    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG,
-    radiusTiles: opts.radiusTiles ?? 1.55,
-    lifeSec: opts.lifeSec ?? 0.36
+    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG
   });
 }
 
 export function spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, opts = {}) {
   pushFieldCutArcParticle('fieldCutPsychicArc', centerX, centerY, headingRad, {
     ...opts,
-    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG,
-    radiusTiles: opts.radiusTiles ?? 1.62,
-    lifeSec: opts.lifeSec ?? 0.34
+    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG
+  });
+}
+
+export function spawnFieldCutScratchFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutScratchArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? 100
   });
 }
 
@@ -274,9 +299,6 @@ function spawnTrailParticle(px, py, trailType, baseZ = 0) {
  */
 function resolveMoveRuntimeAlias(moveId) {
   switch (String(moveId || '')) {
-    case 'absorb':
-    case 'megaDrain':
-      return 'bubbleBeam';
     case 'acid':
     case 'sludge':
       return 'poisonSting';
@@ -285,22 +307,14 @@ function resolveMoveRuntimeAlias(moveId) {
     case 'auroraBeam':
     case 'iceBeam':
       return 'bubbleBeam';
-    case 'blizzard':
-      return 'bubble';
     case 'dragonRage':
       return 'incinerate';
     case 'dreamEater':
     case 'nightShade':
       return 'confusion';
-    case 'fireBlast':
-      return 'incinerate';
-    case 'fireSpin':
-      return 'flamethrower';
     case 'gust':
     case 'razorWind':
       return 'silkShoot';
-    case 'hydroPump':
-      return 'waterGun';
     case 'hyperBeam':
       return 'prismaticLaser';
     case 'petalDance':
@@ -316,8 +330,6 @@ function resolveMoveRuntimeAlias(moveId) {
       return 'psybeam';
     case 'surf':
       return 'waterGun';
-    case 'thunderbolt':
-      return 'thunder';
     case 'triAttack':
       return 'prismaticLaser';
     default:
@@ -327,23 +339,41 @@ function resolveMoveRuntimeAlias(moveId) {
 
 export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    if (PluginRegistry.getCooldown(moveId) > 0) return false;
+    const mod = PluginRegistry.getMove(moveId);
+    PluginRegistry.setCooldown(moveId, mod.cooldownSec || 0.5);
+    bumpPlayerMoveCastVisual(sourceEntity);
+    if (mod.cast) mod.cast(sourceX, sourceY, targetX, targetY, sourceEntity, { pushProjectile, pushParticle });
+    return true;
+  }
   if (moveId === 'ember') return castEmber(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'absorb' || moveId === 'megaDrain') return castAbsorbMoveWrapped(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'flamethrower') return castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'confusion') return castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'bubble') return castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterBurst') return castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'waterGun') return castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'hydroPump') return castHydroPumpMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'bubbleBeam') return castBubbleBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'psybeam') return castPsybeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'prismaticLaser') return castPrismaticLaserMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'steelBeam') return castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'waterCannon') return castWaterCannonMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonSting') return castPoisonSting(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'poisonPowder') return castPoisonPowderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'incinerate') return castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'fireBlast') return castFireBlastMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'flameCharge') return castFlameChargeMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'fireSpin') return castFireSpinMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'earthquake') return castEarthquakeMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'silkShoot') return castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunder') return castThunderMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'thunderShock') return castThundershockMove(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'thunderbolt') return castThunderboltMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'rainDance') return castRainDanceMove(sourceEntity);
   if (moveId === 'sunnyDay') return castSunnyDayMove(sourceEntity);
+  if (moveId === 'blizzard') return castBlizzardMove(sourceEntity);
   return false;
 }
 
@@ -352,21 +382,51 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
  */
 export function castMoveChargedById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    const mod = PluginRegistry.getMove(moveId);
+    if (mod.supportsCharge && mod.castCharged) {
+      if (PluginRegistry.getCooldown(moveId) > 0) return false;
+      PluginRegistry.setCooldown(moveId, mod.cooldownSec || 0.5);
+      bumpPlayerMoveCastVisual(sourceEntity);
+      mod.castCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01, { pushProjectile, pushParticle });
+      return true;
+    }
+    return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
+  }
   if (moveId === 'ember') return castEmberCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'waterBurst') return castWaterCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   if (moveId === 'thunder') return castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'thunderbolt') return castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'fireBlast') return castFireBlastCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'flameCharge') return castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'fireSpin') return castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'earthquake') return castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
+  if (moveId === 'waterGun') return castWaterGunCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01);
   return castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 /**
  * True when the given move has a dedicated charged variant (mirrors the `castMoveChargedById`
- * dispatch). HUD uses this to decide whether to reveal the 3-segment charge meter while holding.
- * Keep in sync with the dispatch above.
+ * dispatch). HUD uses this to decide whether to reveal the 4-segment charge meter while holding.
+ * Keep in sync with the dispatch above (`castMoveChargedById` + charged field skills).
  * @param {string} moveId
  */
 export function moveSupportsChargedRelease(moveId) {
   const resolved = resolveMoveRuntimeAlias(moveId);
-  return resolved === 'ember' || resolved === 'waterBurst' || resolved === 'thunder';
+  if (PluginRegistry.hasMove(resolved)) {
+    return !!PluginRegistry.getMove(resolved).supportsCharge;
+  }
+  return (
+    resolved === 'ember' ||
+    resolved === 'waterBurst' ||
+    resolved === 'thunder' ||
+    resolved === 'thunderbolt' ||
+    resolved === 'fireBlast' ||
+    resolved === 'flameCharge' ||
+    resolved === 'fireSpin' ||
+    resolved === 'earthquake' ||
+    resolved === 'waterGun'
+  );
 }
 
 export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -378,6 +438,23 @@ export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = nul
     pushProjectile
   });
   return true;
+}
+
+export function tryCastPlayerAbsorbStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null, data = null) {
+  if (playerAbsorbCooldown > 0) return false;
+  playerAbsorbCooldown = 0.15;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castAbsorbMove(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    streamPuff: true,
+    data
+  });
+  return true;
+}
+
+export function castAbsorbMoveWrapped(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerAbsorbStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity, null);
 }
 
 export function castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -427,6 +504,87 @@ export function tryCastPlayerFlamethrowerStreamPuff(sourceX, sourceY, targetX, t
 }
 
 /**
+ * Updates the one merged Prismatic Laser beam visual (cursor → mouth) while `active`.
+ * Clears when the player releases the bound button or switches away.
+ */
+export function updatePlayerPrismaticMergedBeamVisual(
+  active,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourceEntity = null
+) {
+  if (!active) {
+    playerPrismaticMergedBeam = null;
+    return;
+  }
+  const geo = computePrismaticPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const prevHue = playerPrismaticMergedBeam?.rainbowHue0;
+  const rainbowHue0 = Number.isFinite(prevHue) ? prevHue : (sourceX * 17 + sourceY * 13) % 360;
+  const { sp, aimX, aimY } = geo;
+  playerPrismaticMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0,
+    rainbowHue0
+  };
+}
+
+/** @returns {null | { laserBeamSx: number, laserBeamSy: number, laserBeamSz: number, laserBeamEx: number, laserBeamEy: number, laserBeamEz: number, rainbowHue0: number }} */
+export function getPlayerPrismaticMergedBeamVisual() {
+  return playerPrismaticMergedBeam;
+}
+
+/**
+ * Updates merged Steel Beam preview while the bound mouse button is held.
+ */
+export function updatePlayerSteelBeamMergedBeamVisual(active, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (!active) {
+    playerSteelBeamMergedBeam = null;
+    return;
+  }
+  const geo = computeSteelBeamPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const { sp, aimX, aimY } = geo;
+  playerSteelBeamMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0
+  };
+}
+
+export function getPlayerSteelBeamMergedBeamVisual() {
+  return playerSteelBeamMergedBeam;
+}
+
+export function updatePlayerWaterCannonMergedBeamVisual(active, sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (!active) {
+    playerWaterCannonMergedBeam = null;
+    return;
+  }
+  const geo = computeWaterCannonPlayerStreamGeometry(sourceX, sourceY, targetX, targetY, sourceEntity);
+  const { sp, aimX, aimY } = geo;
+  playerWaterCannonMergedBeam = {
+    laserBeamSx: sp.startX,
+    laserBeamSy: sp.startY,
+    laserBeamSz: sp.startZ,
+    laserBeamEx: aimX,
+    laserBeamEy: aimY,
+    laserBeamEz: 0
+  };
+}
+
+export function getPlayerWaterCannonMergedBeamVisual() {
+  return playerWaterCannonMergedBeam;
+}
+
+/**
  * One prismatic laser stream puff (hold / hotkey). Same idea as flamethrower stream.
  * @returns {boolean} true when a puff was spawned
  */
@@ -437,9 +595,46 @@ export function tryCastPlayerPrismaticStreamPuff(sourceX, sourceY, targetX, targ
   castPrismaticLaser(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
+    pushParticle,
     streamPuff: true
   });
   return true;
+}
+
+/** @returns {boolean} true when a puff was spawned */
+export function tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerSteelBeamCooldown > 0) return false;
+  playerSteelBeamCooldown = STEEL_BEAM_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castSteelBeam(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    pushParticle,
+    streamPuff: true
+  });
+  return true;
+}
+
+export function castSteelBeamMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerSteelBeamStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+}
+
+/** @returns {boolean} true when a puff was spawned */
+export function tryCastPlayerWaterCannonStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerWaterCannonCooldown > 0) return false;
+  playerWaterCannonCooldown = WATER_CANNON_STREAM_INTERVAL;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterCannon(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    pushParticle,
+    streamPuff: true
+  });
+  return true;
+}
+
+export function castWaterCannonMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerWaterCannonStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -447,19 +642,23 @@ export function castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceE
 }
 
 /**
- * One water-gun stream puff toward floor aim (short cadence like flamethrower).
+ * One hydro-pump stream puff (hold). Water Gun uses {@link castWaterGunMove} / {@link castWaterGunCharged}.
  * @returns {boolean} true when a puff was spawned
  */
-export function tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  if (playerWaterGunCooldown > 0) return false;
-  playerWaterGunCooldown = WATER_GUN_STREAM_INTERVAL;
+export function tryCastPlayerHydroPumpStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerHydroPumpCooldown > 0) return false;
+  playerHydroPumpCooldown = HYDRO_PUMP_STREAM_INTERVAL;
   bumpPlayerMoveCastVisual(sourceEntity);
-  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+  castHydroPump(sourceX, sourceY, targetX, targetY, sourceEntity, {
     fromWild: false,
     pushProjectile,
     streamPuff: true
   });
   return true;
+}
+
+export function castHydroPumpMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerHydroPumpStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
 }
 
 export function castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -485,7 +684,36 @@ export function castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity 
 }
 
 export function castWaterGunMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
-  return tryCastPlayerWaterGunStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (playerWaterGunCooldown > 0) return false;
+  playerWaterGunCooldown = PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    waterGunTier: 1
+  });
+  return true;
+}
+
+/**
+ * Charged Water Gun: tier 1 weak partial / tap-equivalent, tier 2 first strong segment, tier 3 two+ segments.
+ */
+export function castWaterGunCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerWaterGunCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  playerWaterGunCooldown = PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castWaterGun(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    waterGunTier: tier
+  });
+  return true;
 }
 
 /**
@@ -550,16 +778,56 @@ export function castThundershockMove(sourceX, sourceY, targetX, targetY, sourceE
 }
 
 /**
+ * Thunderbolt tap — tier **1** (short arc). Charged releases use {@link castThunderboltCharged}.
+ */
+export function castThunderboltMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerThunderboltCooldown > 0) return false;
+  playerThunderboltCooldown = PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThunderboltAtLevel(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    level: 1,
+    fromWild: false,
+    pushProjectile,
+    data: lastMovesTickData
+  });
+  return true;
+}
+
+/**
+ * Charged Thunderbolt — maps the 4-segment meter to tiers **2–4** (see `thunderbolt-move.js`).
+ * Weak partial charge (held but below first bar) bumps toward tier 2 like ember/water.
+ */
+export function castThunderboltCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerThunderboltCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let level = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    level = getChargeLevel(cp);
+  } else {
+    const w = getWeakPartialChargeT(cp, 0);
+    level = w >= 0.5 ? 2 : 1;
+  }
+  level = Math.max(1, Math.min(4, level));
+  playerThunderboltCooldown =
+    PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castThunderboltAtLevel(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    level,
+    fromWild: false,
+    pushProjectile,
+    data: lastMovesTickData
+  });
+  return true;
+}
+
+/**
  * Rain Dance — instant-cast status move that queues a transition to the `rain` weather
  * preset. No projectile, no aim; the smoothing pass in main.js handles the visual fade.
  * Gated by its own cooldown so the player can't strobe weather on every frame.
  */
 export function castRainDanceMove(sourceEntity = null) {
-  if (playerRainDanceCooldown > 0) return false;
-  playerRainDanceCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
-  // Share cooldown with Sunny Day so the pair feels like a single "weather swap" tool —
-  // spamming both back-to-back would otherwise bypass either's individual cooldown.
-  playerSunnyDayCooldown = Math.max(playerSunnyDayCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
   castRainDance();
   return true;
@@ -571,11 +839,22 @@ export function castRainDanceMove(sourceEntity = null) {
  * behavior; they share the swap-cooldown to prevent ping-ponging.
  */
 export function castSunnyDayMove(sourceEntity = null) {
-  if (playerSunnyDayCooldown > 0) return false;
-  playerSunnyDayCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
-  playerRainDanceCooldown = Math.max(playerRainDanceCooldown, PLAYER_WEATHER_SWAP_COOLDOWN_SEC);
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
   castSunnyDay();
+  return true;
+}
+
+/**
+ * Blizzard — instant-cast status move that queues the `blizzard` weather preset
+ * (dense clouds, strong wind, heavy precip + icy tint).
+ */
+export function castBlizzardMove(sourceEntity = null) {
+  if (playerWeatherSwapCooldown > 0) return false;
+  playerWeatherSwapCooldown = PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castBlizzard();
   return true;
 }
 
@@ -601,6 +880,145 @@ export function castIncinerateMove(sourceX, sourceY, targetX, targetY, sourceEnt
   return true;
 }
 
+/**
+ * Fire Blast tap — tier **1** (quick puff). Charged releases use {@link castFireBlastCharged}.
+ */
+export function castFireBlastMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFireBlastCooldown > 0) return false;
+  playerFireBlastCooldown = PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castFireBlast(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    tier: 1
+  });
+  return true;
+}
+
+/**
+ * Charged Fire Blast. Same 3-tier ladder as Thunder: weak tap → standard → heavy (plus tier-3 ★ companions).
+ */
+export function castFireBlastCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFireBlastCooldown > 0) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  playerFireBlastCooldown = PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castFireBlast(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    tier
+  });
+  return true;
+}
+
+/**
+ * Flame Charge tap — tier **1** (short comet hop). Charged releases use {@link castFlameChargeCharged}.
+ */
+export function castFlameChargeMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFlameChargeCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  if (!beginPlayerFlameCharge(sourceEntity, 1, sourceX, sourceY, targetX, targetY)) return false;
+  playerFlameChargeCooldown = PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/**
+ * Charged Flame Charge — 3 tiers: short roll → sustained comet → long inferno run with head bursts + side wisps.
+ */
+export function castFlameChargeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFlameChargeCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  let tier = 1;
+  if (isChargeStrongAttackEligible(cp)) {
+    const cl = getChargeLevel(cp);
+    tier = cl >= 3 ? 3 : 2;
+  }
+  if (!beginPlayerFlameCharge(sourceEntity, tier, sourceX, sourceY, targetX, targetY)) return false;
+  playerFlameChargeCooldown =
+    PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+function fireSpinAimUnit(sourceX, sourceY, targetX, targetY) {
+  const dx = targetX - sourceX;
+  const dy = targetY - sourceY;
+  const len = Math.hypot(dx, dy) || 1;
+  return { nx: dx / len, ny: dy / len };
+}
+
+/** Fire Spin tap — small outward burst (tier 1). */
+export function castFireSpinMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerFireSpinCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const ch = Number(sourceEntity.fireSpinChannelSec) || 0;
+  const cx = (sourceEntity.visualX ?? sourceEntity.x ?? sourceX) + 0.5;
+  const cy = (sourceEntity.visualY ?? sourceEntity.y ?? sourceY) + 0.5;
+  const { nx, ny } = fireSpinAimUnit(sourceX, sourceY, targetX, targetY);
+  spawnFireSpinReleaseBurst(pushProjectile, sourceEntity, cx, cy, nx, ny, 1, ch);
+  resetFireSpinChannel(sourceEntity);
+  playerFireSpinCooldown = PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/** Charged Fire Spin release — 3 tiers; burst size / send speed scale with channel time + tier. */
+export function castFireSpinCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerFireSpinCooldown > 0) return false;
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const tier = fireSpinTierFromCharge01(charge01);
+  const ch = Number(sourceEntity.fireSpinChannelSec) || 0;
+  const cx = (sourceEntity.visualX ?? sourceEntity.x ?? sourceX) + 0.5;
+  const cy = (sourceEntity.visualY ?? sourceEntity.y ?? sourceY) + 0.5;
+  const { nx, ny } = fireSpinAimUnit(sourceX, sourceY, targetX, targetY);
+  spawnFireSpinReleaseBurst(pushProjectile, sourceEntity, cx, cy, nx, ny, tier, ch);
+  resetFireSpinChannel(sourceEntity);
+  playerFireSpinCooldown =
+    PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[tier] ?? PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[2];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+function tryBeginPlayerEarthquakeJump(sourceEntity, charge01) {
+  if (!sourceEntity || strengthCarryBlocksWalk(sourceEntity)) return false;
+  const cp = Math.max(0, Math.min(1, charge01 || 0));
+  const level = Math.max(1, Math.min(5, getEarthquakeChargeLevel(cp) || 1));
+  const scale = EARTHQUAKE_JUMP_SCALE_BY_LEVEL[level - 1] ?? 1;
+  if (!tryJumpPlayer(null, { vzScale: scale })) return false;
+  sourceEntity.earthquakeAwaitingLand = true;
+  sourceEntity.earthquakeStoredCharge01 = cp;
+  return true;
+}
+
+/** Earthquake tap — tier 1 jump; impact on landing. */
+export function castEarthquakeMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  if (playerEarthquakeCooldown > 0) return false;
+  const cp = Math.max(CHARGE_FIELD_RELEASE_MIN_01, 0);
+  if (!tryBeginPlayerEarthquakeJump(sourceEntity, cp)) return false;
+  playerEarthquakeCooldown = PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[1];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
+/** Charged Earthquake — jump height scales with 5-bar level; landing radius + aftershocks scale with charge. */
+export function castEarthquakeCharged(sourceX, sourceY, targetX, targetY, sourceEntity, charge01) {
+  if (playerEarthquakeCooldown > 0) return false;
+  const cp = Math.max(CHARGE_FIELD_RELEASE_MIN_01, Math.min(1, charge01 || 0));
+  if (!tryBeginPlayerEarthquakeJump(sourceEntity, cp)) return false;
+  const level = Math.max(1, Math.min(5, getEarthquakeChargeLevel(cp) || 1));
+  playerEarthquakeCooldown =
+    PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[level] ?? PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[5];
+  bumpPlayerMoveCastVisual(sourceEntity);
+  return true;
+}
+
 export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
   if (playerSilkShootCooldown > 0) return false;
   playerSilkShootCooldown = 0.72;
@@ -613,7 +1031,7 @@ export function castSilkShootMove(sourceX, sourceY, targetX, targetY, sourceEnti
 }
 
 /**
- * Thunder / Thunderbolt: summons a yellow storm cell at the cursor tile and drops a
+ * Thunder: summons a yellow storm cell at the cursor tile and drops a
  * yellow lightning bolt a beat later. Visual + ignition reuse the rain lightning
  * system; damage is applied when the bolt lands (see `thunder-move.js`).
  */
@@ -637,9 +1055,10 @@ export function castThunderCharged(sourceX, sourceY, targetX, targetY, sourceEnt
   const cp = Math.max(0, Math.min(1, charge01 || 0));
   let level = 1;
   if (isChargeStrongAttackEligible(cp)) {
-    // getChargeLevel returns 1|2|3 for eligible charges. Map directly to thunder tiers.
+    // 4 global charge bars → `getChargeLevel` is 2..4 when past the first full segment.
+    // Thunder stays a 3-tier move: map the top two segments to the heaviest storm strike.
     const cl = getChargeLevel(cp);
-    level = cl >= 3 ? 3 : cl >= 2 ? 2 : 2; // L1 charged-release still feels like tier 2
+    level = cl >= 3 ? 3 : 2;
   }
   playerThunderCooldown = PLAYER_THUNDER_COOLDOWN_BY_LEVEL[level] ?? PLAYER_THUNDER_COOLDOWN_SEC;
   bumpPlayerMoveCastVisual(sourceEntity);
@@ -792,7 +1211,7 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
   if (entity.wildMoveCd > 0) return;
 
   const moveId = resolveWildMoveIdForDex(entity.dexId ?? 1);
-  const opts = { fromWild: true, pushProjectile };
+  const opts = { fromWild: true, pushProjectile, pushParticle };
   if (moveId === 'ember') {
     castEmberVolley(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'waterBurst') {
@@ -809,8 +1228,14 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
     castPsybeam(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'prismaticLaser') {
     castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'steelBeam') {
+    castSteelBeam(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'waterCannon') {
+    castWaterCannon(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'poisonPowder') {
     castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
+  } else if (moveId === 'fireBlast') {
+    castFireBlast(entity.x, entity.y, playerX, playerY, entity, { ...opts, tier: 2 });
   } else if (moveId === 'incinerate') {
     castIncinerate(entity.x, entity.y, playerX, playerY, entity, opts);
   } else if (moveId === 'silkShoot') {
@@ -843,17 +1268,53 @@ export function getPlayerMoveCooldownUiMax(moveId) {
     case 'bubble':
       return 0.55;
     case 'waterGun':
-      return WATER_GUN_STREAM_INTERVAL;
+      return Math.max(
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[1],
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[2],
+        PLAYER_WATER_GUN_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'hydroPump':
+      return HYDRO_PUMP_STREAM_INTERVAL;
     case 'bubbleBeam':
       return BUBBLE_BEAM_STREAM_INTERVAL;
     case 'psybeam':
       return 0.75;
     case 'prismaticLaser':
       return PRISMATIC_STREAM_INTERVAL;
+    case 'steelBeam':
+      return STEEL_BEAM_STREAM_INTERVAL;
+    case 'waterCannon':
+      return WATER_CANNON_STREAM_INTERVAL;
     case 'poisonPowder':
       return 0.95;
     case 'incinerate':
       return 0.78;
+    case 'fireBlast':
+      return Math.max(
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FIRE_BLAST_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'flameCharge':
+      return Math.max(
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FLAME_CHARGE_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'fireSpin':
+      return Math.max(
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[1],
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[2],
+        PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL[3]
+      );
+    case 'earthquake':
+      return Math.max(
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[1],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[2],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[3],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[4],
+        PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL[5]
+      );
     case 'silkShoot':
       return 0.72;
     case 'thunder':
@@ -861,8 +1322,16 @@ export function getPlayerMoveCooldownUiMax(moveId) {
       return PLAYER_THUNDER_COOLDOWN_BY_LEVEL[3];
     case 'thunderShock':
       return THUNDERSHOCK_STREAM_INTERVAL_SEC;
+    case 'thunderbolt':
+      return Math.max(
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[1],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[2],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[3],
+        PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[4]
+      );
     case 'rainDance':
     case 'sunnyDay':
+    case 'blizzard':
       return PLAYER_WEATHER_SWAP_COOLDOWN_SEC;
     case 'ultimate':
       return 7.5;
@@ -879,6 +1348,9 @@ export function getPlayerMoveCooldownUiMax(moveId) {
 export function getPlayerMoveCooldownRemaining(moveId) {
   if (String(moveId || '').startsWith('field:')) return 0;
   moveId = resolveMoveRuntimeAlias(moveId);
+  if (PluginRegistry.hasMove(moveId)) {
+    return PluginRegistry.getCooldown(moveId);
+  }
   switch (moveId) {
     case 'ember':
       return playerEmberCooldown;
@@ -894,26 +1366,42 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerBubbleCooldown;
     case 'waterGun':
       return playerWaterGunCooldown;
+    case 'hydroPump':
+      return playerHydroPumpCooldown;
     case 'bubbleBeam':
       return playerBubbleBeamCooldown;
     case 'psybeam':
       return playerPsybeamCooldown;
     case 'prismaticLaser':
       return playerPrismaticLaserCooldown;
+    case 'steelBeam':
+      return playerSteelBeamCooldown;
+    case 'waterCannon':
+      return playerWaterCannonCooldown;
     case 'poisonPowder':
       return playerPoisonPowderCooldown;
     case 'incinerate':
       return playerIncinerateCooldown;
+    case 'fireBlast':
+      return playerFireBlastCooldown;
+    case 'flameCharge':
+      return playerFlameChargeCooldown;
+    case 'fireSpin':
+      return playerFireSpinCooldown;
+    case 'earthquake':
+      return playerEarthquakeCooldown;
     case 'silkShoot':
       return playerSilkShootCooldown;
     case 'thunder':
       return playerThunderCooldown;
     case 'thunderShock':
       return playerThundershockCooldown;
+    case 'thunderbolt':
+      return playerThunderboltCooldown;
     case 'rainDance':
-      return playerRainDanceCooldown;
     case 'sunnyDay':
-      return playerSunnyDayCooldown;
+    case 'blizzard':
+      return playerWeatherSwapCooldown;
     case 'ultimate':
       return playerUltimateCooldown;
     default:
@@ -928,7 +1416,12 @@ export function getPlayerMoveCooldownRemaining(moveId) {
  * @param {import('../player.js').player} player
  */
 export function updateMoves(dt, wildPokemonList, data, player) {
+  lastMovesTickData = data;
   updatePlayerCombatTimers(dt);
+  for (const key of PluginRegistry.cooldowns.keys()) {
+    const current = PluginRegistry.getCooldown(key);
+    if (current > 0) PluginRegistry.setCooldown(key, Math.max(0, current - dt));
+  }
   playerEmberCooldown = Math.max(0, playerEmberCooldown - dt);
   playerWaterCooldown = Math.max(0, playerWaterCooldown - dt);
   playerPoisonCooldown = Math.max(0, playerPoisonCooldown - dt);
@@ -939,29 +1432,67 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerConfusionCooldown = Math.max(0, playerConfusionCooldown - dt);
   playerBubbleCooldown = Math.max(0, playerBubbleCooldown - dt);
   playerWaterGunCooldown = Math.max(0, playerWaterGunCooldown - dt);
+  playerHydroPumpCooldown = Math.max(0, playerHydroPumpCooldown - dt);
   playerBubbleBeamCooldown = Math.max(0, playerBubbleBeamCooldown - dt);
   playerPsybeamCooldown = Math.max(0, playerPsybeamCooldown - dt);
   playerPrismaticLaserCooldown = Math.max(0, playerPrismaticLaserCooldown - dt);
+  playerSteelBeamCooldown = Math.max(0, playerSteelBeamCooldown - dt);
+  playerWaterCannonCooldown = Math.max(0, playerWaterCannonCooldown - dt);
   playerPoisonPowderCooldown = Math.max(0, playerPoisonPowderCooldown - dt);
   playerIncinerateCooldown = Math.max(0, playerIncinerateCooldown - dt);
+  playerFireBlastCooldown = Math.max(0, playerFireBlastCooldown - dt);
+  playerFlameChargeCooldown = Math.max(0, playerFlameChargeCooldown - dt);
+  playerFireSpinCooldown = Math.max(0, playerFireSpinCooldown - dt);
+  playerEarthquakeCooldown = Math.max(0, playerEarthquakeCooldown - dt);
   playerSilkShootCooldown = Math.max(0, playerSilkShootCooldown - dt);
   playerThunderCooldown = Math.max(0, playerThunderCooldown - dt);
   playerThundershockCooldown = Math.max(0, playerThundershockCooldown - dt);
-  playerRainDanceCooldown = Math.max(0, playerRainDanceCooldown - dt);
-  playerSunnyDayCooldown = Math.max(0, playerSunnyDayCooldown - dt);
+  playerThunderboltCooldown = Math.max(0, playerThunderboltCooldown - dt);
+  playerWeatherSwapCooldown = Math.max(0, playerWeatherSwapCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
-  const wildSpatial = buildWildSpatialIndex(wildList);
+  const wildSpatial = buildWildSpatialIndex(wildList, data);
 
   // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
   // yellow ground strike + splash-damage nearby wild pokemon.
-  tickThunderStrikes(dt, wildList, data, wildSpatial);
+  tickThunderStrikes(dt, wildList, data, wildSpatial, (wx, wy) => {
+    pushParticle({
+      type: 'grassFire',
+      x: wx,
+      y: wy,
+      vx: 0,
+      vy: 0,
+      z: 0.06,
+      vz: 0,
+      life: GRASS_FIRE_PARTICLE_SEC,
+      maxLife: GRASS_FIRE_PARTICLE_SEC
+    });
+  });
+  tickThunderboltChains(wildList, data, player);
+
+  if (player && data) {
+    tickPlayerFlameChargeDash(player, dt, data, pushParticle);
+  }
 
   for (let i = activeParticles.length - 1; i >= 0; i--) {
     const p = activeParticles[i];
     p.life -= dt;
     if (p.life <= 0) {
       activeParticles.splice(i, 1);
+      continue;
+    }
+    if (p.type === 'waterCannonBubble') {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.vz += 0.55 * dt;
+      p.vz -= 5.5 * dt;
+      if (p.z < 0) {
+        p.z = 0;
+        p.vz = Math.abs(p.vz) * 0.2;
+      }
       continue;
     }
     if (p.type === 'grassFire') {
@@ -981,17 +1512,49 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutVineArc' ||
       p.type === 'fieldCutPsychicArc' ||
       p.type === 'fieldCutSlashArc' ||
+      p.type === 'fieldCutScratchArc' ||
       p.type === 'fieldSpinAttack' ||
-      p.type === 'rainFootSplash'
+      p.type === 'rainFootSplash' ||
+      p.type === 'prismaticWindArc' ||
+      p.type === 'steelWindArc' ||
+      p.type === 'waterGunWaveRing'
     ) {
       continue;
     }
     const pzPrev = p.z;
     const vzParticle = p.vz;
+    
+    // Previous tile height for elevation snapping/delta
+    const prevH = p.heightStep || 0;
+    
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
-    p.vz -= 30.0 * dt;
+    
+    // Update terrain height for 2.5D awareness
+    if (data) {
+      const mx = Math.floor(p.x);
+      const my = Math.floor(p.y);
+      const tile = data.getMicroTile?.(mx, my);
+      const curH = Number(tile?.heightStep) || 0;
+      p.heightStep = curH;
+      
+      // If we moved to a lower tile, "drop" the particle's Z so it doesn't visually snap
+      if (curH < prevH) {
+        p.z += (prevH - curH);
+      } else if (curH > prevH) {
+        // If we hit a cliff, we could either "climb" it or hit it.
+        // For particles, we usually want them to just pop up to the new height or die.
+        // Let's pop up for now to keep them "floating" over terrain.
+        p.z = Math.max(0, p.z - (curH - prevH));
+      }
+    }
+
+    // Gravity only for non-absorb particles
+    if (p.type !== 'absorbChargeParticle') {
+      p.vz -= 30.0 * dt;
+    }
+    
     if (p.z <= 0) {
       if (pzPrev > 0.03 && vzParticle < -0.22) {
         playFloorHit2Sfx({ x: p.x, y: p.y, z: 0 });
@@ -1003,246 +1566,16 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     }
   }
 
-  for (let i = activeProjectiles.length - 1; i >= 0; i--) {
-    const proj = activeProjectiles[i];
-
-    if (proj.type === 'psybeamBeam' || proj.type === 'thunderShockBeam') {
-      proj.timeToLive -= dt;
-      const sx0 = proj.beamStartX;
-      const sy0 = proj.beamStartY;
-      const sx1 = proj.beamEndX;
-      const sy1 = proj.beamEndY;
-      const halfW = proj.beamHalfWidth ?? 0.26;
-      const zBeam = proj.z ?? 0;
-
-      if (proj.trailAcc != null) {
-        proj.trailAcc += dt;
-        const interval = PSY_TRAIL_INTERVAL * 1.35;
-        let budget = 4;
-        while (proj.trailAcc >= interval && budget-- > 0) {
-          proj.trailAcc -= interval;
-          const u = Math.random();
-          const px = sx0 + (sx1 - sx0) * u + (Math.random() - 0.5) * 0.06;
-          const py = sy0 + (sy1 - sy0) * u + (Math.random() - 0.5) * 0.06;
-          spawnTrailParticle(px, py, 'psyTrail', zBeam);
-        }
-      }
-
-      if (proj.hitsPlayer && !proj.playerBeamHitDone) {
-        const px = player.visualX ?? player.x;
-        const py = player.visualY ?? player.y;
-        const dex = player.dexId ?? 1;
-        const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
-        if (projectileZInPokemonHurtbox(zBeam, dex, player.z ?? 0)) {
-          const hurtR = getPokemonHurtboxRadiusTiles(dex);
-          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
-            const poison = false;
-            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
-              spawnHitParticles(hx, hy, player.z ?? 0);
-            }
-            proj.playerBeamHitDone = true;
-          }
-        }
-      }
-
-      if (proj.hitsWild) {
-        const set = proj.psyHitWild instanceof Set ? proj.psyHitWild : (proj.psyHitWild = new Set());
-        const pad = COLLISION_BROAD_PHASE_TILES + 1.2;
-        const minX = Math.min(sx0, sx1) - pad;
-        const maxX = Math.max(sx0, sx1) + pad;
-        const minY = Math.min(sy0, sy1) - pad;
-        const maxY = Math.max(sy0, sy1) + pad;
-        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
-          if (wild === proj.sourceEntity) return;
-          if (set.has(wild)) return;
-          if (!projectileZInPokemonHurtbox(zBeam, dex, z)) return;
-          const hurtR = getPokemonHurtboxRadiusTiles(dex);
-          if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
-          if (wild.takeDamage) wild.takeDamage(proj.damage);
-          if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
-          spawnHitParticles(hx, hy, z);
-          set.add(wild);
-        });
-      }
-
-      if (proj.hasTackleTrait && data) {
-        const detailSet =
-          proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
-        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle', pz: zBeam });
-      }
-
-      if (proj.timeToLive <= 0) {
-        emitProjectileWorldReactionOnce(proj, data, (sx0 + sx1) * 0.5, (sy0 + sy1) * 0.5);
-        activeProjectiles.splice(i, 1);
-      }
-      continue;
-    }
-
-    proj.x += proj.vx * dt;
-    proj.y += proj.vy * dt;
-    if (Number.isFinite(proj.vz)) {
-      const zPrev = Number(proj.z) || 0;
-      proj.z += proj.vz * dt;
-      if (zPrev > 0.006 && proj.z <= 0) {
-        playFloorHit2Sfx({ x: proj.x, y: proj.y, z: 0 });
-        proj.z = 0;
-        proj.vz = 0;
-      }
-    }
-
-    proj.timeToLive -= dt;
-    if (proj.timeToLive <= 0) {
-      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
-      if (proj.type === 'incinerateCore') {
-        spawnHitParticles(proj.x, proj.y, 0);
-          applySplashToWild(proj, wildList, 0, wildSpatial);
-        spawnIncinerateShards(proj, pushProjectile, 0);
-      } else if (proj.type === 'confusionOrb') {
-        spawnHitParticles(proj.x, proj.y, 0);
-          applySplashToWild(proj, wildList, 0, wildSpatial);
-      }
-      if (data) {
-        const zz = Math.max(0, Number(proj.z) || 0);
-        if (grassFireTryIgniteAt(proj.x, proj.y, zz, proj.type, data)) {
-          pushParticle({
-            type: 'grassFire',
-            x: proj.x,
-            y: proj.y,
-            vx: 0,
-            vy: 0,
-            z: 0.06,
-            vz: 0,
-            life: GRASS_FIRE_PARTICLE_SEC,
-            maxLife: GRASS_FIRE_PARTICLE_SEC
-          });
-        }
-        tryApplyFireHitToFormalTreesAt(proj.x, proj.y, zz, proj.type, data);
-        grassFireTryExtinguishAt(proj.x, proj.y, zz, proj.type, data);
-      }
-      activeProjectiles.splice(i, 1);
-      continue;
-    }
-
-    const trailType =
-      proj.type === 'ember'
-        ? 'emberTrail'
-        : proj.type === 'waterShot' || proj.type === 'waterGunShot' || proj.type === 'bubbleShot' || proj.type === 'bubbleBeamShot'
-          ? 'waterTrail'
-          : proj.type === 'poisonPowderShot'
-            ? 'powderTrail'
-            : proj.type === 'silkShot'
-              ? 'silkTrail'
-              : proj.type === 'confusionOrb'
-                ? 'psyTrail'
-                : proj.type === 'prismaticShot'
-                  ? 'laserTrail'
-                  : proj.type === 'flamethrowerShot'
-                    ? 'emberTrail'
-                    : null;
-    if (trailType && proj.trailAcc != null) {
-      proj.trailAcc += dt;
-      const interval =
-        trailType === 'waterTrail'
-          ? WATER_TRAIL_INTERVAL
-          : trailType === 'psyTrail'
-            ? PSY_TRAIL_INTERVAL
-            : trailType === 'powderTrail'
-              ? POWDER_TRAIL_INTERVAL
-              : trailType === 'silkTrail'
-                ? SILK_TRAIL_INTERVAL
-                : trailType === 'laserTrail'
-                  ? LASER_TRAIL_INTERVAL
-                  : EMBER_TRAIL_INTERVAL;
-      const effectiveInterval =
-        trailType === 'emberTrail' && Number.isFinite(proj.trailIntervalMul)
-          ? interval * Math.max(1, Number(proj.trailIntervalMul))
-          : interval;
-      let trailBudget = 2;
-      while (proj.trailAcc >= effectiveInterval && trailBudget-- > 0) {
-        proj.trailAcc -= effectiveInterval;
-        spawnTrailParticle(proj.x, proj.y, trailType, proj.z);
-      }
-      if (trailBudget <= 0 && proj.trailAcc > effectiveInterval * 3) {
-        // Prevent runaway catch-up after frame spikes.
-        proj.trailAcc = effectiveInterval * 3;
-      }
-    }
-
-    let runCollisionChecks = true;
-    if (proj.type === 'flamethrowerShot' && proj.streamShot) {
-      proj.hitTickAcc = (Number(proj.hitTickAcc) || 0) + dt;
-      if (proj.hitTickAcc < FLAMETHROWER_STREAM_HIT_TICK_SEC) {
-        runCollisionChecks = false;
-      } else {
-        proj.hitTickAcc = Math.min(
-          proj.hitTickAcc - FLAMETHROWER_STREAM_HIT_TICK_SEC,
-          FLAMETHROWER_STREAM_HIT_TICK_SEC
-        );
-      }
-    }
-    if (!runCollisionChecks) continue;
-
-    if (data && isProjectileBlockedByTree(proj, data)) {
-      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
-      const impactZ = Math.max(0, Number(proj.z) || 0);
-      spawnHitParticles(proj.x, proj.y, impactZ);
-      tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
-      if (proj.type === 'incinerateCore') {
-        applySplashToWild(proj, wildList, impactZ, wildSpatial);
-        spawnIncinerateShards(proj, pushProjectile, impactZ);
-      }
-      activeProjectiles.splice(i, 1);
-      continue;
-    }
-
-    let hit = false;
-
-    if (proj.hitsPlayer && checkPlayerHit(proj, player)) {
-      const poisonCapable = proj.type === 'poisonSting' || proj.type === 'poisonPowderShot';
-      const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
-      const poison = poisonCapable && Math.random() < poisonChance;
-      const pz = player.z ?? 0;
-      if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
-        spawnHitParticles(proj.x, proj.y, pz);
-      }
-      if (proj.type === 'incinerateCore') {
-        spawnIncinerateShards(proj, pushProjectile, pz);
-      }
-      hit = true;
-    }
-
-    if (!hit && proj.hitsWild) {
-      const pad = COLLISION_BROAD_PHASE_TILES;
-      queryWildSpatialIndexInAabb(
-        wildSpatial,
-        proj.x - pad,
-        proj.y - pad,
-        proj.x + pad,
-        proj.y + pad,
-        ({ wild, hx, hy, dex, z }) => {
-          if (hit) return;
-          if (wild === proj.sourceEntity) return;
-          if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return;
-          if (!projectileZInPokemonHurtbox(proj.z, dex, z)) return;
-          const hurtR = getPokemonHurtboxRadiusTiles(dex);
-          if (!checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) return;
-          if (wild.takeDamage) wild.takeDamage(proj.damage);
-          if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
-          spawnHitParticles(proj.x, proj.y, z);
-          if (proj.type === 'incinerateCore' || proj.type === 'confusionOrb') {
-            applySplashToWild(proj, wildList, undefined, wildSpatial);
-          }
-          if (proj.type === 'incinerateCore') {
-            spawnIncinerateShards(proj, pushProjectile, z);
-          }
-          hit = true;
-        }
-      );
-    }
-
-    if (hit) {
-      emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
-      activeProjectiles.splice(i, 1);
-    }
-  }
+  tickActiveProjectiles({
+    dt,
+    wildSpatial,
+    wildList,
+    data,
+    player,
+    projectiles: activeProjectiles,
+    pushParticle,
+    pushProjectile,
+    spawnTrailParticle,
+    spawnHitParticles
+  });
 }

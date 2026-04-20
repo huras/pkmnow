@@ -1,4 +1,5 @@
 import { getPokemonMoveset, getMoveLabel, PLAYER_SPECIAL_WHEEL_MOVE_IDS } from '../moves/pokemon-moveset-config.js';
+import { NATIONAL_DEX_MAX } from '../pokemon/gen1-name-to-dex.js';
 
 /** @typedef {'lmb'|'rmb'|'mmb'|'wheelUp'|'wheelDown'} PlayerInputSlotId */
 
@@ -103,7 +104,7 @@ function loadAll() {
     byDexStr = {};
   }
   let wrote = false;
-  for (let dex = 1; dex <= 151; dex++) {
+  for (let dex = 1; dex <= NATIONAL_DEX_MAX; dex++) {
     const dKey = String(dex);
     if (byDexStr[dKey]) continue;
     const row = defaultBindingsForDex(dex);
@@ -136,7 +137,7 @@ export function getInputSlotId(slotIdx) {
 export function getPlayerInputBindings(dexId) {
   loadAll();
   const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) {
+  if (dex < 1 || dex > NATIONAL_DEX_MAX) {
     const d = defaultBindingsForDex(1);
     return { ...d };
   }
@@ -176,7 +177,7 @@ export function getPlayerInputBindings(dexId) {
 export function setPlayerInputBinding(dexId, slotIdx, moveId) {
   loadAll();
   const dex = Math.floor(Number(dexId) || 0);
-  if (dex < 1 || dex > 151) return;
+  if (dex < 1 || dex > NATIONAL_DEX_MAX) return;
   const slot = INPUT_SLOT_IDS[slotIdx];
   if (!slot) return;
   const dKey = String(dex);

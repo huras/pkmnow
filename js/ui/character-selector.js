@@ -1,25 +1,50 @@
 import { player, setPlayerSpecies } from '../player.js';
 import { summonDebugWildPokemon } from '../wild-pokemon/index.js';
-import { getGen1SpeciesName, padDex3 } from '../pokemon/gen1-name-to-dex.js';
+import { getGen1SpeciesName, padDex3, NATIONAL_DEX_MAX } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
 import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
-import { playInputState } from '../main/play-input-state.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import {
   getPlayerMoveCooldownRemaining,
-  getPlayerMoveCooldownUiMax,
-  moveSupportsChargedRelease
+  getPlayerMoveCooldownUiMax
 } from '../moves/moves-manager.js';
-import { getCollectedDetailInventorySnapshot, getCrystalLootCount } from '../main/play-crystal-tackle.js';
+import {
+  getCollectedDetailInventorySnapshot,
+  getCrystalLootCount,
+  PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE
+} from '../main/play-crystal-tackle.js';
 import { syncSelectedFieldSkillForDex, syncSelectedSpecialAttackForDex } from '../main/play-mouse-combat.js';
 import { getPlayerInputBindings, getBindableMoveLabel } from '../main/player-input-slots.js';
-import { getChargeBarProgresses, getChargeLevel } from '../main/play-charge-levels.js';
 import { getPokemondbItemIconPathMap } from '../social/pokemondb-item-icon-paths.js';
+import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
+import {
+  PLAY_ITEM_HUD_PICKUP_OPAQUE_MS,
+  PLAY_ITEM_HUD_POP_MS
+} from '../main/play-item-pickup-feedback.js';
+import { detailScatterGridPreviewHtml } from '../main/detail-scatter-preview-html.js';
+import { OBJECT_SETS } from '../tessellation-data.js';
+import { parseShape } from '../tessellation-logic.js';
+import { installPokemonBoxModal } from './pokemon-box-modal.js';
 
 const SKILL_ICON_BASE = 'skill-icons';
+
+/** One HUD row for all crystal stacks — map key so parallel non-crystal pops stay independent. */
+const PLAY_ITEM_POP_CRYSTAL_SLOT = '__pkmn_crystal_shard_slot__';
+
+/** Move id (strip `field:`) → PNG basename when it differs from the id (pack filenames). */
+const SKILL_ICON_FILE_BY_MOVE_ID = Object.freeze({
+  thunder: 'thunder_Shamanskill_27',
+  thunderbolt: 'thunderbolt_Mageskill_07',
+  thunderShock: 'thundershock_Shamanskill_23'
+});
+
+function skillIconFileForMoveId(moveId) {
+  const id = String(moveId || '').replace(/^field:/, '');
+  return SKILL_ICON_FILE_BY_MOVE_ID[id] ?? id;
+}
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
 const IMMERSIVE_CHROME_STORAGE_KEY = 'pkmn_play_immersive_chrome';
 
@@ -43,13 +68,27 @@ function lootLabelFromItemKey(itemKey) {
     .trim();
 }
 
-/** @param {string} itemKey */
-function lootSlugForItemKey(itemKey) {
-  const k = String(itemKey || '').toLowerCase();
-  if (k.includes('crystal')) return 'star-piece';
-  const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
-  if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
-  return null;
+/** Tessellation sprite grid sized to fit the play item HUD icon cell (narrow 4-col slot). */
+function playItemHudScatterSpriteHtml(itemKey) {
+  const key = String(itemKey || '');
+  const objSet = OBJECT_SETS[key];
+  if (!objSet) return '';
+  const { rows, cols } = parseShape(objSet.shape || '[1x1]');
+  const gridCols = Math.max(1, cols | 0);
+  const gridRows = Math.max(1, rows | 0);
+  const gap = 2;
+  /** Fits 4-column HUD cells (~min 64px). */
+  const box = 36;
+  const cellByCols = Math.floor((box - gap * (gridCols - 1)) / gridCols);
+  const cellByRows = Math.floor((box - gap * (gridRows - 1)) / gridRows);
+  const cellPx = Math.max(6, Math.min(cellByCols, cellByRows));
+  return detailScatterGridPreviewHtml(
+    key,
+    cellPx,
+    'play-item-hud__detail-sprite',
+    'vertical-align:middle;line-height:0',
+    { seamless: true, gapPx: 0 }
+  );
 }
 
 export class CharacterSelector {
@@ -67,6 +106,8 @@ export class CharacterSelector {
     this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
     this.allSpecies = [];
     this.isOpen = false;
+    /** @type {import('./pokemon-box-modal.js').PokemonBoxModal | null} */
+    this._boxModal = null;
     this._onFieldSkillChange = (ev) => {
       const dex = Math.floor(Number(ev?.detail?.dexId) || 0);
       if (dex === (player.dexId ?? 0)) {
@@ -91,6 +132,37 @@ export class CharacterSelector {
 
     /** @type {Map<string, string> | null} */
     this._lootIconPathMap = null;
+    /** Cache so the loot list DOM is not rebuilt every frame (enables HTML5 drag from rows). */
+    this._lastPlayItemHudSig = '';
+    /** Item HUD: dimmed to 50% unless hovered, dragging from inventory, or post-pickup highlight. */
+    this._playItemHudPointerInside = false;
+    this._playItemHudInventoryDragActive = false;
+    this._playItemHudPickupOpaqueUntil = 0;
+    /** @type {Map<string, number>} itemKey → expiry (ms); several keys can pop in parallel. */
+    this._playItemPopUntilByKey = new Map();
+    /** @type {Map<string, number>} bump on each pickup so the same slot can replay while overlapping. */
+    this._playItemPopGenByKey = new Map();
+
+    /** @param {Event} ev */
+    this._onPlayItemHudPickup = (ev) => {
+      const k = String(/** @type {CustomEvent<{ itemKey?: string }>} */ (ev).detail?.itemKey || '');
+      if (!k) return;
+      const now = performance.now();
+      this._playItemHudPickupOpaqueUntil = now + PLAY_ITEM_HUD_PICKUP_OPAQUE_MS;
+      const popSlotKey = k.toLowerCase().includes('crystal') ? PLAY_ITEM_POP_CRYSTAL_SLOT : k;
+      const until = Math.max(this._playItemPopUntilByKey.get(popSlotKey) || 0, now + PLAY_ITEM_HUD_POP_MS);
+      this._playItemPopUntilByKey.set(popSlotKey, until);
+      this._playItemPopGenByKey.set(popSlotKey, (this._playItemPopGenByKey.get(popSlotKey) || 0) + 1);
+      this._lastPlayItemHudSig = '';
+      this.updatePlayItemsHud();
+      this._syncPlayItemHudOpacity();
+    };
+    this._onDocInventoryDragEnd = () => {
+      if (!this._playItemHudInventoryDragActive) return;
+      this._playItemHudInventoryDragActive = false;
+      this._syncPlayItemHudOpacity();
+    };
+
     void getPokemondbItemIconPathMap().then((m) => {
       this._lootIconPathMap = m;
       const crystalPath = m.get('star-piece');
@@ -99,7 +171,7 @@ export class CharacterSelector {
       this.updatePlayItemsHud();
     });
 
-    for (let i = 1; i <= 151; i++) {
+    for (let i = 1; i <= NATIONAL_DEX_MAX; i++) {
       this.allSpecies.push({
         id: i,
         name: getGen1SpeciesName(i)
@@ -205,39 +277,131 @@ export class CharacterSelector {
 
   /** Clears item HUD counters (e.g. when leaving play mode). */
   clearPlayItemsHud() {
+    this._lastPlayItemHudSig = '';
+    this._playItemHudPickupOpaqueUntil = 0;
+    this._playItemPopUntilByKey.clear();
+    this._playItemPopGenByKey.clear();
+    this._playItemHudPointerInside = false;
+    this._playItemHudInventoryDragActive = false;
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (v) v.textContent = '0';
     const listEl = this.container?.querySelector('#play-item-loot-list');
     if (listEl) listEl.innerHTML = '';
+    const crystalRow = this.container?.querySelector('#play-item-crystal-row');
+    if (crystalRow) crystalRow.setAttribute('draggable', 'false');
+  }
+
+  /** Call after mutating inventory outside the normal HUD tick (e.g. ground drop). */
+  invalidatePlayItemsHudSignature() {
+    this._lastPlayItemHudSig = '';
   }
 
   /** Live item counters (play mode; game loop). */
   updatePlayItemsHud() {
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (!v) return;
-    v.textContent = String(Math.max(0, getCrystalLootCount() | 0));
+    const crystalN = Math.max(0, getCrystalLootCount() | 0);
+    v.textContent = String(crystalN);
+    const crystalRow = this.container?.querySelector('#play-item-crystal-row');
+    if (crystalRow) crystalRow.setAttribute('draggable', crystalN > 0 ? 'true' : 'false');
+
     const listEl = this.container?.querySelector('#play-item-loot-list');
-    if (!listEl) return;
+    if (!listEl) {
+      this._syncPlayItemHudOpacity();
+      return;
+    }
     const rows = getCollectedDetailInventorySnapshot()
       .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
-      .slice(0, 4);
+      .slice(0, 8);
+    const sig = `${crystalN}|${rows.map((r) => `${r.itemKey}:${r.count | 0}`).join(';')}`;
+    if (sig === this._lastPlayItemHudSig) {
+      this._syncPlayItemHudOpacity();
+      this._reapplyPlayItemPopIfNeeded();
+      return;
+    }
+    this._lastPlayItemHudSig = sig;
+
     const m = this._lootIconPathMap;
     listEl.innerHTML = rows
       .map((r) => {
         const slug = lootSlugForItemKey(r.itemKey);
         const path = slug && m ? m.get(slug) : null;
+        const spriteHtml = path ? '' : playItemHudScatterSpriteHtml(r.itemKey);
         const icon = path
-          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="20" height="20" decoding="async" />`
-          : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+          ? `<img class="play-item-hud__icon-img" src="${path}" alt="" width="36" height="36" decoding="async" />`
+          : spriteHtml
+            ? spriteHtml
+            : '<span class="play-item-hud__icon-fallback" aria-hidden="true"></span>';
+        const dragKey = encodeURIComponent(String(r.itemKey || ''));
         return `
-          <div class="play-item-hud__row">
+          <div class="play-item-hud__row play-item-hud__row--draggable" draggable="true" data-inventory-drag="${dragKey}" title="Drag to the map to drop">
             <span class="play-item-hud__icon" aria-hidden="true">${icon}</span>
-            <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
-            <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
+            <div class="play-item-hud__meta">
+              <span class="play-item-hud__label">${lootLabelFromItemKey(r.itemKey)}</span>
+              <span class="play-item-hud__count">${Math.max(0, r.count | 0)}</span>
+            </div>
           </div>
         `;
       })
       .join('');
+    this._reapplyPlayItemPopIfNeeded();
+    this._syncPlayItemHudOpacity();
+  }
+
+  _syncPlayItemHudOpacity() {
+    const el = this.container?.querySelector('#play-item-hud');
+    if (!(el instanceof HTMLElement)) return;
+    const engaged =
+      this._playItemHudPointerInside ||
+      this._playItemHudInventoryDragActive ||
+      performance.now() < (this._playItemHudPickupOpaqueUntil || 0);
+    el.classList.toggle('play-item-hud--engaged', engaged);
+  }
+
+  /** @param {string} itemKey */
+  _findPlayItemHudRowForPop(itemKey) {
+    const key = String(itemKey || '');
+    if (key === PLAY_ITEM_POP_CRYSTAL_SLOT || key.toLowerCase().includes('crystal')) {
+      return this.container?.querySelector('#play-item-crystal-row') ?? null;
+    }
+    return (
+      this.container?.querySelector(
+        `#play-item-loot-list [data-inventory-drag="${encodeURIComponent(key)}"]`
+      ) ?? null
+    );
+  }
+
+  _pruneExpiredPlayItemPops(now) {
+    for (const [k, until] of [...this._playItemPopUntilByKey.entries()]) {
+      if (now < until) continue;
+      this._playItemPopUntilByKey.delete(k);
+      this._playItemPopGenByKey.delete(k);
+      const row = this._findPlayItemHudRowForPop(k);
+      if (row instanceof HTMLElement) {
+        row.classList.remove('play-item-hud__row--pop');
+        delete row.dataset.popGen;
+      }
+    }
+  }
+
+  _reapplyPlayItemPopIfNeeded() {
+    const now = performance.now();
+    this._pruneExpiredPlayItemPops(now);
+    for (const [key, until] of this._playItemPopUntilByKey.entries()) {
+      if (now >= until) continue;
+      const row = this._findPlayItemHudRowForPop(key);
+      if (!(row instanceof HTMLElement)) continue;
+      const gen = this._playItemPopGenByKey.get(key) || 0;
+      const appliedGen = row.dataset.popGen || '';
+      if (appliedGen !== String(gen)) {
+        row.dataset.popGen = String(gen);
+        row.classList.remove('play-item-hud__row--pop');
+        void row.offsetWidth;
+        row.classList.add('play-item-hud__row--pop');
+      } else if (!row.classList.contains('play-item-hud__row--pop')) {
+        row.classList.add('play-item-hud__row--pop');
+      }
+    }
   }
 
   /** Live cooldown sweep + timer on skill slots (play mode; game loop). */
@@ -252,14 +416,16 @@ export class CharacterSelector {
       const cd = getPlayerMoveCooldownRemaining(id);
       const max = Math.max(0.02, getPlayerMoveCooldownUiMax(id));
       if (cd <= 0.008) {
-        sweep.style.setProperty('--cd-p', '0');
-        timer.textContent = '';
-        slot.classList.remove('move-slot--on-cd');
+        if (sweep.style.getPropertyValue('--cd-p') !== '0') sweep.style.setProperty('--cd-p', '0');
+        if (timer.textContent) timer.textContent = '';
+        if (slot.classList.contains('move-slot--on-cd')) slot.classList.remove('move-slot--on-cd');
       } else {
         const p = Math.min(1, cd / max);
-        sweep.style.setProperty('--cd-p', String(p));
-        timer.textContent = cd >= 10 ? String(Math.round(cd)) : cd.toFixed(1);
-        slot.classList.add('move-slot--on-cd');
+        const pText = String(p);
+        if (sweep.style.getPropertyValue('--cd-p') !== pText) sweep.style.setProperty('--cd-p', pText);
+        const timerText = cd >= 10 ? String(Math.round(cd)) : cd.toFixed(1);
+        if (timer.textContent !== timerText) timer.textContent = timerText;
+        if (!slot.classList.contains('move-slot--on-cd')) slot.classList.add('move-slot--on-cd');
       }
     }
   }
@@ -269,7 +435,7 @@ export class CharacterSelector {
     this.container.innerHTML = `
       <div class="character-selector">
         <div class="selector-header">
-          <div class="player-preview-pill player-preview-pill--no-portrait" id="player-preview-pill" title="${activeName}">
+          <div class="player-preview-pill player-preview-pill--no-portrait" id="player-preview-pill" title="Click to open Pokémon Box" aria-label="Open Pokémon Box" role="button" tabindex="0">
             <img class="player-preview-portrait player-preview-portrait--hidden" id="player-preview-portrait" alt="${activeName}" width="40" height="40">
           </div>
           <div class="player-info">
@@ -344,17 +510,16 @@ export class CharacterSelector {
               <div class="player-field-charge__segment player-field-charge__segment--3">
                 <div class="player-field-charge__fill player-field-charge__fill--3" id="player-field-charge-fill-3"></div>
               </div>
+              <div class="player-field-charge__segment player-field-charge__segment--4">
+                <div class="player-field-charge__fill player-field-charge__fill--4" id="player-field-charge-fill-4"></div>
+              </div>
             </div>
             <div class="player-field-charge__label" id="player-field-charge-label">Tackle Charge 0%</div>
           </div>
           <div class="player-moves-list" id="current-player-moves"></div>
         </div>
 
-        <div
-          id="character-social-numpad"
-          class="play-social-overlay play-social-overlay--panel social-numpad-box"
-          aria-label="Social interactions via numpad"
-        ></div>
+
 
         <div class="search-container">
           <span class="search-icon">🔍</span>
@@ -366,14 +531,24 @@ export class CharacterSelector {
 
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__title">Items</div>
-          <div class="play-item-hud__row">
-            <span class="play-item-hud__icon" aria-hidden="true">
-              <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="20" height="20" alt="" decoding="async" />
-            </span>
-            <span class="play-item-hud__label">Crystal Shards</span>
-            <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+          <div class="play-item-hud__grid" id="play-item-grid">
+            <div
+              class="play-item-hud__row play-item-hud__row--draggable"
+              id="play-item-crystal-row"
+              draggable="false"
+              data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
+              title="Drag to the map to drop"
+            >
+              <span class="play-item-hud__icon" aria-hidden="true">
+                <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="36" height="36" alt="" decoding="async" />
+              </span>
+              <div class="play-item-hud__meta">
+                <span class="play-item-hud__label">Crystal Shards</span>
+                <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+              </div>
+            </div>
+            <div id="play-item-loot-list"></div>
           </div>
-          <div id="play-item-loot-list"></div>
         </div>
       </div>
     `;
@@ -383,6 +558,22 @@ export class CharacterSelector {
     const searchInput = this.container.querySelector('#species-search');
     const resultsList = this.container.querySelector('#search-results');
     const pointerBar = this.container.querySelector('#play-pointer-mode-bar');
+
+    // Pokémon Box modal — triggered by clicking the portrait pill
+    this._boxModal = installPokemonBoxModal(this);
+    const portraitPill = this.container.querySelector('#player-preview-pill');
+    if (portraitPill) {
+      portraitPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._boxModal.open(player.dexId ?? 1);
+      });
+      portraitPill.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this._boxModal.open(player.dexId ?? 1);
+        }
+      });
+    }
 
     if (pointerBar) {
       this.syncPlayPointerModeRadios();
@@ -432,6 +623,41 @@ export class CharacterSelector {
     }
     window.addEventListener('play-field-skill-change', this._onFieldSkillChange);
     window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
+    window.addEventListener('play-item-hud-pickup', this._onPlayItemHudPickup);
+    document.addEventListener('dragend', this._onDocInventoryDragEnd);
+
+    const itemHud = this.container?.querySelector('#play-item-hud');
+    if (itemHud) {
+      itemHud.addEventListener('pointerenter', () => {
+        this._playItemHudPointerInside = true;
+        this._syncPlayItemHudOpacity();
+      });
+      itemHud.addEventListener('pointerleave', () => {
+        this._playItemHudPointerInside = false;
+        this._syncPlayItemHudOpacity();
+      });
+      itemHud.addEventListener('dragstart', (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        const row = t.closest('[data-inventory-drag]');
+        if (!row || !itemHud.contains(row)) return;
+        if (row.getAttribute('draggable') !== 'true') {
+          e.preventDefault();
+          return;
+        }
+        const raw = row.getAttribute('data-inventory-drag') || '';
+        const token =
+          raw === PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE ? raw : decodeURIComponent(raw);
+        if (!token) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', `pkmn-inventory-drop:${token}`);
+        e.dataTransfer.effectAllowed = 'copyMove';
+        this._playItemHudInventoryDragActive = true;
+        this._syncPlayItemHudOpacity();
+      });
+    }
   }
 
   async refreshPlayerMovesHud() {
@@ -448,45 +674,7 @@ export class CharacterSelector {
 
   updatePlayFieldMoveChargeHud() {
     const wrap = this.container?.querySelector('#player-field-charge');
-    const fill1 = this.container?.querySelector('#player-field-charge-fill-1');
-    const fill2 = this.container?.querySelector('#player-field-charge-fill-2');
-    const fill3 = this.container?.querySelector('#player-field-charge-fill-3');
-    const label = this.container?.querySelector('#player-field-charge-label');
-    if (
-      !(wrap instanceof HTMLElement) ||
-      !(fill1 instanceof HTMLElement) ||
-      !(fill2 instanceof HTMLElement) ||
-      !(fill3 instanceof HTMLElement) ||
-      !(label instanceof HTMLElement)
-    ) return;
-    const skillId = getPlayerInputBindings(player.dexId).lmb;
-    const p = Math.max(0, Math.min(1, Number(playInputState.chargeLeft01) || 0));
-    const [p1, p2, p3] = getChargeBarProgresses(p);
-    const lvl = getChargeLevel(p);
-    // Show the meter for melee field skills (tackle/cut) + any ranged move that has
-    // a dedicated charged release (ember, waterBurst, thunder). Streamed / tap-only
-    // moves still hide the meter.
-    const canChargeFieldSkill =
-      skillId === 'tackle' || skillId === 'cut' || moveSupportsChargedRelease(skillId);
-    const shouldShow = canChargeFieldSkill && p > 0.005;
-    const moveLabel =
-      skillId === 'cut' ? 'Cut' : skillId === 'tackle' ? 'Tackle' : getBindableMoveLabel(skillId);
-    wrap.classList.toggle('hidden', !shouldShow);
-    fill1.style.width = `${Math.round(p1 * 100)}%`;
-    fill2.style.width = `${Math.round(p2 * 100)}%`;
-    fill3.style.width = `${Math.round(p3 * 100)}%`;
-    label.textContent = `${moveLabel} Charge L${lvl} ${Math.round(p * 100)}%`;
-
-    const FULL = 0.994;
-    const setBarFullGlow = (fill, easedPn) => {
-      const on = shouldShow && easedPn >= FULL;
-      fill.classList.toggle('player-field-charge__fill--full', on);
-      const seg = fill.parentElement;
-      if (seg) seg.classList.toggle('player-field-charge__segment--full', on);
-    };
-    setBarFullGlow(fill1, p1);
-    setBarFullGlow(fill2, p2);
-    setBarFullGlow(fill3, p3);
+    if (wrap instanceof HTMLElement) wrap.classList.add('hidden');
   }
 
   syncPlayPointerModeRadios() {
@@ -498,9 +686,7 @@ export class CharacterSelector {
     }
   }
 
-  getSocialOverlayElement() {
-    return this.container?.querySelector('#character-social-numpad') || null;
-  }
+
 
   async showResults(query) {
     const resultsList = this.container.querySelector('#search-results');
@@ -626,7 +812,7 @@ export class CharacterSelector {
         const label = getBindableMoveLabel(moveId);
         return {
           hudMoveId: moveId,
-          iconFile: moveId,
+          iconFile: skillIconFileForMoveId(moveId),
           hk,
           title: `${label} — slot ${hk} (segure ${digit} para trocar na roda)`,
           labelText: label

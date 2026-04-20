@@ -1001,21 +1001,6 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  /** Praia: mesmo visual que `GRASS_TILES.dirt.original` (antes overlay “Variações de Pele” no modal). */
-  "beach-dirt-turf [1x1]": {
-    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "1x1",
-    "parts": [
-      {
-        "role": "CENTER",
-        "ids": [
-          65
-        ],
-        "walkable": true,
-        "abovePlayer": false
-      }
-    ]
-  },
   "green-broadleaf-1 [3x2]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "shape": "3x2",
@@ -1582,9 +1567,9 @@ export const OBJECT_SETS = {
       }
     ]
   },
-  "vine [1x1]": {
+  "vine [2x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
-    "shape": "1x1",
+    "shape": "2x1",
     "parts": [
       {
         "role": "top",

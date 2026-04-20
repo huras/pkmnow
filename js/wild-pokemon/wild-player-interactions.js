@@ -14,6 +14,8 @@ import {
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
+import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
+import { rumblePlayerGamepadPokemonHitDealt } from '../main/play-gamepad-rumble.js';
 
 const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
 const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
@@ -91,6 +93,7 @@ export function tryPlayerFieldMoveOnTile(mx, my, data, player) {
   pushRecentNearbyEvent(best, 'player_field_move', 1.0);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.7, best);
   broadcastNearbySpeciesAllyHurt(best.x, best.y, best.dexId ?? 1, 0.78, best);
+  markWildMinimapSpeciesKnown(best);
   return { hit: true, dexId: best.dexId };
 }
 
@@ -115,7 +118,7 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
   nx /= len;
   ny /= len;
 
-  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 2);
+  const reach = Math.max(0.2, Number(player._tackleReachTiles) || 1);
   const probeReach = Math.max(0.2, reach - PLAYER_TACKLE_HIT_PROBE_BACKOFF_TILES);
   const ex = px + nx * probeReach;
   const ey = py + ny * probeReach;
@@ -141,9 +144,54 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
   const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
   if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  rumblePlayerGamepadPokemonHitDealt();
   applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
   applyWildKnockbackFromPoint(best, px, py, knockback);
+  pushRecentNearbyEvent(best, 'player_field_move', 1.18);
+  broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
+  return { hit: true, dexId: best.dexId };
+}
+
+/**
+ * Melee hit along an arbitrary segment (e.g. Flame Charge dash path). Picks the nearest wild
+ * along \([ax,ay] \to [bx,by]\) like tackle.
+ * @returns {{ hit: boolean, dexId?: number }}
+ */
+export function tryPlayerFlameChargeHitWildAlongSegment(player, data, ax, ay, bx, by, opts = {}) {
+  if (!player || !data) return { hit: false };
+  const px = Number(ax);
+  const py = Number(ay);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return { hit: false };
+  const ex = Number(bx);
+  const ey = Number(by);
+  if (!Number.isFinite(ex) || !Number.isFinite(ey)) return { hit: false };
+  const pz = Number(player.z) || 0;
+
+  let best = null;
+  let bestT = Infinity;
+  for (const e of entitiesByKey.values()) {
+    if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
+    const dex = e.dexId ?? 1;
+    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
+    const r = getPokemonHurtboxRadiusTiles(dex) + PLAYER_TACKLE_WILD_SWEEP_RADIUS;
+    const t = segmentCircleFirstHitT(px, py, ex, ey, hx, hy, r);
+    if (t == null) continue;
+    if (t < bestT) {
+      bestT = t;
+      best = e;
+    }
+  }
+  if (!best) return { hit: false };
+
+  const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
+  const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
+  if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  rumblePlayerGamepadPokemonHitDealt();
+  applyMeleeHitStop(best);
+  setEmotion(best, 5, false, 'Pain');
+  applyWildKnockbackFromPoint(best, ex, ey, knockback);
   pushRecentNearbyEvent(best, 'player_field_move', 1.18);
   broadcastNearbyPlayerEvent(best.x, best.y, 'player_field_move', 0.78, best);
   return { hit: true, dexId: best.dexId };
@@ -159,6 +207,7 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
   const py = Number(fromY);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
   if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  rumblePlayerGamepadPokemonHitDealt();
   setEmotion(entity, 5, false, 'Pain');
   applyWildKnockbackFromPoint(entity, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);
   pushRecentNearbyEvent(entity, 'player_field_move', 1.18);
@@ -168,8 +217,9 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
 
 /**
  * Circular melee hit used by field skills like Cut (and charged spin when `opts` matches).
- * @param {{ damage?: number, knockback?: number, cutWildHitSound?: boolean }} [opts]
+ * @param {{ damage?: number, knockback?: number, cutWildHitSound?: boolean, ignoreProjectileZForGroundWave?: boolean }} [opts]
  *   When `cutWildHitSound` is true, each wild hit plays Cut contact SFX (not used for tackle spin).
+ *   `ignoreProjectileZForGroundWave`: Earthquake-style floor wave — hit any wild in horizontal radius regardless of float height.
  * @returns {{ hit: boolean, hitCount: number }}
  */
 export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radiusTiles, opts = {}) {
@@ -184,11 +234,12 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_CUT_WILD_KNOCKBACK);
   const playCutHitSfx = !!opts.cutWildHitSound;
   const pz = Number(player.z) || 0;
+  const skipZ = !!opts.ignoreProjectileZForGroundWave;
   let hitCount = 0;
   for (const e of entitiesByKey.values()) {
     if ((e.spawnPhase ?? 1) < 0.5 || e.isDespawning || e.deadState) continue;
     const dex = e.dexId ?? 1;
-    if (!projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
+    if (!skipZ && !projectileZInPokemonHurtbox(pz, dex, e.z ?? 0)) continue;
     const { hx, hy } = getPokemonHurtboxCenterWorldXY(e.x, e.y, dex);
     const rr = radius + getPokemonHurtboxRadiusTiles(dex);
     const dx = hx - cx;
@@ -203,6 +254,7 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
     pushRecentNearbyEvent(e, 'player_field_move', 1.08);
     broadcastNearbyPlayerEvent(e.x, e.y, 'player_field_move', 0.72, e);
   }
+  if (hitCount > 0) rumblePlayerGamepadPokemonHitDealt();
   return { hit: hitCount > 0, hitCount };
 }
 

@@ -10,7 +10,7 @@
  * dependency cycles and keeps the moves directory decoupled from `main/*`.
  */
 
-/** @typedef {'clear' | 'cloudy' | 'rain'} WeatherPresetId */
+/** @typedef {'clear' | 'cloudy' | 'rain' | 'blizzard' | 'sandstorm'} WeatherPresetId */
 
 /** @type {WeatherPresetId | null} */
 let pendingPreset = null;
@@ -24,7 +24,13 @@ let pendingIntensity01 = null;
  * @param {number | null | undefined} intensity01
  */
 export function requestWeatherChange(preset, intensity01) {
-  if (preset === 'clear' || preset === 'cloudy' || preset === 'rain') {
+  if (
+    preset === 'clear' ||
+    preset === 'cloudy' ||
+    preset === 'rain' ||
+    preset === 'blizzard' ||
+    preset === 'sandstorm'
+  ) {
     pendingPreset = preset;
   }
   if (intensity01 != null) {

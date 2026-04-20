@@ -11,6 +11,8 @@
 
 import { grassFireTryIgniteAt } from '../play-grass-fire.js';
 import { tryApplyFireHitToFormalTreesAt } from '../main/play-crystal-tackle.js';
+import { isWorldTileOnPlayCanvas } from '../render/play-camera-snapshot.js';
+import { playFarRainLightningSfx, playNearRainLightningSfx } from '../audio/rain-lightning-sfx.js';
 
 /** Must match CLOUD_SLOT_STEP_WORLD_TILES in render-debug-world.js (duplicated to avoid import cycles). */
 const CLOUD_SLOT_STEP_WORLD_TILES = 10;
@@ -149,8 +151,11 @@ export function spawnInCloudFlashNearPlayer(playerWorldX, playerWorldY) {
  *     coming from a move-summoned storm cell that has its own visible puff and doesn't live
  *     on the procedural cloud grid.
  */
+/**
+ * @returns {boolean} true when a **new** grass burn started this frame (extended burns return false).
+ */
 export function spawnGroundStrikeAt(worldX, worldY, data, opts = {}) {
-  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return;
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return false;
   const now = performance.now();
   const color = opts.color === 'yellow' ? 'yellow' : 'default';
   const flashCloudSlot = opts.flashCloudSlot !== false;
@@ -183,12 +188,21 @@ export function spawnGroundStrikeAt(worldX, worldY, data, opts = {}) {
     cloudFlashes.set(`${sxTop},${syTop}`, now);
   }
 
+  // Rain ground strikes (default palette) — far rumble if impact is off the play canvas.
+  if (color === 'default') {
+    const onCanvas = isWorldTileOnPlayCanvas(worldX, worldY);
+    if (onCanvas === false) playFarRainLightningSfx();
+    else playNearRainLightningSfx({ x: worldX, y: worldY, z: 0 });
+  }
+
   // Ignition. Both helpers short-circuit when projType isn't recognized,
   // so they are safe to call unconditionally — the project-type set opts us in.
+  let grassIgnitedNew = false;
   if (data) {
-    grassFireTryIgniteAt(worldX, worldY, 0, 'lightningStrike', data);
+    grassIgnitedNew = !!grassFireTryIgniteAt(worldX, worldY, 0, 'lightningStrike', data);
     tryApplyFireHitToFormalTreesAt(worldX, worldY, 0, 'lightningStrike', data);
   }
+  return grassIgnitedNew;
 }
 
 /**

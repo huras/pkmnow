@@ -1,4 +1,6 @@
 import { BIOMES } from '../biomes.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
+
 
 /** Site-root-relative Suno originals (same origin as index.html). */
 const SUNO_BASE = 'audio/suno-original-bgm';
@@ -73,7 +75,17 @@ const DESERT_PACK = packFolderTracks('desert', [
 
 const GRASSLAND_PACK = packFolderTracks('plains', [
   'Wind Through the Amber Route (1).mp3',
-  'Wind Through the Amber Route.mp3'
+  'Wind Through the Amber Route.mp3',
+  '12. Route 201 (Day).mp3',
+  '13. Road to Viridian City\uA789 Leaving Pallet Town).mp3',
+  'Green Plains Journey - Plains Day A.mp3',
+  'Green Plains Journey - Plains Day B.mp3',
+  'Mossfield March - Plains Day A.mp3',
+  'Mossfield March - Plains Day B.mp3',
+  'Starfield Meadow - Plains Night A (1).mp3',
+  'Starfield Meadow - Plains Night A.mp3',
+  'Starry Plains - Plains Night A.mp3',
+  'Starry Plains - Plains Night B.mp3'
 ]);
 
 const FOREST_PACK = packFolderTracks('woods', [
@@ -162,6 +174,10 @@ export const BIOME_BGM_TRACK_URLS = Object.freeze({
   ]),
   [BIOMES.DESERT.id]: Object.freeze([...sunoFolderTracks('desert', DESERT_SUNO_FILES), ...DESERT_PACK]),
   [BIOMES.GRASSLAND.id]: Object.freeze([
+    ...sunoFolderTracks('grassland', ['010 - Route 101.mp3', '1-57. Unwavering Emotions.mp3']),
+    ...GRASSLAND_PACK
+  ]),
+  [BIOMES.FLOWER_FIELDS.id]: Object.freeze([
     ...sunoFolderTracks('grassland', ['010 - Route 101.mp3', '1-57. Unwavering Emotions.mp3']),
     ...GRASSLAND_PACK
   ]),
@@ -265,5 +281,7 @@ export const BIOME_BGM_TRACK_URLS = Object.freeze({
  * @returns {readonly string[] | undefined}
  */
 export function getBiomeBgmUrlsForBiome(biomeId) {
+  const mod = PluginRegistry.getBiomeById(biomeId);
+  if (mod?.bgm) return Array.isArray(mod.bgm) ? mod.bgm : [mod.bgm];
   return BIOME_BGM_TRACK_URLS[biomeId];
 }

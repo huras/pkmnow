@@ -21,6 +21,120 @@ function queueFieldSpinWindTextureLoad() {
   });
 }
 
+/**
+ * Wind-arc FX for Prismatic Laser (ported from Zelda `PrismaticLaser.drawArcParticles`).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} p
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ */
+function drawSteelWindArcParticle(ctx, p, tileW, tileH, snapPx) {
+  const elapsed = p.maxLife - p.life;
+  const absZ = (p.heightStep || 0) + (p.z || 0);
+  const cx = snapPx(p.centerX * tileW);
+  const cy = snapPx(p.centerY * tileH - absZ * tileH);
+  const fade = Math.max(0, p.life / Math.max(1e-4, p.maxLife));
+  const lineA = fade * (p.lineAlphaMul ?? 0.48);
+  const r = (p.ellipseRPx ?? 6) * fade;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(220,228,238,${fade * 0.5})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(235,242,252,${lineA})`;
+  ctx.lineWidth = (p.lineWidth ?? 5) * fade;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const segments = 12;
+  const baseWidth = (p.lineWidth ?? 5) * fade;
+  
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  for (let i = 1; i <= segments; i++) {
+    const u = i / segments;
+    const t = elapsed - u * 0.15;
+    if (t < 0) break;
+    const tx = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * t;
+    const ty = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * t;
+    
+    const perp = p.arcAngle + Math.PI / 2;
+    const sweep = Math.sin(t * 8 + u * 3) * (p.arcLength * tileW * 0.15) * fade;
+    const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3) * (1 - u);
+    
+    const x = snapPx(tx * tileW);
+    const y = snapPx(ty * tileH - absZ * tileH);
+    
+    const targetX = x + Math.cos(perp) * (curvePx + sweep);
+    const targetY = y + Math.sin(perp) * (curvePx + sweep);
+    
+    ctx.lineWidth = baseWidth * (1 - u * 0.85);
+    ctx.strokeStyle = `rgba(235,242,252,${lineA * (1 - u)})`;
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(targetX, targetY);
+  }
+  ctx.restore();
+}
+
+function drawPrismaticWindArcParticle(ctx, p, tileW, tileH, snapPx) {
+  const elapsed = p.maxLife - p.life;
+  const absZ = (p.heightStep || 0) + (p.z || 0);
+  const cx = snapPx(p.centerX * tileW);
+  const cy = snapPx(p.centerY * tileH - absZ * tileH);
+  
+  const fade = Math.max(0, p.life / Math.max(1e-4, p.maxLife));
+  const lineA = fade * (p.lineAlphaMul ?? 0.45);
+  const r = (p.ellipseRPx ?? 6) * fade;
+
+  ctx.save();
+  // Head dot
+  ctx.fillStyle = `rgba(255,255,255,${fade * 0.6})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Procedural trail
+  ctx.strokeStyle = `rgba(255,255,255,${lineA})`;
+  ctx.lineWidth = (p.lineWidth ?? 4) * fade;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  const segments = 12;
+  const baseWidth = (p.lineWidth ?? 4) * fade;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  for (let i = 1; i <= segments; i++) {
+    const u = i / segments;
+    const t = elapsed - u * 0.12; 
+    if (t < 0) break;
+    const tx = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * t;
+    const ty = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * t;
+    
+    const perp = p.arcAngle + Math.PI / 2;
+    const sweep = Math.sin(t * 10 + u * 4) * (p.arcLength * tileW * 0.12) * fade;
+    const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3) * (1 - u);
+    
+    const x = snapPx(tx * tileW);
+    const y = snapPx(ty * tileH - absZ * tileH);
+    
+    const targetX = x + Math.cos(perp) * (curvePx + sweep);
+    const targetY = y + Math.sin(perp) * (curvePx + sweep);
+    
+    ctx.lineWidth = baseWidth * (1 - u * 0.9);
+    ctx.strokeStyle = `rgba(255,255,255,${lineA * (1 - u)})`;
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(targetX, targetY);
+  }
+  ctx.restore();
+}
+
 function psychicCutAlternatingPalette(p) {
   const nowMs = performance.now();
   const seed = ((Number(p?.x) || 0) + (Number(p?.y) || 0)) * 37;
@@ -37,8 +151,95 @@ function psychicCutAlternatingPalette(p) {
  * @param {object} p
  */
 export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
+  if (p.type === 'steelWindArc') {
+    drawSteelWindArcParticle(ctx, p, tileW, tileH, snapPx);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.type === 'prismaticWindArc') {
+    drawPrismaticWindArcParticle(ctx, p, tileW, tileH, snapPx);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.type === 'steelLaserSpark') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
+    const px = snapPx(p.x * tileW);
+    const py = snapPx(p.y * tileH - absZ * tileH);
+    const a = Math.max(0, p.life / p.maxLife);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a * 0.88;
+    const tint = String(p.tint || '#e8eef5');
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.075) * (0.35 + 0.65 * a), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.type === 'prismaticLaserSpark') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
+    const px = snapPx(p.x * tileW);
+    const py = snapPx(p.y * tileH - absZ * tileH);
+    const a = Math.max(0, p.life / p.maxLife);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = a * 0.92;
+    const tint = String(p.tint || '#ffffff');
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, tileW * 0.07) * (0.35 + 0.65 * a), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.type === 'waterGunWaveRing') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
+    const px = snapPx(p.x * tileW);
+    const py = snapPx(p.y * tileH - absZ * tileH);
+    const life01 = Math.max(0, Math.min(1, p.life / Math.max(1e-4, p.maxLife)));
+    const elapsed = 1 - life01;
+    const ri = Number(p.ringIndex) || 0;
+    const lag = ri * 0.14;
+    const u = Math.max(0, Math.min(1, (elapsed - lag) / (0.55 + lag * 0.2)));
+    if (u <= 0.01) {
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const fade = Math.max(0.08, 1 - elapsed * 0.85);
+    const spanTiles = (Number(p.maxSpanTiles) || 3) * u;
+    const span = Math.max(12, spanTiles * tileW);
+    queueFieldSpinWindTextureLoad();
+    const windImg = imageCache.get(FIELD_SPIN_WIND_TEX);
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate((p.rot0 || 0) + performance.now() * 0.0028 + ri * 0.35);
+    const prevComp = ctx.globalCompositeOperation;
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = prevAlpha * fade * 0.72;
+    if (windImg?.naturalWidth) {
+      ctx.filter = 'hue-rotate(185deg) saturate(2.6) brightness(1.12)';
+      ctx.drawImage(windImg, -span * 0.5, -span * 0.5, span, span);
+      ctx.filter = 'none';
+    } else {
+      ctx.strokeStyle = `rgba(120,200,255,${fade * 0.55})`;
+      ctx.lineWidth = Math.max(2, tileW * 0.06);
+      ctx.beginPath();
+      ctx.arc(0, 0, span * 0.48, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = prevComp;
+    ctx.globalAlpha = prevAlpha;
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
+  const absZ = (p.heightStep || 0) + (p.z || 0);
   const px = snapPx(p.x * tileW);
-  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+  const py = snapPx(p.y * tileH - absZ * tileH);
   const a = Math.max(0, p.life / p.maxLife);
   ctx.globalAlpha = a;
   if (p.type === 'burst') {
@@ -79,6 +280,31 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
       ctx.arc(px, py, Math.max(4, tileW * 0.22) * a, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (p.type === 'flameChargeTrail' || p.type === 'flameChargeHead') {
+    const tier = Number(p.tier) || 2;
+    const head = p.type === 'flameChargeHead';
+    const r = (head ? tileW * 0.16 : tileW * 0.11) * (0.55 + 0.45 * a) * (tier === 3 ? 1.12 : tier === 2 ? 1.04 : 1);
+    const grd = ctx.createRadialGradient(px - r * 0.2, py - r * 0.25, r * 0.05, px, py, r);
+    grd.addColorStop(0, head ? 'rgba(255,255,220,0.95)' : 'rgba(255,240,180,0.88)');
+    grd.addColorStop(0.45, 'rgba(255,120,40,0.72)');
+    grd.addColorStop(1, 'rgba(180,20,0,0.08)');
+    ctx.fillStyle = grd;
+    ctx.globalAlpha = Math.min(1, a * (head ? 1.05 : 0.92));
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  } else if (p.type === 'fireSpinSpark') {
+    const s = Math.max(0.25, Math.min(1.2, Number(p.size01) || 0.6));
+    const r = Math.max(1.5, tileW * 0.07 * s) * (0.45 + 0.55 * a);
+    const grd = ctx.createRadialGradient(px - r * 0.15, py - r * 0.2, r * 0.04, px, py, r);
+    grd.addColorStop(0, `rgba(255,255,200,${0.55 * a})`);
+    grd.addColorStop(0.5, `rgba(255,140,40,${0.5 * a})`);
+    grd.addColorStop(1, `rgba(200,40,0,${0.08 * a})`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
   } else if (p.type === 'emberTrail') {
     ctx.fillStyle = '#ffa200';
     ctx.beginPath();
@@ -88,6 +314,17 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.fillStyle = '#b8ecff';
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.1) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'waterCannonBubble') {
+    const br = Math.max(1.5, (Number(p.bubbleR) || 0.1) * tileW * (0.55 + 0.45 * a));
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + 0.45 * a})`;
+    ctx.lineWidth = Math.max(1, tileW * 0.028);
+    ctx.beginPath();
+    ctx.arc(px, py, br, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(248,252,255,${0.12 + 0.35 * a})`;
+    ctx.beginPath();
+    ctx.arc(px, py, br * 0.55, 0, Math.PI * 2);
     ctx.fill();
   } else if (p.type === 'rainFootSplash') {
     // Growing upward-opening crown (matches debug rain-splash look). Stays in place;
@@ -128,6 +365,12 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.fillStyle = `hsla(${hue}, 92%, 68%, ${0.35 + 0.55 * a})`;
     ctx.beginPath();
     ctx.arc(px, py, Math.max(2, tileW * 0.095) * a, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.type === 'steelLaserTrail') {
+    const glint = 0.4 + 0.6 * Math.sin(performance.now() * 0.004 + (p.x + p.y) * 6);
+    ctx.fillStyle = `rgba(220,232,248,${(0.32 + 0.48 * a) * glint})`;
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2.2, tileW * 0.1) * a, 0, Math.PI * 2);
     ctx.fill();
   } else if (p.type === 'fieldCutVineArc') {
     const t = 1 - a;
@@ -200,6 +443,39 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.lineWidth = Math.max(1.3, tileW * (psychic ? 0.05 : 0.038));
     ctx.lineJoin = 'round';
     ctx.stroke();
+    ctx.restore();
+  } else if (p.type === 'fieldCutScratchArc') {
+    const t = 1 - a;
+    const ease = 1 - (1 - t) * (1 - t);
+    const arcRad = ((Number(p.arcDeg) || 100) * Math.PI) / 180;
+    const half = arcRad * 0.5;
+    const r = Math.max(tileW * 0.45, (Number(p.radiusTiles) || 1.4) * Math.min(tileW, tileH));
+    const heading = Number(p.headingRad) || 0;
+    const outerR = r * (0.9 + 0.2 * ease);
+    const innerR = outerR * 0.85;
+    const tipInset = half * 0.15;
+    
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(heading);
+    
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + 0.5 * a})`;
+    ctx.strokeStyle = `rgba(240, 240, 240, ${0.4 + 0.6 * a})`;
+    ctx.lineWidth = Math.max(1, tileW * 0.02);
+    
+    const offsets = [-0.2, 0, 0.2];
+    for (const offset of offsets) {
+      const oR = outerR * (1 + offset);
+      const iR = innerR * (1 + offset);
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, oR, -half, half);
+      ctx.arc(0, 0, iR, half - tipInset, -half + tipInset, true);
+      ctx.closePath();
+      
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.restore();
   } else if (p.type === 'fieldSpinAttack') {
     const t = 1 - a;
@@ -283,6 +559,49 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
         ctx.globalAlpha = prevAlpha;
         ctx.restore();
       }
+    }
+    ctx.restore();
+  } else if (p.type === 'absorbChargeParticle') {
+    const speed = Math.hypot(p.vx, p.vy);
+    const alpha = (0.3 + 0.5 * a);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    // Proper trail: efficient procedural ribbon
+    if (speed > 0.1) {
+      const ang = Math.atan2(p.vy, p.vx);
+      const headR = Math.max(2.5, tileW * 0.08) * a;
+      
+      // Draw head
+      ctx.fillStyle = '#b4ff8c';
+      ctx.beginPath();
+      ctx.ellipse(px, py, headR + 1, headR * 0.6, ang, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw trailing tail
+      ctx.strokeStyle = '#8cf476';
+      ctx.lineWidth = headR * 1.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      
+      const trailSegs = 4;
+      for (let i = 1; i <= trailSegs; i++) {
+        const u = i / trailSegs;
+        const tx = p.x - p.vx * 0.06 * u;
+        const ty = p.y - p.vy * 0.06 * u;
+        const tpx = snapPx(tx * tileW);
+        const tpy = snapPx(ty * tileH - (p.z || 0) * tileH);
+        
+        ctx.lineWidth = headR * 1.5 * (1 - u);
+        ctx.lineTo(tpx, tpy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#b4ff8c';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2, tileW * 0.06) * a, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   } else {

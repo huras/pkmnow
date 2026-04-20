@@ -16,6 +16,8 @@ export const RAIN_DANCE_TARGET_INTENSITY = 0.82;
 /** Sunny Day pushes intensity high for the `clear` preset so the cloud-threshold ramp
  *  clamps clouds to their sparsest reading (threshold 0.78). */
 export const SUNNY_DAY_TARGET_INTENSITY = 1;
+/** Target intensity when Blizzard is cast — full howl + max precip from the blizzard preset curve. */
+export const BLIZZARD_TARGET_INTENSITY = 1;
 
 /**
  * Queue a transition to the `rain` preset at {@link RAIN_DANCE_TARGET_INTENSITY}.
@@ -34,5 +36,14 @@ export function castRainDance() {
  */
 export function castSunnyDay() {
   requestWeatherChange('clear', SUNNY_DAY_TARGET_INTENSITY);
+  return true;
+}
+
+/**
+ * Queue a transition to the `blizzard` preset (heavy snow-storm look: dense clouds, high wind,
+ * strong precip using the existing rain field + icy screen tint).
+ */
+export function castBlizzard() {
+  requestWeatherChange('blizzard', BLIZZARD_TARGET_INTENSITY);
   return true;
 }

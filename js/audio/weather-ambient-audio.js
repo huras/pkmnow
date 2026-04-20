@@ -19,7 +19,7 @@
 
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
 import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
-import { getWeatherRainIntensity } from '../main/weather-state.js';
+import { getWeatherRainIntensity, getWeatherSandstormBlend01 } from '../main/weather-state.js';
 import { getWindBaseIntensity, getWindGust } from '../main/wind-state.js';
 
 const TUNING = {
@@ -248,8 +248,12 @@ export function syncWeatherAmbientAudio() {
   const windGust = clamp01(getWindGust());
   const windFelt = windBase * windGust;
   const windSpan = Math.max(0.001, 1 - TUNING.windMinIntensity);
-  const windUnit =
+  let windUnit =
     windFelt <= TUNING.windMinIntensity ? 0 : clamp01((windFelt - TUNING.windMinIntensity) / windSpan);
+  const sand = clamp01(getWeatherSandstormBlend01());
+  if (sand > 0.04) {
+    windUnit = clamp01(windUnit + sand * 0.42 * (1 - windUnit * 0.35));
+  }
   updateLayer(/** @type {AmbientLayer} */ (windLayer), windUnit, TUNING.windMasterLinearGain);
 }
 

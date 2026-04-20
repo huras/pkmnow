@@ -201,9 +201,25 @@ export function sampleWorldDangerEscapeAngle(x, y, data) {
   return Math.atan2(vy, vx);
 }
 
-const FIRE_PROJECTILES = new Set(['ember', 'flamethrowerShot', 'incinerateCore', 'incinerateShard']);
-const WATER_PROJECTILES = new Set(['waterShot', 'waterGunShot', 'bubbleShot', 'bubbleBeamShot', 'waterBurstShot']);
-const ELECTRIC_PROJECTILES = new Set(['prismaticShot']);
+const FIRE_PROJECTILES = new Set([
+  'ember',
+  'flamethrowerShot',
+  'fireSpinBurst',
+  'incinerateCore',
+  'incinerateShard',
+  'fireBlastCore',
+  'fireBlastShard'
+]);
+const WATER_PROJECTILES = new Set([
+  'waterShot',
+  'waterGunShot',
+  'waterGunBall',
+  'bubbleShot',
+  'bubbleBeamShot',
+  'waterBurstShot',
+  'waterCannonShot'
+]);
+const ELECTRIC_PROJECTILES = new Set(['prismaticShot', 'thunderBoltArc']);
 
 export function emitWorldReactionFromProjectile(proj, data, x, y) {
   if (!EXPERIMENT_WORLD_REACTIONS_V1 || !proj || !data) return;

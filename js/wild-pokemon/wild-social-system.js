@@ -5,6 +5,7 @@ import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { clamp, entitiesByKey } from './wild-core-state.js';
 import { setEmotion } from './wild-motion-ai.js';
 import { setWildSpeechBubble } from '../social/speech-bubble-state.js';
+import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 
 const WILD_SOCIAL_INTERACTION_RADIUS = 9.0;
 const WILD_SOCIAL_RIPPLE_RADIUS = 14.0;
@@ -374,6 +375,7 @@ function applySocialReactionToWild(entity, action, player, influence) {
   );
 
   memory.reactionCooldown = WILD_SOCIAL_REACTION_COOLDOWN_SEC;
+  markWildMinimapSpeciesKnown(entity);
   return true;
 }
 

@@ -2,7 +2,9 @@ import { OBJECT_SETS } from '../tessellation-data.js';
 import { parseShape, seededHash } from '../tessellation-logic.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
-import { setPlayerSpeechBubbleForDetailPickup } from '../social/speech-bubble-state.js';
+import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
+import { rumblePlayerGamepadPickupSoft } from './play-gamepad-rumble.js';
+import { notifyPlayDetailItemPickupFeedback } from './play-item-pickup-feedback.js';
 
 /** Ground pickup radius for dropped crystal items (tiles). */
 const CRYSTAL_DROP_PICK_RADIUS_TILES = 1.35;
@@ -169,6 +171,31 @@ export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
   });
 }
 
+/**
+ * Break visible crystal pickups in a world-tile radius (Earthquake etc.).
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} radiusTiles
+ * @param {object | null} data
+ */
+export function shatterCrystalDropsInRadius(cx, cy, radiusTiles, data) {
+  if (!data) return;
+  const px = Number(cx);
+  const py = Number(cy);
+  const r = Math.max(0.05, Number(radiusTiles) || 0);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+  const r2 = r * r;
+  for (let i = activeCrystalDrops.length - 1; i >= 0; i--) {
+    const d = activeCrystalDrops[i];
+    const dx = Number(d.x) - px;
+    const dy = Number(d.y) - py;
+    if (dx * dx + dy * dy > r2) continue;
+    playRockSmashingSfx({ x: d.x, y: d.y });
+    spawnCrystalShards(Math.floor(d.x), Math.floor(d.y), String(d.itemKey || 'small-blue-crystal [1x1]'), data);
+    activeCrystalDrops.splice(i, 1);
+  }
+}
+
 export function spawnCrystalShards(rootOx, rootOy, itemKey, data) {
   const objSet = OBJECT_SETS[itemKey];
   if (!objSet) return;
@@ -259,7 +286,8 @@ export function updateCrystalDropsAndPickup(dt, player) {
         collectedDetailInventory.set(key, (collectedDetailInventory.get(key) || 0) + stack);
         if (isCrystalItemKey(key)) crystalLootCount += stack;
         playItemPickupSfx(player);
-        setPlayerSpeechBubbleForDetailPickup(player, key, stack);
+        rumblePlayerGamepadPickupSoft();
+        notifyPlayDetailItemPickupFeedback(player, key, stack);
         activeCrystalDrops.splice(i, 1);
       }
       continue;
@@ -293,4 +321,61 @@ export function getCollectedDetailInventorySnapshot() {
   }
   out.sort((a, b) => b.count - a.count || a.itemKey.localeCompare(b.itemKey));
   return out;
+}
+
+/**
+ * Replaces session inventory from a persisted snapshot (e.g. play resume).
+ * @param {Array<{ itemKey?: string, count?: number }> | null | undefined} rows
+ */
+export function restoreCollectedDetailInventoryFromSnapshot(rows) {
+  collectedDetailInventory.clear();
+  crystalLootCount = 0;
+  if (!Array.isArray(rows)) return;
+  for (const row of rows) {
+    const k = String(row?.itemKey || '');
+    const c = Math.max(0, row?.count | 0);
+    if (!k || c <= 0) continue;
+    collectedDetailInventory.set(k, c);
+  }
+  for (const [k, c] of collectedDetailInventory.entries()) {
+    if (isCrystalItemKey(k)) crystalLootCount += Math.max(0, c | 0);
+  }
+}
+
+/** `data-inventory-drag` value for the aggregated “Crystal Shards” HUD row. */
+export const PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE = '__pkmn_crystal_shards__';
+
+function spendOneUnitForItemKey(itemKey) {
+  const key = String(itemKey || '');
+  const prev = collectedDetailInventory.get(key) ?? 0;
+  if (prev <= 0) return false;
+  const next = prev - 1;
+  if (next <= 0) collectedDetailInventory.delete(key);
+  else collectedDetailInventory.set(key, next);
+  if (isCrystalItemKey(key)) crystalLootCount = Math.max(0, (crystalLootCount | 0) - 1);
+  return true;
+}
+
+/**
+ * Removes one inventory unit so it can be spawned as a ground pickup. Crystal HUD uses
+ * {@link PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}: picks a concrete crystal `itemKey` with stock.
+ * @param {string} tokenOrItemKey
+ * @returns {{ itemKey: string } | null}
+ */
+export function trySpendOneInventoryUnitForGroundDrop(tokenOrItemKey) {
+  const raw = String(tokenOrItemKey || '');
+  if (raw === PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE) {
+    if ((crystalLootCount | 0) <= 0) return null;
+    const keys = [];
+    for (const [k, c] of collectedDetailInventory.entries()) {
+      if ((c | 0) > 0 && isCrystalItemKey(k)) keys.push(String(k));
+    }
+    keys.sort();
+    for (const k of keys) {
+      if (spendOneUnitForItemKey(k)) return { itemKey: k };
+    }
+    return null;
+  }
+  if (!spendOneUnitForItemKey(raw)) return null;
+  return { itemKey: raw };
 }

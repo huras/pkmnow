@@ -1,0 +1,153 @@
+/* Dual gamepad bind wheels: type (left) + move (right), slow-mo backdrop */
+.play-dual-bind-wheel {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.play-dual-bind-wheel.hidden {
+  display: none !important;
+}
+
+.play-dual-bind-wheel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.play-dual-bind-wheel__layout {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 4vw, 48px);
+  width: 100%;
+  max-width: min(1200px, 96vw);
+  padding: 12px;
+}
+
+.play-dual-bind-wheel__panel {
+  flex: 1 1 42%;
+  max-width: min(420px, 46vw);
+  background: rgba(18, 22, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 10px 12px 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.play-dual-bind-wheel__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.play-dual-bind-wheel__subtitle {
+  font-size: 0.72rem;
+  color: rgba(200, 210, 230, 0.75);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.play-dual-bind-wheel__ring {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: min(52vh, 380px);
+  margin: 0 auto;
+}
+
+.play-dual-bind-wheel__slice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  height: 10%;
+  transform-origin: 50% 50%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02));
+  border-radius: 4px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.play-dual-bind-wheel__center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 38%;
+  min-width: 88px;
+  max-width: 140px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.play-dual-bind-wheel__center-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.15;
+}
+
+.play-dual-bind-wheel__center-type {
+  font-size: 0.65rem;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.play-dual-bind-wheel__hint {
+  font-size: 0.62rem;
+  color: rgba(180, 190, 210, 0.85);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.play-dual-bind-wheel__item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 52px;
+  max-width: 92px;
+  padding: 4px 6px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(40, 48, 62, 0.92);
+  color: #eef2ff;
+  cursor: default;
+  line-height: 1.1;
+}
+
+.play-dual-bind-wheel__item.is-hover {
+  outline: 2px solid rgba(120, 200, 255, 0.85);
+  box-shadow: 0 0 12px rgba(100, 180, 255, 0.35);
+}
+
+/* Reuse type tint classes from attack-wheel.css where loaded */
+.play-dual-bind-wheel__item.type-fire { border-color: rgba(255, 68, 68, 0.45); background: rgba(85, 20, 20, 0.88); }
+.play-dual-bind-wheel__item.type-water { border-color: rgba(68, 136, 255, 0.45); background: rgba(20, 45, 85, 0.88); }
+.play-dual-bind-wheel__item.type-grass { border-color: rgba(68, 255, 68, 0.45); background: rgba(20, 85, 20, 0.88); }
+.play-dual-bind-wheel__item.type-electric { border-color: rgba(255, 255, 68, 0.45); background: rgba(85, 85, 20, 0.88); }
+.play-dual-bind-wheel__item.type-ground { border-color: rgba(214, 181, 90, 0.5); background: rgba(72, 56, 28, 0.88); }
+.play-dual-bind-wheel__item.type-steel { border-color: rgba(180, 195, 210, 0.5); background: rgba(52, 62, 74, 0.9); }
+.play-dual-bind-wheel__item.type-psychic { border-color: rgba(255, 68, 255, 0.45); background: rgba(85, 20, 85, 0.88); }
+.play-dual-bind-wheel__item.type-ice { border-color: rgba(68, 255, 255, 0.45); background: rgba(20, 85, 85, 0.88); }
+.play-dual-bind-wheel__item.type-poison { border-color: rgba(187, 68, 255, 0.45); background: rgba(62, 20, 85, 0.88); }
+.play-dual-bind-wheel__item.type-bug { border-color: rgba(170, 187, 34, 0.45); background: rgba(56, 62, 11, 0.88); }
+.play-dual-bind-wheel__item.type-dragon { border-color: rgba(102, 51, 255, 0.45); background: rgba(34, 17, 85, 0.88); }
+.play-dual-bind-wheel__item.type-ghost { border-color: rgba(119, 119, 187, 0.45); background: rgba(39, 39, 62, 0.88); }
+.play-dual-bind-wheel__item.type-normal { border-color: rgba(170, 170, 153, 0.45); background: rgba(56, 56, 51, 0.88); }
+.play-dual-bind-wheel__item.type-flying { border-color: rgba(136, 153, 255, 0.45); background: rgba(45, 51, 85, 0.88); }

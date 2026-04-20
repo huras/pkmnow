@@ -25,6 +25,33 @@ const DEX_OVERRIDE = new Map([
   [63, 'confusion'],
   [150, 'prismaticLaser'],
   [151, 'prismaticLaser'],
+  [249, 'prismaticLaser'],
+  [250, 'prismaticLaser'],
+  [251, 'prismaticLaser'],
+  [377, 'prismaticLaser'],
+  [378, 'prismaticLaser'],
+  [379, 'prismaticLaser'],
+  [380, 'prismaticLaser'],
+  [381, 'prismaticLaser'],
+  [382, 'prismaticLaser'],
+  [383, 'prismaticLaser'],
+  [384, 'prismaticLaser'],
+  [385, 'prismaticLaser'],
+  [386, 'prismaticLaser'],
+  [480, 'prismaticLaser'],
+  [481, 'prismaticLaser'],
+  [482, 'prismaticLaser'],
+  [483, 'prismaticLaser'],
+  [484, 'prismaticLaser'],
+  [485, 'prismaticLaser'],
+  [486, 'prismaticLaser'],
+  [487, 'prismaticLaser'],
+  [488, 'prismaticLaser'],
+  [489, 'prismaticLaser'],
+  [490, 'prismaticLaser'],
+  [491, 'prismaticLaser'],
+  [492, 'prismaticLaser'],
+  [493, 'prismaticLaser'],
   [7, 'bubble'],
   [8, 'waterGun'],
   [9, 'waterGun'],
@@ -72,6 +99,9 @@ export function resolveWildMoveIdForDex(dexId) {
   if (types.includes('fire')) return 'flamethrower';
   if (types.includes('water')) return 'waterBurst';
   if (types.includes('psychic')) return 'confusion';
+  if (types.includes('steel')) return 'incinerate';
+  if (types.includes('dark')) return 'incinerate';
+  if (types.includes('fairy')) return 'bubble';
   if (types.includes('poison') || types.includes('bug')) return 'poisonSting';
   return 'poisonSting';
 }

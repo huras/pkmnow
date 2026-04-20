@@ -22,6 +22,23 @@ import {
 import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-config.js';
 
+/** Copas assadas: espelha o tilt +θ para o bin esquerdo (eixo em px/py). */
+function drawCanopyWithWindFlip(ctx, canvas, px, py, ox, oy, flipX, snapPx) {
+  const left = snapPx(px - ox);
+  const top = snapPx(py - oy);
+  if (!flipX) {
+    ctx.drawImage(canvas, left, top);
+    return;
+  }
+  const pivotX = snapPx(px);
+  ctx.save();
+  ctx.translate(pivotX, 0);
+  ctx.scale(-1, 1);
+  ctx.translate(-pivotX, 0);
+  ctx.drawImage(canvas, left, top);
+  ctx.restore();
+}
+
 const DROP_GLOW_TEXTURE_PATH = 'vfx/ETF_Texture_Sparkle_02.png';
 const DROP_GLOW_PERIOD_SEC = 3;
 const DROP_GLOW_DURATION_SEC = 0.5;
@@ -127,7 +144,7 @@ export function drawScatter(ctx, item, options) {
     // Draw Top (Canopy)
     if (topPart && !isCharred) {
       const wind = item.windSway; // passed in renderItems or helper
-      const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+      const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
         canopyAnimTime,
         itemKey,
         originX,
@@ -142,7 +159,7 @@ export function drawScatter(ctx, item, options) {
       );
       const px = snapPx(originX * tileW + (cols * tileW) / 2);
       const py = snapPx(originY * tileH + tileH);
-      ctx.drawImage(scCan, px - scOx, py - scOy);
+      drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
     }
     // Draw Burning
     if (isBurning) {
@@ -224,7 +241,7 @@ export function drawTree(ctx, item, options) {
   }
 
   if (!isDestroyed && ids.top) {
-    const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+    const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       canopyAnimTime,
       treeType,
       originX,
@@ -237,7 +254,7 @@ export function drawTree(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + tileW);
     const py = snapPx(originY * tileH + tileH);
-    ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+    drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
   }
 
   if (isBurning) {
@@ -445,11 +462,9 @@ export function drawStrengthThrowFaintedWild(ctx, item, options) {
   let sh;
   let animCols;
   if (isRolling && wTumble && sheet === wTumble) {
-    const walkMeta = getDexAnimSlice(dex, 'walk');
-    const frameW = Math.max(1, Number(walkMeta?.frameWidth) || 32);
-    animCols = Math.max(1, Math.floor((sheet.naturalWidth || frameW) / frameW));
-    sw = Math.max(1, Math.floor((sheet.naturalWidth || frameW * animCols) / animCols));
-    sh = Math.max(1, Number(sheet.naturalHeight) || Number(walkMeta?.frameHeight) || 40);
+    const tumbleMeta = getDexAnimSlice(dex, 'tumble');
+    const specSlice = tumbleMeta ? 'tumble' : 'walk';
+    ({ sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, specSlice));
   } else {
     ({ sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, animSlice));
   }
@@ -462,7 +477,14 @@ export function drawStrengthThrowFaintedWild(ctx, item, options) {
   let frame = 0;
   if (isRolling) {
     if (wTumble && sheet === wTumble) {
-      frame = Math.floor((Number(item.rollAge) || 0) * 18) % Math.max(1, animCols);
+      const tumbleSeq = getDexAnimSlice(dex, 'tumble')?.durations;
+      if (tumbleSeq?.length) {
+        const total = tumbleSeq.reduce((a, b) => a + b, 0);
+        const tick = ((Number(item.rollAge) || 0) * 60 * 1.9) % Math.max(1, total);
+        frame = pickAnimFrame(tumbleSeq, tick);
+      } else {
+        frame = Math.floor((Number(item.rollAge) || 0) * 18) % Math.max(1, animCols);
+      }
     } else {
       const seq = getDexAnimSlice(dex, 'walk')?.durations || [8, 10, 8, 10];
       const total = seq.reduce((a, b) => a + b, 0);
@@ -709,6 +731,79 @@ export function drawStrengthThrowAimPreview(ctx, item, options) {
 }
 
 /**
+ * Handles drawing of the default Strength throw target ring on ground (no active aim input).
+ */
+export function drawStrengthThrowIdleTarget(ctx, item, options) {
+  const { snapPx, tileW, tileH } = options;
+  const lc = snapPx(item.landX * tileW);
+  const lg = snapPx(item.landY * tileH);
+  const footprint = Math.max(1, Math.hypot(Number(item.cols) || 1, Number(item.rows) || 1));
+  const cr = Math.max(tileW * 0.3, footprint * tileW * 0.2);
+  ctx.save();
+  ctx.fillStyle = 'rgba(140, 210, 255, 0.1)';
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 225, 255, 0.86)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(lc, lg, cr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/**
+ * Shows the active move target for a wild group leader while it is in ROAM.
+ */
+export function drawWildLeaderRoamTarget(ctx, item, options) {
+  const { snapPx, tileW, tileH, time = 0 } = options;
+  const tx = Number(item?.targetX);
+  const ty = Number(item?.targetY);
+  if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+
+  const sx = snapPx((Number(item.x) + 0.5) * tileW);
+  const sy = snapPx((Number(item.y) + 0.5) * tileH);
+  const cx = snapPx((tx + 0.5) * tileW);
+  const cy = snapPx((ty + 0.5) * tileH);
+  const pulse = 0.5 + 0.5 * Math.sin(time * 7.2);
+  const ringR = Math.max(5, tileW * (0.24 + pulse * 0.06));
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 224, 132, 0.95)';
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(cx, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = 'rgba(255, 208, 100, 0.14)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 184, 88, 0.95)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const cross = ringR * 0.56;
+  ctx.strokeStyle = 'rgba(255, 241, 188, 0.92)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(cx - cross, cy);
+  ctx.lineTo(cx + cross, cy);
+  ctx.moveTo(cx, cy - cross);
+  ctx.lineTo(cx, cy + cross);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * Handles drawing of the psybeam charge ball.
  */
 export function drawPsybeamChargeBall(ctx, item, options) {
@@ -784,7 +879,7 @@ export function drawTreeTopFall(ctx, item, options) {
     if (!ids?.top?.length || alpha < 0.02) return;
     ctx.save();
     ctx.globalAlpha = ga * alpha;
-    const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+    const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       0,
       treeType,
       originX,
@@ -797,7 +892,7 @@ export function drawTreeTopFall(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + tileW);
     const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-    ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+    drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
     ctx.restore();
     return;
   }
@@ -813,7 +908,7 @@ export function drawTreeTopFall(ctx, item, options) {
     if (!img) return;
     ctx.save();
     ctx.globalAlpha = ga * alpha;
-    const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+    const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
       0,
       itemKey,
       originX,
@@ -828,7 +923,7 @@ export function drawTreeTopFall(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + (cols * tileW) / 2);
     const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-    ctx.drawImage(scCan, px - scOx, py - scOy);
+    drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
     ctx.restore();
     return;
   }

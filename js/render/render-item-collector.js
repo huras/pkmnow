@@ -1,16 +1,12 @@
 import { OBJECT_SETS } from '../tessellation-data.js';
-import { seededHash, parseShape } from '../tessellation-logic.js';
+import { parseShape } from '../tessellation-logic.js';
 import {
-  BIOME_VEGETATION,
-  getTreeType,
-  TREE_DENSITY_THRESHOLD,
-  TREE_NOISE_SCALE,
   isSortableScatter,
-  tileSurfaceAllowsScatterVegetation,
   scatterHasWindSway
 } from '../biome-tiles.js';
-import { MACRO_TILE_STRIDE, foliageDensity, foliageType } from '../chunking.js';
-import { validScatterOriginMicro, scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
+import { MACRO_TILE_STRIDE } from '../chunking.js';
+import { PLAY_CHUNK_SIZE } from './render-constants.js';
+import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { getWildPokemonEntities } from '../wild-pokemon/index.js';
 import { activeProjectiles, activeParticles } from '../moves/moves-manager.js';
 import {
@@ -34,6 +30,7 @@ import {
   sampleStrengthThrowAimArc
 } from '../main/thrown-map-detail-entities.js';
 import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
+import { getStaticEntitiesForChunk } from './static-entity-cache.js';
 import { aimAtCursor } from '../main/play-mouse-combat.js';
 import { wildSexHudLabel } from '../pokemon/pokemon-sex.js';
 import { defaultPortraitSlugForBalloon } from '../pokemon/spritecollab-portraits.js';
@@ -57,6 +54,16 @@ import {
 } from '../wild-pokemon/underground-burrow.js';
 import { isGhostPhaseShiftBurrowEligibleDex } from '../wild-pokemon/ghost-phase-shift.js';
 import { speciesHasFlyingType } from '../pokemon/pokemon-type-helpers.js';
+import { markWildMinimapSpeciesKnown } from '../wild-pokemon/wild-minimap-species-known.js';
+
+
+function facingUnitFromPlayer(player) {
+  const f = String(player?.facing || 'down');
+  if (f === 'up') return { nx: 0, ny: -1 };
+  if (f === 'left') return { nx: -1, ny: 0 };
+  if (f === 'right') return { nx: 1, ny: 0 };
+  return { nx: 0, ny: 1 };
+}
 
 /**
  * Collects all items that need to be rendered in the current frame, sorted by Y.
@@ -126,29 +133,7 @@ export function collectRenderItems(options) {
     }
   }
 
-  // --- Player speech bubble (Sims-style) ---
-  if (player.speechBubble?.segments?.length && lodDetail < 2) {
-    const finalVX = player.visualX ?? player.x;
-    const finalVY = player.visualY ?? player.y;
-    const targetHeightTiles = 1.1;
-    const targetHeightPx = targetHeightTiles * tileH;
-    const pmdPivotY = targetHeightPx * PMD_MON_SHEET.pivotYFrac;
-    renderItems.push({
-      type: 'playerSpeechBubble',
-      sortY: finalVY + 0.505,
-      x: finalVX,
-      y: finalVY,
-      cx: snapPx((finalVX + 0.5) * tileW),
-      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
-      pivotY: pmdPivotY,
-      spawnPhase: 1,
-      spawnType: null,
-      dexId: playerDex,
-      speechBubble: player.speechBubble
-    });
-  }
-
-  // --- Player Emotion ---
+  /** Same pivot as `drawWildSpeechBubbleOverlay` / wild overlays: scaled frame height × PMD pivot (not a fixed 1.1t guess). */
   const playerEmotionPayload =
     !player.speechBubble &&
     player.socialEmotionType !== null &&
@@ -161,28 +146,6 @@ export function collectRenderItems(options) {
             defaultPortraitSlugForBalloon(player.socialEmotionType)
         }
       : null;
-
-  if (playerEmotionPayload && lodDetail < 2) {
-    const finalVX = player.visualX ?? player.x;
-    const finalVY = player.visualY ?? player.y;
-    const targetHeightTiles = 1.1; // fallback
-    const targetHeightPx = targetHeightTiles * tileH;
-    const pmdPivotY = (targetHeightPx) * PMD_MON_SHEET.pivotYFrac;
-
-    renderItems.push({
-      type: 'playerEmotion',
-      sortY: finalVY + 0.49,
-      x: finalVX,
-      y: finalVY,
-      cx: snapPx((finalVX + 0.5) * tileW),
-      cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
-      pivotY: pmdPivotY,
-      spawnPhase: 1,
-      spawnType: null,
-      dexId: playerDex,
-      emotion: playerEmotionPayload
-    });
-  }
 
   const isPlayerMoving = isPlayerWalkingAnim;
   const borrowDiglettArt =
@@ -207,6 +170,7 @@ export function collectRenderItems(options) {
     (borrowDiglettArt ? !!pDig : !!pDigSelf || isUndergroundBurrowerDex(playerDex));
   const combatShoot = (player.moveShootAnimSec || 0) > 0 && !!pShootSheet;
   const combatLmbAttack = (player.lmbAttackAnimSec || 0) > 0;
+  const flameChargeRoll = (player.flameChargeDashSec || 0) > 0.001 && !!pChargeSheet;
   const combatCharge =
     !player.digBurrowMode &&
     (playInputState.chargeLeft01 > 0.02 || playInputState.chargeRight01 > 0.02) &&
@@ -232,6 +196,9 @@ export function collectRenderItems(options) {
       pSheet = isPlayerMoving ? pWalk : pIdle;
       pmdAnimSlice = isPlayerMoving ? 'walk' : 'idle';
     }
+  } else if (flameChargeRoll) {
+    pSheet = pChargeSheet;
+    pmdAnimSlice = 'charge';
   } else if (combatCharge) {
     pSheet = pChargeSheet;
     pmdAnimSlice = 'charge';
@@ -258,6 +225,40 @@ export function collectRenderItems(options) {
 
     const dw = sw * finalScale;
     const dh = sh * finalScale;
+    const overlayPivotY = dh * PMD_MON_SHEET.pivotYFrac;
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+
+    if (player.speechBubble?.segments?.length && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerSpeechBubble',
+        sortY: finalVY + 0.52,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        speechBubble: player.speechBubble
+      });
+    }
+    if (playerEmotionPayload && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerEmotion',
+        sortY: finalVY + 0.51,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        emotion: playerEmotionPayload
+      });
+    }
 
     renderItems.push({
       type: 'player',
@@ -287,6 +288,44 @@ export function collectRenderItems(options) {
       targetHeightTiles,
       strengthCarry: player._strengthCarry || null
     });
+  } else {
+    const finalVX = player.visualX ?? player.x;
+    const finalVY = player.visualY ?? player.y;
+    const fallbackTiles =
+      latchGround && player.digBurrowMode
+        ? POKEMON_HEIGHTS[phDex] || 1.2
+        : POKEMON_HEIGHTS[playerDex] || 1.1;
+    const overlayPivotY = fallbackTiles * tileH * PMD_MON_SHEET.pivotYFrac;
+    if (player.speechBubble?.segments?.length && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerSpeechBubble',
+        sortY: finalVY + 0.52,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        speechBubble: player.speechBubble
+      });
+    }
+    if (playerEmotionPayload && lodDetail < 2) {
+      renderItems.push({
+        type: 'playerEmotion',
+        sortY: finalVY + 0.51,
+        x: finalVX,
+        y: finalVY,
+        cx: snapPx((finalVX + 0.5) * tileW),
+        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        pivotY: overlayPivotY,
+        spawnPhase: 1,
+        spawnType: null,
+        dexId: playerDex,
+        emotion: playerEmotionPayload
+      });
+    }
   }
 
   // 2. Add Wild Pokemon
@@ -334,6 +373,8 @@ export function collectRenderItems(options) {
           targetHeightTiles,
           sexHud: wildSexHudLabel(w.sex)
         });
+
+        markWildMinimapSpeciesKnown(w);
 
         // 2b. Sims-style speech bubble (rich segments) — takes priority over classic emotion overlay.
         if (w.speechBubble?.segments?.length && lodDetail < 2) {
@@ -385,82 +426,130 @@ export function collectRenderItems(options) {
     }
   }
 
-  // 3. Scan for World Objects (Trees, Scatters, Buildings)
+  // 3. World Objects (Trees, Scatters, Buildings)
+  //
+  // OPTIMIZATION: Instead of scanning every tile in [startY-pad .. endY] x [startX-pad .. endX]
+  // every frame (O(viewport_area)), we now look up per-chunk cached entity descriptor lists.
+  // Each chunk's list is computed ONCE on first access and reused forever (until map changes).
+  // This converts the inner scan to O(visible_chunks * avg_entities_per_chunk).
+  //
+  // Runtime-mutable state (isDestroyed, isBurning, isCharred, regrowFade01) is still
+  // applied per-frame below — those are cheap Map lookups, not tile scanning.
   const sortableScanPad = lodDetail >= 2 ? 2 : 4;
-  const scatterOriginMemoRender = new Map();
+  const fullW = width * microStride;
+  const fullH = height * microStride;
+  const maxChunkXi = Math.max(0, Math.ceil(fullW / PLAY_CHUNK_SIZE) - 1);
+  const maxChunkYi = Math.max(0, Math.ceil(fullH / PLAY_CHUNK_SIZE) - 1);
 
-  for (let myScan = startY - sortableScanPad; myScan < endY; myScan++) {
-    for (let mxScan = startX - sortableScanPad; mxScan < endX; mxScan++) {
-      if (mxScan < 0 || myScan < 0 || mxScan >= width * microStride || myScan >= height * microStride) continue;
-      
-      const t = getCached(mxScan, myScan);
-      if (!tileSurfaceAllowsScatterVegetation(t)) continue;
+  // Chunk range that covers [startY-pad .. endY) x [startX-pad .. endX)
+  const cScanX0 = Math.max(0, Math.floor((startX - sortableScanPad) / PLAY_CHUNK_SIZE));
+  const cScanY0 = Math.max(0, Math.floor((startY - sortableScanPad) / PLAY_CHUNK_SIZE));
+  const cScanX1 = Math.min(maxChunkXi, Math.floor((endX - 1) / PLAY_CHUNK_SIZE));
+  const cScanY1 = Math.min(maxChunkYi, Math.floor((endY - 1) / PLAY_CHUNK_SIZE));
 
-      // a. Formal Trees
-      const treeType = getTreeType(t.biomeId, mxScan, myScan, data.seed);
-      if (treeType && (mxScan + myScan) % 3 === 0 && foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD) {
-        if (getCached(mxScan + 1, myScan)?.heightStep === t.heightStep) {
+  for (let cy = cScanY0; cy <= cScanY1; cy++) {
+    for (let cx = cScanX0; cx <= cScanX1; cx++) {
+      const chunkKey = `${cx},${cy}`;
+      const chunkEntities = getStaticEntitiesForChunk(cx, cy, chunkKey, data, fullW, fullH);
+
+      for (const desc of chunkEntities) {
+        const { originX: mxScan, originY: myScan } = desc;
+
+        // Cull to scan bounds.
+        if (mxScan < startX - sortableScanPad || mxScan >= endX) continue;
+        if (myScan < startY - sortableScanPad || myScan >= endY) continue;
+
+        if (desc.type === 'tree') {
           if (isPlayFormalTreeRootBurnedHarvested(mxScan, myScan)) continue;
           renderItems.push({
             type: 'tree',
-            treeType,
+            treeType: desc.treeType,
             originX: mxScan,
             originY: myScan,
             y: myScan + 0.9,
             sortY: myScan + 1.0,
-            biomeId: t.biomeId,
+            biomeId: desc.biomeId,
             isDestroyed: isPlayFormalTreeRootDestroyed(mxScan, myScan),
             isCharred: isPlayFormalTreeRootCharred(mxScan, myScan),
             isBurning: isPlayFormalTreeRootBurning(mxScan, myScan),
             regrowFade01: getFormalTreeRegrowVisualAlpha01(mxScan, myScan)
           });
-        }
-      }
 
-      // b. Scatters
-      const sType = foliageType(mxScan, myScan, data.seed + 1234);
-      const items = BIOME_VEGETATION[t.biomeId] || [];
-      const forcedScatter = getScatterItemKeyOverride(mxScan, myScan);
-      const sItem = forcedScatter || items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
-      if (sItem && isSortableScatter(sItem)) {
-        const forcedOrigin = hasScatterItemKeyOverride(mxScan, myScan);
-        if (forcedOrigin || validScatterOriginMicro(mxScan, myScan, data.seed, width * microStride, height * microStride, getCached, scatterOriginMemoRender)) {
-          if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
-          const objSet = OBJECT_SETS[sItem];
-          if (objSet) {
-            const { cols, rows } = parseShape(objSet.shape);
-            renderItems.push({
-              type: 'scatter',
-              itemKey: sItem,
-              objSet,
-              originX: mxScan,
-              originY: myScan,
-              cols,
-              rows,
-              y: myScan + rows - 0.1,
-              sortY: myScan + (objSet.sortYOffset !== undefined ? objSet.sortYOffset : 1.0),
-              isSortable: true,
-              isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
-              isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
-              windSway: scatterHasWindSway(sItem),
-              regrowFade01: scatterItemKeyIsTree(sItem)
-                ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
-                : 1
-            });
+        } else if (desc.type === 'scatter') {
+          // Apply runtime override: the cached item key may have been replaced at runtime.
+          const overrideKey = getScatterItemKeyOverride(mxScan, myScan);
+          const sItem = overrideKey || desc.itemKey;
+          let activeObjSet = desc.objSet;
+          let activeCols = desc.cols;
+          let activeRows = desc.rows;
+          let activeWindSway = desc.windSway;
+          if (overrideKey && overrideKey !== desc.itemKey) {
+            // Override changes the item — re-resolve objSet from OBJECT_SETS.
+            activeObjSet = OBJECT_SETS[overrideKey];
+            if (!activeObjSet) continue;
+            const parsed = parseShape(activeObjSet.shape);
+            activeCols = parsed.cols;
+            activeRows = parsed.rows;
+            activeWindSway = scatterHasWindSway(overrideKey);
           }
-        }
-      }
+          if (!isSortableScatter(sItem)) continue;
+          if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
+          renderItems.push({
+            type: 'scatter',
+            itemKey: sItem,
+            objSet: activeObjSet,
+            originX: mxScan,
+            originY: myScan,
+            cols: activeCols,
+            rows: activeRows,
+            y: myScan + activeRows - 0.1,
+            sortY: myScan + (activeObjSet.sortYOffset !== undefined ? activeObjSet.sortYOffset : 1.0),
+            isSortable: true,
+            isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
+            isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
+            windSway: activeWindSway,
+            regrowFade01: scatterItemKeyIsTree(sItem)
+              ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
+              : 1
+          });
 
-      // c. Buildings
-      if (t.urbanBuilding && t.urbanBuildingOrigin) {
-        renderItems.push({
-          type: 'building',
-          bData: t.urbanBuilding,
-          originX: mxScan,
-          originY: myScan,
-          y: myScan + (t.urbanBuilding.rows || 3) - 0.1,
-          sortY: myScan + (t.urbanBuilding.type === 'pokecenter' ? 5.9 : 4.9)
-        });
+        } else if (desc.type === '_override') {
+          // Origin has a forced scatter but no natural procedural one.
+          const overrideKey = getScatterItemKeyOverride(mxScan, myScan);
+          if (!overrideKey || !isSortableScatter(overrideKey)) continue;
+          if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
+          const activeObjSet = OBJECT_SETS[overrideKey];
+          if (!activeObjSet) continue;
+          const { cols: activeCols, rows: activeRows } = parseShape(activeObjSet.shape);
+          renderItems.push({
+            type: 'scatter',
+            itemKey: overrideKey,
+            objSet: activeObjSet,
+            originX: mxScan,
+            originY: myScan,
+            cols: activeCols,
+            rows: activeRows,
+            y: myScan + activeRows - 0.1,
+            sortY: myScan + (activeObjSet.sortYOffset !== undefined ? activeObjSet.sortYOffset : 1.0),
+            isSortable: true,
+            isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
+            isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
+            windSway: scatterHasWindSway(overrideKey),
+            regrowFade01: scatterItemKeyIsTree(overrideKey)
+              ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
+              : 1
+          });
+
+        } else if (desc.type === 'building') {
+          renderItems.push({
+            type: 'building',
+            bData: desc.bData,
+            originX: mxScan,
+            originY: myScan,
+            y: myScan + (desc.bData.rows || 3) - 0.1,
+            sortY: myScan + (desc.bData.type === 'pokecenter' ? 5.9 : 4.9)
+          });
+        }
       }
     }
   }
@@ -492,6 +581,28 @@ export function collectRenderItems(options) {
 
   // 6. Specialist Injections (Strength, Tree Falling)
   appendStrengthThrowRenderItems(renderItems, startX, startY, endX, endY);
+
+  if (player._strengthCarry && data) {
+    const hasActiveThrowAim =
+      !!playInputState.gamepadAimActive ||
+      (playInputState.throwAimInputMode === 'mouse' && !!playInputState.mouseValid);
+    if (!hasActiveThrowAim) {
+      const px = player.visualX ?? player.x;
+      const py = player.visualY ?? player.y;
+      const { nx, ny } = facingUnitFromPlayer(player);
+      const sx = px + 0.5;
+      const sy = py + 0.5;
+      const sc = player._strengthCarry;
+      renderItems.push({
+        type: 'strengthThrowIdleTarget',
+        sortY: sy + ny + 0.72,
+        landX: sx + nx,
+        landY: sy + ny,
+        cols: sc.cols,
+        rows: sc.rows
+      });
+    }
+  }
 
   if (playInputState.strengthCarryLmbAim && player._strengthCarry && data) {
     const { tx, ty } = aimAtCursor(player);

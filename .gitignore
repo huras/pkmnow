@@ -34,3 +34,6 @@ tilesets/spritecollab-portraits/
 *.zip
 
 *.unitypackage
+docs/video-making/
+unity-export/
+*.tiled-session

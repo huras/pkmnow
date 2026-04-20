@@ -9,7 +9,8 @@ import {
   canWalkMicroTile,
   pivotCellHeightTraversalOk,
   beginWalkProbeCache,
-  endWalkProbeCache
+  endWalkProbeCache,
+  syncEntityZWithTerrain
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
 import {
@@ -21,7 +22,7 @@ import {
   speciesHasGroundType,
   speciesHasSmoothLevitationFlight
 } from './pokemon/pokemon-type-helpers.js';
-import { playInputState } from './main/play-input-state.js';
+import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
 import {
   strengthCarryBlocksWalk,
   onStrengthCarrierDamaged,
@@ -30,9 +31,16 @@ import {
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
 import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from './world-movement-constants.js';
+import {
+  ENTITY_STAMINA_MAX,
+  ensureEntityStamina,
+  canEntityStartSprint,
+  tickEntityStamina
+} from './entity-stamina.js';
 import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
+import { NATIONAL_DEX_MAX } from './pokemon/gen1-name-to-dex.js';
 import { imageCache } from './image-cache.js';
 import { getPmdFeetDeltaWorldTiles, worldFeetFromPivotCell } from './pokemon/pmd-layout-metrics.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from './pokemon/emotion-display-timing.js';
@@ -41,6 +49,8 @@ import { playJumpSfx } from './audio/jump-sfx.js';
 import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
 import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
 import { advanceRainFootstepFxForDistance } from './weather/rain-footstep-fx.js';
+import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
+import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
@@ -81,6 +91,11 @@ const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 const RUN_SPEED_CAP_MULT = 2;
 /** Hold-LMB combat charge: movement stays possible but slower. */
 const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
+/**
+ * Walk facing: gamepad vectors are rarely axis-aligned. When the smaller axis magnitude
+ * is at most this fraction of the larger, treat facing as pure N/S/E/W (same as keyboard zeros).
+ */
+const FACING_CARDINAL_AXIS_SLIP_RATIO = 0.32;
 
 /** Dig animation advance when stationary (world-units/sec equivalent feel). */
 const DIG_IDLE_ANIM_SPEED = 2.8;
@@ -90,8 +105,8 @@ const DIG_CHARGE_SEC = 0.88;
 const DIG_CHARGE_DECAY = 2.2;
 /** Fixed real-time length for one tackle window (seconds). */
 const TACKLE_DURATION_SEC = 0.5;
-/** Tackle visual reach in tile units (sprite-only lunge; gameplay body stays in place). */
-const TACKLE_REACH_TILES = 2;
+/** Tackle visual reach in tile units (sprite-only lunge; gameplay body stays in place). Field tackle charges 1..3. */
+const TACKLE_REACH_TILES = 1;
 /** Tackle lunge curve profile (`sin` = symmetric out/back, `easeOut` = snappier hit then settle). */
 const TACKLE_LUNGE_CURVE = 'sin';
 /** PMD-ish depth foreshortening for tackle sprite offset on world Y (visual only). */
@@ -101,7 +116,10 @@ const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 /** Default species when nothing valid is stored (Charmander). */
 const DEFAULT_PLAYER_DEX_ID = 4;
 const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
-const initialDex = Number.isFinite(_savedDex) && _savedDex >= 1 ? _savedDex : DEFAULT_PLAYER_DEX_ID;
+const initialDex =
+  Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
+    ? _savedDex
+    : DEFAULT_PLAYER_DEX_ID;
 
 export const player = {
   x: 0,
@@ -141,6 +159,9 @@ export const player = {
   /** Play mode: HP when hit by wild projectiles. */
   hp: 100,
   maxHp: 100,
+  /** Sprint / wild sprint-speed drain; regens when not draining. */
+  stamina: ENTITY_STAMINA_MAX,
+  maxStamina: ENTITY_STAMINA_MAX,
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
@@ -187,20 +208,41 @@ export const player = {
    */
   _strengthGrabAction: null,
   /** Cut combo 3rd hit: movement locked (seconds). */
-  cutThirdHitLockoutSec: 0
+  cutThirdHitLockoutSec: 0,
+  /** Flame Charge: remaining dash time (s); velocity override while > 0. */
+  flameChargeDashSec: 0,
+  /** @type {1|2|3} */
+  flameChargeTier: 1,
+  flameChargeNx: 0,
+  flameChargeNy: 1,
+  flameChargeSpeedCapTilesPerSec: 0,
+  flameChargeTrailAcc: 0,
+  flameChargeHeadAcc: 0,
+  _flameChargeSegPrevX: 0,
+  _flameChargeSegPrevY: 0,
+  /** Fire Spin: seconds held this channel (caps in move module). */
+  fireSpinChannelSec: 0,
+  fireSpinOrbitAngle: 0,
+  fireSpinParticleAcc: 0,
+  /** Earthquake move: waiting for landing to apply ring damage + quake pulse. */
+  earthquakeAwaitingLand: false,
+  earthquakeStoredCharge01: 0
 };
 
 export function setPlayerSpecies(dexId) {
-  player.dexId = dexId;
+  const d = Math.floor(Number(dexId)) || DEFAULT_PLAYER_DEX_ID;
+  player.dexId = Math.max(1, Math.min(NATIONAL_DEX_MAX, d));
   player.runMode = false;
-  if (!speciesHasFlyingType(dexId)) player.flightActive = false;
-  localStorage.setItem(SAVED_DEX_KEY, dexId);
-  if (speciesUsesBorrowedDiglettDigVisual(dexId) || speciesHasGroundType(dexId)) {
-    void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(dexId));
+  if (!speciesHasFlyingType(player.dexId)) player.flightActive = false;
+  localStorage.setItem(SAVED_DEX_KEY, String(player.dexId));
+  if (speciesUsesBorrowedDiglettDigVisual(player.dexId) || speciesHasGroundType(player.dexId)) {
+    void ensurePokemonSheetsLoaded(imageCache, getBorrowDigPlaceholderDex(player.dexId));
   }
   player.digBurrowMode = false;
   player.digCharge01 = 0;
   player.hp = player.maxHp ?? 100;
+  ensureEntityStamina(player);
+  player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
@@ -225,8 +267,50 @@ export function setPlayerSpecies(dexId) {
   player._strengthCarryHitStreak = 0;
   player._strengthGrabAction = null;
   player.cutThirdHitLockoutSec = 0;
+  player.flameChargeDashSec = 0;
+  player.flameChargeTier = 1;
+  player.flameChargeNx = 0;
+  player.flameChargeNy = 1;
+  player.flameChargeSpeedCapTilesPerSec = 0;
+  player.flameChargeTrailAcc = 0;
+  player.flameChargeHeadAcc = 0;
+  player._flameChargeSegPrevX = 0;
+  player._flameChargeSegPrevY = 0;
+  player.fireSpinChannelSec = 0;
+  player.fireSpinOrbitAngle = 0;
+  player.fireSpinParticleAcc = 0;
+  player.earthquakeAwaitingLand = false;
+  player.earthquakeStoredCharge01 = 0;
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('pkmn-player-species-changed', { detail: { dexId } }));
+    window.dispatchEvent(
+      new CustomEvent('pkmn-player-species-changed', { detail: { dexId: player.dexId } })
+    );
+  }
+}
+
+/**
+ * Sets world position after a resume save (no Strength-drop side effects, no full stat reset).
+ * @param {number} x
+ * @param {number} y
+ * @param {number} [z=0]
+ */
+export function applyPlayerWorldResumePosition(x, y, z = 0) {
+  const xf = Number(x);
+  const yf = Number(y);
+  const zf = Math.max(0, Number(z) || 0);
+  if (!Number.isFinite(xf) || !Number.isFinite(yf)) return;
+  player.x = xf;
+  player.y = yf;
+  player.visualX = xf;
+  player.visualY = yf;
+  player.vx = 0;
+  player.vy = 0;
+  player.vz = 0;
+  player.z = zf;
+  player.grounded = zf <= 1e-4;
+  if (player.grounded) {
+    player.jumping = false;
+    player.jumpsUsed = 0;
   }
 }
 
@@ -267,6 +351,8 @@ export function setPlayerPos(x, y) {
   player.digBurrowMode = false;
   player.digCharge01 = 0;
   player.hp = player.maxHp ?? 100;
+  ensureEntityStamina(player);
+  player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
   player.poisonVisualSec = 0;
   player.socialEmotionType = null;
@@ -284,6 +370,20 @@ export function setPlayerPos(x, y) {
   player._tackleLungeDx = 0;
   player._tackleLungeDy = 0;
   player.cutThirdHitLockoutSec = 0;
+  player.flameChargeDashSec = 0;
+  player.flameChargeTier = 1;
+  player.flameChargeNx = 0;
+  player.flameChargeNy = 1;
+  player.flameChargeSpeedCapTilesPerSec = 0;
+  player.flameChargeTrailAcc = 0;
+  player.flameChargeHeadAcc = 0;
+  player._flameChargeSegPrevX = 0;
+  player._flameChargeSegPrevY = 0;
+  player.fireSpinChannelSec = 0;
+  player.fireSpinOrbitAngle = 0;
+  player.fireSpinParticleAcc = 0;
+  player.earthquakeAwaitingLand = false;
+  player.earthquakeStoredCharge01 = 0;
 }
 
 /**
@@ -312,6 +412,7 @@ export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false,
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
   player.hp = Math.max(0, cur - amount);
+  rumblePlayerGamepadPokemonHitTaken();
   player.projIFrameSec = 0.55;
   if (applyPoisonVisual) player.poisonVisualSec = 3;
   const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
@@ -479,6 +580,41 @@ const FACING_TO_TACKLE_UNIT = {
 };
 
 /**
+ * Normalized world aim from the player's current 8-way facing (tackle / cut when mouse aim is off).
+ * @param {{ facing?: string } | null | undefined} p
+ */
+export function getTackleDirUnitFromFacing(p) {
+  if (!p) return { nx: 0, ny: 1 };
+  const q = FACING_TO_TACKLE_UNIT[p.facing] || FACING_TO_TACKLE_UNIT.down;
+  return { nx: q[0], ny: q[1] };
+}
+
+/**
+ * @param {number} ix
+ * @param {number} iy
+ */
+function setPlayerFacingFromWalkInput(ix, iy) {
+  const ax = Math.abs(ix);
+  const ay = Math.abs(iy);
+  const major = Math.max(ax, ay, 1e-6);
+  const slip = FACING_CARDINAL_AXIS_SLIP_RATIO;
+  if (ax <= slip * major) {
+    if (iy < 0) player.facing = 'up';
+    else if (iy > 0) player.facing = 'down';
+    return;
+  }
+  if (ay <= slip * major) {
+    if (ix < 0) player.facing = 'left';
+    else if (ix > 0) player.facing = 'right';
+    return;
+  }
+  if (ix > 0 && iy < 0) player.facing = 'up-right';
+  else if (ix < 0 && iy < 0) player.facing = 'up-left';
+  else if (ix > 0 && iy > 0) player.facing = 'down-right';
+  else if (ix < 0 && iy > 0) player.facing = 'down-left';
+}
+
+/**
  * Starts the LMB melee pose window (`getDexAnimSlice(dex, 'attack')` timings) + tackle direction for lunge / crystal hit.
  * @param {{ dexId?: number, lmbAttackAnimSec?: number, _lmbAttackAnimTick?: number, facing?: string, tackleDirNx?: number, tackleDirNy?: number, _tackleDurSec?: number } | null | undefined} p
  * @param {number} [dirNx] Optional free-aim X (used when player is not pressing movement input).
@@ -546,7 +682,11 @@ export function tryMovePlayer(dx, dy, data) {
  * - Se estiver de frente para um "Muro" (EDGE_S, EDGE_W, EDGE_E), tenta saltar por cima: pula 2 tiles.
  * - Se estiver no plano, faz apenas um pulinho (hop) no lugar para feedback visual.
  */
-export function tryJumpPlayer(data) {
+/**
+ * @param {object} [_data] reserved / parity with callers that pass map data
+ * @param {{ vzScale?: number }} [opts]
+ */
+export function tryJumpPlayer(_data, opts = {}) {
   if ((player.cutThirdHitLockoutSec || 0) > 0) return false;
   const canFly = speciesHasFlyingType(player.dexId ?? 0);
   if (canFly && player.flightActive) return false;
@@ -557,7 +697,8 @@ export function tryJumpPlayer(data) {
     player.digBurrowMode = false;
     player.digCharge01 = 0;
   }
-  player.vz = JUMP_IMPULSE;
+  const vzScale = Math.max(0.35, Math.min(2.5, Number(opts?.vzScale) || 1));
+  player.vz = JUMP_IMPULSE * vzScale;
   player.grounded = false;
   player.jumping = true;
   player.jumpsUsed = (player.jumpsUsed || 0) + 1;
@@ -578,13 +719,17 @@ export function isPlayerIdleOnWaitingFrame() {
  * @param {number} dt - delta time em segundos
  * @param {number} multiplier - multiplicador de velocidade (não afeta o tempo da animação interna do PMD)
  */
-export function updatePlayer(dt, data) {
+export function updatePlayer(dt, data, gameTimeSec) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
   const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
   const isAirborne = player.jumping || player.z > 0.05 || flightMove;
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
+
+  if ((player.flameChargeDashSec || 0) > 1e-5 && (flightMove || isAirborne || player.digBurrowMode)) {
+    player.flameChargeDashSec = 0;
+  }
 
   if (!isGroundDigLatchEligible() || flightMove) {
     player.digBurrowMode = false;
@@ -594,7 +739,7 @@ export function updatePlayer(dt, data) {
     player.digCharge01 = 0;
   } else if (player.digBurrowMode) {
     /* latched: stay dug until leave ground / jump */
-  } else if (playInputState.shiftLeftHeld) {
+  } else if (isPlayGroundDigShiftHeld()) {
     player.digCharge01 = Math.min(1, player.digCharge01 + dt / DIG_CHARGE_SEC);
     if (player.digCharge01 >= 1) {
       player.digBurrowMode = true;
@@ -606,12 +751,12 @@ export function updatePlayer(dt, data) {
 
   const groundDigVisual =
     isGroundDigLatchEligible() && !!player.grounded && !isAirborne && (player.digCharge01 > 0 || player.digBurrowMode);
-  player.digActive = !!player.grounded && (groundDigVisual || (gh && !!playInputState.shiftLeftHeld));
+  player.digActive = !!player.grounded && (groundDigVisual || (gh && !!isPlayGroundDigShiftHeld()));
 
   const raisingHeightOnFlight =
     flightMove &&
-    !!playInputState.spaceHeld &&
-    !playInputState.shiftLeftHeld &&
+    isPlaySpaceAscendHeld() &&
+    !isPlayGroundDigShiftHeld() &&
     player.z < FLIGHT_MAX_Z - 1e-4;
   const flightHorizontalMoveBoost =
     flightMove &&
@@ -620,10 +765,12 @@ export function updatePlayer(dt, data) {
       ? FLIGHT_HORIZONTAL_MOVE_SPEED_MULT
       : 1;
 
-  if (strengthCarryBlocksWalk(player)) {
-    player.inputX = 0;
-    player.inputY = 0;
+  const carryBlocksWalk = strengthCarryBlocksWalk(player);
+  const blockedTurnInputX = carryBlocksWalk ? Number(player.inputX) || 0 : 0;
+  const blockedTurnInputY = carryBlocksWalk ? Number(player.inputY) || 0 : 0;
+  if (carryBlocksWalk) {
     player.runMode = false;
+    player.flameChargeDashSec = 0;
   }
 
   if ((player.cutThirdHitLockoutSec || 0) > 0) {
@@ -632,19 +779,40 @@ export function updatePlayer(dt, data) {
     player.runMode = false;
     player.vx = 0;
     player.vy = 0;
+    player.flameChargeDashSec = 0;
   }
 
+  const flameChargeActive =
+    (player.flameChargeDashSec || 0) > 1e-5 &&
+    player.grounded &&
+    !flightMove &&
+    !player.digBurrowMode;
+
   // 1. Horizontal Input & Physics
-  if (player.inputX !== 0 || player.inputY !== 0) {
-    // Determine facing
-    if (player.inputX === 0 && player.inputY < 0) player.facing = 'up';
-    else if (player.inputX === 0 && player.inputY > 0) player.facing = 'down';
-    else if (player.inputX < 0 && player.inputY === 0) player.facing = 'left';
-    else if (player.inputX > 0 && player.inputY === 0) player.facing = 'right';
-    else if (player.inputX > 0 && player.inputY < 0) player.facing = 'up-right';
-    else if (player.inputX < 0 && player.inputY < 0) player.facing = 'up-left';
-    else if (player.inputX > 0 && player.inputY > 0) player.facing = 'down-right';
-    else if (player.inputX < 0 && player.inputY > 0) player.facing = 'down-left';
+  if (carryBlocksWalk) {
+    // Heavy carry can block translation, but still allow facing/rotation in place.
+    if (blockedTurnInputX !== 0 || blockedTurnInputY !== 0) {
+      setPlayerFacingFromWalkInput(blockedTurnInputX, blockedTurnInputY);
+    }
+    player.inputX = 0;
+    player.inputY = 0;
+    player.vx = 0;
+    player.vy = 0;
+  } else if (flameChargeActive) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
+    const nx = Number(player.flameChargeNx) || 0;
+    const ny = Number(player.flameChargeNy) || 1;
+    const nLen = Math.hypot(nx, ny);
+    const ux = nLen > 1e-5 ? nx / nLen : 0;
+    const uy = nLen > 1e-5 ? ny / nLen : 1;
+    const cap = Math.max(4.5, Number(player.flameChargeSpeedCapTilesPerSec) || 6);
+    player.vx = ux * cap;
+    player.vy = uy * cap;
+    setPlayerFacingFromWorldAimDelta(player, ux, uy);
+  } else if (player.inputX !== 0 || player.inputY !== 0) {
+    setPlayerFacingFromWalkInput(player.inputX, player.inputY);
 
     // Accelerate (flight: gentler horizontal accel than on foot)
     const accelMul = flightMove ? FLIGHT_ACCEL_MULT : 1;
@@ -710,7 +878,14 @@ export function updatePlayer(dt, data) {
       burrowFeetTileExists
     });
   }
-  const runMul = player.runMode ? RUN_SPEED_CAP_MULT : 1;
+  const sprintEligible =
+    !!player.runMode &&
+    canEntityStartSprint(player) &&
+    !carryBlocksWalk &&
+    !flameChargeActive &&
+    !flightMove &&
+    !player.digBurrowMode;
+  const runMul = sprintEligible ? RUN_SPEED_CAP_MULT : 1;
   const flightMul = flightMove
     ? smoothLevitationFlight
       ? FLIGHT_LEVITATION_MAX_SPEED_MULT
@@ -723,7 +898,7 @@ export function updatePlayer(dt, data) {
     !playInputState.ctrlLeftHeld
       ? LMB_COMBAT_CHARGE_SPEED_MUL
       : 1;
-  const currentMaxSpeed =
+  let currentMaxSpeed =
     MAX_SPEED *
     Math.max(1.0, inputMag) *
     runMul *
@@ -732,6 +907,10 @@ export function updatePlayer(dt, data) {
     flightHorizontalMoveBoost *
     getStrengthCarryMoveSpeedMultiplier(player) *
     combatChargeSlowMul;
+  if (flameChargeActive) {
+    const fcCap = Number(player.flameChargeSpeedCapTilesPerSec) || MAX_SPEED * 2.4;
+    currentMaxSpeed = Math.max(currentMaxSpeed, fcCap);
+  }
   const spd = Math.hypot(player.vx, player.vy);
   if (spd > currentMaxSpeed) {
      player.vx *= currentMaxSpeed / spd;
@@ -821,6 +1000,9 @@ export function updatePlayer(dt, data) {
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
     const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
+    
+    syncEntityZWithTerrain(player, player.x, player.y, r.x, r.y, data);
+
     player.x = r.x;
     player.y = r.y;
     player.vx = r.vx;
@@ -844,8 +1026,8 @@ export function updatePlayer(dt, data) {
     const zFlightPrev = player.z;
     const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
     const cutLock = (player.cutThirdHitLockoutSec || 0) > 0;
-    const up = cutLock ? 0 : playInputState.spaceHeld ? vSp : 0;
-    const down = cutLock ? 0 : playInputState.shiftLeftHeld ? vSp : 0;
+    const up = cutLock ? 0 : isPlaySpaceAscendHeld() ? vSp : 0;
+    const down = cutLock ? 0 : isPlayGroundDigShiftHeld() ? vSp : 0;
     const dz = (up - down) * dt;
     player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
     player.vz = 0;
@@ -861,6 +1043,8 @@ export function updatePlayer(dt, data) {
   } else if (!player.grounded) {
     const zJumpPrev = player.z;
     player.vz -= GRAVITY * dt;
+    /** Used by Earthquake: high falls can cross z=0 in one step from z < 0.04 (tunneling). */
+    const vzBeforePositionStep = player.vz;
     player.z += player.vz * dt;
 
     if (player.z <= 0) {
@@ -870,6 +1054,13 @@ export function updatePlayer(dt, data) {
       player.jumping = false;
       player.jumpsUsed = 0;
       if (zJumpPrev > 0.04) playFloorHit2Sfx(player);
+      const gt =
+        gameTimeSec != null && Number.isFinite(gameTimeSec)
+          ? gameTimeSec
+          : typeof performance !== 'undefined'
+            ? performance.now() * 0.001
+            : 0;
+      onPlayerEarthquakeLanding(player, data, zJumpPrev, gt, vzBeforePositionStep);
     }
   }
 
@@ -951,8 +1142,8 @@ export function updatePlayer(dt, data) {
       (flightMove &&
         smoothLevitationFlight &&
         (spd > 0.1 ||
-          !!playInputState.spaceHeld ||
-          !!playInputState.shiftLeftHeld ||
+          isPlaySpaceAscendHeld() ||
+          isPlayGroundDigShiftHeld() ||
           player.z > 0.02));
 
     if (useWalkLikeAnim) {
@@ -1015,7 +1206,7 @@ export function updatePlayer(dt, data) {
   const tackleRem = player.lmbAttackAnimSec || 0;
   if (tackleRem > 0 && tackleDur > 1e-6) {
     const progress = 1 - tackleRem / tackleDur;
-    const reach = Math.max(0, Number(player._tackleReachTiles) || 2);
+    const reach = Math.max(0, Number(player._tackleReachTiles) || TACKLE_REACH_TILES);
     const lunge = resolveTackleLunge01(progress) * reach;
     player._tackleLungeDx = (player.tackleDirNx ?? 0) * lunge;
     player._tackleLungeDy = (player.tackleDirNy ?? 0) * lunge * TACKLE_VISUAL_DEPTH_Y_SCALE;
@@ -1037,12 +1228,12 @@ export function updatePlayer(dt, data) {
   // Ground ↔ air tether: while changing height in flight, or each 4s hover-idle the last 1s blinks on/off.
   if (flightMove) {
     const raisingHeightDraw =
-      !!playInputState.spaceHeld &&
-      !playInputState.shiftLeftHeld &&
+      isPlaySpaceAscendHeld() &&
+      !isPlayGroundDigShiftHeld() &&
       player.z < FLIGHT_MAX_Z - 1e-4;
     const loweringHeightDraw =
-      !!playInputState.shiftLeftHeld &&
-      !playInputState.spaceHeld &&
+      isPlayGroundDigShiftHeld() &&
+      !isPlaySpaceAscendHeld() &&
       player.z > 1e-4;
     const verticalFlightAdjust = raisingHeightDraw || loweringHeightDraw;
     const horizBusy =
@@ -1073,4 +1264,12 @@ export function updatePlayer(dt, data) {
     player._flightIdleCycleSec = 0;
     player.flightGroundTetherVisible = false;
   }
+
+  ensureEntityStamina(player);
+  const runningCostsStamina =
+    !!sprintEligible &&
+    !!player.grounded &&
+    !isAirborne &&
+    (player.inputX !== 0 || player.inputY !== 0);
+  tickEntityStamina(player, dt, runningCostsStamina);
 }

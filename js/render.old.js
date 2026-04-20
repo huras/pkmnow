@@ -180,7 +180,22 @@ export function spawnJumpRingAt(x, y) {
 	// logic handled in render/render-effects-state.js
 }
 
-
+/** Copas assadas: flip horizontal do tilt +θ (eixo em px/py). */
+function drawCanopyWithWindFlip(ctx, canvas, px, py, ox, oy, flipX, snapPx) {
+	const left = snapPx(px - ox);
+	const top = snapPx(py - oy);
+	if (!flipX) {
+		ctx.drawImage(canvas, left, top);
+		return;
+	}
+	const pivotX = snapPx(px);
+	ctx.save();
+	ctx.translate(pivotX, 0);
+	ctx.scale(-1, 1);
+	ctx.translate(-pivotX, 0);
+	ctx.drawImage(canvas, left, top);
+	ctx.restore();
+}
 
 export function render(canvas, data, options = {}) {
 	const ctx = canvas.getContext('2d');
@@ -566,19 +581,42 @@ export function render(canvas, data, options = {}) {
 			if (lodDetail >= 2 && !playerTopOverlay) return;
 			const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
-			const blitGrassQuad = (frame, destYTop, destHFull) => {
-				if (!frame) return;
-				const fw = frame.width || frame.naturalWidth;
-				const fh = frame.height || frame.naturalHeight;
+			const blitGrassQuad = (surf, destYTop, destHFull) => {
+				if (!surf) return;
+				const canvas = surf.canvas != null ? surf.canvas : surf;
+				const flipX = surf.flipX === true;
+				const fw = canvas.width || canvas.naturalWidth;
+				const fh = canvas.height || canvas.naturalHeight;
+				const destX = snapPx(tx);
 				if (!playerTopOverlay) {
-					ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
+					if (!flipX) {
+						ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+					} else {
+						const cx = destX + tileW * 0.5;
+						ctx.save();
+						ctx.translate(cx, 0);
+						ctx.scale(-1, 1);
+						ctx.translate(-cx, 0);
+						ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+						ctx.restore();
+					}
 					return;
 				}
 				const sh = Math.max(1, Math.round(fh * barFrac));
 				const sy = fh - sh;
 				const dh = destHFull * barFrac;
 				const dy = destYTop + destHFull * (1 - barFrac);
-				ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
+				if (!flipX) {
+					ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+				} else {
+					const cx = destX + tileW * 0.5;
+					ctx.save();
+					ctx.translate(cx, 0);
+					ctx.scale(-1, 1);
+					ctx.translate(-cx, 0);
+					ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+					ctx.restore();
+				}
 			};
 
 			if (playerTopOverlay) {
@@ -1463,7 +1501,7 @@ export function render(canvas, data, options = {}) {
 					// Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
 					if (topPart && !isCharred) {
 						const wind = scatterHasWindSway(itemKey);
-						const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+						const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
 							canopyAnimTime,
 							itemKey,
 							originX,
@@ -1478,7 +1516,7 @@ export function render(canvas, data, options = {}) {
 						);
 						const px = snapPx(originX * tileW + (cols * tileW) / 2);
 						const py = snapPx(originY * tileH + tileH);
-						ctx.drawImage(scCan, px - scOx, py - scOy);
+						drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
 					}
 					if (isBurning) {
 						const fireImg = imageCache.get('tilesets/effects/actual-fire.png');
@@ -1539,7 +1577,7 @@ export function render(canvas, data, options = {}) {
 
 					// Draw Top (Canopy) — pre-baked composite (no per-frame ctx.rotate)
 					if (!isDestroyed && ids.top) {
-						const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+						const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
 							canopyAnimTime,
 							treeType,
 							originX,
@@ -1552,7 +1590,7 @@ export function render(canvas, data, options = {}) {
 						);
 						const px = snapPx(originX * tileW + tileW);
 						const py = snapPx(originY * tileH + tileH);
-						ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+						drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
 					}
 					if (isBurning) {
 						const img = imageCache.get('tilesets/effects/actual-fire.png');
@@ -1591,7 +1629,7 @@ export function render(canvas, data, options = {}) {
 				if (ids?.top?.length && alpha > 0.02) {
 					ctx.save();
 					ctx.globalAlpha = alpha;
-					const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+					const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
 						0,
 						treeType,
 						originX,
@@ -1604,7 +1642,7 @@ export function render(canvas, data, options = {}) {
 					);
 					const px = snapPx(originX * tileW + tileW);
 					const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-					ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+					drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
 					ctx.restore();
 				}
 			} else if (item.type === 'scatterTreeCanopyFall') {
@@ -1617,7 +1655,7 @@ export function render(canvas, data, options = {}) {
 						if (img) {
 							ctx.save();
 							ctx.globalAlpha = alpha;
-							const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+							const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
 								0,
 								itemKey,
 								originX,
@@ -1632,7 +1670,7 @@ export function render(canvas, data, options = {}) {
 							);
 							const px = snapPx(originX * tileW + (cols * tileW) / 2);
 							const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-							ctx.drawImage(scCan, px - scOx, py - scOy);
+							drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
 							ctx.restore();
 						}
 					}

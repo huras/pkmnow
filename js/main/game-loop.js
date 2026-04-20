@@ -8,8 +8,8 @@ import {
   getWildPokemonEntities,
   wildUpdatePerfLast
 } from '../wild-pokemon/index.js';
-import { updateMoves } from '../moves/moves-manager.js';
-import { updateGrassFire } from '../play-grass-fire.js';
+import { updateMoves, pushParticle } from '../moves/moves-manager.js';
+import { updateGrassFire, GRASS_FIRE_PARTICLE_SEC } from '../play-grass-fire.js';
 import { tickLightning } from '../weather/lightning.js';
 import { getWeatherRainIntensity } from './weather-state.js';
 import {
@@ -29,10 +29,17 @@ import {
 import { syncSpatialListenerFromPlayer } from '../audio/spatial-audio.js';
 import { syncBiomeBgm } from '../audio/biome-bgm.js';
 import { syncWeatherAmbientAudio } from '../audio/weather-ambient-audio.js';
+import { syncEarthquakeAmbientAudio } from '../audio/earthquake-ambient-audio.js';
 import { syncFireLoopAudio } from '../audio/fire-loop-sfx.js';
 import { updatePlayGrassRustle } from '../audio/play-grass-rustle.js';
 import { ingestPlayPerfSample, resetPlayPerfProfiler } from './play-performance-profiler.js';
+import { getLastRenderFrameBreakdown, RENDER_FRAME_PHASE_HUD_LABELS } from '../render/render-frame-phases.js';
 import { getSocialActionByNumpadCode } from '../social/social-actions.js';
+import { tickPlaySessionAutosave } from './play-session-persist.js';
+import { tickPlayGamepadFrame } from './play-gamepad.js';
+import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
+import { canEntityStartSprint } from '../entity-stamina.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -66,7 +73,10 @@ function isPlayMovementKeyEvent(e) {
  *   getPlayFpsCompact?: () => boolean,
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
- *   advanceWorldTime?: (dt: number) => void
+ *   advanceWorldTime?: (dt: number) => void,
+ *   getGameTimeSec?: () => number,
+ *   onEscapePlay?: () => void,
+ *   getPlaySessionPersistExtra?: () => object | null
  * }} api When `getPlayFpsCompact` is true, `#play-fps` shows only the rolling FPS (minimal / immersive UI).
  */
 export function createGameLoop(api) {
@@ -80,15 +90,26 @@ export function createGameLoop(api) {
     getPlayFpsCompact,
     player,
     onPlayHudFrame,
-    advanceWorldTime
+    advanceWorldTime,
+    getGameTimeSec,
+    onEscapePlay,
+    getPlaySessionPersistExtra
   } = api;
+  let lastFpsHudWriteMs = 0;
+  let lastFpsHudText = '';
+  let lastFpsHudCompact = null;
 
   function gameLoop(timestamp) {
     const tLoopStart = performance.now();
     const dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
+    const simDt = getGameplaySimDt(dt);
     setGameTime(timestamp / 1000);
-    if (getAppMode() === 'play') advanceWorldTime?.(dt);
+
+    // --- Plugin Hooks: preUpdate ---
+    PluginRegistry.executeHooks('preUpdate', simDt);
+
+    if (getAppMode() === 'play') advanceWorldTime?.(simDt);
 
     let inX = 0;
     let inY = 0;
@@ -103,12 +124,31 @@ export function createGameLoop(api) {
       inY /= mag;
     }
 
+    const { inX: mergedX, inY: mergedY, gamepadAnalogMove } = tickPlayGamepadFrame({
+      getAppMode,
+      getCurrentData,
+      player,
+      refreshPlayModeInfoBar,
+      onEscapePlay,
+      keyboardMoveX: inX,
+      keyboardMoveY: inY
+    });
+
     if (['play'].includes(getAppMode())) {
-      if (inX === 0 && inY === 0) {
+      if (mergedX === 0 && mergedY === 0) {
         player.runMode = false;
+      } else if (gamepadAnalogMove) {
+        // Joystick move: sprint only while run button (A / Cross) is held — release stops running.
+        if (playInputState.gamepadRunHeld && canEntityStartSprint(player)) {
+          player.runMode = true;
+        } else {
+          player.runMode = false;
+        }
+      } else if (playInputState.gamepadRunHeld && canEntityStartSprint(player)) {
+        player.runMode = true;
       }
-      player.inputX = inX;
-      player.inputY = inY;
+      player.inputX = mergedX;
+      player.inputY = mergedY;
     } else {
       player.inputX = 0;
       player.inputY = 0;
@@ -132,14 +172,14 @@ export function createGameLoop(api) {
 
     const currentData = getCurrentData();
     const tUpdPlayer0 = performance.now();
-    updatePlayer(dt, currentData);
+    updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
-    updatePlayGrassRustle(dt, player, getAppMode() === 'play' ? currentData : null);
+    updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
-      updateCrystalShardParticles(dt);
-      updateCrystalDropsAndPickup(dt, player);
-      updateBreakableDetailRegeneration(dt, currentData);
+      updateCrystalShardParticles(simDt);
+      updateCrystalDropsAndPickup(simDt, player);
+      updateBreakableDetailRegeneration(simDt, currentData);
     }
 
     if (currentData && getAppMode() === 'play') {
@@ -150,7 +190,7 @@ export function createGameLoop(api) {
       syncWildPokemonWindow(currentData, pvx, pvy);
       updateBreakdown.updWildWindowMs = performance.now() - tWildWindow0;
       const tWild0 = performance.now();
-      updateWildPokemon(dt, currentData, pvx, pvy);
+      updateWildPokemon(simDt, currentData, pvx, pvy);
       updateBreakdown.updWildMs = performance.now() - tWild0;
       updateBreakdown.updWildMiscMs = wildUpdatePerfLast.miscMs;
       updateBreakdown.updWildVerticalMs = wildUpdatePerfLast.verticalMs;
@@ -158,17 +198,29 @@ export function createGameLoop(api) {
       updateBreakdown.updWildMotionMs = wildUpdatePerfLast.motionMs;
       updateBreakdown.updWildPostMs = wildUpdatePerfLast.postMs;
       const tPointer0 = performance.now();
-      updatePlayPointerCombat(dt, player, currentData);
-      updateStrengthCarryInteraction(dt, player, currentData);
-      updateThrownMapDetailEntities(dt, currentData);
+      updatePlayPointerCombat(simDt, player, currentData);
+      updateStrengthCarryInteraction(simDt, player, currentData);
+      updateThrownMapDetailEntities(simDt, currentData);
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
-      updateMoves(dt, getWildPokemonEntities(), currentData, player);
+      updateMoves(simDt, getWildPokemonEntities(), currentData, player);
       updateBreakdown.updMovesMs = performance.now() - tMoves0;
       const tGrassFire0 = performance.now();
-      updateGrassFire(dt, currentData, pvx, pvy);
+      updateGrassFire(simDt, currentData, pvx, pvy, (wx, wy) => {
+        pushParticle({
+          type: 'grassFire',
+          x: wx,
+          y: wy,
+          vx: 0,
+          vy: 0,
+          z: 0.06,
+          vz: 0,
+          life: GRASS_FIRE_PARTICLE_SEC,
+          maxLife: GRASS_FIRE_PARTICLE_SEC
+        });
+      });
       updateBreakdown.updGrassFireMs = performance.now() - tGrassFire0;
-      tickLightning(dt, {
+      tickLightning(simDt, {
         rainIntensity: getWeatherRainIntensity(),
         playerWorldX: pvx,
         playerWorldY: pvy,
@@ -177,13 +229,18 @@ export function createGameLoop(api) {
       const tBgm0 = performance.now();
       syncBiomeBgm(currentData, player);
       syncWeatherAmbientAudio();
+      syncEarthquakeAmbientAudio(getGameTimeSec?.() ?? 0);
       syncFireLoopAudio(currentData, player);
       updateBreakdown.updBgmMs = performance.now() - tBgm0;
       const tHud0 = performance.now();
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
       updateBreakdown.updHudMs = performance.now() - tHud0;
+      tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
     }
+
+    // --- Plugin Hooks: postUpdate ---
+    PluginRegistry.executeHooks('postUpdate', simDt);
 
     const tRenderStart = performance.now();
     updateView();
@@ -197,13 +254,23 @@ export function createGameLoop(api) {
       while (playFpsSampleTimes.length && playFpsSampleTimes[0] < cutoff) playFpsSampleTimes.shift();
       const fps = playFpsSampleTimes.length;
       const compact = getPlayFpsCompact?.() ?? false;
-      if (compact) {
-        playFpsEl.textContent = `${fps} FPS`;
+      const hudCadenceMs = compact ? 250 : 160;
+      const compactChanged = lastFpsHudCompact == null || compact !== lastFpsHudCompact;
+      if (!compactChanged && tEnd - lastFpsHudWriteMs < hudCadenceMs) {
+        // Keep HUD responsive enough while avoiding per-frame text/layout churn.
+      } else if (compact) {
+        const text = `${fps} FPS`;
+        if (text !== lastFpsHudText) {
+          playFpsEl.textContent = text;
+          lastFpsHudText = text;
+        }
+        lastFpsHudWriteMs = tEnd;
+        lastFpsHudCompact = compact;
       } else {
         const lod = getPlayLodDetail();
         const updateMs = tRenderStart - tLoopStart;
         const renderMs = tRenderEnd - tRenderStart;
-        const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown);
+        const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown, getLastRenderFrameBreakdown());
         const stablePct = perf.stableRatio01 * 100;
         const heavyUpdateSlices = [
           ['ply', perf.p95UpdPlayerMsStable],
@@ -236,26 +303,37 @@ export function createGameLoop(api) {
               .join(' | ')
           : '';
         const wildSubTag = wildSubHeavy ? ` · wldΔ ${wildSubHeavy}` : '';
+        const rndHeavy = Object.entries(perf.renderP95Stable)
+          .map(([k, ms]) => [RENDER_FRAME_PHASE_HUD_LABELS[k] || k, ms])
+          .sort((a, b) => b[1] - a[1]);
+        const top3HeavyRender = rndHeavy
+          .slice(0, 3)
+          .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+          .join(' | ');
         const chunkStats = getPlayChunkFrameStats();
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
           chunkStats.mode === 'play'
-            ? ` · chk ${chunkStats.drawnVisible}/${chunkStats.totalVisible}` +
+            ? `chk ${chunkStats.drawnVisible}/${chunkStats.totalVisible}` +
               ` · miss ${chunkStats.missingVisible}` +
               ` · bake ${chunkStats.bakedThisFrame}/${chunkStats.bakeBudget}` +
               ` · q ${chunkStats.queueSize}` +
               chunkBoostTag
             : '';
-        playFpsEl.textContent =
-          `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms` +
-          ` · p50 ${perf.p50Fps.toFixed(1)}fps` +
-          ` · p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable)` +
-          ` · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms` +
-          ` · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms` +
-          ` · upd top ${top3HeavyUpdate}` +
-          wildSubTag +
-          ` · stable ${stablePct.toFixed(0)}%` +
-          chunkInfo;
+        const fpsHudLines = [
+          `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms · p50 ${perf.p50Fps.toFixed(1)}fps`,
+          `p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable) · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms`,
+          `rnd top ${top3HeavyRender}`,
+          `upd top ${top3HeavyUpdate}${wildSubTag}`,
+          `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}`
+        ];
+        const text = fpsHudLines.join('\n');
+        if (text !== lastFpsHudText) {
+          playFpsEl.textContent = text;
+          lastFpsHudText = text;
+        }
+        lastFpsHudWriteMs = tEnd;
+        lastFpsHudCompact = compact;
       }
     }
     if (getAppMode() === 'play') {
@@ -371,7 +449,7 @@ export function registerPlayKeyboard(api) {
         if (!e.repeat) {
           const now = performance.now();
           if (runTapDir === dir && now - runTapAt <= RUN_DOUBLE_TAP_MS) {
-            player.runMode = true;
+            if (canEntityStartSprint(player)) player.runMode = true;
             runTapDir = null;
             runTapAt = 0;
           } else {

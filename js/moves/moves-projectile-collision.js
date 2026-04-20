@@ -8,14 +8,18 @@ import {
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { formalTreeTrunkBlocksWorldPoint, scatterTreeTrunkBlocksWorldPoint } from '../walkability.js';
+import { getMicroTile } from '../chunking.js';
 import { TREE_MOVE_HITBOX_RADIUS_MULT } from '../scatter-collider-config.js';
 import { emitWorldReactionFromProjectile } from '../simulation/world-reactions.js';
 
 const TREE_BLOCKING_FIRE_PROJECTILE_TYPES = new Set([
   'ember',
   'flamethrowerShot',
+  'fireSpinBurst',
   'incinerateShard',
-  'incinerateCore'
+  'incinerateCore',
+  'fireBlastCore',
+  'fireBlastShard'
 ]);
 
 /** XY overlap for damage: projectile circle vs target hurt radius (tiles), not walk collider. */
@@ -31,8 +35,8 @@ function wildSpatialCellKey(cx, cy) {
   return `${cx},${cy}`;
 }
 
-export function buildWildSpatialIndex(wildList) {
-  /** @type {Map<string, Array<{wild: object, hx: number, hy: number, dex: number, z: number}>>} */
+export function buildWildSpatialIndex(wildList, data) {
+  /** @type {Map<string, Array<{wild: object, hx: number, hy: number, dex: number, absZ: number}>>} */
   const cells = new Map();
   for (const wild of wildList) {
     if (!wild || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
@@ -46,7 +50,9 @@ export function buildWildSpatialIndex(wildList) {
       bucket = [];
       cells.set(key, bucket);
     }
-    bucket.push({ wild, hx, hy, dex, z: wild.z ?? 0 });
+    const t = data ? getMicroTile(Math.floor(wild.x + 0.5), Math.floor(wild.y + 0.5), data) : null;
+    const absZ = (t ? (t.heightStep || 0) : 0) + (wild.z ?? 0);
+    bucket.push({ wild, hx, hy, dex, absZ });
   }
   return cells;
 }
@@ -136,14 +142,14 @@ export function emitProjectileWorldReactionOnce(proj, data, x, y) {
 /**
  * @param {import('../player.js').player} player
  */
-export function checkPlayerHit(proj, player) {
+export function checkPlayerHit(proj, player, projAbsZ, playerAbsZ) {
   if (!proj.hitsPlayer) return false;
   const px = player.visualX ?? player.x;
   const py = player.visualY ?? player.y;
   const dex = player.dexId ?? 1;
   const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
   if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return false;
-  if (!projectileZInPokemonHurtbox(proj.z, dex, player.z ?? 0)) return false;
+  if (!projectileZInPokemonHurtbox(projAbsZ, dex, playerAbsZ)) return false;
   const hurtR = getPokemonHurtboxRadiusTiles(dex);
   return checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR);
 }
@@ -174,20 +180,49 @@ export function spawnIncinerateShards(proj, pushProjectileRef, effectZ) {
   }
 }
 
-/** @param {number | undefined} splashZ — world height for splash (e.g. `0` on ground TTL); default `proj.z`. */
-export function applySplashToWild(proj, wildList, splashZ, wildSpatial = null) {
+/** Radial ember burst when a Fire Blast core detonates — scales with charge tier. */
+export function spawnFireBlastBurst(proj, pushProjectileRef, effectZ) {
+  const z0 = effectZ !== undefined && effectZ !== null ? Number(effectZ) || 0 : proj.z || 0;
+  const tier = Number(proj.blastTier) || 2;
+  const count = Math.max(8, Math.min(34, Number(proj.fireBlastBurstShards) || (tier === 3 ? 26 : tier === 2 ? 16 : 10)));
+  const baseDmg = (proj.splashDamage || 3) * (tier === 3 ? 0.68 : tier === 2 ? 0.74 : 0.82);
+  const speedLo = tier === 3 ? 10.2 : tier === 2 ? 9.2 : 8.4;
+  const speedHi = tier === 3 ? 13.4 : tier === 2 ? 11.8 : 10.6;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+    const speed = speedLo + Math.random() * (speedHi - speedLo);
+    pushProjectileRef({
+      type: 'fireBlastShard',
+      x: proj.x,
+      y: proj.y,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      z: z0,
+      radius: tier === 3 ? 0.28 : tier === 2 ? 0.24 : 0.22,
+      timeToLive: (tier === 3 ? 0.55 : tier === 2 ? 0.46 : 0.42) + Math.random() * 0.22,
+      damage: baseDmg * (0.88 + Math.random() * 0.22),
+      sourceEntity: proj.sourceEntity,
+      fromWild: proj.fromWild,
+      hitsWild: proj.hitsWild,
+      hitsPlayer: proj.hitsPlayer,
+      trailAcc: EMBER_TRAIL_INTERVAL * (i / count)
+    });
+  }
+}
+
+/** @param {number | undefined} splashAbsZ — world absolute height for splash */
+export function applySplashToWild(proj, wildList, splashAbsZ, wildSpatial = null, data = null) {
   const r = proj.splashRadius || 0;
   const d = proj.splashDamage || 0;
   if (r <= 0 || d <= 0) return;
-  const sz = splashZ !== undefined ? Number(splashZ) || 0 : proj.z || 0;
   const minX = proj.x - r;
   const minY = proj.y - r;
   const maxX = proj.x + r;
   const maxY = proj.y + r;
-  const visit = ({ wild, hx, hy, dex, z }) => {
+  const visit = ({ wild, hx, hy, dex, absZ: z }) => {
     if (wild === proj.sourceEntity) return;
     if (Math.hypot(hx - proj.x, hy - proj.y) > r) return;
-    if (!projectileZInPokemonHurtbox(sz, dex, z)) return;
+    if (!projectileZInPokemonHurtbox(splashAbsZ, dex, z)) return;
     if (wild.takeDamage) wild.takeDamage(d);
   };
   if (wildSpatial) {
@@ -198,6 +233,7 @@ export function applySplashToWild(proj, wildList, splashZ, wildSpatial = null) {
     if (wild === proj.sourceEntity || wild.isDespawning || (wild.hp !== undefined && wild.hp <= 0)) continue;
     const splashDex = wild.dexId ?? 1;
     const { hx: shx, hy: shy } = getPokemonHurtboxCenterWorldXY(wild.x, wild.y, splashDex);
-    visit({ wild, hx: shx, hy: shy, dex: splashDex, z: wild.z ?? 0 });
+    const wt = data ? getMicroTile(Math.floor(wild.x + 0.5), Math.floor(wild.y + 0.5), data) : null;
+    visit({ wild, hx: shx, hy: shy, dex: splashDex, absZ: (wt ? (wt.heightStep || 0) : 0) + (wild.z ?? 0) });
   }
 }

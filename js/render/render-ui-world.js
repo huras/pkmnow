@@ -7,6 +7,7 @@ import {
   CLASSIC_BALLOON_FRAME_ANIM_SEC,
   PORTRAIT_REVEAL_AFTER_SEC
 } from '../pokemon/emotion-display-timing.js';
+import { ENTITY_STAMINA_MAX } from '../entity-stamina.js';
 
 /**
  * @param {CanvasRenderingContext2D} ctx
@@ -229,6 +230,38 @@ export function drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH) {
 }
 
 /**
+ * Stamina strip above wild HP (wild) or above the player sprite (player).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ type: string, cx: number, cy: number, pivotY: number, stamina?: number, maxStamina?: number, isBoss?: boolean }} item
+ */
+export function drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH) {
+  const maxS = Math.max(1, Number(item.maxStamina) || ENTITY_STAMINA_MAX);
+  const stRaw = Number(item.stamina);
+  if (!Number.isFinite(stRaw)) return;
+  const st = Math.max(0, Math.min(maxS, stRaw));
+  const s01 = st / maxS;
+  const boss = !!item.isBoss;
+  const barW = Math.max(14, Math.floor(tileW * (boss ? 0.98 : 0.82)));
+  const barH = Math.max(2, Math.floor(tileH * 0.055));
+  const x = Math.floor(item.cx - barW * 0.5);
+  const baseTop = item.cy - item.pivotY + spawnYOffset;
+  const hpBarH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
+  const hpPad = boss ? 8 : 6;
+  const gap = 2;
+  const y =
+    item.type === 'wild'
+      ? Math.floor(baseTop - hpPad - hpBarH - gap - barH)
+      : Math.floor(baseTop - barH - 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+  ctx.fillStyle = s01 > 0.35 ? '#59e36e' : s01 > 0.12 ? '#8ecf6a' : '#b8e050';
+  ctx.fillRect(x, y, Math.max(0, Math.floor(barW * s01)), barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, barW, barH);
+}
+
+/**
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ cx: number, cy: number, pivotY: number, _strengthGrabAction?: any }} item
  */
@@ -253,5 +286,131 @@ export function drawStrengthGrabProgressBar(ctx, item, tileW, tileH, snapPx) {
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+}
+
+/**
+ * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null} prompt
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ * @param {number} timeSec
+ * @returns {{ cx: number, cy: number, rx: number, ry: number, pulse: number } | null}
+ */
+function resolveStrengthGrabTargetOutlineGeom(prompt, tileW, tileH, snapPx, timeSec) {
+  if (!prompt || (prompt.kind !== 'rock' && prompt.kind !== 'faintedWild')) return null;
+  const ox = Math.floor(Number(prompt.ox) || 0);
+  const oy = Math.floor(Number(prompt.oy) || 0);
+  const cols = Math.max(1, Math.floor(Number(prompt.cols) || 1));
+  const rows = Math.max(1, Math.floor(Number(prompt.rows) || 1));
+  const hasCenter = Number.isFinite(Number(prompt.cx)) && Number.isFinite(Number(prompt.cy));
+
+  const cx =
+    prompt.kind === 'faintedWild'
+      ? snapPx((hasCenter ? Number(prompt.cx) : ox + 0.5) * tileW)
+      : snapPx((hasCenter ? Number(prompt.cx) : ox + cols * 0.5) * tileW);
+  const cy =
+    prompt.kind === 'faintedWild'
+      ? snapPx((hasCenter ? Number(prompt.cy) : oy + 0.5) * tileH)
+      : snapPx((hasCenter ? Number(prompt.cy) : oy + rows - 0.5) * tileH);
+  const rx =
+    prompt.kind === 'faintedWild'
+      ? Math.max(tileW * 0.34, cols * tileW * 0.42)
+      : Math.max(tileW * 0.3, cols * tileW * 0.46);
+  const ry =
+    prompt.kind === 'faintedWild'
+      ? Math.max(tileH * 0.2, tileH * 0.28)
+      : Math.max(tileH * 0.12, tileH * 0.22);
+  const pulse = 0.84 + 0.16 * Math.sin((Number(timeSec) || 0) * 7.5);
+  return { cx, cy, rx, ry, pulse };
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rx
+ * @param {number} ry
+ * @param {number} tileW
+ * @param {number} timeSec
+ */
+function strokeStrengthGrabTargetRings(ctx, cx, cy, rx, ry, tileW, timeSec) {
+  ctx.setLineDash([Math.max(3, tileW * 0.16), Math.max(2, tileW * 0.12)]);
+  ctx.lineDashOffset = -((Number(timeSec) || 0) * 40) % 1000;
+  ctx.strokeStyle = 'rgba(255, 235, 140, 0.98)';
+  ctx.lineWidth = Math.max(1.5, tileW * 0.06);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 250, 220, 0.45)';
+  ctx.lineWidth = Math.max(1, tileW * 0.028);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 0.92, ry * 0.92, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/**
+ * Screen-north = upper half (smaller Y); canvas angles clockwise from +X, so π→2π is the upper arc.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rx
+ * @param {number} ry
+ * @param {number} tileW
+ * @param {number} timeSec
+ * @param {'north' | 'south'} half
+ */
+function strokeStrengthGrabTargetRingsHalf(ctx, cx, cy, rx, ry, tileW, timeSec, half) {
+  const a0 = half === 'north' ? Math.PI : 0;
+  const a1 = half === 'north' ? Math.PI * 2 : Math.PI;
+  ctx.setLineDash([Math.max(3, tileW * 0.16), Math.max(2, tileW * 0.12)]);
+  ctx.lineDashOffset = -((Number(timeSec) || 0) * 40) % 1000;
+  ctx.strokeStyle = 'rgba(255, 235, 140, 0.98)';
+  ctx.lineWidth = Math.max(1.5, tileW * 0.06);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, a0, a1);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 250, 220, 0.45)';
+  ctx.lineWidth = Math.max(1, tileW * 0.028);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 0.92, ry * 0.92, 0, a0, a1);
+  ctx.stroke();
+}
+
+/**
+ * North = smaller screen Y (map-north / “back” of the footprint); south = larger Y, in front of the prop.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null} prompt
+ * @param {'north' | 'south'} half
+ * @param {number} timeSec
+ */
+export function drawStrengthGrabTargetOutlineHalf(ctx, prompt, half, tileW, tileH, snapPx, timeSec = 0) {
+  const g = resolveStrengthGrabTargetOutlineGeom(prompt, tileW, tileH, snapPx, timeSec);
+  if (!g) return;
+  const { cx, cy, rx, ry, pulse } = g;
+
+  ctx.save();
+  ctx.globalAlpha *= pulse;
+  strokeStrengthGrabTargetRingsHalf(ctx, cx, cy, rx, ry, tileW, timeSec, half);
+  ctx.restore();
+}
+
+/**
+ * Dashed ellipse around the base footprint of the current Strength grab target.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ kind?: string, ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null} prompt
+ * @param {number} timeSec
+ */
+export function drawStrengthGrabTargetOutline(ctx, prompt, tileW, tileH, snapPx, timeSec = 0) {
+  const g = resolveStrengthGrabTargetOutlineGeom(prompt, tileW, tileH, snapPx, timeSec);
+  if (!g) return;
+  const { cx, cy, rx, ry, pulse } = g;
+  ctx.save();
+  ctx.globalAlpha *= pulse;
+  strokeStrengthGrabTargetRings(ctx, cx, cy, rx, ry, tileW, timeSec);
   ctx.restore();
 }

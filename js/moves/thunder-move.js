@@ -12,7 +12,7 @@
  * Flow per cast:
  *   1. `spawnSummonedThunderCloudAt(tx, ty, { scale })` — transient dark puff at the target.
  *   2. One or more strikes are queued with `boltAtMs = now + SUMMONED_THUNDER_BOLT_DELAY_MS (+ stagger)`.
- *   3. `tickThunderStrikes(dt, wildList, data, wildSpatial)` resolves the queue:
+ *   3. `tickThunderStrikes(dt, wildList, data, wildSpatial, onNewGrassFireParticle?)` resolves the queue:
  *        - `spawnGroundStrikeAt(...)` with `{ color: 'yellow', flashCloudSlot: false }`.
  *        - splash damage on wild pokemon in the strike's radius.
  */
@@ -26,6 +26,7 @@ import {
 } from '../weather/lightning.js';
 import { applySplashToWild } from './moves-projectile-collision.js';
 import { getChargeLevel, isChargeStrongAttackEligible } from '../main/play-charge-levels.js';
+import { playThunderStrikeSfx } from '../audio/thunder-strike-sfx.js';
 
 /** @typedef {1 | 2 | 3} ThunderLevel */
 
@@ -119,8 +120,9 @@ export function scheduleThunderStrike(targetX, targetY, sourceEntity = null, opt
  * @param {Array<object> | Iterable<object>} wildList
  * @param {object | null} data
  * @param {Map<string, any[]> | null} wildSpatial  optional spatial index from moves-manager
+ * @param {(worldX: number, worldY: number) => void} [onNewGrassFireParticle] optional — spawn `grassFire` particle when a strike starts a new burn
  */
-export function tickThunderStrikes(_dt, wildList, data, wildSpatial = null) {
+export function tickThunderStrikes(_dt, wildList, data, wildSpatial = null, onNewGrassFireParticle = null) {
   if (pendingStrikes.length === 0) return;
   const now = performance.now();
   const list = Array.isArray(wildList) ? wildList : wildList ? [...wildList] : [];
@@ -129,10 +131,14 @@ export function tickThunderStrikes(_dt, wildList, data, wildSpatial = null) {
     if (now < strike.boltAtMs) continue;
     pendingStrikes.splice(i, 1);
 
-    spawnGroundStrikeAt(strike.worldX, strike.worldY, data, {
+    const ignitedGrass = spawnGroundStrikeAt(strike.worldX, strike.worldY, data, {
       color: 'yellow',
       flashCloudSlot: false
     });
+    if (ignitedGrass && typeof onNewGrassFireParticle === 'function') {
+      onNewGrassFireParticle(strike.worldX, strike.worldY);
+    }
+    playThunderStrikeSfx({ x: strike.worldX, y: strike.worldY, z: 0 });
     // Reuse the projectile splash helper via a minimal duck-typed object (no projectile
     // actually travels — the bolt is instant by design, matching the rain lightning).
     applySplashToWild(

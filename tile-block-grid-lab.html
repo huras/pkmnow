@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lab — grid de blocos (drag &amp; drop)</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --surface: #141820;
+        --surface2: #1c2230;
+        --text: #e8ecf4;
+        --muted: #8b95a8;
+        --accent: #e60012;
+        --cell-on: #c8d4e8;
+        --cell-off: #2a3142;
+        --grid-line: #2e3648;
+        --tray-h: 168px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem 1rem 2rem;
+        padding-bottom: calc(var(--tray-h) + 2rem);
+      }
+      .top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem 1rem;
+        margin-bottom: 0.75rem;
+      }
+      .top h1 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+        flex: 1 1 auto;
+      }
+      .top a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.9rem;
+      }
+      .top a:hover {
+        color: var(--text);
+      }
+      .hint {
+        font-size: 0.82rem;
+        color: var(--muted);
+        line-height: 1.45;
+        margin-bottom: 0.75rem;
+      }
+      .hint code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.78em;
+        background: var(--surface);
+        padding: 0.08em 0.32em;
+        border-radius: 4px;
+      }
+      .board-wrap {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 0.75rem;
+        overflow: auto;
+        max-height: min(70vh, 720px);
+      }
+      .board {
+        display: grid;
+        gap: 4px;
+        width: max-content;
+        margin: 0 auto;
+      }
+      .slot {
+        width: 52px;
+        height: 52px;
+        background: var(--surface2);
+        border-radius: 6px;
+        border: 1px solid var(--grid-line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px;
+        cursor: pointer;
+        transition: border-color 0.12s ease, background 0.12s ease;
+      }
+      .slot:hover {
+        border-color: #4a5568;
+      }
+      .slot.drag-over {
+        border-color: var(--accent);
+        background: #1a1520;
+      }
+      .mini {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        gap: 1px;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .mini span {
+        border-radius: 1px;
+        background: var(--cell-off);
+      }
+      .mini span.on {
+        background: var(--cell-on);
+      }
+      .tray {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 20;
+        background: linear-gradient(180deg, transparent 0%, var(--bg) 18%);
+        padding: 0.5rem 0.75rem 0.75rem;
+        border-top: 1px solid var(--grid-line);
+      }
+      .tray-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 0.5rem 0.6rem;
+      }
+      .tray-title {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 0 0 0.35rem 0.15rem;
+      }
+      .tray-scroll {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: flex-end;
+        max-height: calc(var(--tray-h) - 28px);
+        overflow-y: auto;
+      }
+      .tray-item {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.2rem;
+        user-select: none;
+      }
+      .tray-item label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.58rem;
+        color: var(--muted);
+        max-width: 64px;
+        text-align: center;
+        line-height: 1.15;
+        word-break: break-word;
+      }
+      .palette-piece,
+      .slot-piece {
+        width: 48px;
+        height: 48px;
+        border-radius: 6px;
+        border: 1px solid var(--grid-line);
+        background: #0f1218;
+        padding: 3px;
+      }
+      .palette-piece {
+        cursor: grab;
+      }
+      .palette-piece:active {
+        cursor: grabbing;
+      }
+      .palette-piece.dragging-source {
+        opacity: 0.45;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.6rem;
+      }
+      .controls label {
+        font-size: 0.8rem;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .controls input[type='number'] {
+        width: 4rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        padding: 0.25rem 0.35rem;
+        border-radius: 6px;
+        border: 1px solid var(--grid-line);
+        background: var(--surface2);
+        color: var(--text);
+      }
+      button.btn {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 6px;
+        border: 1px solid var(--grid-line);
+        background: var(--surface2);
+        color: var(--text);
+        cursor: pointer;
+      }
+      button.btn:hover {
+        border-color: #5c6578;
+      }
+      button.btn-primary {
+        border-color: #8a2f3a;
+        background: #2a1216;
+        color: #ffb4bc;
+      }
+      button.btn-primary:hover {
+        border-color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="top">
+        <h1>Grid de blocos 3×3</h1>
+        <a href="index.html">← Voltar</a>
+      </div>
+      <p class="hint">
+        Arraste da bandeja para um slot. <code>Botão direito</code> em um slot limpa.
+        Arrastar de um slot para outro move a peça. Peça <code>VAZIO</code> só limpa ao soltar.
+      </p>
+      <div class="controls">
+        <label>Cols <input type="number" id="colsIn" min="4" max="40" value="14" /></label>
+        <label>Linhas <input type="number" id="rowsIn" min="4" max="40" value="10" /></label>
+        <button type="button" class="btn" id="applySize">Aplicar tamanho</button>
+        <button type="button" class="btn-primary btn" id="clearBoard">Limpar grade</button>
+      </div>
+      <div class="board-wrap">
+        <div class="board" id="board" aria-label="Grade principal"></div>
+      </div>
+    </div>
+
+    <aside class="tray" aria-label="Bandeja de peças">
+      <div class="tray-inner">
+        <p class="tray-title">Peças</p>
+        <div class="tray-scroll" id="tray"></div>
+      </div>
+    </aside>
+
+    <script>
+      /** @type {Record<string, number[][]>} */
+      const PIECES = {
+        OUT_NW: [
+          [0, 0, 0],
+          [0, 1, 1],
+          [0, 1, 1],
+        ],
+        EDGE_N: [
+          [0, 0, 0],
+          [1, 1, 1],
+          [1, 1, 1],
+        ],
+        OUT_NE: [
+          [0, 0, 0],
+          [1, 1, 0],
+          [1, 1, 0],
+        ],
+        EDGE_W: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [1, 1, 0],
+        ],
+        CENTER: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1],
+        ],
+        EDGE_E: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [1, 1, 0],
+        ],
+        IN_SE: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 0],
+        ],
+        IN_SW: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [0, 1, 1],
+        ],
+        OUT_SW: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [0, 0, 0],
+        ],
+        EDGE_S: [
+          [1, 1, 1],
+          [1, 1, 1],
+          [0, 0, 0],
+        ],
+        OUT_SE: [
+          [1, 1, 0],
+          [1, 1, 0],
+          [0, 0, 0],
+        ],
+        IN_NE: [
+          [1, 1, 0],
+          [1, 1, 1],
+          [1, 1, 1],
+        ],
+        IN_NW: [
+          [0, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1],
+        ],
+      };
+
+      const MIME = 'application/x-tile-piece';
+
+      /** @param {number[][]} data */
+      function renderMini(data) {
+        const el = document.createElement('div');
+        el.className = 'mini';
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 3; c++) {
+            const cell = document.createElement('span');
+            if (data[r][c]) cell.classList.add('on');
+            el.appendChild(cell);
+          }
+        }
+        return el;
+      }
+
+      /** @param {string} key */
+      function makePieceElement(key) {
+        const wrap = document.createElement('div');
+        wrap.className = 'palette-piece';
+        wrap.dataset.pieceKey = key;
+        wrap.setAttribute('draggable', 'true');
+        if (key === '__EMPTY__') {
+          wrap.style.opacity = '0.85';
+          wrap.title = 'Soltar em um slot para limpar';
+        }
+        const data =
+          key === '__EMPTY__'
+            ? [
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+              ]
+            : PIECES[key];
+        wrap.appendChild(renderMini(data));
+        return wrap;
+      }
+
+      /** @param {HTMLElement} slot */
+      function setSlotKey(slot, key) {
+        slot.dataset.pieceKey = key;
+        const existing = slot.querySelector('.slot-piece');
+        if (existing) existing.remove();
+        if (key === '__EMPTY__') return;
+        const holder = document.createElement('div');
+        holder.className = 'slot-piece';
+        holder.appendChild(renderMini(PIECES[key]));
+        slot.appendChild(holder);
+      }
+
+      /** @param {HTMLElement} slot */
+      function getSlotKey(slot) {
+        const k = slot.dataset.pieceKey;
+        return k === '__EMPTY__' || !k ? '__EMPTY__' : k;
+      }
+
+      const boardEl = document.getElementById('board');
+      const trayEl = document.getElementById('tray');
+      const colsIn = document.getElementById('colsIn');
+      const rowsIn = document.getElementById('rowsIn');
+
+      let dragSource = /** @type {{ type: 'palette' | 'slot', key: string, slot?: HTMLElement } | null} */ (
+        null
+      );
+
+      function buildTray() {
+        trayEl.innerHTML = '';
+        const keys = ['__EMPTY__', ...Object.keys(PIECES)];
+        for (const key of keys) {
+          const row = document.createElement('div');
+          row.className = 'tray-item';
+          const lbl = document.createElement('label');
+          lbl.textContent = key === '__EMPTY__' ? 'VAZIO' : key;
+          const piece = makePieceElement(key);
+          row.appendChild(piece);
+          row.appendChild(lbl);
+          trayEl.appendChild(row);
+
+          piece.addEventListener('dragstart', (ev) => {
+            dragSource = { type: 'palette', key };
+            ev.dataTransfer?.setData(MIME, key);
+            ev.dataTransfer?.setData('text/plain', key);
+            ev.dataTransfer.effectAllowed = 'copy';
+            piece.classList.add('dragging-source');
+          });
+          piece.addEventListener('dragend', () => {
+            piece.classList.remove('dragging-source');
+            dragSource = null;
+          });
+        }
+      }
+
+      /** @param {number} cols @param {number} rows */
+      function buildBoard(cols, rows) {
+        boardEl.innerHTML = '';
+        boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const slot = document.createElement('div');
+            slot.className = 'slot';
+            slot.dataset.row = String(r);
+            slot.dataset.col = String(c);
+            slot.dataset.pieceKey = '__EMPTY__';
+            slot.title = `Slot ${c + 1},${r + 1}`;
+
+            slot.addEventListener('dragover', (ev) => {
+              ev.preventDefault();
+              ev.dataTransfer.dropEffect =
+                dragSource?.type === 'palette' ? 'copy' : 'move';
+              slot.classList.add('drag-over');
+            });
+            slot.addEventListener('dragleave', () => {
+              slot.classList.remove('drag-over');
+            });
+            slot.addEventListener('drop', (ev) => {
+              ev.preventDefault();
+              slot.classList.remove('drag-over');
+              let key = ev.dataTransfer?.getData(MIME) || '';
+              if (!key) key = ev.dataTransfer?.getData('text/plain') || '';
+              if (!key && dragSource?.type === 'slot') key = dragSource.key;
+
+              if (dragSource?.type === 'slot' && dragSource.slot) {
+                const from = dragSource.slot;
+                if (from === slot) return;
+                const fromKey = getSlotKey(from);
+                const toKey = getSlotKey(slot);
+                setSlotKey(from, toKey);
+                setSlotKey(slot, fromKey);
+                return;
+              }
+
+              if (key && (key === '__EMPTY__' || PIECES[key])) {
+                setSlotKey(slot, key);
+              }
+            });
+
+            slot.addEventListener('dragstart', (ev) => {
+              const k = getSlotKey(slot);
+              if (k === '__EMPTY__') {
+                ev.preventDefault();
+                return;
+              }
+              dragSource = { type: 'slot', key: k, slot };
+              ev.dataTransfer?.setData(MIME, k);
+              ev.dataTransfer?.setData('text/plain', k);
+              ev.dataTransfer.effectAllowed = 'move';
+              slot.style.opacity = '0.35';
+            });
+            slot.addEventListener('dragend', () => {
+              slot.style.opacity = '';
+              dragSource = null;
+            });
+
+            slot.setAttribute('draggable', 'true');
+
+            slot.addEventListener('contextmenu', (ev) => {
+              ev.preventDefault();
+              setSlotKey(slot, '__EMPTY__');
+            });
+
+            boardEl.appendChild(slot);
+          }
+        }
+      }
+
+      function readSize() {
+        const cols = Math.min(40, Math.max(4, Number(colsIn.value) || 14));
+        const rows = Math.min(40, Math.max(4, Number(rowsIn.value) || 10));
+        colsIn.value = String(cols);
+        rowsIn.value = String(rows);
+        return { cols, rows };
+      }
+
+      document.getElementById('applySize').addEventListener('click', () => {
+        const { cols, rows } = readSize();
+        buildBoard(cols, rows);
+      });
+      document.getElementById('clearBoard').addEventListener('click', () => {
+        boardEl.querySelectorAll('.slot').forEach((s) => {
+          setSlotKey(/** @type {HTMLElement} */ (s), '__EMPTY__');
+        });
+      });
+
+      buildTray();
+      buildBoard(14, 10);
+    </script>
+  </body>
+</html>

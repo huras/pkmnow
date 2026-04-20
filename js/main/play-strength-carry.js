@@ -461,7 +461,8 @@ export function updateStrengthCarryInteraction(dt, player, data) {
 
 /**
  * Returns a grab prompt payload when a liftable Strength detail is in range.
- * @returns {{ itemKey: string } | null}
+ * Includes footprint metadata used by world-space UI highlights.
+ * @returns {{ itemKey: string, displayName: string | null, wildDexId?: number, kind?: 'rock' | 'faintedWild', ox?: number, oy?: number, cols?: number, rows?: number, cx?: number, cy?: number } | null}
  */
 export function getStrengthGrabPromptInfo(player, data) {
   if (!player || !data) return null;
@@ -473,16 +474,40 @@ export function getStrengthGrabPromptInfo(player, data) {
     const p = scatterPhysicsCircleAtOrigin(cand.ox, cand.oy, data);
     if (p) {
       const itemKey = String(p.itemKey || '');
-      if (itemKey) return { itemKey, displayName: null };
+      if (itemKey) {
+        const objSet = OBJECT_SETS[itemKey];
+        const parsed = parseShape(objSet?.shape || '[1x1]');
+        const cols = Math.max(1, Math.floor(Number(parsed.cols) || 1));
+        const rows = Math.max(1, Math.floor(Number(parsed.rows) || 1));
+        return {
+          kind: 'rock',
+          itemKey,
+          displayName: null,
+          ox: Math.floor(Number(cand.ox) || 0),
+          oy: Math.floor(Number(cand.oy) || 0),
+          cols,
+          rows,
+          cx: Number(p.cx),
+          cy: Number(p.cy)
+        };
+      }
     }
     return null;
   }
   const fainted = nearest.fainted;
-  const dex = Math.floor(Number(fainted.dexId) || 1);
+  const dex = Math.max(1, Math.floor(Number(fainted.dexId) || 1));
   const cfg = getPokemonConfig(dex);
   return {
+    kind: 'faintedWild',
     itemKey: '',
-    displayName: `Fainted ${String(cfg?.name || `#${dex}`)}`
+    displayName: `Fainted ${String(cfg?.name || `#${dex}`)}`,
+    wildDexId: dex,
+    ox: Math.floor(Number(fainted.x) || 0),
+    oy: Math.floor(Number(fainted.y) || 0),
+    cols: 1,
+    rows: Math.max(1, Math.round((Number(cfg?.heightTiles) || 1.1) / 1.8)),
+    cx: Number(fainted.x),
+    cy: Number(fainted.y)
   };
 }
 

@@ -1,4 +1,5 @@
 import { entitiesByKey } from './wild-core-state.js';
+import { ensureEntityStamina, tickEntityStamina } from '../entity-stamina.js';
 import { decaySocialMemory, trackPlayerProximitySignals } from './wild-social-system.js';
 import { updateWorldReactions } from '../simulation/world-reactions.js';
 import {
@@ -6,6 +7,7 @@ import {
   integrateWildPokemonVertical,
   updateWildMotion
 } from './wild-motion-ai.js';
+import { tickWildGroupLeaderPhaseWhenMotionSkipped } from './wild-group-behavior.js';
 
 /** Skip heavy wander pathing when far (sleep/flee/approach/alert still run every frame). */
 const WILD_WANDER_LOD_SKIP_DIST = 40;
@@ -125,6 +127,9 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       e.vx = 0;
       e.vy = 0;
       e.animMoving = false;
+      ensureEntityStamina(e);
+      tickEntityStamina(e, stepDt, false);
+      tickWildGroupLeaderPhaseWhenMotionSkipped(e, stepDt, entitiesByKey);
     }
 
     wildUpdatePerfLast.motionMs += performance.now() - mark;

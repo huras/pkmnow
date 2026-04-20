@@ -11,7 +11,12 @@ import { AnimationRenderer } from '../animation-renderer.js';
 import { getGrassVariant, GRASS_TILES } from '../biome-tiles.js';
 import { foliageType } from '../chunking.js';
 import { getPlayAnimatedGrassLayers } from '../play-grass-eligibility.js';
-import { grassFireVisualPhaseAt, grassFireCharredRegrowth01 } from '../play-grass-fire.js';
+import {
+  grassFireVisualPhaseAt,
+  grassFireCharredRegrowth01,
+  grassFireExtinguishBarVisibleAt,
+  grassFireBurningHpAt
+} from '../play-grass-fire.js';
 import { getGrassCutFadeoutAlpha01 } from '../play-grass-cut.js';
 import { TCOLS_NATURE } from './render-utils-internal.js';
 
@@ -125,19 +130,45 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
   if (lodDetail >= 2 && !playerTopOverlay) return;
   const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
-  const blitGrassQuad = (frame, destYTop, destHFull) => {
-    if (!frame) return;
-    const fw = frame.width || frame.naturalWidth;
-    const fh = frame.height || frame.naturalHeight;
+  const blitGrassQuad = (surf, destYTop, destHFull) => {
+    if (!surf) return;
+    const canvas = surf.canvas != null ? surf.canvas : surf;
+    const flipX = surf.flipX === true;
+    const fw = canvas.width || canvas.naturalWidth;
+    const fh = canvas.height || canvas.naturalHeight;
+    const destX = snapPx(tx);
+    const drawFull = () => {
+      if (!flipX) {
+        ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+        return;
+      }
+      const cx = destX + tileW * 0.5;
+      ctx.save();
+      ctx.translate(cx, 0);
+      ctx.scale(-1, 1);
+      ctx.translate(-cx, 0);
+      ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+      ctx.restore();
+    };
     if (!playerTopOverlay) {
-      ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
+      drawFull();
       return;
     }
     const sh = Math.max(1, Math.round(fh * barFrac));
     const sy = fh - sh;
     const dh = destHFull * barFrac;
     const dy = destYTop + destHFull * (1 - barFrac);
-    ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
+    if (!flipX) {
+      ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+      return;
+    }
+    const cx = destX + tileW * 0.5;
+    ctx.save();
+    ctx.translate(cx, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-cx, 0);
+    ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+    ctx.restore();
   };
 
   const cutFade = getGrassCutFadeoutAlpha01(mx, my);
@@ -204,6 +235,31 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       ctx.filter = 'none';
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
+      if (grassFireExtinguishBarVisibleAt(mx, my)) {
+        const hpInfo = grassFireBurningHpAt(mx, my);
+        if (hpInfo && hpInfo.maxHp > 0) {
+          const frac = Math.max(0, Math.min(1, hpInfo.hp / hpInfo.maxHp));
+          const bx = snapPx(tx + tileW * 0.08);
+          const bw = Math.max(10, tileW * 0.84);
+          const by = ty - tileH * 0.22;
+          const bh = Math.max(3.5, tileH * 0.075);
+          ctx.save();
+          ctx.globalAlpha = playerTopOverlay ? 0.88 * PLAYER_TILE_GRASS_OVERLAY_ALPHA : 0.94;
+          ctx.fillStyle = 'rgba(0,0,0,0.58)';
+          ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+          ctx.fillStyle = 'rgba(28,28,28,0.95)';
+          ctx.fillRect(bx, by, bw, bh);
+          const r = Math.round(255);
+          const gCol = Math.round(70 + 150 * frac);
+          const bCol = Math.round(35 + 55 * frac);
+          ctx.fillStyle = `rgb(${r},${gCol},${bCol})`;
+          ctx.fillRect(bx, by, bw * frac, bh);
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bx, by, bw, bh);
+          ctx.restore();
+        }
+      }
       ctx.restore();
     } else {
       const u = Math.max(0, Math.min(1, charredRegrowU));
@@ -223,7 +279,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       }
       ctx.restore();
     }
-    if (playerTopOverlay) ctx.restore();
+    if (needAlphaRestore) ctx.restore();
     return;
   }
 

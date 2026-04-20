@@ -7,15 +7,14 @@ import {
   triggerPlayerSocialAction
 } from './wild-pokemon/index.js';
 import { resetThrownMapDetailEntities } from './main/thrown-map-detail-entities.js';
-import { ensurePokemonSheetsLoaded } from './pokemon/pokemon-asset-loader.js';
+import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-asset-loader.js';
+import { resolvePmdFrameSpecForSlice } from './pokemon/pmd-layout-metrics.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
-import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
-import { speciesHasFlyingType } from './pokemon/pokemon-type-helpers.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
@@ -26,9 +25,16 @@ import {
   openDetailDebugModal
 } from './main/tile-debug-modal.js';
 import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.js';
-import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import { registerPlayGamepadListeners } from './main/play-gamepad.js';
+import {
+  tryApplyPlaySessionResumeOnEnter,
+  resetPlayAutosaveSchedule,
+  flushPlaySessionSave,
+  peekPlaySessionSaveForMap,
+  getPlayResumeMacroTileFromSave
+} from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
 import { WEATHER_PRESET_LABELS } from './main/weather-presets.js';
 import {
@@ -37,11 +43,22 @@ import {
   getWeatherTarget,
   setWeatherTarget,
   getActiveWeatherParams,
+  getActiveWeatherPresetBlend,
   addWeatherTargetChangeListener
 } from './main/weather-system.js';
+import {
+  initEarthquakeLayer,
+  tickEarthquakeLayer,
+  setEarthquakeTargetIntensity01,
+  getEarthquakeActiveIntensity01
+} from './main/earthquake-layer.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
-import { clearPlayCrystalTackleState } from './main/play-crystal-tackle.js';
+import {
+  clearPlayCrystalTackleState,
+  spawnPickableCrystalDropAt,
+  trySpendOneInventoryUnitForGroundDrop
+} from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
 import { renderMapHoverDetails, MAP_HOVER_MIN_INTERVAL_MS } from './main/map-hover-hud.js';
 import { createPlaySocialOverlay } from './main/play-social-overlay.js';
@@ -53,21 +70,24 @@ import {
   getPlayColliderOverlayCache
 } from './main/play-collider-overlay-cache.js';
 import { playInputState } from './main/play-input-state.js';
+import { playScreenPixelsToWorldTileCoords, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import {
-  playScreenPixelsToWorldTileCoords,
-  clearPlayCameraSnapshot
-} from './render/play-camera-snapshot.js';
+  recordPlayPointerClient,
+  clientToCanvasPixels,
+  getPlayHoverMicroTile,
+  invalidatePlayPointerHover
+} from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
-import { OBJECT_SETS } from './tessellation-data.js';
-import { parseShape } from './tessellation-logic.js';
-import { TessellationEngine } from './tessellation-engine.js';
+import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
+import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
 import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
-import { cycleMinimapZoom } from './render/render-minimap.js';
+import { installMinimapSaveModal } from './main/minimap-save-modal.js';
+import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
 import {
   advanceWorldHours,
   dayPhaseLabelEn,
@@ -78,6 +98,9 @@ import {
   tickDayCycleTintSmooth,
   wrapHours
 } from './main/world-time-of-day.js';
+import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
+import { initMods } from './core/mod-loader.js';
+
 
 if (isPlayShell()) {
   setPlayPointerMode('game');
@@ -129,26 +152,36 @@ if (canvas) {
 const minimap = document.getElementById('minimap');
 const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
-const btnMinimapZoom = document.getElementById('minimap-zoom-btn');
+const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
+const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 
-/** Zoom labels shown in the panel badge */
-const ZOOM_LABELS = { far: '🗺 Far', mid: '🔍 Mid', close: '🔍+ Close' };
-
-function syncMinimapZoomBadge() {
-  if (!minimap || !minimapPanel) return;
+function syncMinimapZoomReadout() {
+  if (!minimap) return;
   const zoom = minimap.dataset.zoom || 'close';
-  minimapPanel.dataset.zoomLevel = ZOOM_LABELS[zoom] ?? zoom;
+  const { title, subtitle } = getMinimapZoomUiLines(zoom);
+  const titleEl = document.getElementById('minimap-zoom-readout-title');
+  const subEl = document.getElementById('minimap-zoom-readout-sub');
+  const readout = document.getElementById('minimap-zoom-readout');
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = subtitle;
+  if (readout) readout.title = `${title} — ${subtitle}`;
 }
 
-if (btnMinimapZoom && minimap) {
-  btnMinimapZoom.addEventListener('click', () => {
-    const next = cycleMinimapZoom(/** @type {HTMLCanvasElement} */ (minimap));
-    syncMinimapZoomBadge();
-    // Tooltip update to reflect new state
-    const NEXT_LABELS = { far: 'Zoom: mapa completo — clique para zoom médio', mid: 'Zoom: médio — clique para zoom aproximado', close: 'Zoom: aproximado — clique para mapa completo' };
-    btnMinimapZoom.title = NEXT_LABELS[next] ?? 'Alterar zoom';
+function wireMinimapZoomStepButtons() {
+  if (!minimap) return;
+  const c = /** @type {HTMLCanvasElement} */ (minimap);
+  btnMinimapZoomIn?.addEventListener('click', () => {
+    stepMinimapZoom(c, 1);
+    syncMinimapZoomReadout();
+  });
+  btnMinimapZoomOut?.addEventListener('click', () => {
+    stepMinimapZoom(c, -1);
+    syncMinimapZoomReadout();
   });
 }
+
+wireMinimapZoomStepButtons();
+syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const infoBar = document.getElementById('hud-info');
@@ -173,6 +206,7 @@ const debugContent = document.getElementById('tile-debug-content');
 const btnDebugClose = document.getElementById('tile-debug-close');
 const btnDebugCopy = document.getElementById('tile-debug-copy-json');
 const btnDebugCopyDetail = document.getElementById('tile-debug-copy-detail-json');
+const playBgmNowPlayingEl = document.getElementById('play-bgm-now-playing');
 const playBgmNowPlayingTrackEl = document.getElementById('play-bgm-now-playing-track');
 const playBgmNowPlayingStatusEl = document.getElementById('play-bgm-now-playing-status');
 const playBgmToastEl = document.getElementById('play-bgm-toast');
@@ -184,11 +218,17 @@ const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 const chkRotas = document.getElementById('chkRotas');
 const chkGrafo = document.getElementById('chkGrafo');
 const chkCurvas = document.getElementById('chkCurvas');
+
+if (playBgmNowPlayingEl) {
+  playBgmNowPlayingEl.hidden = true;
+  playBgmNowPlayingEl.style.display = 'none';
+}
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -200,6 +240,8 @@ let playSocialOverlay = {
 };
 
 let currentData = null;
+/** One-shot: auto-enter play at saved position after first map load (page session). */
+let didAutoResumePlayOnInitialLoad = false;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
 let playCharacterSelector = null;
 let appMode = 'map';
@@ -208,10 +250,13 @@ let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
 let worldTimeRunning = true;
+/** After play on this map in the page session; map overview can show live player if there is no save yet. */
+let sessionEnteredPlayOnCurrentMap = false;
 // Weather engine state lives in `./main/weather-system.js` — this file only wires the
 // DOM panel + the tick call. Initial seed here so the first `getActiveWeatherParams()`
 // read (during `getSettings()` before the first tick) returns the correct shape.
 initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
+initEarthquakeLayer({ intensity01: 0 });
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -289,9 +334,27 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
-installPlayHelpWikiModal({
-  forceCloseMinimapAudioPopover: minimapAudioUi.forceCloseMinimapAudioPopover
+const minimapHudPopovers = installMinimapHudPopovers({ imageCache });
+const minimapSaveModal = installMinimapSaveModal({
+  getCurrentData: () => currentData,
+  getPlayer: () => player,
+  getPersistExtra: () => buildPlaySessionPersistExtra()
 });
+installPlayHelpWikiModal({
+  forceCloseMinimapAudioPopover: () => {
+    minimapAudioUi.forceCloseMinimapAudioPopover();
+    minimapHudPopovers.forceCloseAllPopovers();
+    minimapSaveModal.forceClose();
+  }
+});
+
+function escapeFromPlayOrCloseOverlays() {
+  if (minimapSaveModal.isOpen()) {
+    minimapSaveModal.forceClose();
+    return;
+  }
+  btnBackToMap?.click?.();
+}
 
 let lastHudTileKey = '';
 let lastHudMs = 0;
@@ -306,92 +369,111 @@ function detailLabelFromItemKey(itemKey) {
     .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function detailPreviewHtmlForInfoBar(itemKey) {
-  const objSet = OBJECT_SETS[String(itemKey || '')];
-  if (!objSet) return '';
-  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return '';
-  const { cols } = parseShape(objSet.shape || '[1x1]');
-  const imgPath = TessellationEngine.getImagePath(objSet.file);
-  if (!imgPath) return '';
-  const atlasCols = imgPath.includes('caves') ? 50 : 57;
-  const previewIds = base.ids.slice(0, Math.max(1, Math.min(4, cols)));
-  const tiles = previewIds
-    .map((id) => {
-      const sx = (id % atlasCols) * 16;
-      const sy = Math.floor(id / atlasCols) * 16;
-      return `<span style="display:inline-block;width:14px;height:14px;background-image:url('${imgPath}');background-repeat:no-repeat;background-size:auto;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.18) inset"></span>`;
-    })
-    .join('');
-  return `<span style="display:inline-flex;gap:2px;vertical-align:middle;margin-right:6px">${tiles}</span>`;
+function detailPreviewHtmlForImmersiveHint(itemKey) {
+  return detailScatterGridPreviewHtml(
+    itemKey,
+    15,
+    'play-immersive-hint__sprite',
+    'vertical-align:middle;line-height:0',
+    { seamless: true, gapPx: 0 }
+  );
 }
 
-function detailPreviewHtmlForImmersiveHint(itemKey) {
-  const objSet = OBJECT_SETS[String(itemKey || '')];
-  if (!objSet) return '';
-  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
-  if (!base?.ids?.length) return '';
-  const { cols } = parseShape(objSet.shape || '[1x1]');
-  const imgPath = TessellationEngine.getImagePath(objSet.file);
-  if (!imgPath) return '';
-  const atlasCols = imgPath.includes('caves') ? 50 : 57;
-  const gridCols = Math.max(1, cols | 0);
-  const tiles = base.ids
-    .map((id) => {
-      const sx = (id % atlasCols) * 16;
-      const sy = Math.floor(id / atlasCols) * 16;
-      return `<span style="display:inline-block;width:15px;height:15px;background-image:url('${imgPath}');background-repeat:no-repeat;background-position:-${sx}px -${sy}px;image-rendering:pixelated;border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.16) inset"></span>`;
-    })
-    .join('');
-  return `<span class="play-immersive-hint__sprite" aria-hidden="true" style="display:grid;grid-template-columns:repeat(${gridCols},15px);gap:2px">${tiles}</span>`;
+/** First frame of faint (or idle) PMD sheet for Strength HUD. */
+function faintedWildHudSpriteHtml(dexId, displayW) {
+  const dex = Math.max(1, Math.floor(Number(dexId) || 1));
+  void ensurePokemonSheetsLoaded(imageCache, dex);
+  const { faint: wFaint, idle: wIdle, walk: wWalk } = getResolvedSheets(imageCache, dex);
+  const sheet = wFaint || wIdle || wWalk;
+  if (!sheet || !(sheet.naturalWidth || sheet.width)) return '';
+  const { sw, sh } = resolvePmdFrameSpecForSlice(sheet, dex, 'faint');
+  const natW = sheet.naturalWidth || sheet.width;
+  const natH = sheet.naturalHeight || sheet.height;
+  const dw = Math.max(20, Math.floor(displayW));
+  const dh = Math.max(16, Math.round((sh * dw) / Math.max(1, sw)));
+  const scale = dw / Math.max(1, sw);
+  const bgW = natW * scale;
+  const bgH = natH * scale;
+  const src = String(sheet.currentSrc || sheet.src || '').replace(/'/g, '%27');
+  if (!src) return '';
+  return `<span aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px;width:${dw}px;height:${dh}px;background-image:url('${src}');background-repeat:no-repeat;background-size:${bgW}px ${bgH}px;background-position:0 0;image-rendering:pixelated;box-shadow:0 0 0 1px rgba(255,255,255,0.14) inset;border-radius:2px"></span>`;
+}
+
+/** @param {{ itemKey: string, wildDexId?: number }} ctx */
+function strengthHudObjectPreviewHtmlImmersive(ctx) {
+  const wid = Math.floor(Number(ctx?.wildDexId) || 0);
+  if (wid > 0) return faintedWildHudSpriteHtml(wid, 40);
+  return detailPreviewHtmlForImmersiveHint(String(ctx?.itemKey || ''));
+}
+
+/**
+ * Minimap biome row + coords — always in sync (must not sit behind the HUD throttle return).
+ * @param {{ id: number, name?: string, color?: string } | undefined} bio
+ * @param {number} px
+ * @param {number} py
+ * @param {number} pz
+ */
+function syncMinimapPlayFooter(bio, px, py, pz) {
+  const root = minimapPanel || document.getElementById('minimap-panel');
+  if (!root) return;
+  const nameEl = root.querySelector('#minimap-biome-readout');
+  const swatchEl = root.querySelector('#minimap-biome-swatch');
+  const coordsEl = root.querySelector('#minimap-coords-readout');
+  const biomeLabel = bio?.name ?? '—';
+  if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
+  if (swatchEl) {
+    const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
+    const bg = sw && /^#[0-9a-fA-F]{6}$/.test(sw) ? sw : '#3a3a44';
+    if (swatchEl.style.background !== bg) swatchEl.style.background = bg;
+  }
+  const coordsLine = `X ${px.toFixed(1)} · Y ${py.toFixed(1)} · Z ${pz.toFixed(2)}`;
+  if (coordsEl && coordsEl.textContent !== coordsLine) coordsEl.textContent = coordsLine;
+}
+
+function resetMinimapPlayFooter() {
+  const root = minimapPanel || document.getElementById('minimap-panel');
+  if (!root) return;
+  const nameEl = root.querySelector('#minimap-biome-readout');
+  const swatchEl = root.querySelector('#minimap-biome-swatch');
+  const coordsEl = root.querySelector('#minimap-coords-readout');
+  if (nameEl) nameEl.textContent = '—';
+  if (swatchEl) swatchEl.style.background = '#3a3a44';
+  if (coordsEl) coordsEl.textContent = 'X — · Y — · Z —';
 }
 
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
 function refreshPlayModeInfoBar(force = false) {
-  if (!infoBar || !currentData || appMode !== 'play') return;
+  if (!currentData || appMode !== 'play') return;
   const mx = Math.floor(player.x);
   const my = Math.floor(player.y);
-  const key = `${mx},${my}`;
+  const tile = getMicroTile(mx, my, currentData);
+  const bId = tile.biomeId;
+  const bio = Object.values(BIOMES).find((b) => b.id === bId);
+  const px = Number(player.x) || 0;
+  const py = Number(player.y) || 0;
+  const pz = Number(player.z) || 0;
+  syncMinimapPlayFooter(bio, px, py, pz);
+
+  const rx = Math.round(px * 10);
+  const ry = Math.round(py * 10);
+  const rz = Math.round(pz * 100);
+  const key = `${rx},${ry},${rz},${bId}`;
   const now = performance.now();
   if (!force) {
-    const sameTile = key === lastHudTileKey;
-    if (sameTile && now - lastHudMs < HUD_MIN_INTERVAL_MS) return;
+    const sameSig = key === lastHudTileKey;
+    if (sameSig && now - lastHudMs < HUD_MIN_INTERVAL_MS) return;
   }
   lastHudTileKey = key;
   lastHudMs = now;
 
-  const tile = getMicroTile(mx, my, currentData);
-  const bId = tile.biomeId;
-  const bio = Object.values(BIOMES).find((b) => b.id === bId);
-  const encounters = getEncounters(bId);
-  let prefix = '';
-  const macroX = Math.floor(player.x / MACRO_TILE_STRIDE);
-  const macroY = Math.floor(player.y / MACRO_TILE_STRIDE);
-  if (currentData.graph) {
-    const city = currentData.graph.nodes.find(
-      (n) => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1
-    );
-    if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
-  }
-  if (!prefix && currentData.paths) {
-    const activePath = currentData.paths.find((p) => p.some((c) => c.x === macroX && c.y === macroY));
-    if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
-  }
-  const baseAt = computeTerrainRoleAndSprite(mx, my, currentData, tile.heightStep);
-  const flyHint =
-    speciesHasFlyingType(player.dexId ?? 0) &&
-    ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (F toggle · Space/Shift altitude · hops: 2 or 6 flying)`;
-  const hp = player.hp ?? player.maxHp ?? 100;
-  const maxH = player.maxHp ?? 100;
-  const psn =
-    (player.poisonVisualSec ?? 0) > 0.05
-      ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
-      : '';
-  const ifr = (player.projIFrameSec ?? 0) > 0 ? ` · i-frames ${(player.projIFrameSec ?? 0).toFixed(2)}s` : '';
   const carryPrompt = player._strengthCarry
     ? {
       itemKey: String(player._strengthCarry.itemKey || ''),
-      displayName: String(player._strengthCarry.displayName || '')
+      displayName: String(player._strengthCarry.displayName || ''),
+      wildDexId:
+        player._strengthCarry.kind === 'faintedWild'
+          ? Math.max(1, Math.floor(Number(player._strengthCarry.wildDexId) || 0))
+          : 0
     }
     : null;
   const carryMobility = getStrengthCarryMobilityInfo(player);
@@ -406,30 +488,21 @@ function refreshPlayModeInfoBar(force = false) {
           `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Throw</span><span class="play-immersive-hint__key">LMB</span></div>` +
           `${carryMobility ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__warn">${carryMobility.message}</span></div>` : ''}`
         : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
-      playImmersiveHintEl.innerHTML =
+      const immersiveHtml =
         `<div class="play-immersive-hint__row">` +
-        `${detailPreviewHtmlForImmersiveHint(ctxPrompt.itemKey)}` +
+        `${strengthHudObjectPreviewHtmlImmersive(ctxPrompt)}` +
         `<span>(${label})</span>` +
         `${actionHtml}` +
         `</div>`;
+      if (playImmersiveHintEl.innerHTML !== immersiveHtml) {
+        playImmersiveHintEl.innerHTML = immersiveHtml;
+      }
       playImmersiveHintEl.classList.add('play-immersive-hint--visible');
     } else {
-      playImmersiveHintEl.innerHTML = '';
+      if (playImmersiveHintEl.innerHTML) playImmersiveHintEl.innerHTML = '';
       playImmersiveHintEl.classList.remove('play-immersive-hint--visible');
     }
   }
-  if (immersive) return;
-  const carryHint = carryPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${detailPreviewHtmlForInfoBar(carryPrompt.itemKey)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
-      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Place [E]</span>` +
-      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
-      `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
-    : '';
-  const grabHint = grabPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffe69b;font-weight:700">${detailPreviewHtmlForInfoBar(grabPrompt.itemKey)}(${String(grabPrompt.displayName || detailLabelFromItemKey(grabPrompt.itemKey) || 'Detail')}) Grab [E]</span>`
-    : '';
-  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
-  infoBar.innerHTML = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${grabHint}${telem}`;
 }
 
 function readWorldHoursPerRealSec() {
@@ -454,6 +527,38 @@ function syncPlayWorldTimePanel() {
     if (!Number.isFinite(sVal) || Math.abs(sVal - stepped) > 1e-4) {
       playWorldTimeSlider.value = String(stepped);
     }
+  }
+}
+
+function buildPlaySessionPersistExtra() {
+  const wt = getWeatherTarget();
+  return {
+    worldHours: wrapHours(worldHours),
+    weatherPreset: wt.preset,
+    weatherIntensity01: wt.intensity01,
+    earthquakeIntensity01: getEarthquakeActiveIntensity01()
+  };
+}
+
+/**
+ * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01: number, earthquakeIntensity01: number }} env
+ */
+function applyRestoredPlayEnvironmentFromSave(env) {
+  if (!env) return;
+  worldHours = wrapHours(env.worldHours);
+  const stepped = Math.round(worldHours / 0.05) * 0.05;
+  if (playWorldTimeSlider) playWorldTimeSlider.value = String(stepped);
+  const phase = getDayPhaseFromHours(worldHours);
+  lastWorldTimePanelPhase = phase;
+  if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
+  if (playWorldTimeHourEl) playWorldTimeHourEl.textContent = `${worldHours.toFixed(2)} h`;
+  snapDayCycleTintSmoothToHours(worldHours);
+  setWeatherTarget({ preset: env.weatherPreset, intensity01: env.weatherIntensity01 }, 'external');
+  syncWeatherUi();
+  setEarthquakeTargetIntensity01(env.earthquakeIntensity01);
+  if (playEarthquakeIntensityEl) {
+    playEarthquakeIntensityEl.value = String(Math.round(env.earthquakeIntensity01 * 100));
   }
 }
 
@@ -533,6 +638,7 @@ function getSettings() {
     playColliderOverlayCache: collidersOn ? getPlayColliderOverlayCache() : null,
     playDetailColliderHighlight,
     appMode,
+    sessionEnteredPlayOnCurrentMap,
     player,
     time: gameTime,
     dayPhase,
@@ -547,9 +653,20 @@ function getSettings() {
     weatherCloudAlphaMul: weather.cloudAlphaMul,
     weatherRainIntensity: weather.rainIntensity,
     weatherScreenTint: weather.screenTint,
+    weatherBlizzardBlend01: getActiveWeatherPresetBlend('blizzard'),
+    weatherSandstormBlend01: getActiveWeatherPresetBlend('sandstorm'),
     weatherCloudNoiseSeed,
     weatherWindIntensity: getWindFeltIntensity(),
-    weatherWindDirRad: getWindDirectionRad()
+    weatherWindDirRad: getWindDirectionRad(),
+    weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
+    weatherVolumetricMode: weather.weatherMode,
+    weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
+    weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
+    weatherVolumetricFallSpeed: weather.volumetricFallSpeed,
+    weatherVolumetricWindCarry: weather.volumetricWindCarry,
+    weatherVolumetricTurbulence: weather.volumetricTurbulence,
+    weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
+    weatherVolumetricSplashBias: weather.volumetricSplashBias
   };
 }
 
@@ -578,8 +695,8 @@ function syncWeatherUi(ev) {
 addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
-  refreshPlayPointerWorldFromLastClientIfHovering();
-  if (currentData) render(canvas, currentData, { settings: getSettings(), hover: lastHoverTile });
+  const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
+  if (currentData) render(canvas, currentData, { settings: getSettings(), hover });
 }
 
 const { startGameLoop, stopGameLoop } = createGameLoop({
@@ -593,12 +710,15 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   getPlayFpsEl: () => playFpsEl,
   getPlayFpsCompact: () => isPlayImmersiveMinimalUi(),
   player,
+  onEscapePlay: escapeFromPlayOrCloseOverlays,
   advanceWorldTime: (dt) => {
     if (appMode !== 'play') return;
     worldHours = advanceWorldHours(worldHours, dt, worldTimeRunning, readWorldHoursPerRealSec());
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
     tickWeather(dt, gameTime);
+    tickEarthquakeLayer(dt, gameTime);
   },
+  getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
@@ -607,15 +727,18 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
     minimapAudioUi.syncMinimapAudioPopover();
-  }
+  },
+  getPlaySessionPersistExtra: () => buildPlaySessionPersistExtra()
 });
 
 /** Help wiki registers Escape (capture) before this so Esc closes the modal instead of exiting play. */
+registerPlayGamepadListeners();
+
 registerPlayKeyboard({
   getAppMode: () => appMode,
   getCurrentData: () => currentData,
   refreshPlayModeInfoBar,
-  onEscapePlay: () => btnBackToMap?.click?.(),
+  onEscapePlay: escapeFromPlayOrCloseOverlays,
   onPlaySocialAction: (action) => {
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);
@@ -657,6 +780,7 @@ installPlayContextMenu({
 
 function run() {
   resizeCanvas();
+  sessionEnteredPlayOnCurrentMap = false;
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
@@ -686,44 +810,13 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
-/** Last pointer client coords on window (play); used to reproject aim/hover every frame while camera moves. */
-let playPointerLastClientX = 0;
-let playPointerLastClientY = 0;
-
-/** World aim under cursor in play (also used by `pointermove` while LMB/RMB held / captured). */
-function syncPlayPointerWorldFromClient(clientX, clientY) {
-  if (!currentData || appMode !== 'play') return;
-  playPointerLastClientX = clientX;
-  playPointerLastClientY = clientY;
-  const rect = canvas.getBoundingClientRect();
-  const mouseClientX = clientX - rect.left;
-  const mouseClientY = clientY - rect.top;
-  const mousePxX = (mouseClientX / rect.width) * canvas.width;
-  const mousePxY = (mouseClientY / rect.height) * canvas.height;
-  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
-    canvas.width,
-    canvas.height,
-    mousePxX,
-    mousePxY,
-    player
-  );
-  playInputState.mouseX = worldX;
-  playInputState.mouseY = worldY;
-  playInputState.mouseValid = true;
-  lastHoverTile = { x: Math.floor(worldX), y: Math.floor(worldY) };
-}
-
-/** Recompute world under cursor when the play camera moves but the mouse has not (hover ring + aim). */
-function refreshPlayPointerWorldFromLastClientIfHovering() {
-  if (!currentData || appMode !== 'play' || !playInputState.mouseValid) return;
-  syncPlayPointerWorldFromClient(playPointerLastClientX, playPointerLastClientY);
-}
 
 canvas.addEventListener('mousemove', (e) => {
   if (!currentData) return;
 
   if (appMode === 'play') {
-    syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+    recordPlayPointerClient(e.clientX, e.clientY);
+    playInputState.mouseValid = true;
     return;
   }
 
@@ -752,29 +845,87 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!currentData || appMode !== 'play') return;
-  syncPlayPointerWorldFromClient(e.clientX, e.clientY);
+  recordPlayPointerClient(e.clientX, e.clientY);
+  playInputState.mouseValid = true;
+});
+
+const PLAY_INVENTORY_DROP_PREFIX = 'pkmn-inventory-drop:';
+
+canvas.addEventListener('dragover', (e) => {
+  if (!currentData || appMode !== 'play') return;
+  const types = e.dataTransfer?.types;
+  if (!types || ![...types].includes('text/plain')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+
+canvas.addEventListener('drop', (e) => {
+  if (!currentData || appMode !== 'play' || !canvas) return;
+  const raw = e.dataTransfer?.getData('text/plain') || '';
+  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const token = raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+  const spent = trySpendOneInventoryUnitForGroundDrop(token);
+  if (!spent?.itemKey) return;
+  const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
+  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+    canvas.width,
+    canvas.height,
+    mousePxX,
+    mousePxY,
+    player
+  );
+  spawnPickableCrystalDropAt(worldX, worldY, spent.itemKey, 1);
+  playCharacterSelector?.invalidatePlayItemsHudSignature?.();
+  playCharacterSelector?.updatePlayItemsHud?.();
+  focusGameCanvas();
 });
 
 canvas.addEventListener('mouseleave', () => {
-  if (appMode === 'play') playInputState.mouseValid = false;
+  if (appMode === 'play') {
+    playInputState.mouseValid = false;
+    invalidatePlayPointerHover();
+  }
   if (currentData && appMode === 'map') updateView();
 });
 
-function enterPlayMode(gx, gy) {
+/**
+ * @param {number} gx
+ * @param {number} gy
+ * @param {{ resumePosition?: boolean }} [opts] — `resumePosition: true` only for cold resume on load; map click omits it so the clicked tile wins.
+ */
+function enterPlayMode(gx, gy, opts = {}) {
+  const resumePosition = opts.resumePosition === true;
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
   setPlayerPos(gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2, gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2);
+  if (
+    currentData &&
+    tryApplyPlaySessionResumeOnEnter(currentData, player, {
+      position: resumePosition,
+      inventory: true,
+      applyEnvironmentFromSave: resumePosition,
+      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave
+    })
+  ) {
+    playCharacterSelector?.invalidatePlayItemsHudSignature?.();
+    playCharacterSelector?.updatePlayItemsHud?.();
+  }
+  resetPlayAutosaveSchedule();
+  sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
+  invalidatePlayPointerHover();
   appMode = 'play';
   btnExport?.classList.add('hidden');
   btnBackToMap?.classList.remove('hidden');
   if (minimapPanel) minimapPanel.classList.remove('hidden');
   else minimap?.classList.remove('hidden');
-  syncMinimapZoomBadge();
+  syncMinimapZoomReadout();
   minimapAudioUi.forceCloseMinimapAudioPopover();
-  infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Golpes: 5 entradas — clique esquerdo, direito, meio da rolagem, rolagem para cima, rolagem para baixo — cada uma dispara o golpe que você amarrou nela. Segure 1–5 um instante para abrir a roda e escolher o golpe daquele botão (qualquer golpe da lista). Tackle/Cut no clique esquerdo: combo do Cut e carregar soltando como antes. Carregar pedra: E; com pedra, soltar LMB arremessa na mira. Social: Numpad 1–9. Debug: Ctrl+clique direito.</span>";
+  minimapHudPopovers.forceCloseAllPopovers();
+  if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
@@ -795,6 +946,7 @@ function enterPlayMode(gx, gy) {
 
   resizeCanvas();
   startGameLoop();
+  refreshPlayModeInfoBar(true);
 }
 
 btnMinimapBackToMap?.addEventListener('click', () => {
@@ -802,18 +954,24 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 });
 
 btnBackToMap?.addEventListener('click', () => {
+  if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
   stopBiomeBgm();
   stopWeatherAmbientAudio();
+  stopEarthquakeAmbientAudio();
   stopFireLoopAudio();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
+  playInputState.fieldChargeUiActive = null;
   appMode = 'map';
   btnExport?.classList.remove('hidden');
   btnBackToMap?.classList.add('hidden');
   if (minimapPanel) minimapPanel.classList.add('hidden');
   else minimap?.classList.add('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
-  infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  minimapHudPopovers.forceCloseAllPopovers();
+  minimapSaveModal.forceClose();
+  if (infoBar) infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
   document.body.classList.remove('play-mode-active');
@@ -1027,7 +1185,6 @@ playWorldTimeSlider?.addEventListener('input', () => {
   const v = parseFloat(playWorldTimeSlider.value);
   if (!Number.isFinite(v)) return;
   worldHours = wrapHours(v);
-  snapDayCycleTintSmoothToHours(worldHours);
   lastWorldTimePanelPhase = null;
   syncPlayWorldTimePanel();
   updateView();
@@ -1040,7 +1197,6 @@ playWorldTimeRun?.addEventListener('change', () => {
 function wireWorldTimePreset(id, hour) {
   document.getElementById(id)?.addEventListener('click', () => {
     worldHours = wrapHours(hour);
-    snapDayCycleTintSmoothToHours(worldHours);
     lastWorldTimePanelPhase = null;
     syncPlayWorldTimePanel();
     updateView();
@@ -1060,6 +1216,11 @@ for (const btn of playWeatherPresetBtns) {
 playWeatherIntensityEl?.addEventListener('input', () => {
   const v = Number(playWeatherIntensityEl.value);
   setWeatherTarget({ intensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui');
+});
+
+playEarthquakeIntensityEl?.addEventListener('input', () => {
+  const v = Number(playEarthquakeIntensityEl.value);
+  setEarthquakeTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
 });
 
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {
@@ -1094,6 +1255,8 @@ document.getElementById('chkForceLod0')?.addEventListener('change', () => {
 });
 syncForceLod0FromUi();
 
+void initMods();
+
 loadTilesetImages().then(async () => {
   if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {
     new BiomesModal();
@@ -1103,7 +1266,7 @@ loadTilesetImages().then(async () => {
     getAppMode: () => appMode,
     defaultPlayImmersiveChrome: document.documentElement?.dataset?.appShell === 'play'
   });
-  playSocialOverlay = createPlaySocialOverlay(playCharacterSelector.getSocialOverlayElement());
+  playSocialOverlay = createPlaySocialOverlay(document.getElementById('character-social-numpad'));
   void playSocialOverlay.refreshPortraits(player.dexId);
   window.addEventListener('pkmn-player-species-changed', () => {
     void playSocialOverlay.refreshPortraits(player.dexId);
@@ -1111,4 +1274,22 @@ loadTilesetImages().then(async () => {
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   run();
+  queueTryAutoResumePlayFromSave();
 });
+
+function queueTryAutoResumePlayFromSave() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => tryAutoResumePlayFromSave());
+  });
+}
+
+function tryAutoResumePlayFromSave() {
+  if (didAutoResumePlayOnInitialLoad) return;
+  if (appMode !== 'map' || !currentData) return;
+  const saved = peekPlaySessionSaveForMap(currentData);
+  if (!saved) return;
+  const tile = getPlayResumeMacroTileFromSave(saved, currentData);
+  if (!tile) return;
+  didAutoResumePlayOnInitialLoad = true;
+  enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+}

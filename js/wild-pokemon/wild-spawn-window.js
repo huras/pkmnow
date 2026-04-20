@@ -28,6 +28,7 @@ import {
   entitiesByKey,
   wildSubdivN
 } from './wild-core-state.js';
+import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
 
 export const SKY_SPECIES = new Set([
   6, // Charizard
@@ -48,7 +49,45 @@ export const SKY_SPECIES = new Set([
   144,
   145,
   146, // Birds
-  149 // Dragonite
+  149, // Dragonite
+  164, // Noctowl
+  169, // Crobat
+  176, // Togetic
+  178, // Xatu
+  189, // Jumpluff
+  193, // Yanma
+  198, // Murkrow
+  225, // Delibird
+  226, // Mantine
+  227, // Skarmory
+  249, // Lugia
+  250, // Ho-Oh
+  267, // Beautifly
+  276,
+  277, // Taillow / Swellow
+  278,
+  279, // Wingull / Pelipper
+  284, // Masquerain
+  329,
+  330, // Vibrava / Flygon
+  333,
+  334, // Swablu / Altaria
+  357, // Tropius
+  373, // Salamence
+  384, // Rayquaza
+  396,
+  397,
+  398, // Starly line
+  425,
+  426, // Drifloon / Drifblim
+  430, // Honchkrow
+  441, // Chatot
+  458, // Mantyke
+  468, // Togekiss
+  469, // Yanmega
+  472, // Gliscor
+  479, // Rotom
+  487 // Giratina
 ]);
 
 export const WILD_WINDOW_RADIUS = 2;
@@ -67,7 +106,23 @@ const GROUP_SLOT_MAX_DIST_MIN = 24.0;
 const GROUP_SLOT_MAX_DIST_MAX = 72.0;
 const GROUP_MEMBER_MAX_DIST_MACRO_TILES = 0.9;
 const GROUP_MEMBER_MAX_SPAWN_DIST = GROUP_MEMBER_MAX_DIST_MACRO_TILES * MACRO_TILE_STRIDE;
-const FORCE_GROUPS_ONLY_FOR_TEST = true;
+
+/**
+ * Inclusive bounds on **rolled** wild group size (leader + companions). After the roll, `total` is clamped here.
+ * Fewer companions than desired can still shrink the spawned group; if the result would fall below `MIN`, the slot is skipped.
+ * Set `MIN = 2` to disallow solo spawns from the roller (singles from weights become pairs).
+ */
+export const WILD_GROUP_SIZE_MIN = 3;
+export const WILD_GROUP_SIZE_MAX = 5;
+
+const GROUP_SIZE_CLAMP_LO = Math.max(1, Math.min(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
+const GROUP_SIZE_CLAMP_HI = Math.max(GROUP_SIZE_CLAMP_LO, Math.max(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
+
+/** @param {number} total */
+function clampWildGroupTotal(total) {
+  const t = Math.floor(Number(total)) || 1;
+  return Math.min(GROUP_SIZE_CLAMP_HI, Math.max(GROUP_SIZE_CLAMP_LO, t));
+}
 
 /** Keys for play-debug summons: never despawned by sync slot budget. */
 export const DEBUG_SUMMON_KEY_PREFIX = 'debug:';
@@ -105,15 +160,23 @@ function slotCenter(mx, my, sx, sy, cellW) {
 
 function rollGroupPattern(mx, my, sx, sy, seed) {
   const r = seededHashInt(mx * 1291 + sx * 271, my * 1237 + sy * 313, seed ^ SALT_GROUP) % GROUP_ROLL_TOTAL;
-  if (FORCE_GROUPS_ONLY_FOR_TEST) {
-    if (r < 700) return { total: 2, mixed: false }; // maioria em dupla mesma espécie
-    if (r < 920) return { total: 3, mixed: false }; // alguns trios mesma espécie
-    return { total: 2, mixed: true }; // poucos pares mistos
+  let total;
+  let mixed;
+  if (r < GROUP_WEIGHT_SINGLE) {
+    total = 1;
+    mixed = false;
+  } else if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME) {
+    total = 2;
+    mixed = false;
+  } else if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME + GROUP_WEIGHT_TRIO_SAME) {
+    total = 3;
+    mixed = false;
+  } else {
+    total = 2;
+    mixed = true;
   }
-  if (r < GROUP_WEIGHT_SINGLE) return { total: 1, mixed: false };
-  if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME) return { total: 2, mixed: false };
-  if (r < GROUP_WEIGHT_SINGLE + GROUP_WEIGHT_PAIR_SAME + GROUP_WEIGHT_TRIO_SAME) return { total: 3, mixed: false };
-  return { total: 2, mixed: true };
+  total = clampWildGroupTotal(total);
+  return { total, mixed };
 }
 
 function resolveGroupId(mx, my, sx, sy, seed) {
@@ -348,6 +411,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     if (isDebugSummonKey(k)) continue;
     if (!needed.has(k)) {
       ent.isDespawning = true;
+      releaseWildGroupFollowersFromLeader(ent, entitiesByKey);
     }
   }
 
@@ -614,18 +678,31 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const bossRoll = rollBossPromotedDex(baseDex, slot.mx, slot.my, slot.sx, slot.sy, data.seed);
     const leaderDex = bossRoll.dex;
     const pattern = rollGroupPattern(slot.mx, slot.my, slot.sx, slot.sy, data.seed);
-    const desiredCompanions = Math.max(0, pattern.total - 1);
+    const leaderConfig = getPokemonConfig(leaderDex);
+    const leaderBeh = getSpeciesBehavior(leaderDex);
+    const isFlocking = leaderConfig?.types?.includes('flying') || leaderConfig?.types?.includes('water') || leaderBeh.flocks;
+    
+    let desiredCompanions = Math.max(0, pattern.total - 1);
+    if (isFlocking) {
+      desiredCompanions = 4 + (seededHashInt(slot.mx * 31, slot.my * 37, data.seed ^ 0xf10c) % 8); // massive flock: 4 to 11 companions
+    }
+    
     const groupId = desiredCompanions > 0 ? resolveGroupId(slot.mx, slot.my, slot.sx, slot.sy, data.seed) : null;
     const cohesionHash = seededHashInt(
       slot.mx * 881 + slot.sx * 53,
       slot.my * 907 + slot.sy * 61,
       data.seed ^ SALT_GROUP_ID
     );
-    const cohesionSec =
+    let cohesionSec =
       desiredCompanions > 0
         ? GROUP_COHESION_SEC_MIN + ((cohesionHash % 1000) / 1000) * GROUP_COHESION_SEC_EXTRA
         : 0;
-    const companionSlotMaxDist = Math.max(GROUP_SLOT_MAX_DIST_MIN, Math.min(GROUP_SLOT_MAX_DIST_MAX, cellW * 1.15));
+        
+    if (isFlocking && desiredCompanions > 0) {
+      cohesionSec = 999999;
+    }
+    
+    const companionSlotMaxDist = isFlocking ? cellW * 4.5 : Math.max(GROUP_SLOT_MAX_DIST_MIN, Math.min(GROUP_SLOT_MAX_DIST_MAX, cellW * 1.15));
     const companionSlots = findCompanionSlotCandidates(
       slot,
       neededSlots,
@@ -634,8 +711,8 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       companionSlotMaxDist ** 2
     );
     const actualCompanions = Math.min(desiredCompanions, companionSlots.length);
-    if (FORCE_GROUPS_ONLY_FOR_TEST && desiredCompanions > 0 && actualCompanions <= 0) continue;
     const groupSize = 1 + actualCompanions;
+    if (groupSize < GROUP_SIZE_CLAMP_LO) continue;
     /** @type {Array<{ x: number, y: number }>} */
     const groupSpawnPoints = [];
 
@@ -688,7 +765,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         groupMemberIndex: i + 1,
         groupSize,
         groupCohesionSec: cohesionSec,
-        groupMaxSpawnDist: GROUP_MEMBER_MAX_SPAWN_DIST,
+        groupMaxSpawnDist: isFlocking ? GROUP_MEMBER_MAX_SPAWN_DIST * 2.5 : GROUP_MEMBER_MAX_SPAWN_DIST,
         groupAnchorX: leaderAnchorX,
         groupAnchorY: leaderAnchorY,
         groupExistingPoints: groupSpawnPoints,
