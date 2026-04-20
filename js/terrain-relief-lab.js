@@ -5,6 +5,7 @@ import { MACRO_TILE_STRIDE } from './chunking.js';
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 
 const SET_NAME = 'Palette base — rock';
 const TILE_SRC = 16;
@@ -25,16 +26,8 @@ const imgPath = TessellationEngine.getImagePath(terrainSet.file);
 const setType = terrainSet.type;
 const centerRole = 'CENTER';
 
-function roleToTileId(role) {
-  const id = terrainSet.roles[role] ?? terrainSet.centerId;
-  return id;
-}
-
-function blitTile(ctx, img, tileId, dx, dy) {
-  if (!img || tileId == null || tileId < 0) return;
-  const sx = (tileId % sheetCols) * TILE_SRC;
-  const sy = Math.floor(tileId / sheetCols) * TILE_SRC;
-  ctx.drawImage(img, sx, sy, TILE_SRC, TILE_SRC, dx, dy, TILE, TILE);
+function blitTile(ctx, img, tileId, dx, dy, flipX = false) {
+  drawTerrainCellFromSheet(ctx, img, sheetCols, TILE_SRC, tileId, dx, dy, TILE, TILE, flipX);
 }
 
 function makeGrid() {
@@ -195,7 +188,7 @@ function draw(grid, ctx, img, liftTops, showMacroOverlay) {
   ctx.fillStyle = '#0a0c10';
   ctx.fillRect(0, 0, cw, ch);
 
-  const centerId = roleToTileId(centerRole);
+  const centerId = getConcConvATerrainTileSpec(terrainSet, centerRole).tileId;
 
   for (let y = 0; y < GRID_H; y++) {
     for (let x = 0; x < GRID_W; x++) {
@@ -234,7 +227,8 @@ function draw(grid, ctx, img, liftTops, showMacroOverlay) {
       const px = x * TILE;
       const py = y * TILE - lift;
       const role = getRoleForCell(y, x, GRID_H, GRID_W, (rr, cc) => terraceLandAt(grid, rr, cc), setType);
-      blitTile(ctx, img, roleToTileId(role), px, py);
+      const spec = getConcConvATerrainTileSpec(terrainSet, role);
+      blitTile(ctx, img, spec.tileId, px, py, spec.flipX);
     }
   }
 

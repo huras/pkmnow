@@ -5,6 +5,7 @@
 import { getRoleForCell } from './tessellation-logic.js';
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 
 const SET_NAME = 'Palette base — rock';
 const TILE_SRC = 16;
@@ -24,15 +25,8 @@ function loadImage(src) {
   });
 }
 
-function blitTile(ctx, img, tileId, sheetCols, dx, dy) {
-  if (!img || tileId == null || tileId < 0) return;
-  const sx = (tileId % sheetCols) * TILE_SRC;
-  const sy = Math.floor(tileId / sheetCols) * TILE_SRC;
-  ctx.drawImage(img, sx, sy, TILE_SRC, TILE_SRC, dx, dy, TILE, TILE);
-}
-
-function roleToTileId(terrainSet, role) {
-  return terrainSet.roles[role] ?? terrainSet.centerId;
+function blitTile(ctx, img, tileId, sheetCols, dx, dy, flipX = false) {
+  drawTerrainCellFromSheet(ctx, img, sheetCols, TILE_SRC, tileId, dx, dy, TILE, TILE, flipX);
 }
 
 /**
@@ -187,12 +181,12 @@ export function openExtrudedTerrainOverlay(landGrid, gridW, gridH) {
     const setType = terrainSet.type;
     const sheetCols = TessellationEngine.getTerrainSheetCols(terrainSet);
     const imgPath = TessellationEngine.getImagePath(terrainSet.file);
-    const centerId = roleToTileId(terrainSet, 'CENTER');
+    const centerId = getConcConvATerrainTileSpec(terrainSet, 'CENTER').tileId;
 
-    function blitStackedLandTile(img, px, py, tileId) {
+    function blitStackedLandTile(img, px, py, tileId, flipX) {
       for (let k = EXTRUDE_LAYERS - 1; k >= 0; k--) {
         const dy = py - k * STEP_Y;
-        blitTile(ctx, img, tileId, sheetCols, px, dy);
+        blitTile(ctx, img, tileId, sheetCols, px, dy, flipX);
       }
     }
 
@@ -219,8 +213,8 @@ export function openExtrudedTerrainOverlay(landGrid, gridW, gridH) {
           const px = OFFX + x * TILE;
           const py = OFFY + y * TILE;
           const role = getRoleForCell(y, x, gridH, gridW, landAt, setType);
-          const tileId = roleToTileId(terrainSet, role);
-          blitStackedLandTile(img, px, py, tileId);
+          const spec = getConcConvATerrainTileSpec(terrainSet, role);
+          blitStackedLandTile(img, px, py, spec.tileId, spec.flipX);
         }
       }
     }

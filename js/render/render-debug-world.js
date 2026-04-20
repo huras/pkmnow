@@ -54,7 +54,7 @@ const CLOUD_SIZE_MAX_MUL = 1.55;
 export const CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES = 8.3;
 /**
  * Cloud drift is integrated in `cloudDriftXTiles` / `cloudDriftYTiles` using
- * {@link getWindVelocityTilesPerSec} from `wind-state.js` (same helper as rain + streamlines).
+ * {@link getWindVelocityTilesPerSec} from `wind-state.js` (same helper as rain slant).
  */
 let cloudDriftXTiles = 0;
 let cloudDriftYTiles = 0;
@@ -64,7 +64,7 @@ let cloudDriftLastTimeSec = -1;
 let rainStreakScrollPxX = 0;
 let rainStreakScrollPxY = 0;
 let rainStreakScrollLastSec = -1;
-/** Smoothed wind snapshot shared by precipitation / streamlines to avoid abrupt direction jumps. */
+/** Smoothed wind snapshot shared by precipitation to avoid abrupt direction jumps. */
 let envWindSmoothIntensity01 = 0;
 let envWindSmoothDirX = Math.cos(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
 let envWindSmoothDirY = Math.sin(WIND_CLOUD_BLEND_BASELINE_DIR_RAD);
@@ -802,7 +802,7 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {number} [options.cloudMinMul] / @param {number} [options.cloudMaxMul] — cloud size range.
  * @param {number} [options.cloudAlphaMul] — extra cloud alpha multiplier.
  * @param {number} [options.rainIntensity=0] — 0..1 rain VFX intensity.
- * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (drives streamline density/brightness).
+ * @param {number} [options.windIntensity=0] — 0..1 wind VFX intensity (cloud drift, rain slant, blizzard drift).
  * @param {number} [options.windDirRad=0] — wind direction in radians (0 = east, +π/2 = south).
  * @param {'clear' | 'cloudy' | 'rain' | 'blizzard' | 'sandstorm' | string} [options.weatherPreset='clear'] — current weather preset id.
  * @param {number} [options.weatherBlizzardBlend01=0] — smoothed 0..1 blend into blizzard precipitation.
@@ -926,10 +926,6 @@ export function drawEnvironmentalEffects(ctx, options) {
     rainStreakScrollLastSec = -1;
     rainStreakScrollPxX = 0;
     rainStreakScrollPxY = 0;
-  }
-
-  if (windI01 > 0.02) {
-    drawWindStreamlines(ctx, cw, ch, time, windI01, windDir, tileW, tileH, startX, startY, endX, endY);
   }
 
   if (screenTint && typeof screenTint.r === 'number' && (screenTint.a ?? 1) > 0.001) {
@@ -1407,165 +1403,6 @@ function drawRainStreaks(
   for (let j = startJ; j <= endJ; j++) {
     for (let i = startI; i <= endI; i++) {
       ctx.drawImage(rainTileCanvas, i * CW + ox, j * CH + oy);
-    }
-  }
-  ctx.restore();
-}
-
-const WIND_HASH_CACHE = [];
-/** Preallocated streamline hash slots (`ensureWindHashCache`; grid draw does not cap on this yet). */
-const WIND_MAX_STREAMS = 360;
-
-function ensureWindHashCache() {
-  if (WIND_HASH_CACHE.length >= WIND_MAX_STREAMS) return;
-  for (let i = WIND_HASH_CACHE.length; i < WIND_MAX_STREAMS; i++) {
-    WIND_HASH_CACHE.push({
-      hx: hash01Cell(i, 2017, 1),
-      hy: hash01Cell(i, 7321, 2),
-      hs: hash01Cell(i, 4091, 3),
-      hp: hash01Cell(i, 50021, 4),
-      hSpawn: hash01Cell(i, 8111, 5),
-      hSide: hash01Cell(i, 13411, 6),
-      hSwirl: hash01Cell(i, 26371, 7)
-    });
-  }
-}
-
-/**
- * Screen-space wind visualization with a Wind-Waker calligraphy feel: long, clearly-
- * forward-going swooshes that drift along the wind vector, curve with a two-harmonic
- * swirl (suggesting a gust rolling through), and fade in / out over their lifetime.
- *
- * Per streamline we draw the same polyline twice:
- *   1. a soft wide halo (`source-over`, pale blue) — gives body / glow,
- *   2. a bright narrow core (`lighter`, white) — snappy center line.
- * Doing both `stroke()` calls against the same cached path means the path-construction
- * cost (the inner `segments` loop) is paid only once per streamline.
- *
- * Anchors advance in world-space at `flowPxSec × dir` and wrap around a bleed-padded
- * span, so strokes never pop at the viewport edge. Each streamline has a per-instance
- * lifecycle (`fade-in → hold → fade-out → respawn`) desynced by a hash, which gives the
- * field that "wind gusts wandering through" energy Wind Waker does so well.
- */
-function drawWindStreamlines(ctx, cw, ch, timeSec, intensity, dirRad, tileW, tileH, startX, startY, endX, endY) {
-  const time = Number.isFinite(timeSec) ? timeSec : 0;
-
-  // Use the exact same effective wind state as the clouds to guarantee synchronization.
-  const windState = getWindVelocityTilesPerSec(intensity, dirRad);
-  const dirX = Math.cos(windState.effectiveDirRad);
-  const dirY = Math.sin(windState.effectiveDirRad);
-  const perpX = -dirY;
-  const perpY = dirX;
-
-  // Sync with cloud drift (calculated in drawSnesCloudParallax).
-  // We scale the influence by 10x for the particles to make them feel like fast gusts.
-  const windInfluenceMul = 35;
-  const windX = cloudDriftXTiles * windInfluenceMul;
-  const windY = cloudDriftYTiles * windInfluenceMul;
-
-  // Use a slot-based grid in world tiles (smaller step = more gusts; keep sane for fill cost).
-  const step = 9;
-  const jitterMargin = step * 1.2;
-  const baseLen = 9 * (tileW || 32);
-  const halfLenTiles = (baseLen / (tileW || 32)) * 0.5;
-
-  // Visible slot range in world tiles, with a margin for trail length and jitter.
-  const sxMin = Math.floor((startX - windX - halfLenTiles - jitterMargin) / step);
-  const sxMax = Math.ceil((endX - windX + halfLenTiles + jitterMargin) / step);
-  const syMin = Math.floor((startY - windY - halfLenTiles - jitterMargin) / step);
-  const syMax = Math.ceil((endY - windY + halfLenTiles + jitterMargin) / step);
-
-  // Lifecycle constants.
-  const lifeSec = 2.4 + 2.0 * intensity;
-  const fadeSec = 0.5;
-  const fadeT = fadeSec / lifeSec;
-
-  // Geometry.
-  const segments = 24;
-  const swirlAmp = 18 + 24 * intensity;
-  const baseHalfWidth = 1.2 + 2.4 * intensity;
-
-  ctx.save();
-  // We do NOT call setTransform here; we stay in world-pixel space (camera-translated).
-  ctx.imageSmoothingEnabled = false;
-
-  for (let sy = syMin; sy <= syMax; sy++) {
-    for (let sx = sxMin; sx <= sxMax; sx++) {
-      // Density control: only some slots produce a streamline (threshold ↑ ⇒ more visible gusts).
-      const hExist = hash01Cell(sx, sy, 0x1234);
-      if (hExist > 0.12 + intensity * 0.58) continue;
-
-      const hSpawn = hash01Cell(sx, sy, 0x5678);
-      const rawLife = (time / lifeSec + hSpawn) % 1;
-      let fade;
-      if (rawLife < fadeT) fade = rawLife / fadeT;
-      else if (rawLife > 1 - fadeT) fade = (1 - rawLife) / fadeT;
-      else fade = 1;
-      if (fade < 0.02) continue;
-
-      const hJitterX = hash01Cell(sx, sy, 0x9abc);
-      const hJitterY = hash01Cell(sx, sy, 0xdef0);
-      const jitterX = (hJitterX - 0.5) * step * 1.2;
-      const jitterY = (hJitterY - 0.5) * step * 1.2;
-
-      // Anchor in world-tiles.
-      const worldXTiles = sx * step + windX + jitterX;
-      const worldYTiles = sy * step + windY + jitterY;
-
-      // Anchor in world-pixels.
-      const ax = worldXTiles * tileW;
-      const ay = worldYTiles * tileH;
-
-      const hs = hash01Cell(sx, sy, 0x1357);
-      const hSwirl = hash01Cell(sx, sy, 0x2468);
-      const hSide = hash01Cell(sx, sy, 0x369c);
-
-      const len = baseLen * (0.9 + hs * 0.25);
-      const amp = swirlAmp * 0.3 * (0.7 + hSwirl * 0.8);
-      const side = hSide < 0.5 ? -1 : 1;
-      const phA = hs * Math.PI * 2;
-      const phB = hSwirl * 3.1 + 0.7;
-
-      const leftSide = [];
-      const rightSide = [];
-      const waveSpeed = 1.2 + hs * 0.8;
-
-      for (let s = 0; s <= segments; s++) {
-        const tt = s / segments;
-        const along = (tt - 0.5) * len;
-
-        const primary = amp * side * Math.sin(tt * Math.PI * 0.8 + phA - time * waveSpeed);
-        const secondary = amp * 0.3 * Math.sin(tt * Math.PI * 2 + phB + time * waveSpeed * 1.4);
-        const perp = primary + secondary;
-
-        const cx = ax + dirX * along + perpX * perp;
-        const cy = ay + dirY * along + perpY * perp;
-
-        let widthTaper = Math.pow(tt, 1.2);
-        if (tt > 0.96) {
-          widthTaper = 1.0 - (tt - 0.96) * 2;
-        }
-
-        const hw = baseHalfWidth * widthTaper;
-        leftSide.push({ x: cx + perpX * hw, y: cy + perpY * hw });
-        rightSide.push({ x: cx - perpX * hw, y: cy - perpY * hw });
-      }
-
-      const drawTrailPoly = (color, alphaMult) => {
-        ctx.globalAlpha = fade * alphaMult;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(leftSide[0].x, leftSide[0].y);
-        for (let j = 1; j < leftSide.length; j++) ctx.lineTo(leftSide[j].x, leftSide[j].y);
-        for (let j = rightSide.length - 1; j >= 0; j--) ctx.lineTo(rightSide[j].x, rightSide[j].y);
-        ctx.closePath();
-        ctx.fill();
-      };
-
-      ctx.globalCompositeOperation = 'source-over';
-      drawTrailPoly('#c9d8f2', 0.45 + 0.3 * intensity);
-      ctx.globalCompositeOperation = 'lighter';
-      drawTrailPoly('#ffffff', 0.6 + 0.3 * intensity);
     }
   }
   ctx.restore();

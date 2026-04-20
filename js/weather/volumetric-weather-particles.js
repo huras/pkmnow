@@ -226,7 +226,23 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
     const p = allocPart();
     if (!p) break;
     p.alive = 1;
-    p.kind = Math.random() < pRain ? 0 : (Math.random() < (pRain + pSnow) / (pRain + pSnow + 0.1) ? 1 : 2);
+    
+    // Determine type: rain (0), snow (1), sand (2), wind streak (3)
+    let k = 0;
+    const r = Math.random();
+    // Wind streaks spawn based on wind intensity, even if no precip, but we need precip > 0.01 to enter the loop
+    const pWind = windI01 > 0.1 ? 0.05 + 0.15 * windI01 : 0;
+    const norm = pRain + pSnow + pWind + 0.001;
+    const threshRain = pRain / norm;
+    const threshSnow = threshRain + pSnow / norm;
+    const threshWind = threshSnow + pWind / norm;
+    
+    if (r < threshRain) k = 0;
+    else if (r < threshSnow) k = 1;
+    else if (r < threshWind) k = 3;
+    else k = 2; // Sand
+
+    p.kind = k;
     p.z = Math.random(); // 0 = far, 1 = near
     p.x = wx0 - 200 + Math.random() * (worldW + 400);
     p.y = wy0 - 100 + Math.random() * 200;
@@ -239,9 +255,13 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
     } else if (p.kind === 1) { // Snow
       p.vy = (40 + 60 * snowCh) * fallS;
       p.vx = windVx * (0.6 + 0.8 * Math.random());
-    } else { // Sand
+    } else if (p.kind === 2) { // Sand
       p.vy = (15 + 40 * sandCh) * fallS;
       p.vx = windVx * (1.2 + 0.5 * Math.random());
+    } else { // Wind streak (kind 3)
+      p.vy = windVy * (1.5 + Math.random());
+      p.vx = windVx * (1.5 + Math.random());
+      p.life = 0.5 + Math.random() * 1.5; // Shorter life for streaks
     }
   }
 
@@ -265,7 +285,7 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
     const { mx, my } = worldPixelToMicroTile(p.x, p.y, tw, th);
     const groundY = (my + 1) * th;
     
-    if (p.y > groundY - 2) {
+    if (p.y > groundY - 2 && p.kind !== 3) {
       const surf = getWeatherSurfaceMaterialCached(mx, my, macroData, surfaceFrameCache);
       if (surf === WEATHER_SURFACE_HARD) {
         if (p.kind === 0) {
@@ -331,7 +351,7 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
     ctx.globalAlpha = Math.min(1, (0.3 + 0.7 * (bIdx / Z_LAYERS)) * precip);
     
     // Draw each kind in batch
-    [0, 1, 2].forEach(kind => {
+    [0, 1, 2, 3].forEach(kind => {
       ctx.beginPath();
       bin.filter(p => p.kind === kind).forEach(p => {
         if (kind === 0) { // Rain
@@ -342,9 +362,41 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
           const r = (1.5 + 2 * snowCh) * zFac;
           ctx.moveTo(p.x + r, p.y);
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        } else { // Sand
+        } else if (kind === 2) { // Sand
           const w = 2 * zFac;
           ctx.rect(p.x - w / 2, p.y - w / 2, w, w);
+        } else if (kind === 3) { // Wind Streak (Wind Waker Style)
+          const dx = p.vx * 0.08; 
+          const dy = p.vy * 0.08;
+          const len = Math.hypot(dx, dy);
+          if (len < 0.1) return;
+          const nx = -dy / len;
+          const ny = dx / len;
+          
+          const segments = 12;
+          const lifeFade = Math.sin(Math.min(1, p.life) * Math.PI);
+          const baseWidth = 4 * zFac;
+
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          
+          for (let s = 1; s <= segments; s++) {
+            const u = s / segments;
+            const px = p.x - dx * u * 12; 
+            const py = p.y - dy * u * 12;
+            
+            // Zelda-style "Swirl/Sweep" math
+            const swirl = Math.sin(time * 4 + p.x * 0.005 + u * 2.5) * (15 * zFac * u) * lifeFade;
+            const tx = px + nx * swirl;
+            const ty = py + ny * swirl;
+            
+            ctx.lineWidth = baseWidth * (1 - u * 0.8); // Tapering
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.25 * lifeFade * (1 - u)})`;
+            ctx.lineTo(tx, ty);
+            ctx.stroke(); // Draw segment by segment for tapering
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+          }
         }
       });
       
@@ -355,10 +407,11 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
       } else if (kind === 1) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.fill();
-      } else {
+      } else if (kind === 2) {
         ctx.fillStyle = 'rgba(210, 180, 120, 0.5)';
         ctx.fill();
       }
+      // kind 3 is handled per-segment for tapering
     });
   });
 

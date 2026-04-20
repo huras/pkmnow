@@ -19,6 +19,7 @@ import {
   projectileZInPokemonHurtbox
 } from '../pokemon/pokemon-combat-hurtbox.js';
 import { tryApplyFireHitToFormalTreesAt, tryBreakDetailsAlongSegment } from '../main/play-crystal-tackle.js';
+import { getMicroTile } from '../chunking.js';
 import {
   queryWildSpatialIndexInAabb,
   applyWildKnockbackFromProjectile,
@@ -69,9 +70,13 @@ export function tickActiveProjectiles(ctx) {
     spawnTrailParticle,
     spawnHitParticles
   } = ctx;
+  const pt = data ? getMicroTile(Math.floor(player.x + 0.5), Math.floor(player.y + 0.5), data) : null;
+  const playerAbsZ = (pt ? (pt.heightStep || 0) : 0) + (player.z ?? 0);
 
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
+    const t = data ? getMicroTile(Math.floor(proj.x + 0.5), Math.floor(proj.y + 0.5), data) : null;
+    const projAbsZ = (t ? (t.heightStep || 0) : 0) + (proj.z ?? 0);
 
     if (
       proj.type === 'psybeamBeam' ||
@@ -104,7 +109,7 @@ export function tickActiveProjectiles(ctx) {
         const py = player.visualY ?? player.y;
         const dex = player.dexId ?? 1;
         const { hx, hy } = getPokemonHurtboxCenterWorldXY(px, py, dex);
-        if (projectileZInPokemonHurtbox(zBeam, dex, player.z ?? 0)) {
+        if (projectileZInPokemonHurtbox(projAbsZ, dex, playerAbsZ)) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
@@ -123,7 +128,7 @@ export function tickActiveProjectiles(ctx) {
         const maxX = Math.max(sx0, sx1) + pad;
         const minY = Math.min(sy0, sy1) - pad;
         const maxY = Math.max(sy0, sy1) + pad;
-        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, absZ: z }) => {
           if (wild === proj.sourceEntity) return;
           if (set.has(wild)) return;
           if (!projectileZInPokemonHurtbox(zBeam, dex, z)) return;
@@ -238,7 +243,7 @@ export function tickActiveProjectiles(ctx) {
           t = Math.max(0, Math.min(1, t));
         }
         const zAt = szA + (szB - szA) * t;
-        if (projectileZInPokemonHurtbox(zAt, dex, player.z ?? 0)) {
+        if (projectileZInPokemonHurtbox(zAt + (projAbsZ - (proj.z ?? 0)), dex, playerAbsZ)) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
@@ -261,7 +266,7 @@ export function tickActiveProjectiles(ctx) {
         const day = sy1 - sy0;
         const len2 = dax * dax + day * day;
         const nowSecWild = performance.now() * 0.001;
-        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+        queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, absZ: z }) => {
           if (wild === proj.sourceEntity) return;
           if (set.has(wild)) return;
           let t = 0.5;
@@ -350,6 +355,17 @@ export function tickActiveProjectiles(ctx) {
 
       proj.timeToLive -= dt;
 
+      const projAbsZAfterMove = (t ? (t.heightStep || 0) : 0) + (proj.z ?? 0);
+      let terrainCrashed = false;
+      if (data) {
+        const nt = getMicroTile(Math.floor(proj.x + 0.5), Math.floor(proj.y + 0.5), data);
+        const newHeight = nt ? (nt.heightStep || 0) : 0;
+        if (projAbsZAfterMove < newHeight - 0.25) {
+          terrainCrashed = true;
+        } else if (newHeight !== (t ? (t.heightStep || 0) : 0)) {
+          proj.z = Math.max(0, projAbsZAfterMove - newHeight);
+        }
+      }
       const r = Math.max(0.12, Number(proj.radius) || 0.5);
       const set = proj.wgHitWild instanceof Set ? proj.wgHitWild : (proj.wgHitWild = new Set());
       const pad = COLLISION_BROAD_PHASE_TILES + r + 1.2;
@@ -362,7 +378,7 @@ export function tickActiveProjectiles(ctx) {
       const len2 = dax * dax + day * day;
       const zSeg = Number(proj.z) || 0;
 
-      queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, z }) => {
+      queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, ({ wild, hx, hy, dex, absZ: z }) => {
         if (wild === proj.sourceEntity) return;
         if (set.has(wild)) return;
         if (!projectileZInPokemonHurtbox(zSeg, dex, z)) return;
@@ -381,7 +397,7 @@ export function tickActiveProjectiles(ctx) {
         const pyy = player.visualY ?? player.y;
         const dex = player.dexId ?? 1;
         const { hx, hy } = getPokemonHurtboxCenterWorldXY(pxx, pyy, dex);
-        if (projectileZInPokemonHurtbox(zSeg, dex, player.z ?? 0)) {
+        if (projectileZInPokemonHurtbox(projAbsZ, dex, playerAbsZ)) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           const dist =
             len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
@@ -401,7 +417,7 @@ export function tickActiveProjectiles(ctx) {
         const iz = Math.max(0, Number(proj.z) || 0);
         spawnWaterGunImpactWaveParticles(pushParticle, ix, iy, iz, proj.wgTier || 1);
         const splashRef = { ...proj, x: ix, y: iy, z: iz };
-        applySplashToWild(splashRef, wildList, iz, wildSpatial);
+        applySplashToWild(splashRef, wildList, iz, wildSpatial, data);
         const sr = Number(proj.splashRadius) || 0;
         const sd = Number(proj.splashDamage) || 0;
         if (proj.hitsPlayer && sr > 0 && sd > 0) {
@@ -411,7 +427,7 @@ export function tickActiveProjectiles(ctx) {
           const { hx: phx, hy: phy } = getPokemonHurtboxCenterWorldXY(pxw, pyw, dpx);
           const hr = getPokemonHurtboxRadiusTiles(dpx);
           if (
-            projectileZInPokemonHurtbox(iz, dpx, player.z ?? 0) &&
+            projectileZInPokemonHurtbox(iz + (projAbsZ - (proj.z ?? 0)), dpx, playerAbsZ) &&
             Math.hypot(phx - ix, phy - iy) <= sr + hr
           ) {
             tryDamagePlayerFromProjectile(sd, false, data);
@@ -425,7 +441,7 @@ export function tickActiveProjectiles(ctx) {
         }
       };
 
-      if (data && isProjectileBlockedByTree(proj, data)) {
+      if (terrainCrashed || (data && isProjectileBlockedByTree(proj, data))) {
         impact(proj.x, proj.y);
         projectiles.splice(i, 1);
         continue;
@@ -453,6 +469,19 @@ export function tickActiveProjectiles(ctx) {
 
     proj.x += proj.vx * dt;
     proj.y += proj.vy * dt;
+
+    const projAbsZAfterMove = (t ? (t.heightStep || 0) : 0) + (proj.z ?? 0);
+    let terrainCrashed = false;
+    if (data) {
+      const nt = getMicroTile(Math.floor(proj.x + 0.5), Math.floor(proj.y + 0.5), data);
+      const newHeight = nt ? (nt.heightStep || 0) : 0;
+      if (projAbsZAfterMove < newHeight - 0.25) {
+        terrainCrashed = true;
+      } else if (newHeight !== (t ? (t.heightStep || 0) : 0)) {
+        proj.z = Math.max(0, projAbsZAfterMove - newHeight);
+      }
+    }
+
     if (Number.isFinite(proj.vz)) {
       const zPrev = Number(proj.z) || 0;
       proj.z += proj.vz * dt;
@@ -468,15 +497,15 @@ export function tickActiveProjectiles(ctx) {
       emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       if (proj.type === 'incinerateCore') {
         spawnHitParticles(proj.x, proj.y, 0);
-        applySplashToWild(proj, wildList, 0, wildSpatial);
+        applySplashToWild(proj, wildList, 0, wildSpatial, data);
         spawnIncinerateShards(proj, pushProjectile, 0);
       } else if (proj.type === 'fireBlastCore') {
         spawnHitParticles(proj.x, proj.y, 0);
-        applySplashToWild(proj, wildList, 0, wildSpatial);
+        applySplashToWild(proj, wildList, 0, wildSpatial, data);
         spawnFireBlastBurst(proj, pushProjectile, 0);
       } else if (proj.type === 'confusionOrb') {
         spawnHitParticles(proj.x, proj.y, 0);
-        applySplashToWild(proj, wildList, 0, wildSpatial);
+        applySplashToWild(proj, wildList, 0, wildSpatial, data);
       }
       if (data) {
         const zz = Math.max(0, Number(proj.z) || 0);
@@ -568,16 +597,16 @@ export function tickActiveProjectiles(ctx) {
     }
     if (!runCollisionChecks) continue;
 
-    if (data && isProjectileBlockedByTree(proj, data)) {
+    if (terrainCrashed || (data && isProjectileBlockedByTree(proj, data))) {
       emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       const impactZ = Math.max(0, Number(proj.z) || 0);
       spawnHitParticles(proj.x, proj.y, impactZ);
       tryApplyFireHitToFormalTreesAt(proj.x, proj.y, impactZ, proj.type, data);
       if (proj.type === 'incinerateCore') {
-        applySplashToWild(proj, wildList, impactZ, wildSpatial);
+        applySplashToWild(proj, wildList, impactZ, wildSpatial, data);
         spawnIncinerateShards(proj, pushProjectile, impactZ);
       } else if (proj.type === 'fireBlastCore') {
-        applySplashToWild(proj, wildList, impactZ, wildSpatial);
+        applySplashToWild(proj, wildList, impactZ, wildSpatial, data);
         spawnFireBlastBurst(proj, pushProjectile, impactZ);
       }
       projectiles.splice(i, 1);
@@ -586,7 +615,10 @@ export function tickActiveProjectiles(ctx) {
 
     let hit = false;
 
-    if (proj.hitsPlayer && checkPlayerHit(proj, player)) {
+    const hitTile = data ? getMicroTile(Math.floor(proj.x + 0.5), Math.floor(proj.y + 0.5), data) : null;
+    const projHitWorldZ = (hitTile ? (hitTile.heightStep || 0) : 0) + (proj.z ?? 0);
+
+    if (proj.hitsPlayer && checkPlayerHit(proj, player, projHitWorldZ, playerAbsZ)) {
       const poisonCapable = proj.type === 'poisonSting' || proj.type === 'poisonPowderShot';
       const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
       const poison = poisonCapable && Math.random() < poisonChance;
@@ -610,11 +642,11 @@ export function tickActiveProjectiles(ctx) {
         proj.y - pad,
         proj.x + pad,
         proj.y + pad,
-        ({ wild, hx, hy, dex, z }) => {
+        ({ wild, hx, hy, dex, absZ: z }) => {
           if (hit) return;
           if (wild === proj.sourceEntity) return;
           if (!broadPhaseOk(proj.x, proj.y, hx, hy)) return;
-          if (!projectileZInPokemonHurtbox(proj.z, dex, z)) return;
+          if (!projectileZInPokemonHurtbox(projHitWorldZ, dex, z)) return;
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (!checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) return;
           if (wild.takeDamage) wild.takeDamage(proj.damage);
@@ -622,7 +654,7 @@ export function tickActiveProjectiles(ctx) {
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(proj.x, proj.y, z);
           if (proj.type === 'incinerateCore' || proj.type === 'fireBlastCore' || proj.type === 'confusionOrb') {
-            applySplashToWild(proj, wildList, undefined, wildSpatial);
+            applySplashToWild(proj, wildList, undefined, wildSpatial, data);
           }
           if (proj.type === 'incinerateCore') {
             spawnIncinerateShards(proj, pushProjectile, z);

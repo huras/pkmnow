@@ -161,7 +161,8 @@ export function scatterHasWindSway(itemKey) {
 }
 
 /**
- * Scatter com pedra/cristal deve ter sorting no eixo Y com o player.
+ * Scatter com sprite "alto/overlay" deve ter sorting no eixo Y com o player.
+ * Inclui cristais/rochas/árvores e também flores (sem exigir collider).
  */
 export function isSortableScatter(itemKey) {
   const k = String(itemKey).toLowerCase();
@@ -174,6 +175,10 @@ export function isSortableScatter(itemKey) {
     k.includes('pine') ||
     k.includes('savannah-tree') ||
     k.includes('dry-grass') ||
+    k.includes('flower') ||
+    k.includes('lily') ||
+    k.includes('daisy') ||
+    k.includes('coreopsis') ||
     k.includes('vine')
   );
 }

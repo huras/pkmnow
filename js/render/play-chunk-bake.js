@@ -16,6 +16,7 @@ import { getMicroTile, MACRO_TILE_STRIDE, LAND_STEPS, foliageDensity } from '../
 import { imageCache } from '../image-cache.js';
 import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { getRoleForCell, seededHash, parseShape, terrainRoleAllowsScatter2CContinuation } from '../tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './conc-conv-a-terrain-blit.js';
 import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
 import { TessellationEngine } from '../tessellation-engine.js';
 import { imageForPaletteBaseTerrainDraw } from './palette-base-draw.js';
@@ -206,7 +207,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
       const role = getRoleAtOrAboveHeight(mx, my, tile.heightStep, biomeSet.type);
       const centerIdW = biomeSet.roles?.CENTER ?? biomeSet.centerId;
-      const tileId = biomeSet.roles[role] ?? centerIdW ?? biomeSet.centerId;
+      const specW = getConcConvATerrainTileSpec(biomeSet, role);
+      const tileId = specW.tileId;
       if (tileId == null) continue;
       const px = Math.round((mx - startX) * tileW);
       const py = Math.round((my - startY) * tileH);
@@ -227,17 +229,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
           thNat
         );
       }
-      octx.drawImage(
-        img,
-        (tileId % cols) * 16,
-        Math.floor(tileId / cols) * 16,
-        16,
-        16,
-        px,
-        py,
-        twNat,
-        thNat
-      );
+      drawTerrainCellFromSheet(octx, img, cols, 16, tileId, px, py, twNat, thNat, specW.flipX);
     }
   }
 
@@ -266,7 +258,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
             role = getRoleAtOrAboveHeight(mx, my, level, biomeSet.type);
           }
           const centerId = biomeSet.roles?.CENTER ?? biomeSet.centerId;
-          const tileId = role ? (biomeSet.roles[role] ?? centerId) : null;
+          const spec = role ? getConcConvATerrainTileSpec(biomeSet, role) : { tileId: null, flipX: false };
+          const tileId = spec.tileId;
           if (img && tileId != null) {
             const px = Math.round((mx - startX) * tileW);
             const py = Math.round((my - startY) * tileH);
@@ -288,17 +281,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                 thNat
               );
             }
-            octx.drawImage(
-              img,
-              (tileId % cols) * 16,
-              Math.floor(tileId / cols) * 16,
-              16,
-              16,
-              px,
-              py,
-              twNat,
-              thNat
-            );
+            drawTerrainCellFromSheet(octx, img, cols, 16, tileId, px, py, twNat, thNat, spec.flipX);
           }
         }
 
@@ -343,18 +326,20 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                     ? isFoliagePoolTile
                     : isFoliageSafeAt;
                   const fRole = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, landForFoliageRole, foliageSet.type);
-                  const fTileId = foliageSet.roles[fRole] ?? foliageSet.roles.CENTER ?? foliageSet.centerId;
+                  const fSpec = getConcConvATerrainTileSpec(foliageSet, fRole);
+                  const fTileId = fSpec.tileId;
                   if (img && fTileId != null) {
-                    octx.drawImage(
+                    drawTerrainCellFromSheet(
+                      octx,
                       img,
-                      (fTileId % fCols) * 16,
-                      Math.floor(fTileId / fCols) * 16,
+                      fCols,
                       16,
-                      16,
+                      fTileId,
                       Math.round((mx - startX) * tileW),
                       Math.round((my - startY) * tileH),
                       twNat,
-                      thNat
+                      thNat,
+                      fSpec.flipX
                     );
                   }
                 }
@@ -376,18 +361,20 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
               return (t?.heightStep ?? -99) >= level && t?.isRoad && !t?.roadFeature?.startsWith('stair');
             };
             const role = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAboveRoad, roadSet.type);
-            const tileId = role ? (roadSet.roles[role] ?? roadSet.roles.CENTER ?? roadSet.centerId) : null;
+            const rSpec = role ? getConcConvATerrainTileSpec(roadSet, role) : { tileId: null, flipX: false };
+            const tileId = rSpec.tileId;
             if (img && tileId != null) {
-              octx.drawImage(
+              drawTerrainCellFromSheet(
+                octx,
                 img,
-                (tileId % cols) * 16,
-                Math.floor(tileId / cols) * 16,
+                cols,
                 16,
-                16,
+                tileId,
                 Math.round((mx - startX) * tileW),
                 Math.round((my - startY) * tileH),
                 twNat,
-                thNat
+                thNat,
+                rSpec.flipX
               );
             }
           }
@@ -406,18 +393,20 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
                 return (t?.heightStep ?? -99) >= tile.heightStep && t?.isRoad && t?.roadFeature === tile.roadFeature;
               };
               const role = getRoleForCell(my, mx, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, isAtOrAboveStair, stairSet.type);
-              const tileId = role ? (stairSet.roles[role] ?? stairSet.roles.CENTER ?? stairSet.centerId) : null;
+              const sSpec = role ? getConcConvATerrainTileSpec(stairSet, role) : { tileId: null, flipX: false };
+              const tileId = sSpec.tileId;
               if (tileId != null) {
-                octx.drawImage(
+                drawTerrainCellFromSheet(
+                  octx,
                   img,
-                  (tileId % cols) * 16,
-                  Math.floor(tileId / cols) * 16,
+                  cols,
                   16,
-                  16,
+                  tileId,
                   Math.round((mx - startX) * tileW),
                   Math.round((my - startY) * tileH),
                   twNat,
-                  thNat
+                  thNat,
+                  sSpec.flipX
                 );
               }
             }

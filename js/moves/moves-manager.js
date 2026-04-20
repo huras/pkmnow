@@ -41,6 +41,7 @@ import {
   fireSpinTierFromCharge01,
   PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL
 } from './fire-spin-move.js';
+import { castAbsorbMove } from './absorb-move.js';
 import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import {
   spawnAlongHypotTowardGround,
@@ -152,6 +153,7 @@ let playerSilkShootCooldown = 0;
 let playerThunderCooldown = 0;
 let playerThundershockCooldown = 0;
 let playerThunderboltCooldown = 0;
+let playerAbsorbCooldown = 0;
 /** Shared gate for Rain Dance / Sunny Day / Blizzard so weather cannot be spam-strobed. */
 let playerWeatherSwapCooldown = 0;
 
@@ -196,18 +198,21 @@ function pushFieldCutArcParticle(type, centerX, centerY, headingRad, opts = {}) 
 export function spawnFieldCutVineSlashFx(centerX, centerY, headingRad, opts = {}) {
   pushFieldCutArcParticle('fieldCutVineArc', centerX, centerY, headingRad, {
     ...opts,
-    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG,
-    radiusTiles: opts.radiusTiles ?? 1.55,
-    lifeSec: opts.lifeSec ?? 0.36
+    arcDeg: opts.arcDeg ?? FIELD_CUT_VINE_ARC_DEG
   });
 }
 
 export function spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, opts = {}) {
   pushFieldCutArcParticle('fieldCutPsychicArc', centerX, centerY, headingRad, {
     ...opts,
-    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG,
-    radiusTiles: opts.radiusTiles ?? 1.62,
-    lifeSec: opts.lifeSec ?? 0.34
+    arcDeg: opts.arcDeg ?? FIELD_CUT_PSYCHIC_ARC_DEG
+  });
+}
+
+export function spawnFieldCutScratchFx(centerX, centerY, headingRad, opts = {}) {
+  pushFieldCutArcParticle('fieldCutScratchArc', centerX, centerY, headingRad, {
+    ...opts,
+    arcDeg: opts.arcDeg ?? 100
   });
 }
 
@@ -294,9 +299,6 @@ function spawnTrailParticle(px, py, trailType, baseZ = 0) {
  */
 function resolveMoveRuntimeAlias(moveId) {
   switch (String(moveId || '')) {
-    case 'absorb':
-    case 'megaDrain':
-      return 'bubbleBeam';
     case 'acid':
     case 'sludge':
       return 'poisonSting';
@@ -346,6 +348,7 @@ export function castMoveById(moveId, sourceX, sourceY, targetX, targetY, sourceE
     return true;
   }
   if (moveId === 'ember') return castEmber(sourceX, sourceY, targetX, targetY, sourceEntity);
+  if (moveId === 'absorb' || moveId === 'megaDrain') return castAbsorbMoveWrapped(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'flamethrower') return castFlamethrowerMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'confusion') return castConfusionMove(sourceX, sourceY, targetX, targetY, sourceEntity);
   if (moveId === 'bubble') return castBubbleMove(sourceX, sourceY, targetX, targetY, sourceEntity);
@@ -435,6 +438,23 @@ export function castEmber(sourceX, sourceY, targetX, targetY, sourceEntity = nul
     pushProjectile
   });
   return true;
+}
+
+export function tryCastPlayerAbsorbStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity = null, data = null) {
+  if (playerAbsorbCooldown > 0) return false;
+  playerAbsorbCooldown = 0.15;
+  bumpPlayerMoveCastVisual(sourceEntity);
+  castAbsorbMove(sourceX, sourceY, targetX, targetY, sourceEntity, {
+    fromWild: false,
+    pushProjectile,
+    streamPuff: true,
+    data
+  });
+  return true;
+}
+
+export function castAbsorbMoveWrapped(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
+  return tryCastPlayerAbsorbStreamPuff(sourceX, sourceY, targetX, targetY, sourceEntity, null);
 }
 
 export function castWaterBurst(sourceX, sourceY, targetX, targetY, sourceEntity = null) {
@@ -1431,7 +1451,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
   playerWeatherSwapCooldown = Math.max(0, playerWeatherSwapCooldown - dt);
 
   const wildList = Array.isArray(wildPokemonList) ? wildPokemonList : [...wildPokemonList];
-  const wildSpatial = buildWildSpatialIndex(wildList);
+  const wildSpatial = buildWildSpatialIndex(wildList, data);
 
   // Thunder-move strikes: when a scheduled cloud's bolt delay elapses, fire the
   // yellow ground strike + splash-damage nearby wild pokemon.
@@ -1492,6 +1512,7 @@ export function updateMoves(dt, wildPokemonList, data, player) {
       p.type === 'fieldCutVineArc' ||
       p.type === 'fieldCutPsychicArc' ||
       p.type === 'fieldCutSlashArc' ||
+      p.type === 'fieldCutScratchArc' ||
       p.type === 'fieldSpinAttack' ||
       p.type === 'rainFootSplash' ||
       p.type === 'prismaticWindArc' ||
@@ -1502,10 +1523,38 @@ export function updateMoves(dt, wildPokemonList, data, player) {
     }
     const pzPrev = p.z;
     const vzParticle = p.vz;
+    
+    // Previous tile height for elevation snapping/delta
+    const prevH = p.heightStep || 0;
+    
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
-    p.vz -= 30.0 * dt;
+    
+    // Update terrain height for 2.5D awareness
+    if (data) {
+      const mx = Math.floor(p.x);
+      const my = Math.floor(p.y);
+      const tile = data.getMicroTile?.(mx, my);
+      const curH = Number(tile?.heightStep) || 0;
+      p.heightStep = curH;
+      
+      // If we moved to a lower tile, "drop" the particle's Z so it doesn't visually snap
+      if (curH < prevH) {
+        p.z += (prevH - curH);
+      } else if (curH > prevH) {
+        // If we hit a cliff, we could either "climb" it or hit it.
+        // For particles, we usually want them to just pop up to the new height or die.
+        // Let's pop up for now to keep them "floating" over terrain.
+        p.z = Math.max(0, p.z - (curH - prevH));
+      }
+    }
+
+    // Gravity only for non-absorb particles
+    if (p.type !== 'absorbChargeParticle') {
+      p.vz -= 30.0 * dt;
+    }
+    
     if (p.z <= 0) {
       if (pzPrev > 0.03 && vzParticle < -0.22) {
         playFloorHit2Sfx({ x: p.x, y: p.y, z: 0 });

@@ -130,19 +130,45 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
   if (lodDetail >= 2 && !playerTopOverlay) return;
   const barFrac = PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC;
 
-  const blitGrassQuad = (frame, destYTop, destHFull) => {
-    if (!frame) return;
-    const fw = frame.width || frame.naturalWidth;
-    const fh = frame.height || frame.naturalHeight;
+  const blitGrassQuad = (surf, destYTop, destHFull) => {
+    if (!surf) return;
+    const canvas = surf.canvas != null ? surf.canvas : surf;
+    const flipX = surf.flipX === true;
+    const fw = canvas.width || canvas.naturalWidth;
+    const fh = canvas.height || canvas.naturalHeight;
+    const destX = snapPx(tx);
+    const drawFull = () => {
+      if (!flipX) {
+        ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+        return;
+      }
+      const cx = destX + tileW * 0.5;
+      ctx.save();
+      ctx.translate(cx, 0);
+      ctx.scale(-1, 1);
+      ctx.translate(-cx, 0);
+      ctx.drawImage(canvas, 0, 0, fw, fh, destX, snapPx(destYTop), tileW, destHFull);
+      ctx.restore();
+    };
     if (!playerTopOverlay) {
-      ctx.drawImage(frame, 0, 0, fw, fh, snapPx(tx), snapPx(destYTop), tileW, destHFull);
+      drawFull();
       return;
     }
     const sh = Math.max(1, Math.round(fh * barFrac));
     const sy = fh - sh;
     const dh = destHFull * barFrac;
     const dy = destYTop + destHFull * (1 - barFrac);
-    ctx.drawImage(frame, 0, sy, fw, sh, snapPx(tx), snapPx(dy), tileW, dh);
+    if (!flipX) {
+      ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+      return;
+    }
+    const cx = destX + tileW * 0.5;
+    ctx.save();
+    ctx.translate(cx, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-cx, 0);
+    ctx.drawImage(canvas, 0, sy, fw, sh, destX, snapPx(dy), tileW, dh);
+    ctx.restore();
   };
 
   const cutFade = getGrassCutFadeoutAlpha01(mx, my);
@@ -253,7 +279,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       }
       ctx.restore();
     }
-    if (playerTopOverlay) ctx.restore();
+    if (needAlphaRestore) ctx.restore();
     return;
   }
 

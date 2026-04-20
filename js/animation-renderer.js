@@ -1,85 +1,104 @@
 import { getWindPhaseOffset } from './perlin-wind.js';
 
+/** Bins do seno (esquerda / centro / direita) — visual; cache só assa 2 ângulos. */
+export const WIND_SWAY_BIN_COUNT = 3;
+
+/**
+ * Ângulos assados onde o tilt negativo é obtido por flip do tilt positivo (copas + grama espelhável).
+ */
+export const WIND_BAKE_ANGLES = [0, 0.03];
+
+/** Grama assimétrica: três rotações explícitas no cache. */
+const WIND_GRASS_BAKE_ANGLES = [-0.03, 0, 0.03];
+
+/** IDs 1x1 no nature tileset com arte espelhável — 2 bakes + flip como as copas. */
+const WIND_GRASS_MIRROR_TILE_IDS = new Set([117, 118, 60, 61]);
+
+/**
+ * @param {number} logicalFrameIndex índice de 0 .. WIND_SWAY_BIN_COUNT-1
+ * @returns {{ bakeSlot: number, flipX: boolean }} bakeSlot indexa WIND_BAKE_ANGLES
+ */
+export function resolveWindSwayBake(logicalFrameIndex) {
+  const i = Math.max(0, Math.min(WIND_SWAY_BIN_COUNT - 1, logicalFrameIndex | 0));
+  if (i === 1) return { bakeSlot: 0, flipX: false };
+  if (i === 0) return { bakeSlot: 1, flipX: true };
+  return { bakeSlot: 1, flipX: false };
+}
+
 /**
  * AnimationRenderer
  * Gesto de frames pré-renderizados para balanço de vegetação (Vento).
  */
 export const AnimationRenderer = {
-    // Cache de frames (Tiny Canvases)
-    // Key format: "imageURI-tileId-frameIndex"
-    cache: new Map(),
+  // Cache de frames (Tiny Canvases)
+  // Keys: …-g0|g1|g2 (grama assimétrica), …-sym-b0|b1 (grama / copas com flip)
+  cache: new Map(),
 
-    // Configurações de balanço (Sutil)
-    // 11 frames deixam o vento ainda mais suave e fluido ao longo do ciclo.
-    WIND_ANGLES: [
-        -0.06,
-        -0.048,
-        -0.036,
-        -0.024,
-        -0.012,
-        0,
-        0.012,
-        0.024,
-        0.036,
-        0.048,
-        0.06
-    ],
+  /**
+   * @param {HTMLImageElement} img O Tileset original
+   * @param {number} tileId O ID do tile no tileset
+   * @param {number} logicalFrameIndex bin do vento (0..WIND_SWAY_BIN_COUNT-1)
+   * @param {number} cols Número de colunas no tileset
+   * @returns {{ canvas: HTMLCanvasElement, flipX: boolean } | null}
+   */
+  getWindFrame(img, tileId, logicalFrameIndex, cols) {
+    if (!img || tileId == null || tileId < 0) return null;
 
-    /**
-     * Retorna um frame pré-renderizado (Canvas) para o balanço de vento.
-     * @param {HTMLImageElement} img O Tileset original
-     * @param {number} tileId O ID do tile no tileset
-     * @param {number} frameIndex O índice do frame (0 a WIND_ANGLES.length - 1)
-     * @param {number} cols Número de colunas no tileset
-     */
-    getWindFrame(img, tileId, frameIndex, cols) {
-        if (!img || tileId == null || tileId < 0) return null;
+    const i = Math.max(0, Math.min(WIND_SWAY_BIN_COUNT - 1, logicalFrameIndex | 0));
 
-        const key = `${img.src}-${tileId}-${frameIndex}`;
-        if (this.cache.has(key)) return this.cache.get(key);
+    const bakeOne = (angleRad) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d', { alpha: true });
+      if (!ctx) return null;
+      ctx.imageSmoothingEnabled = false;
+      const sx = (tileId % cols) * 16;
+      const sy = Math.floor(tileId / cols) * 16;
+      ctx.save();
+      ctx.translate(8, 31);
+      ctx.rotate(angleRad);
+      ctx.drawImage(img, sx, sy, 16, 16, -8, -15, 16, 16);
+      ctx.restore();
+      return canvas;
+    };
 
-        // Criar um novo mini-canvas para este frame
-        const canvas = document.createElement('canvas');
-        canvas.width = 16;
-        canvas.height = 32; // Dobramos a altura para garantir que topos não sejam cortados
-        const ctx = canvas.getContext('2d', { alpha: true });
-        ctx.imageSmoothingEnabled = false; // PIXEL ART: Mantém os pixels nítidos na rotação
-
-        const angle = this.WIND_ANGLES[frameIndex] || 0;
-        const sx = (tileId % cols) * 16;
-        const sy = Math.floor(tileId / cols) * 16;
-
-        // Desenhar rotacionado
-        ctx.save();
-        // Pivot no rodapé do tile (x:8, y:31)
-        ctx.translate(8, 31);
-        ctx.rotate(angle);
-        ctx.drawImage(
-            img,
-            sx, sy, 16, 16,
-            -8, -15, 16, 16
-        );
-        ctx.restore();
-
+    if (WIND_GRASS_MIRROR_TILE_IDS.has(tileId)) {
+      const { bakeSlot, flipX } = resolveWindSwayBake(i);
+      const key = `${img.src}-${tileId}-sym-b${bakeSlot}`;
+      let canvas = this.cache.get(key);
+      if (!canvas) {
+        const angle = WIND_BAKE_ANGLES[bakeSlot] || 0;
+        canvas = bakeOne(angle);
+        if (!canvas) return null;
         this.cache.set(key, canvas);
-        return canvas;
-    },
-
-    /**
-     * Calcula qual frameIndex usar baseado no tempo e posição.
-     * @param {number} time Tempo atual (s)
-     * @param {number} mx Posição X (world)
-     * @param {number} my Posição Y (world)
-     */
-    getFrameIndex(time, mx, my) {
-        // Fase por célula: Perlin (escala baixa) + cache em perlin-wind.js — não recalcula todo frame.
-        const phase = getWindPhaseOffset(mx, my);
-        const wave = Math.sin(time * 2.0 + phase);
-        
-        const frameCount = this.WIND_ANGLES.length || 1;
-        // Mapeia Seno (-1 a 1) para índice de frame (0 a frameCount - 1)
-        const normalized = (wave + 1) * 0.5;
-        const idx = Math.floor(normalized * frameCount);
-        return Math.max(0, Math.min(frameCount - 1, idx));
+      }
+      return { canvas, flipX };
     }
+
+    const key = `${img.src}-${tileId}-g${i}`;
+    let canvas = this.cache.get(key);
+    if (!canvas) {
+      const angle = WIND_GRASS_BAKE_ANGLES[i] || 0;
+      canvas = bakeOne(angle);
+      if (!canvas) return null;
+      this.cache.set(key, canvas);
+    }
+    return { canvas, flipX: false };
+  },
+
+  /**
+   * @param {number} time Tempo atual (s)
+   * @param {number} mx Posição X (world)
+   * @param {number} my Posição Y (world)
+   */
+  getFrameIndex(time, mx, my) {
+    const phase = getWindPhaseOffset(mx, my);
+    const wave = Math.sin(time * 2.0 + phase);
+
+    const frameCount = WIND_SWAY_BIN_COUNT || 1;
+    const normalized = (wave + 1) * 0.5;
+    const idx = Math.floor(normalized * frameCount);
+    return Math.max(0, Math.min(frameCount - 1, idx));
+  }
 };

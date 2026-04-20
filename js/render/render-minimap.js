@@ -39,7 +39,7 @@ const ZOOM_ORDER = ['far', 'mid', 'close', 'closer'];
 
 /**
  * Text for the minimap footer (between zoom buttons). `side` = edge length in **micro-tiles**
- * of the square window on the world (minimap is square; value is approximate).
+ * of the minimap viewport on the world in micro-tiles (value is approximate; canvas can be non-square).
  * @param {string} zoom
  * @returns {{ title: string, subtitle: string }}
  */
@@ -87,6 +87,16 @@ let baseCacheH = 0;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
 const minimapBiomeRgbCache = new Map();
+
+/** Wild portrait icons only: tiny scratch @ this scale, then blit down. No extra cost for terrain/noise. */
+const WILD_MINIMAP_PORTRAIT_SUPER_PX = 2;
+/** @type {HTMLCanvasElement | null} */
+let wildMinimapPortraitScratch = null;
+
+/** Canvas2D `filter` on wild portraits only (terrain untouched). Stronger read on dark minimap. */
+const MINIMAP_PORTRAIT_FILTER = 'contrast(1.12) saturate(1.18) brightness(1.06)';
+/** Softer when species hidden or distance is approximate */
+const MINIMAP_PORTRAIT_FILTER_MUTED = 'contrast(0.94) saturate(0.72) brightness(0.93)';
 
 /** Until `minimapSpeciesKnown`, wilds use this instead of a species portrait on the minimap. */
 const UNKNOWN_POKEMON_MINIMAP_PATH = 'map-icons/unknown-pokemon.png';
@@ -624,18 +634,54 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
     ctx.stroke();
 
     const drawClippedRoundPortrait = (tex) => {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(sx, sy, markerR - 1.1, 0, Math.PI * 2);
-      ctx.clip();
+      const r = markerR - 1.1;
+      const hi = WILD_MINIMAP_PORTRAIT_SUPER_PX;
+      const d = Math.max(8, Math.ceil(r * 2 * hi));
+      if (!wildMinimapPortraitScratch) {
+        wildMinimapPortraitScratch = document.createElement('canvas');
+      }
+      const hiCanvas = wildMinimapPortraitScratch;
+      if (hiCanvas.width !== d || hiCanvas.height !== d) {
+        hiCanvas.width = d;
+        hiCanvas.height = d;
+      }
+      const sctx = hiCanvas.getContext('2d');
+      if (!sctx) return;
+      sctx.setTransform(1, 0, 0, 1, 0, 0);
+      sctx.clearRect(0, 0, d, d);
+      const cx = d * 0.5;
+      const cy = d * 0.5;
+      const rHi = r * hi;
+      sctx.imageSmoothingEnabled = true;
+      if (sctx.imageSmoothingQuality !== undefined) sctx.imageSmoothingQuality = 'high';
+      if (typeof sctx.filter === 'string') {
+        sctx.filter = mutedRing ? MINIMAP_PORTRAIT_FILTER_MUTED : MINIMAP_PORTRAIT_FILTER;
+      }
+      sctx.save();
+      sctx.beginPath();
+      sctx.arc(cx, cy, rHi, 0, Math.PI * 2);
+      sctx.clip();
       const iw = tex.naturalWidth;
       const ih = tex.naturalHeight;
-      const side = (markerR - 1.1) * 2;
-      const scale = Math.max(side / iw, side / ih);
-      const dw = iw * scale;
-      const dh = ih * scale;
-      ctx.drawImage(tex, sx - dw * 0.5, sy - dh * 0.46, dw, dh);
-      ctx.restore();
+      const sideHi = rHi * 2;
+      const cover = Math.max(sideHi / iw, sideHi / ih);
+      const dwHi = iw * cover;
+      const dhHi = ih * cover;
+      sctx.drawImage(tex, cx - dwHi * 0.5, cy - dhHi * 0.46, dwHi, dhHi);
+      sctx.restore();
+      if (typeof sctx.filter === 'string') sctx.filter = 'none';
+
+      const prevSmooth = ctx.imageSmoothingEnabled;
+      const prevWk =
+        ctx.webkitImageSmoothingEnabled !== undefined ? ctx.webkitImageSmoothingEnabled : undefined;
+      const prevQ = ctx.imageSmoothingQuality !== undefined ? ctx.imageSmoothingQuality : undefined;
+      ctx.imageSmoothingEnabled = true;
+      if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = true;
+      if (ctx.imageSmoothingQuality !== undefined) ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(hiCanvas, 0, 0, d, d, sx - r, sy - r, r * 2, r * 2);
+      ctx.imageSmoothingEnabled = prevSmooth;
+      if (prevWk !== undefined) ctx.webkitImageSmoothingEnabled = prevWk;
+      if (prevQ !== undefined) ctx.imageSmoothingQuality = prevQ;
     };
 
     if (unknownImg?.naturalWidth && speciesHidden) {

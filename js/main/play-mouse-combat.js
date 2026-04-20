@@ -15,6 +15,7 @@ import {
   spawnFieldCutSlashFx,
   spawnFieldSpinAttackFx,
   spawnFieldCutVineSlashFx,
+  spawnFieldCutScratchFx,
   tryCastPlayerFlamethrowerStreamPuff,
   tryCastPlayerHydroPumpStreamPuff,
   castWaterGunMove,
@@ -27,6 +28,7 @@ import {
   tryCastPlayerWaterCannonStreamPuff,
   updatePlayerWaterCannonMergedBeamVisual,
   tryCastPlayerThundershockStreamPuff,
+  tryCastPlayerAbsorbStreamPuff,
   tryReleasePlayerPsybeam,
   castFireSpinMove,
   castFireSpinCharged,
@@ -99,7 +101,10 @@ const FIELD_CUT_THIRD_HIT_LOCKOUT_SEC = 0.45;
 const FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES = 0.5;
 const FIELD_SKILL_LABEL = {
   tackle: 'Tackle',
-  cut: 'Cut'
+  cut: 'Cut',
+  scratch: 'Scratch',
+  psychoCut: 'Psycho Cut',
+  vineWhip: 'Vine Whip'
 };
 
 /** Hold digit 1–5 briefly to open the bind wheel for LMB / RMB / MMB / wheel↑ / wheel↓. */
@@ -172,9 +177,13 @@ function getMoveTypeClass(moveId) {
     case 'ultimate':
       return 'type-normal';
     case 'tackle':
+    case 'scratch':
       return 'type-normal';
     case 'cut':
+    case 'vineWhip':
       return 'type-grass';
+    case 'psychoCut':
+      return 'type-psychic';
     default:
       return 'type-normal';
   }
@@ -219,6 +228,9 @@ let middleSteelBeamStreamedThisPress = false;
 let rightWaterCannonStreamedThisPress = false;
 let leftWaterCannonStreamedThisPress = false;
 let middleWaterCannonStreamedThisPress = false;
+let rightAbsorbStreamedThisPress = false;
+let leftAbsorbStreamedThisPress = false;
+let middleAbsorbStreamedThisPress = false;
 let middleThundershockStreamedThisPress = false;
 let fieldCutComboStep = 0;
 let fieldCutComboTimerSec = 0;
@@ -445,7 +457,11 @@ export function handleSpecialAttackHotkeyUp(code, pl) {
   return handleBindSlotHotkeyUp(code, pl);
 }
 
-function resolveCutStyleForDex(dexId) {
+function resolveCutStyle(meleeId, dexId) {
+  if (meleeId === 'vineWhip') return 'vine';
+  if (meleeId === 'psychoCut') return 'psychic';
+  if (meleeId === 'scratch') return 'scratch';
+  if (meleeId === 'cut') return 'slash';
   if (speciesHasType(dexId, 'grass')) return 'vine';
   if (speciesHasType(dexId, 'psychic')) return 'psychic';
   return 'slash';
@@ -457,6 +473,9 @@ function resolveCutProfile(styleId) {
   }
   if (styleId === 'psychic') {
     return { radius: FIELD_SKILL_CUT_RADIUS + 0.35, damage: 10, knockback: 3.4 };
+  }
+  if (styleId === 'scratch') {
+    return { radius: FIELD_SKILL_CUT_RADIUS + 0.1, damage: 9, knockback: 3.0 };
   }
   return { radius: FIELD_SKILL_CUT_RADIUS, damage: 9, knockback: 3.1 };
 }
@@ -551,11 +570,11 @@ function resolveCutComboStep(player, charged) {
   return fieldCutComboStep;
 }
 
-function castPlayerCut(player, data, charged = false) {
+function castPlayerCut(player, data, charged = false, meleeId = 'cut') {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-  const styleId = resolveCutStyleForDex(player.dexId ?? 1);
+  const styleId = resolveCutStyle(meleeId, player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
   const comboStep = resolveCutComboStep(player, charged);
   player._tackleReachTiles = comboStep >= 3 ? FIELD_CUT_THIRD_HIT_ADVANCE_TILES : FIELD_CUT_HIT_ADVANCE_TILES;
@@ -586,6 +605,12 @@ function castPlayerCut(player, data, charged = false) {
       arcDeg: variant.arcDeg,
       lifeSec: variant.lifeSec
     });
+  } else if (styleId === 'scratch') {
+    spawnFieldCutScratchFx(centerX, centerY, headingRad, {
+      radiusTiles: useRadius,
+      arcDeg: variant.arcDeg,
+      lifeSec: variant.lifeSec
+    });
   } else {
     spawnFieldCutSlashFx(centerX, centerY, headingRad, {
       radiusTiles: useRadius,
@@ -607,14 +632,14 @@ function castPlayerCut(player, data, charged = false) {
 }
 
 /** Charged Cut release before the first bar is full: one slash, slightly stronger than tap 1. */
-function castWeakPartialChargedCut(player, data, charge01) {
+function castWeakPartialChargedCut(player, data, charge01, meleeId = 'cut') {
   if (!player || !data) return;
   const weakT = getWeakPartialChargeT(charge01);
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
   player._tackleReachTiles = FIELD_CUT_HIT_ADVANCE_TILES;
   playCutComboSwordSwishSfx(player, 1);
-  const styleId = resolveCutStyleForDex(player.dexId ?? 1);
+  const styleId = resolveCutStyle(meleeId, player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
   const variant = resolveCutComboVariant(styleId, 1, false);
   const nx = Number(player.tackleDirNx) || 0;
@@ -636,6 +661,12 @@ function castWeakPartialChargedCut(player, data, charge01) {
     });
   } else if (styleId === 'psychic') {
     spawnFieldCutPsychicSlashFx(centerX, centerY, headingRad, {
+      radiusTiles: useRadius,
+      arcDeg: variant.arcDeg,
+      lifeSec: variant.lifeSec + 0.04 * weakT
+    });
+  } else if (styleId === 'scratch') {
+    spawnFieldCutScratchFx(centerX, centerY, headingRad, {
       radiusTiles: useRadius,
       arcDeg: variant.arcDeg,
       lifeSec: variant.lifeSec + 0.04 * weakT
@@ -676,10 +707,10 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   let knockback = 5;
   let styleId = 'slash';
   let fxLifeSec = 0.44;
-  if (meleeId === 'cut') {
+  if (meleeId !== 'tackle') {
     const uRange = getChargeRange01(charge01);
     const uDamage = getChargeDamage01(charge01);
-    const cutStyle = resolveCutStyleForDex(player.dexId ?? 1);
+    const cutStyle = resolveCutStyle(meleeId, player.dexId ?? 1);
     const profile = resolveCutProfile(cutStyle);
     styleId = cutStyle;
     const radiusMul = 1 + (FIELD_CUT_CHARGE_MAX_RADIUS_MUL - 1) * uRange;
@@ -715,17 +746,18 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
 
 function castSelectedFieldSkill(player, data, charged = false, charge01 = 0, meleeId = 'tackle') {
   if (!player) return;
-  if (charged && meleeId === 'cut') {
+  const isCutFamily = meleeId === 'cut' || meleeId === 'scratch' || meleeId === 'psychoCut' || meleeId === 'vineWhip';
+  if (charged && isCutFamily) {
     if (isChargeStrongAttackEligible(charge01)) {
       playLinkSuperSwordSfx(player);
       castChargedFieldSpinAttack(player, data, meleeId, charge01);
     } else {
-      castWeakPartialChargedCut(player, data, charge01);
+      castWeakPartialChargedCut(player, data, charge01, meleeId);
     }
     return;
   }
-  if (meleeId === 'cut') {
-    castPlayerCut(player, data, false);
+  if (isCutFamily) {
+    castPlayerCut(player, data, false, meleeId);
     return;
   }
   fieldCutComboStep = 0;
@@ -802,7 +834,9 @@ function isHoldStreamMoveId(moveId) {
     moveId === 'solarBeam' ||
     moveId === 'hyperBeam' ||
     moveId === 'triAttack' ||
-    moveId === 'thunderShock'
+    moveId === 'thunderShock' ||
+    moveId === 'absorb' ||
+    moveId === 'megaDrain'
   );
 }
 
@@ -874,6 +908,7 @@ function initLeftCombatPressFromPointerOrGamepad(modifierSnapshot, useMouseForMe
   leftSteelBeamStreamedThisPress = false;
   leftWaterCannonStreamedThisPress = false;
   leftThundershockStreamedThisPress = false;
+  leftAbsorbStreamedThisPress = false;
 }
 
 /**
@@ -936,6 +971,7 @@ function initRightCombatPressFromGamepad(useMouseForMeleeAim = true) {
   rightSteelBeamStreamedThisPress = false;
   rightWaterCannonStreamedThisPress = false;
   rightThundershockStreamedThisPress = false;
+  rightAbsorbStreamedThisPress = false;
 }
 
 /**
@@ -967,6 +1003,7 @@ function initMiddleCombatPressFromGamepad(useMouseForMeleeAim = true) {
   middleSteelBeamStreamedThisPress = false;
   middleWaterCannonStreamedThisPress = false;
   middleThundershockStreamedThisPress = false;
+  middleAbsorbStreamedThisPress = false;
 }
 
 /**
@@ -998,7 +1035,7 @@ function getBindingsOrDefault(pl) {
 }
 
 function isMeleeTackleOrCut(moveId) {
-  return moveId === 'tackle' || moveId === 'cut';
+  return moveId === 'tackle' || moveId === 'cut' || moveId === 'scratch' || moveId === 'psychoCut' || moveId === 'vineWhip';
 }
 
 function fieldMoveUsesChargeMeter(moveId) {
@@ -1140,6 +1177,7 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
   const waterCannon =
     which === 'l' ? leftWaterCannonStreamedThisPress : which === 'm' ? middleWaterCannonStreamedThisPress : rightWaterCannonStreamedThisPress;
   const tshock = which === 'l' ? leftThundershockStreamedThisPress : which === 'm' ? middleThundershockStreamedThisPress : rightThundershockStreamedThisPress;
+  const absorb = which === 'l' ? leftAbsorbStreamedThisPress : which === 'm' ? middleAbsorbStreamedThisPress : rightAbsorbStreamedThisPress;
 
   if (moveId === 'flamethrower') {
     if (!flame) {
@@ -1187,6 +1225,11 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     if (!tshock) {
       applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
       tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, pl);
+    }
+  } else if (moveId === 'absorb' || moveId === 'megaDrain') {
+    if (!absorb) {
+      applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
+      tryCastPlayerAbsorbStreamPuff(sx, sy, tx, ty, pl, data);
     }
   } else if (moveId === 'psybeam') {
     applyPlayerFacingFromStreamAim(pl, sx, sy, tx, ty);
@@ -1363,6 +1406,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) leftThundershockStreamedThisPress = true;
   }
+  if (virtLeft && !mod && (lmb === 'absorb' || lmb === 'megaDrain')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerAbsorbStreamPuff(sx, sy, tx, ty, player, data)) leftAbsorbStreamedThisPress = true;
+  }
 
   if (virtRight && !mod && rmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1403,6 +1450,10 @@ export function updatePlayPointerCombat(dt, player, data) {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) rightThundershockStreamedThisPress = true;
   }
+  if (virtRight && !mod && (rmb === 'absorb' || rmb === 'megaDrain')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerAbsorbStreamPuff(sx, sy, tx, ty, player, data)) rightAbsorbStreamedThisPress = true;
+  }
 
   if (virtMiddle && !mod && mmb === 'flamethrower') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1442,6 +1493,10 @@ export function updatePlayPointerCombat(dt, player, data) {
   if (virtMiddle && !mod && mmb === 'thunderShock') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
     if (tryCastPlayerThundershockStreamPuff(sx, sy, tx, ty, player)) middleThundershockStreamedThisPress = true;
+  }
+  if (virtMiddle && !mod && (mmb === 'absorb' || mmb === 'megaDrain')) {
+    applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
+    if (tryCastPlayerAbsorbStreamPuff(sx, sy, tx, ty, player, data)) middleAbsorbStreamedThisPress = true;
   }
 
   const prismaticLaserStreamHeld =

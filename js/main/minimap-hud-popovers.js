@@ -1,7 +1,14 @@
+import { renderWildGroupsPopoverList } from './minimap-wild-groups-popover.js';
+
 /**
- * Manages Time, Weather, Social, and Audio popovers on the minimap header.
+ * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
+ * @param {{ imageCache?: Map<string, HTMLImageElement> }} [options]
  */
-export function installMinimapHudPopovers() {
+export function installMinimapHudPopovers(options = {}) {
+  const { imageCache } = options;
+  const groupsToggle = document.getElementById('minimap-groups-toggle');
+  const groupsPop = document.getElementById('minimap-groups-popover');
+  const groupsList = document.getElementById('minimap-groups-popover-list');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -15,7 +22,23 @@ export function installMinimapHudPopovers() {
     return { forceCloseAllPopovers: () => {} };
   }
 
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let groupsRefreshTimer = null;
+
+  function stopGroupsRefresh() {
+    if (groupsRefreshTimer != null) {
+      clearInterval(groupsRefreshTimer);
+      groupsRefreshTimer = null;
+    }
+  }
+
+  function refreshGroupsPanel() {
+    if (!groupsList || !imageCache) return;
+    renderWildGroupsPopoverList(groupsList, imageCache);
+  }
+
   const popovers = [
+    ...(groupsToggle && groupsPop ? [{ toggle: groupsToggle, pop: groupsPop, name: 'groups' }] : []),
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
@@ -23,7 +46,8 @@ export function installMinimapHudPopovers() {
   ];
 
   function closeAllExcept(activeName) {
-    popovers.forEach(p => {
+    if (activeName !== 'groups') stopGroupsRefresh();
+    popovers.forEach((p) => {
       if (p.name !== activeName) {
         p.pop?.classList.add('hidden');
         p.toggle?.setAttribute('aria-pressed', 'false');
@@ -32,19 +56,30 @@ export function installMinimapHudPopovers() {
   }
 
   function togglePopover(name) {
-    const p = popovers.find(x => x.name === name);
+    const p = popovers.find((x) => x.name === name);
     if (!p || !p.pop) return;
 
     const isOpen = !p.pop.classList.contains('hidden');
     if (isOpen) {
       p.pop.classList.add('hidden');
       p.toggle?.setAttribute('aria-pressed', 'false');
+      if (name === 'groups') stopGroupsRefresh();
     } else {
       closeAllExcept(name);
       p.pop.classList.remove('hidden');
       p.toggle?.setAttribute('aria-pressed', 'true');
+      if (name === 'groups') {
+        refreshGroupsPanel();
+        stopGroupsRefresh();
+        groupsRefreshTimer = setInterval(refreshGroupsPanel, 380);
+      }
     }
   }
+
+  groupsToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('groups');
+  });
 
   timeToggle.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -81,6 +116,9 @@ export function installMinimapHudPopovers() {
   });
 
   return {
-    forceCloseAllPopovers: () => closeAllExcept(null)
+    forceCloseAllPopovers: () => {
+      stopGroupsRefresh();
+      closeAllExcept(null);
+    }
   };
 }

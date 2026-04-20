@@ -28,6 +28,7 @@ import {
   entitiesByKey,
   wildSubdivN
 } from './wild-core-state.js';
+import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
 
 export const SKY_SPECIES = new Set([
   6, // Charizard
@@ -111,8 +112,8 @@ const GROUP_MEMBER_MAX_SPAWN_DIST = GROUP_MEMBER_MAX_DIST_MACRO_TILES * MACRO_TI
  * Fewer companions than desired can still shrink the spawned group; if the result would fall below `MIN`, the slot is skipped.
  * Set `MIN = 2` to disallow solo spawns from the roller (singles from weights become pairs).
  */
-export const WILD_GROUP_SIZE_MIN = 1;
-export const WILD_GROUP_SIZE_MAX = 3;
+export const WILD_GROUP_SIZE_MIN = 3;
+export const WILD_GROUP_SIZE_MAX = 5;
 
 const GROUP_SIZE_CLAMP_LO = Math.max(1, Math.min(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
 const GROUP_SIZE_CLAMP_HI = Math.max(GROUP_SIZE_CLAMP_LO, Math.max(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
@@ -410,6 +411,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     if (isDebugSummonKey(k)) continue;
     if (!needed.has(k)) {
       ent.isDespawning = true;
+      releaseWildGroupFollowersFromLeader(ent, entitiesByKey);
     }
   }
 
@@ -676,18 +678,31 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const bossRoll = rollBossPromotedDex(baseDex, slot.mx, slot.my, slot.sx, slot.sy, data.seed);
     const leaderDex = bossRoll.dex;
     const pattern = rollGroupPattern(slot.mx, slot.my, slot.sx, slot.sy, data.seed);
-    const desiredCompanions = Math.max(0, pattern.total - 1);
+    const leaderConfig = getPokemonConfig(leaderDex);
+    const leaderBeh = getSpeciesBehavior(leaderDex);
+    const isFlocking = leaderConfig?.types?.includes('flying') || leaderConfig?.types?.includes('water') || leaderBeh.flocks;
+    
+    let desiredCompanions = Math.max(0, pattern.total - 1);
+    if (isFlocking) {
+      desiredCompanions = 4 + (seededHashInt(slot.mx * 31, slot.my * 37, data.seed ^ 0xf10c) % 8); // massive flock: 4 to 11 companions
+    }
+    
     const groupId = desiredCompanions > 0 ? resolveGroupId(slot.mx, slot.my, slot.sx, slot.sy, data.seed) : null;
     const cohesionHash = seededHashInt(
       slot.mx * 881 + slot.sx * 53,
       slot.my * 907 + slot.sy * 61,
       data.seed ^ SALT_GROUP_ID
     );
-    const cohesionSec =
+    let cohesionSec =
       desiredCompanions > 0
         ? GROUP_COHESION_SEC_MIN + ((cohesionHash % 1000) / 1000) * GROUP_COHESION_SEC_EXTRA
         : 0;
-    const companionSlotMaxDist = Math.max(GROUP_SLOT_MAX_DIST_MIN, Math.min(GROUP_SLOT_MAX_DIST_MAX, cellW * 1.15));
+        
+    if (isFlocking && desiredCompanions > 0) {
+      cohesionSec = 999999;
+    }
+    
+    const companionSlotMaxDist = isFlocking ? cellW * 4.5 : Math.max(GROUP_SLOT_MAX_DIST_MIN, Math.min(GROUP_SLOT_MAX_DIST_MAX, cellW * 1.15));
     const companionSlots = findCompanionSlotCandidates(
       slot,
       neededSlots,
@@ -750,7 +765,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         groupMemberIndex: i + 1,
         groupSize,
         groupCohesionSec: cohesionSec,
-        groupMaxSpawnDist: GROUP_MEMBER_MAX_SPAWN_DIST,
+        groupMaxSpawnDist: isFlocking ? GROUP_MEMBER_MAX_SPAWN_DIST * 2.5 : GROUP_MEMBER_MAX_SPAWN_DIST,
         groupAnchorX: leaderAnchorX,
         groupAnchorY: leaderAnchorY,
         groupExistingPoints: groupSpawnPoints,

@@ -8,6 +8,8 @@ import {
 } from './wild-social-system.js';
 import { setEmotion } from './wild-motion-ai.js';
 import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
+import { entitiesByKey } from './wild-core-state.js';
+import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
 
 export function bindStandardWildTakeDamage(entity) {
   entity.takeDamage = function (amount) {
@@ -28,6 +30,7 @@ export function bindStandardWildTakeDamage(entity) {
       this.vy = 0;
       setEmotion(this, 9, true, 'Pain');
       this.isDespawning = true;
+      releaseWildGroupFollowersFromLeader(this, entitiesByKey);
     }
     this.hitFlashTimer = 0.2;
 

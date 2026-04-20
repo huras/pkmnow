@@ -18,6 +18,7 @@ import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { imageCache } from './image-cache.js';
 import { parseShape, getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 
 export class BiomesModal {
   constructor() {
@@ -251,13 +252,8 @@ export class BiomesModal {
 
         // Determina o papel (role) usando a mesma função do jogo
         const role = getRoleForCell(r, c, 7, 7, isLandAt, set.type);
-        const tileId = set.roles[role] ?? set.centerId;
-
-        ctx.drawImage(
-          img,
-          (tileId % sheetCols) * 16, Math.floor(tileId / sheetCols) * 16, 16, 16,
-          c * 16, r * 16, 16, 16
-        );
+        const spec = getConcConvATerrainTileSpec(set, role);
+        drawTerrainCellFromSheet(ctx, img, sheetCols, 16, spec.tileId, c * 16, r * 16, 16, 16, spec.flipX);
       }
     }
   }

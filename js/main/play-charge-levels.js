@@ -1,8 +1,10 @@
 export const CHARGE_LEVEL_BAR_COUNT = 4;
 export const CHARGE_LEVEL_SEGMENT_SIZE = 1 / CHARGE_LEVEL_BAR_COUNT;
 
-/** Earthquake: first half of linear `charge01` maps to the legacy 4 bars; second half fills bar 5 (ease-out). */
+/** Earthquake: first half of linear `charge01` maps to the legacy 4 bars; second half fills bar 5 (late snap). */
 export const EARTHQUAKE_CHARGE_FIRST_HALF_MAX = 0.5;
+/** Bar-5 calibration: at total `charge01=0.95`, bar5 raw is 0.9 and visual should be 0.25. */
+const EARTHQUAKE_BAR5_LATE_SNAP_EXPONENT = Math.log(0.25) / Math.log(0.9);
 
 /** First charge bar completely filled (same as one segment at 100%). */
 export const CHARGE_STRONG_ATTACK_MIN_01 = CHARGE_LEVEL_SEGMENT_SIZE;
@@ -21,6 +23,12 @@ function clamp01(v) {
 function easeOutCubic(t) {
   const u = clamp01(t);
   return 1 - (1 - u) ** 3;
+}
+
+/** t in [0,1] — late-snap curve (very slow until near full, then hard finish). */
+function easeLateSnapBar5Earthquake(t) {
+  const u = clamp01(t);
+  return u ** EARTHQUAKE_BAR5_LATE_SNAP_EXPONENT;
 }
 
 /** t in [0,1] — mild ease-in for bars 2–4 (softer than cubic). */
@@ -101,7 +109,7 @@ export function getChargeDamage01(charge01) {
 
 /**
  * Five HUD segments for Earthquake: bars 1–4 match the global meter on `charge01*2` while
- * `charge01 <= 0.5`; bar 5 fills on `(charge01-0.5)/0.5` with ease-out (same wall-clock span
+ * `charge01 <= 0.5`; bar 5 fills on `(charge01-0.5)/0.5` with a late snap (same wall-clock span
  * as bars 1–4 when charge ramps at half speed — see play-mouse-combat).
  * @param {number} charge01
  * @returns {[number, number, number, number, number]}
@@ -114,7 +122,7 @@ export function getEarthquakeChargeBarProgresses(charge01) {
     return [b1, b2, b3, b4, 0];
   }
   const raw5 = clamp01((p - EARTHQUAKE_CHARGE_FIRST_HALF_MAX) / (1 - EARTHQUAKE_CHARGE_FIRST_HALF_MAX));
-  return [1, 1, 1, 1, easeOutCubic(raw5)];
+  return [1, 1, 1, 1, easeLateSnapBar5Earthquake(raw5)];
 }
 
 /**

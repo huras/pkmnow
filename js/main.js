@@ -14,9 +14,7 @@ import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
 import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
-import { getEncounters } from './ecodex.js';
 import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
-import { speciesHasFlyingType } from './pokemon/pokemon-type-helpers.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
@@ -27,7 +25,6 @@ import {
   openDetailDebugModal
 } from './main/tile-debug-modal.js';
 import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.js';
-import { computeTerrainRoleAndSprite } from './main/terrain-role-helpers.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
 import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
 import { registerPlayGamepadListeners } from './main/play-gamepad.js';
@@ -337,7 +334,7 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
-const minimapHudPopovers = installMinimapHudPopovers();
+const minimapHudPopovers = installMinimapHudPopovers({ imageCache });
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
   getPlayer: () => player,
@@ -372,16 +369,6 @@ function detailLabelFromItemKey(itemKey) {
     .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function detailPreviewHtmlForInfoBar(itemKey) {
-  return detailScatterGridPreviewHtml(
-    itemKey,
-    14,
-    '',
-    'vertical-align:middle;margin-right:6px;line-height:0',
-    { seamless: true, gapPx: 0 }
-  );
-}
-
 function detailPreviewHtmlForImmersiveHint(itemKey) {
   return detailScatterGridPreviewHtml(
     itemKey,
@@ -413,67 +400,72 @@ function faintedWildHudSpriteHtml(dexId, displayW) {
 }
 
 /** @param {{ itemKey: string, wildDexId?: number }} ctx */
-function strengthHudObjectPreviewHtml(ctx) {
-  const wid = Math.floor(Number(ctx?.wildDexId) || 0);
-  if (wid > 0) return faintedWildHudSpriteHtml(wid, 36);
-  return detailPreviewHtmlForInfoBar(String(ctx?.itemKey || ''));
-}
-
-/** @param {{ itemKey: string, wildDexId?: number }} ctx */
 function strengthHudObjectPreviewHtmlImmersive(ctx) {
   const wid = Math.floor(Number(ctx?.wildDexId) || 0);
   if (wid > 0) return faintedWildHudSpriteHtml(wid, 40);
   return detailPreviewHtmlForImmersiveHint(String(ctx?.itemKey || ''));
 }
 
+/**
+ * Minimap biome row + coords — always in sync (must not sit behind the HUD throttle return).
+ * @param {{ id: number, name?: string, color?: string } | undefined} bio
+ * @param {number} px
+ * @param {number} py
+ * @param {number} pz
+ */
+function syncMinimapPlayFooter(bio, px, py, pz) {
+  const root = minimapPanel || document.getElementById('minimap-panel');
+  if (!root) return;
+  const nameEl = root.querySelector('#minimap-biome-readout');
+  const swatchEl = root.querySelector('#minimap-biome-swatch');
+  const coordsEl = root.querySelector('#minimap-coords-readout');
+  const biomeLabel = bio?.name ?? '—';
+  if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
+  if (swatchEl) {
+    const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
+    const bg = sw && /^#[0-9a-fA-F]{6}$/.test(sw) ? sw : '#3a3a44';
+    if (swatchEl.style.background !== bg) swatchEl.style.background = bg;
+  }
+  const coordsLine = `X ${px.toFixed(1)} · Y ${py.toFixed(1)} · Z ${pz.toFixed(2)}`;
+  if (coordsEl && coordsEl.textContent !== coordsLine) coordsEl.textContent = coordsLine;
+}
+
+function resetMinimapPlayFooter() {
+  const root = minimapPanel || document.getElementById('minimap-panel');
+  if (!root) return;
+  const nameEl = root.querySelector('#minimap-biome-readout');
+  const swatchEl = root.querySelector('#minimap-biome-swatch');
+  const coordsEl = root.querySelector('#minimap-coords-readout');
+  if (nameEl) nameEl.textContent = '—';
+  if (swatchEl) swatchEl.style.background = '#3a3a44';
+  if (coordsEl) coordsEl.textContent = 'X — · Y — · Z —';
+}
+
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
 function refreshPlayModeInfoBar(force = false) {
-  if (!infoBar || !currentData || appMode !== 'play') return;
+  if (!currentData || appMode !== 'play') return;
   const mx = Math.floor(player.x);
   const my = Math.floor(player.y);
-  const key = `${mx},${my}`;
+  const tile = getMicroTile(mx, my, currentData);
+  const bId = tile.biomeId;
+  const bio = Object.values(BIOMES).find((b) => b.id === bId);
+  const px = Number(player.x) || 0;
+  const py = Number(player.y) || 0;
+  const pz = Number(player.z) || 0;
+  syncMinimapPlayFooter(bio, px, py, pz);
+
+  const rx = Math.round(px * 10);
+  const ry = Math.round(py * 10);
+  const rz = Math.round(pz * 100);
+  const key = `${rx},${ry},${rz},${bId}`;
   const now = performance.now();
   if (!force) {
-    const sameTile = key === lastHudTileKey;
-    if (sameTile && now - lastHudMs < HUD_MIN_INTERVAL_MS) return;
+    const sameSig = key === lastHudTileKey;
+    if (sameSig && now - lastHudMs < HUD_MIN_INTERVAL_MS) return;
   }
   lastHudTileKey = key;
   lastHudMs = now;
 
-  const tile = getMicroTile(mx, my, currentData);
-  const bId = tile.biomeId;
-  const bio = Object.values(BIOMES).find((b) => b.id === bId);
-  const encounters = getEncounters(bId);
-  let prefix = '';
-  const macroX = Math.floor(player.x / MACRO_TILE_STRIDE);
-  const macroY = Math.floor(player.y / MACRO_TILE_STRIDE);
-  if (currentData.graph) {
-    const city = currentData.graph.nodes.find(
-      (n) => Math.abs(n.x - macroX) <= 1 && Math.abs(n.y - macroY) <= 1
-    );
-    if (city) prefix = `<span style="color:#ff5b5b">🏙️ ${city.name}</span> | `;
-  }
-  if (!prefix && currentData.paths) {
-    const activePath = currentData.paths.find((p) => p.some((c) => c.x === macroX && c.y === macroY));
-    if (activePath) prefix = `<span style="color:#ffd700">🛣️ ${activePath.name || 'Rota'}</span> | `;
-  }
-  const baseAt = computeTerrainRoleAndSprite(mx, my, currentData, tile.heightStep);
-  const flyHint =
-    speciesHasFlyingType(player.dexId ?? 0) &&
-    ` · Flight ${player.flightActive ? 'ON' : 'OFF'} (F toggle · Space/Shift altitude · hops: 2 or 6 flying)`;
-  const hp = player.hp ?? player.maxHp ?? 100;
-  const maxH = player.maxHp ?? 100;
-  const sta = Number(player.stamina);
-  const maxSta = Math.max(1, Number(player.maxStamina) || 100);
-  const staLine =
-    Number.isFinite(sta) && Number.isFinite(maxSta)
-      ? ` · <span style="color:#7fe88a;font-weight:600">STA ${Math.ceil(sta)}/${Math.ceil(maxSta)}</span>`
-      : '';
-  const psn =
-    (player.poisonVisualSec ?? 0) > 0.05
-      ? ` <span style="color:#d080ff;font-weight:700">PSN ${(player.poisonVisualSec ?? 0).toFixed(1)}s</span>`
-      : '';
-  const ifr = (player.projIFrameSec ?? 0) > 0 ? ` · i-frames ${(player.projIFrameSec ?? 0).toFixed(2)}s` : '';
   const carryPrompt = player._strengthCarry
     ? {
       itemKey: String(player._strengthCarry.itemKey || ''),
@@ -511,15 +503,6 @@ function refreshPlayModeInfoBar(force = false) {
       playImmersiveHintEl.classList.remove('play-immersive-hint--visible');
     }
   }
-  const carryHint = carryPrompt
-    ? `<span style="display:block;margin-top:4px;color:#ffdcb2;font-weight:700">${strengthHudObjectPreviewHtml(carryPrompt)}(${String(carryPrompt.displayName || detailLabelFromItemKey(carryPrompt.itemKey) || 'Detail')})</span>` +
-      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Place [E]</span>` +
-      `<span style="display:block;margin-top:2px;color:#ffdcb2;font-weight:700">Throw [LMB]</span>` +
-      `${carryMobility ? `<span style="display:block;margin-top:2px;color:#ffc6a8;font-weight:700">${carryMobility.message}</span>` : ''}`
-    : '';
-  const telem = `<span style="opacity:0.8;font-size:0.72rem;display:block;margin-top:4px;color:#9ad8ff;font-family:'JetBrains Mono',monospace">HP ${Math.ceil(hp)}/${maxH}${staLine}${psn}${ifr} · Telemetry · [${mx},${my}] H=${tile.heightStep} · ${bio?.name ?? '?'} · ${baseAt.setName ?? '—'} · role ${baseAt.role ?? '—'}${flyHint || ''}</span>`;
-  const infoHtml = `${prefix}<span style="color:#8ceda1">Biome: ${bio?.name ?? '?'} | Selvagens: ${encounters.slice(0, 3).join(', ')}</span>${carryHint}${telem}`;
-  if (infoBar.innerHTML !== infoHtml) infoBar.innerHTML = infoHtml;
 }
 
 function readWorldHoursPerRealSec() {
@@ -942,8 +925,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   syncMinimapZoomReadout();
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
-  infoBar.innerHTML =
-    "<b style='color:#fff'>WASD / setas · duplo toque na mesma direção = correr · ESC = sair.</b><br><span style='color:#cfe7ff;font-size:0.88rem'>Golpes: 5 entradas — clique esquerdo, direito, meio da rolagem, rolagem para cima, rolagem para baixo — cada uma dispara o golpe que você amarrou nela. Segure 1–5 um instante para abrir a roda e escolher o golpe daquele botão (qualquer golpe da lista). Tackle/Cut no clique esquerdo: combo do Cut e carregar soltando como antes. Carregar pedra: E; com pedra, soltar LMB arremessa na mira. Social: Numpad 1–9. Debug: Ctrl+clique direito.</span>";
+  if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = '…';
 
@@ -964,6 +946,7 @@ function enterPlayMode(gx, gy, opts = {}) {
 
   resizeCanvas();
   startGameLoop();
+  refreshPlayModeInfoBar(true);
 }
 
 btnMinimapBackToMap?.addEventListener('click', () => {
@@ -987,7 +970,8 @@ btnBackToMap?.addEventListener('click', () => {
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
   minimapSaveModal.forceClose();
-  infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  if (infoBar) infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
   document.body.classList.remove('play-mode-active');

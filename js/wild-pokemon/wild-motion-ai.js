@@ -7,7 +7,7 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
-import { canWildPokemonWalkMicroTile, isCliffDrop, pivotCellHeightTraversalOk } from '../walkability.js';
+import { canWildPokemonWalkMicroTile, isCliffDrop, pivotCellHeightTraversalOk, gatherTreeTrunkCirclesNearWorldPoint, syncEntityZWithTerrain } from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
@@ -195,17 +195,9 @@ export function applyWildTreeTrunkResolution(entity, data) {
   const air = !!entity.jumping || (entity.z || 0) > 0.05;
   if (!entity.grounded || air || !data) return;
   if (isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) return;
-  const { dx, dy } = wildFeetDeltaForEntity(entity);
-  const r = resolvePivotWithFeetVsTreeTrunks(
-    entity.x,
-    entity.y,
-    dx,
-    dy,
-    WILD_TREE_BODY_R,
-    entity.vx,
-    entity.vy,
-    data
-  );
+  const fd = getPmdFeetDeltaWorldTiles(imageCache, entity.dexId ?? 1, true);
+  const r = resolvePivotWithFeetVsTreeTrunks(entity.x, entity.y, fd.dx, fd.dy, WILD_TREE_BODY_R, entity.vx, entity.vy, data);
+  syncEntityZWithTerrain(entity, entity.x, entity.y, r.x, r.y, data);
   entity.x = r.x;
   entity.y = r.y;
   entity.vx = r.vx;
@@ -221,6 +213,7 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
 
   const ig = true;
   if (wildWalkOk(nx, ny, data, ox, oy, entity, air, ig)) {
+    syncEntityZWithTerrain(entity, ox, oy, nx, ny, data);
     entity.x = nx;
     entity.y = ny;
     return true;
@@ -265,15 +258,18 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
   }
 
   if (moved) {
+    syncEntityZWithTerrain(entity, ox, oy, px, py, data);
     entity.x = px;
     entity.y = py;
     return true;
   }
   if (wildWalkOk(nx, oy, data, ox, oy, entity, air, ig)) {
+    syncEntityZWithTerrain(entity, ox, oy, nx, oy, data);
     entity.x = nx;
     return true;
   }
   if (wildWalkOk(ox, ny, data, ox, oy, entity, air, ig)) {
+    syncEntityZWithTerrain(entity, ox, oy, ox, ny, data);
     entity.y = ny;
     return true;
   }
@@ -379,9 +375,10 @@ export function wildIsAirborne(entity) {
 }
 
 export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, narrowSweep = false) {
-  const config = getPokemonConfig(entity.dexId ?? 1);
-  const isNaturalFlyer = config?.types?.includes('flying');
-  const ignoreLedgePenalty = isAirborne || isNaturalFlyer;
+  // Ledge penalty must match real movement: grounded mons (including Flying-type) still use
+  // `wildWalkOk(..., air=false)` / height checks — ignoring cliffs only while airborne avoids
+  // steering toward drops the physics cannot follow (stutter, jump spam, “doidão” roam).
+  const ignoreLedgePenalty = !!isAirborne;
 
   const angles = narrowSweep
     ? [
@@ -398,6 +395,8 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
         targetAng + Math.PI / 2,
         targetAng - Math.PI / 2
       ];
+
+  const trunkCircles = gatherTreeTrunkCirclesNearWorldPoint(entity.x, entity.y, data);
 
   const desiredNx = Math.cos(targetAng);
   const desiredNy = Math.sin(targetAng);
@@ -420,22 +419,50 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
   for (const ang of angles) {
     const vx = Math.cos(ang) * speed;
     const vy = Math.sin(ang) * speed;
-    if (!wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne, true)) {
-      continue;
-    }
     const nx = Math.cos(ang);
     const ny = Math.sin(ang);
-    const alignGoal = nx * desiredNx + ny * desiredNy;
-    const alignMem = nx * memNx + ny * memNy;
-
+    
     let penalty = 0;
+    
+    // Do not discard! Add a penalty. This allows Pokémon to try to walk into cliffs if it's the best path,
+    // which will correctly trigger the jump logic instead of zig-zagging.
+    if (!wildWalkOk(entity.x + vx * 0.4, entity.y + vy * 0.4, data, entity.x, entity.y, entity, isAirborne, true)) {
+      penalty += 1.25;
+    }
+
     if (!ignoreLedgePenalty) {
       const tx = entity.x + vx * 0.45;
       const ty = entity.y + vy * 0.45;
       if (isCliffDrop(entity.x, entity.y, tx, ty, data)) {
-        penalty = 0.85; // Strong penalty for walking off cliffs while roaming
+        penalty += 0.85; // Strong penalty for walking off cliffs while roaming
       }
     }
+    
+    // Smart steering around circular colliders (trees/rocks)
+    for (let i = 0; i < trunkCircles.length; i++) {
+       const circle = trunkCircles[i];
+       const dxToTree = circle.cx - entity.x;
+       const dyToTree = circle.cy - entity.y;
+       const distSq = dxToTree * dxToTree + dyToTree * dyToTree;
+       
+       if (distSq < 9) { // Only evaluate trees within ~3 tiles
+           const dot = dxToTree * nx + dyToTree * ny;
+           if (dot > 0) { // Tree is somewhat in front
+               const projX = nx * dot;
+               const projY = ny * dot;
+               const perpDistSq = (dxToTree - projX)**2 + (dyToTree - projY)**2;
+               
+               const avoidanceRadius = circle.r + 0.65; // padding for entity body
+               if (perpDistSq < avoidanceRadius * avoidanceRadius) {
+                   // Repulsion penalty based on how close we would pass and how near the tree is
+                   penalty += (avoidanceRadius * avoidanceRadius - perpDistSq) * (1.0 / Math.max(0.1, dot)) * 0.8;
+               }
+           }
+       }
+    }
+
+    const alignGoal = nx * desiredNx + ny * desiredNy;
+    const alignMem = nx * memNx + ny * memNy;
 
     const score = alignGoal + 0.38 * alignMem - penalty - 0.02 * Math.abs(Math.atan2(Math.sin(ang - targetAng), Math.cos(ang - targetAng)));
     if (score > bestScore) {
@@ -549,7 +576,21 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity._neutralPostAlertCooldown = 0;
     } else if (!playerThreatInRange && environmentalThreatInRange) {
       entity.aiState = 'flee';
-      const hazardFleeAng = envEscapeAng ?? Math.atan2(dyP, dxP);
+      let hazardFleeAng = envEscapeAng ?? Math.atan2(dyP, dxP);
+      
+      const isFlocking = (Number(entity.groupCohesionSec) || 0) > 1000;
+      if (isFlocking && entity.groupId) {
+        const groupBoids = groupBehavior.resolveGroupBoidsSteer(entity, entitiesByKey, clamp);
+        if (groupBoids) {
+          let combinedNx = Math.cos(hazardFleeAng);
+          let combinedNy = Math.sin(hazardFleeAng);
+          const boidsBlend = 0.65 * groupBoids.strength;
+          combinedNx = combinedNx * (1 - boidsBlend) + groupBoids.nx * boidsBlend;
+          combinedNy = combinedNy * (1 - boidsBlend) + groupBoids.ny * boidsBlend;
+          hazardFleeAng = Math.atan2(combinedNy, combinedNx);
+        }
+      }
+
       const hazardFleeSpeed = Math.max(beh.fleeSpeed || 0, WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.92);
       steerTowardAngle(entity, hazardFleeAng, hazardFleeSpeed, data, wildIsAirborne(entity), true);
       entity.wanderTimer = 0;
@@ -557,7 +598,21 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.targetX = null;
     } else if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
-      const fleeAng = playerThreatInRange ? Math.atan2(dyP, dxP) : envEscapeAng ?? Math.atan2(dyP, dxP);
+      let fleeAng = playerThreatInRange ? Math.atan2(dyP, dxP) : envEscapeAng ?? Math.atan2(dyP, dxP);
+      
+      const isFlocking = (Number(entity.groupCohesionSec) || 0) > 1000;
+      if (isFlocking && entity.groupId) {
+        const groupBoids = groupBehavior.resolveGroupBoidsSteer(entity, entitiesByKey, clamp);
+        if (groupBoids) {
+          let combinedNx = Math.cos(fleeAng);
+          let combinedNy = Math.sin(fleeAng);
+          const boidsBlend = 0.65 * groupBoids.strength;
+          combinedNx = combinedNx * (1 - boidsBlend) + groupBoids.nx * boidsBlend;
+          combinedNy = combinedNy * (1 - boidsBlend) + groupBoids.ny * boidsBlend;
+          fleeAng = Math.atan2(combinedNy, combinedNx);
+        }
+      }
+
       steerTowardAngle(entity, fleeAng, beh.fleeSpeed, data, wildIsAirborne(entity), true);
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
@@ -633,16 +688,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
 
     // ── Phase Lifecycle & Organic Discovery ──
     if (entity.groupId && !followerMode) {
-      // Leader manages the phase timers for the whole group
-      entity.groupPhaseTimer = (entity.groupPhaseTimer || 0) - dt;
-      
-      if (entity.groupPhase === 'ROAM' && entity.groupPhaseTimer <= 0) {
-        entity.groupPhase = 'EXPLORE';
-        entity.groupPhaseTimer = groupBehavior.PHASE_EXPLORE_MIN_SEC + Math.random() * (groupBehavior.PHASE_EXPLORE_MAX_SEC - groupBehavior.PHASE_EXPLORE_MIN_SEC);
-      } else if (entity.groupPhase === 'EXPLORE' && entity.groupPhaseTimer <= 0) {
-        entity.groupPhase = 'ROAM';
-        entity.groupPhaseTimer = groupBehavior.PHASE_ROAM_MIN_SEC + Math.random() * (groupBehavior.PHASE_ROAM_MAX_SEC - groupBehavior.PHASE_ROAM_MIN_SEC);
-      }
+      groupBehavior.advanceWildGroupLeaderPhaseTimer(entity, dt);
+      groupBehavior.syncWildGroupPhaseFromLeader(entity, entitiesByKey);
     }
 
     // Organic Discovery Check (Any member can find while in EXPLORE)
@@ -732,10 +779,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
           const ty = entity.centerY + Math.sin(ang) * dist;
           const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
           if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-            // Avoid choosing a wander target that is itself a cliff edge drop from current pos
-            const config = getPokemonConfig(entity.dexId ?? 1);
-            const isNaturalFlyer = config?.types?.includes('flying');
-            if (isNaturalFlyer || !isCliffDrop(entity.x, entity.y, tx, ty, data)) {
+            // Avoid wander targets past a cliff while grounded (same rule for all species until aerial roam exists).
+            if (!isCliffDrop(entity.x, entity.y, tx, ty, data)) {
               entity.targetX = tx;
               entity.targetY = ty;
               break;
@@ -854,6 +899,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     if (!followerTeamMode && entity.groupId && entity.groupPhase === 'SCENIC' && entity.aiState !== 'scenic') {
         entity.groupPhase = 'ROAM';
         entity.groupPhaseTimer = groupBehavior.PHASE_ROAM_MIN_SEC + Math.random() * (groupBehavior.PHASE_ROAM_MAX_SEC - groupBehavior.PHASE_ROAM_MIN_SEC);
+        groupBehavior.syncWildGroupPhaseFromLeader(entity, entitiesByKey);
     }
   }
 

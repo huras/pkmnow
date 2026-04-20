@@ -1,4 +1,4 @@
-import { AnimationRenderer } from '../animation-renderer.js';
+import { AnimationRenderer, resolveWindSwayBake, WIND_BAKE_ANGLES } from '../animation-renderer.js';
 import { VEG_MULTITILE_OVERLAP_PX } from './render-constants.js';
 
 const snap = (n) => Math.round(n);
@@ -114,17 +114,18 @@ function bakeComposite(key, img, atlasCols, tileW, tileH, placements, angleRad) 
  * @param {number} TCOLS_NATURE
  * @param {number} tileW
  * @param {number} tileH
- * @returns {{ canvas: HTMLCanvasElement, ox: number, oy: number }}
+ * @returns {{ canvas: HTMLCanvasElement, ox: number, oy: number, flipX: boolean }}
  */
 export function getFormalTreeCanopyComposite(time, treeType, originX, originY, tops, natureImg, TCOLS_NATURE, tileW, tileH) {
   if (!natureImg || !tops?.length) {
     const c = document.createElement('canvas');
     c.width = 1;
     c.height = 1;
-    return { canvas: c, ox: 0, oy: 0 };
+    return { canvas: c, ox: 0, oy: 0, flipX: false };
   }
-  const frameIndex = AnimationRenderer.getFrameIndex(time, originX, originY);
-  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
+  const logicalIdx = AnimationRenderer.getFrameIndex(time, originX, originY);
+  const { bakeSlot, flipX } = resolveWindSwayBake(logicalIdx);
+  const angle = WIND_BAKE_ANGLES[bakeSlot] || 0;
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
   const canopyCols = 2;
@@ -143,8 +144,9 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
       drawY
     });
   }
-  const key = `ft|${treeType}|${frameIndex}|${twC}|${thC}|${natureImg.src}|${tops.join(',')}`;
-  return bakeComposite(key, natureImg, TCOLS_NATURE, tileW, tileH, placements, angle);
+  const key = `ft|${treeType}|b${bakeSlot}|${twC}|${thC}|${natureImg.src}|${tops.join(',')}`;
+  const baked = bakeComposite(key, natureImg, TCOLS_NATURE, tileW, tileH, placements, angle);
+  return { ...baked, flipX };
 }
 
 /**
@@ -159,6 +161,7 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
  * @param {number} tileW
  * @param {number} tileH
  * @param {boolean} windSway
+ * @returns {{ canvas: HTMLCanvasElement, ox: number, oy: number, flipX: boolean }}
  */
 export function getScatterTopCanopyComposite(
   time,
@@ -177,10 +180,11 @@ export function getScatterTopCanopyComposite(
     const c = document.createElement('canvas');
     c.width = 1;
     c.height = 1;
-    return { canvas: c, ox: 0, oy: 0 };
+    return { canvas: c, ox: 0, oy: 0, flipX: false };
   }
-  const frameIndex = windSway ? AnimationRenderer.getFrameIndex(time, originX, originY) : 1;
-  const angle = AnimationRenderer.WIND_ANGLES[frameIndex] || 0;
+  const logicalIdx = windSway ? AnimationRenderer.getFrameIndex(time, originX, originY) : 1;
+  const { bakeSlot, flipX } = resolveWindSwayBake(logicalIdx);
+  const angle = WIND_BAKE_ANGLES[bakeSlot] || 0;
   const twC = Math.ceil(tileW);
   const thC = Math.ceil(tileH);
   const topRows = Math.ceil(topPart.ids.length / cols);
@@ -199,6 +203,7 @@ export function getScatterTopCanopyComposite(
     });
   }
   const idsKey = topPart.ids.join(',');
-  const key = `sc|${itemKey}|${cols}|${frameIndex}|${windSway ? 1 : 0}|${twC}|${thC}|${img.src || ''}|${atlasCols}|${idsKey}`;
-  return bakeComposite(key, img, atlasCols, tileW, tileH, placements, angle);
+  const key = `sc|${itemKey}|${cols}|b${bakeSlot}|${windSway ? 1 : 0}|${twC}|${thC}|${img.src || ''}|${atlasCols}|${idsKey}`;
+  const baked = bakeComposite(key, img, atlasCols, tileW, tileH, placements, angle);
+  return { ...baked, flipX };
 }

@@ -63,6 +63,21 @@
             <div class="minimap-panel__header-actions">
               <button
                 type="button"
+                id="minimap-groups-toggle"
+                class="minimap-panel__groups-btn"
+                title="Grupos de Pokémon selvagens ativos"
+                aria-label="Grupos de Pokémon selvagens ativos"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__groups-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="7" cy="14" r="2.5"/>
+                  <circle cx="17" cy="14" r="2.5"/>
+                  <circle cx="12" cy="8" r="2.5"/>
+                  <path d="M3.5 20v-1a4 4 0 0 1 4-4h1.5M20.5 20v-1a4 4 0 0 0-4-4h-1.5M9 11.5v-1a3 3 0 0 1 6 0v1"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-help-toggle"
                 class="minimap-panel__help-btn"
                 title="Ajuda — controles e interface"
@@ -153,8 +168,22 @@
               </button>
             </div>
           </header>
-          <canvas id="minimap" width="192" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
-          <footer class="minimap-panel__footer">
+          <canvas id="minimap" width="230" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+          <footer
+            class="minimap-panel__footer minimap-panel__footer--biome"
+            role="status"
+            aria-live="polite"
+            aria-label="Bioma atual e posição (X, Y, Z)"
+          >
+            <div class="minimap-panel__biome-footer-inner">
+              <div class="minimap-panel__biome-readout-row">
+                <span id="minimap-biome-swatch" class="minimap-panel__biome-swatch" aria-hidden="true"></span>
+                <span id="minimap-biome-readout" class="minimap-panel__biome-readout">—</span>
+              </div>
+              <div id="minimap-coords-readout" class="minimap-panel__coords-readout">X — · Y — · Z —</div>
+            </div>
+          </footer>
+          <footer class="minimap-panel__footer minimap-panel__footer--zoom">
             <div class="minimap-panel__footer-zoom" role="group" aria-label="Zoom do minimapa">
               <button
                 type="button"
@@ -261,6 +290,11 @@
 
           <div id="minimap-social-popover" class="minimap-social-popover hidden" role="dialog" aria-label="Ações sociais">
             <div id="character-social-numpad" class="play-social-overlay play-social-overlay--popover social-numpad-box"></div>
+          </div>
+
+          <div id="minimap-groups-popover" class="minimap-groups-popover hidden" role="dialog" aria-label="Grupos de Pokémon selvagens">
+            <div class="minimap-groups-popover__head">Grupos simulados</div>
+            <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>

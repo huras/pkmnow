@@ -22,6 +22,7 @@
  * @property {number} fleeSpeed     - tiles/sec (timid/skittish only)
  * @property {number} approachSpeed - tiles/sec (aggressive only)
  * @property {number} stopDist      - tiles; how close an aggressive mon will get
+ * @property {boolean} [flocks]     - true if the species should spawn and move in cohesive massive flocks
  */
 
 /** @type {BehaviorProfile} */

@@ -31,87 +31,107 @@ function queueFieldSpinWindTextureLoad() {
  */
 function drawSteelWindArcParticle(ctx, p, tileW, tileH, snapPx) {
   const elapsed = p.maxLife - p.life;
-  const tipXw = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * elapsed;
-  const tipYw = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * elapsed;
+  const absZ = (p.heightStep || 0) + (p.z || 0);
   const cx = snapPx(p.centerX * tileW);
-  const cy = snapPx(p.centerY * tileH - (p.z || 0) * tileH);
-  const tx = snapPx(tipXw * tileW);
-  const ty = snapPx(tipYw * tileH - (p.z || 0) * tileH);
+  const cy = snapPx(p.centerY * tileH - absZ * tileH);
   const fade = Math.max(0, p.life / Math.max(1e-4, p.maxLife));
-  const lineA = fade * (p.lineAlphaMul ?? 0.78);
-  const ellA = fade * (p.ellipseAlpha ?? 0.5);
-  const r = p.ellipseRPx ?? 6;
+  const lineA = fade * (p.lineAlphaMul ?? 0.48);
+  const r = (p.ellipseRPx ?? 6) * fade;
 
   ctx.save();
-  ctx.fillStyle = `rgba(220,228,238,${ellA})`;
+  ctx.fillStyle = `rgba(220,228,238,${fade * 0.5})`;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, r, r * 0.88, 0, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
   ctx.fill();
 
-  const midX = (cx + tx) * 0.5;
-  const midY = (cy + ty) * 0.5;
-  const perp = p.arcAngle + Math.PI / 2;
-  const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3);
-  const ctrlX = midX + Math.cos(perp) * curvePx;
-  const ctrlY = midY + Math.sin(perp) * curvePx;
-
   ctx.strokeStyle = `rgba(235,242,252,${lineA})`;
-  ctx.lineWidth = p.lineWidth ?? 5;
+  ctx.lineWidth = (p.lineWidth ?? 5) * fade;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  const segments = 12;
+  const baseWidth = (p.lineWidth ?? 5) * fade;
+  
   ctx.beginPath();
   ctx.moveTo(cx, cy);
-  const segments = 8;
   for (let i = 1; i <= segments; i++) {
-    const t = i / segments;
-    const x = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * ctrlX + t * t * tx;
-    const y = (1 - t) * (1 - t) * cy + 2 * (1 - t) * t * ctrlY + t * t * ty;
-    ctx.lineTo(x, y);
+    const u = i / segments;
+    const t = elapsed - u * 0.15;
+    if (t < 0) break;
+    const tx = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * t;
+    const ty = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * t;
+    
+    const perp = p.arcAngle + Math.PI / 2;
+    const sweep = Math.sin(t * 8 + u * 3) * (p.arcLength * tileW * 0.15) * fade;
+    const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3) * (1 - u);
+    
+    const x = snapPx(tx * tileW);
+    const y = snapPx(ty * tileH - absZ * tileH);
+    
+    const targetX = x + Math.cos(perp) * (curvePx + sweep);
+    const targetY = y + Math.sin(perp) * (curvePx + sweep);
+    
+    ctx.lineWidth = baseWidth * (1 - u * 0.85);
+    ctx.strokeStyle = `rgba(235,242,252,${lineA * (1 - u)})`;
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(targetX, targetY);
   }
-  ctx.stroke();
   ctx.restore();
 }
 
 function drawPrismaticWindArcParticle(ctx, p, tileW, tileH, snapPx) {
   const elapsed = p.maxLife - p.life;
-  const tipXw = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * elapsed;
-  const tipYw = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * elapsed;
+  const absZ = (p.heightStep || 0) + (p.z || 0);
   const cx = snapPx(p.centerX * tileW);
-  const cy = snapPx(p.centerY * tileH - (p.z || 0) * tileH);
-  const tx = snapPx(tipXw * tileW);
-  const ty = snapPx(tipYw * tileH - (p.z || 0) * tileH);
+  const cy = snapPx(p.centerY * tileH - absZ * tileH);
+  
   const fade = Math.max(0, p.life / Math.max(1e-4, p.maxLife));
-  const lineA = fade * (p.lineAlphaMul ?? 0.75);
-  const ellA = fade * (p.ellipseAlpha ?? 0.55);
-  const r = p.ellipseRPx ?? 6;
+  const lineA = fade * (p.lineAlphaMul ?? 0.45);
+  const r = (p.ellipseRPx ?? 6) * fade;
 
   ctx.save();
-  ctx.fillStyle = `rgba(255,255,255,${ellA})`;
+  // Head dot
+  ctx.fillStyle = `rgba(255,255,255,${fade * 0.6})`;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, r, r * 0.88, 0, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
   ctx.fill();
 
-  const midX = (cx + tx) * 0.5;
-  const midY = (cy + ty) * 0.5;
-  const perp = p.arcAngle + Math.PI / 2;
-  const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3);
-  const ctrlX = midX + Math.cos(perp) * curvePx;
-  const ctrlY = midY + Math.sin(perp) * curvePx;
-
+  // Procedural trail
   ctx.strokeStyle = `rgba(255,255,255,${lineA})`;
-  ctx.lineWidth = p.lineWidth ?? 4;
+  ctx.lineWidth = (p.lineWidth ?? 4) * fade;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  
+  const segments = 12;
+  const baseWidth = (p.lineWidth ?? 4) * fade;
+
   ctx.beginPath();
   ctx.moveTo(cx, cy);
-  const segments = 8;
   for (let i = 1; i <= segments; i++) {
-    const t = i / segments;
-    const x = (1 - t) * (1 - t) * cx + 2 * (1 - t) * t * ctrlX + t * t * tx;
-    const y = (1 - t) * (1 - t) * cy + 2 * (1 - t) * t * ctrlY + t * t * ty;
-    ctx.lineTo(x, y);
+    const u = i / segments;
+    const t = elapsed - u * 0.12; 
+    if (t < 0) break;
+    const tx = p.centerX + Math.cos(p.arcAngle) * p.arcSpeed * t;
+    const ty = p.centerY + Math.sin(p.arcAngle) * p.arcSpeed * t;
+    
+    const perp = p.arcAngle + Math.PI / 2;
+    const sweep = Math.sin(t * 10 + u * 4) * (p.arcLength * tileW * 0.12) * fade;
+    const curvePx = p.arcLength * Math.min(tileW, tileH) * (p.curveIntensity ?? 0.3) * (1 - u);
+    
+    const x = snapPx(tx * tileW);
+    const y = snapPx(ty * tileH - absZ * tileH);
+    
+    const targetX = x + Math.cos(perp) * (curvePx + sweep);
+    const targetY = y + Math.sin(perp) * (curvePx + sweep);
+    
+    ctx.lineWidth = baseWidth * (1 - u * 0.9);
+    ctx.strokeStyle = `rgba(255,255,255,${lineA * (1 - u)})`;
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(targetX, targetY);
   }
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -142,8 +162,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     return;
   }
   if (p.type === 'steelLaserSpark') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
     const px = snapPx(p.x * tileW);
-    const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+    const py = snapPx(p.y * tileH - absZ * tileH);
     const a = Math.max(0, p.life / p.maxLife);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -158,8 +179,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     return;
   }
   if (p.type === 'prismaticLaserSpark') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
     const px = snapPx(p.x * tileW);
-    const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+    const py = snapPx(p.y * tileH - absZ * tileH);
     const a = Math.max(0, p.life / p.maxLife);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -174,8 +196,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     return;
   }
   if (p.type === 'waterGunWaveRing') {
+    const absZ = (p.heightStep || 0) + (p.z || 0);
     const px = snapPx(p.x * tileW);
-    const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+    const py = snapPx(p.y * tileH - absZ * tileH);
     const life01 = Math.max(0, Math.min(1, p.life / Math.max(1e-4, p.maxLife)));
     const elapsed = 1 - life01;
     const ri = Number(p.ringIndex) || 0;
@@ -214,8 +237,9 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.globalAlpha = 1;
     return;
   }
+  const absZ = (p.heightStep || 0) + (p.z || 0);
   const px = snapPx(p.x * tileW);
-  const py = snapPx(p.y * tileH - (p.z || 0) * tileH);
+  const py = snapPx(p.y * tileH - absZ * tileH);
   const a = Math.max(0, p.life / p.maxLife);
   ctx.globalAlpha = a;
   if (p.type === 'burst') {
@@ -420,6 +444,39 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.lineJoin = 'round';
     ctx.stroke();
     ctx.restore();
+  } else if (p.type === 'fieldCutScratchArc') {
+    const t = 1 - a;
+    const ease = 1 - (1 - t) * (1 - t);
+    const arcRad = ((Number(p.arcDeg) || 100) * Math.PI) / 180;
+    const half = arcRad * 0.5;
+    const r = Math.max(tileW * 0.45, (Number(p.radiusTiles) || 1.4) * Math.min(tileW, tileH));
+    const heading = Number(p.headingRad) || 0;
+    const outerR = r * (0.9 + 0.2 * ease);
+    const innerR = outerR * 0.85;
+    const tipInset = half * 0.15;
+    
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(heading);
+    
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + 0.5 * a})`;
+    ctx.strokeStyle = `rgba(240, 240, 240, ${0.4 + 0.6 * a})`;
+    ctx.lineWidth = Math.max(1, tileW * 0.02);
+    
+    const offsets = [-0.2, 0, 0.2];
+    for (const offset of offsets) {
+      const oR = outerR * (1 + offset);
+      const iR = innerR * (1 + offset);
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, oR, -half, half);
+      ctx.arc(0, 0, iR, half - tipInset, -half + tipInset, true);
+      ctx.closePath();
+      
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   } else if (p.type === 'fieldSpinAttack') {
     const t = 1 - a;
     const styleId = String(p.styleId || 'slash');
@@ -502,6 +559,49 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
         ctx.globalAlpha = prevAlpha;
         ctx.restore();
       }
+    }
+    ctx.restore();
+  } else if (p.type === 'absorbChargeParticle') {
+    const speed = Math.hypot(p.vx, p.vy);
+    const alpha = (0.3 + 0.5 * a);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    // Proper trail: efficient procedural ribbon
+    if (speed > 0.1) {
+      const ang = Math.atan2(p.vy, p.vx);
+      const headR = Math.max(2.5, tileW * 0.08) * a;
+      
+      // Draw head
+      ctx.fillStyle = '#b4ff8c';
+      ctx.beginPath();
+      ctx.ellipse(px, py, headR + 1, headR * 0.6, ang, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw trailing tail
+      ctx.strokeStyle = '#8cf476';
+      ctx.lineWidth = headR * 1.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      
+      const trailSegs = 4;
+      for (let i = 1; i <= trailSegs; i++) {
+        const u = i / trailSegs;
+        const tx = p.x - p.vx * 0.06 * u;
+        const ty = p.y - p.vy * 0.06 * u;
+        const tpx = snapPx(tx * tileW);
+        const tpy = snapPx(ty * tileH - (p.z || 0) * tileH);
+        
+        ctx.lineWidth = headR * 1.5 * (1 - u);
+        ctx.lineTo(tpx, tpy);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#b4ff8c';
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2, tileW * 0.06) * a, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   } else {

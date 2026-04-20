@@ -4,7 +4,7 @@
  * GBA PC-Box inspired paginated species browser.
  * Opens when the player clicks their portrait pill in the character selector.
  *
- * Layout: 5 columns × 6 rows = 30 slots per page.
+ * Layout: 30 slots per page (see `pokemon-box-modal.css` for 5×6 / 6×5 / 10×3 grids).
  * All national species (1..NATIONAL_DEX_MAX) → ceil(MAX/30) pages.
  *
  * Usage:
@@ -17,8 +17,7 @@ import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { startPokemonBoxDetailSpritePreview } from './pokemon-box-detail-sprite.js';
 
-const SLOTS_PER_PAGE = 30; // 5 cols × 6 rows
-const COLS = 5;
+const SLOTS_PER_PAGE = 30;
 const TOTAL_PAGES = Math.ceil(NATIONAL_DEX_MAX / SLOTS_PER_PAGE);
 
 /** All species cache for searching */
@@ -125,25 +124,25 @@ export class PokemonBoxModal {
             </svg>
           </button>
         </footer>
+      </div>
 
-        <div class="pkmn-box-detail" id="pkmn-box-detail" aria-hidden="true">
-          <div class="pkmn-box-detail__panel" role="document" aria-label="Pokémon summary">
-            <header class="pkmn-box-detail__header">
-              <button type="button" class="pkmn-box-detail__back" id="pkmn-box-detail-back" aria-label="Back to Pokémon Box">←</button>
-              <div class="pkmn-box-detail__headtext">
-                <h3 class="pkmn-box-detail__title" id="pkmn-box-detail-title">—</h3>
-                <span class="pkmn-box-detail__dex" id="pkmn-box-detail-dex">#000</span>
-              </div>
-            </header>
-            <div class="pkmn-box-detail__stage">
-              <canvas id="pkmn-box-detail-canvas" width="260" height="200" aria-hidden="true"></canvas>
+      <div class="pkmn-box-detail" id="pkmn-box-detail" aria-hidden="true">
+        <div class="pkmn-box-detail__panel" role="document" aria-label="Pokémon summary">
+          <header class="pkmn-box-detail__header">
+            <button type="button" class="pkmn-box-detail__back" id="pkmn-box-detail-back" aria-label="Back to Pokémon Box">←</button>
+            <div class="pkmn-box-detail__headtext">
+              <h3 class="pkmn-box-detail__title" id="pkmn-box-detail-title">—</h3>
+              <span class="pkmn-box-detail__dex" id="pkmn-box-detail-dex">#000</span>
             </div>
-            <div class="pkmn-box-detail__types" id="pkmn-box-detail-types"></div>
-            <dl class="pkmn-box-detail__stats" id="pkmn-box-detail-stats"></dl>
-            <footer class="pkmn-box-detail__footer">
-              <button type="button" class="pkmn-box-detail__play" id="pkmn-box-detail-play">Play with this Pokémon</button>
-            </footer>
+          </header>
+          <div class="pkmn-box-detail__stage">
+            <canvas id="pkmn-box-detail-canvas" width="260" height="200" aria-hidden="true"></canvas>
           </div>
+          <div class="pkmn-box-detail__types" id="pkmn-box-detail-types"></div>
+          <dl class="pkmn-box-detail__stats" id="pkmn-box-detail-stats"></dl>
+          <footer class="pkmn-box-detail__footer">
+            <button type="button" class="pkmn-box-detail__play" id="pkmn-box-detail-play">Play with this Pokémon</button>
+          </footer>
         </div>
       </div>
     `;

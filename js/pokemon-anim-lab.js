@@ -11,6 +11,7 @@ import { BIOME_TO_TERRAIN, BIOME_TO_FOLIAGE, TREE_TILES } from './biome-tiles.js
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
 import { getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 import { loadTilesetImages } from './render.js';
 import { POKEMON_HEIGHTS } from './pokemon/pokemon-heights.js';
 
@@ -280,17 +281,18 @@ function drawTerrainTesselation(ctx, ox, oy, setName) {
     for (let c = 0; c < LAB_GRID; c++) {
       if (!labIsLandAt(r, c)) continue;
       const role = getRoleForCell(r, c, LAB_GRID, LAB_GRID, labIsLandAt, set.type);
-      const tileId = set.roles[role] ?? set.centerId;
-      ctx.drawImage(
+      const spec = getConcConvATerrainTileSpec(set, role);
+      drawTerrainCellFromSheet(
+        ctx,
         img,
-        (tileId % sheetCols) * LAB_TILE,
-        Math.floor(tileId / sheetCols) * LAB_TILE,
+        sheetCols,
         LAB_TILE,
-        LAB_TILE,
+        spec.tileId,
         ox + c * LAB_TILE,
         oy + r * LAB_TILE,
         LAB_TILE,
-        LAB_TILE
+        LAB_TILE,
+        spec.flipX
       );
     }
   }
@@ -307,17 +309,18 @@ function drawFoliageTesselation(ctx, ox, oy, setName) {
     for (let c = 0; c < LAB_GRID; c++) {
       if (!labIsLandAt(r, c)) continue;
       const role = getRoleForCell(r, c, LAB_GRID, LAB_GRID, labIsLandAt, set.type);
-      const tileId = set.roles[role] ?? set.centerId;
-      ctx.drawImage(
+      const spec = getConcConvATerrainTileSpec(set, role);
+      drawTerrainCellFromSheet(
+        ctx,
         img,
-        (tileId % sheetCols) * LAB_TILE,
-        Math.floor(tileId / sheetCols) * LAB_TILE,
+        sheetCols,
         LAB_TILE,
-        LAB_TILE,
+        spec.tileId,
         ox + c * LAB_TILE,
         oy + r * LAB_TILE,
         LAB_TILE,
-        LAB_TILE
+        LAB_TILE,
+        spec.flipX
       );
     }
   }

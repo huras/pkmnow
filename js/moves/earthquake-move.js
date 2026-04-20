@@ -1,12 +1,11 @@
 /**
- * Earthquake — charged Normal ground move: one hop; impact ring damages trees / breakables /
- * ground crystal drops (not decorative grass scatter), hits wilds in radius, and drives the
+ * Earthquake — charged Normal ground move: one hop; impact ring damages trees / breakables,
+ * hits wilds in radius, and drives the
  * global earthquake shake layer + timed aftershocks on high charge (up to 5 charge tiers).
  */
 
 import { getEarthquakeChargeLevel, getEarthquakeChargeRange01 } from '../main/play-charge-levels.js';
 import { tryBreakDetailsInCircle } from '../main/play-crystal-tackle.js';
-import { shatterCrystalDropsInRadius } from '../main/play-crystal-drops.js';
 import { tryPlayerCutHitWildCircle } from '../wild-pokemon/wild-player-interactions.js';
 import { enqueueEarthquakeMovePulse } from '../main/earthquake-layer.js';
 
@@ -74,7 +73,6 @@ export function onPlayerEarthquakeLanding(player, data, zJumpPrev, gameTimeSec, 
     excludePureGrassScatterHits: true,
     treeDemolishOneShot: lvl >= 5
   });
-  shatterCrystalDropsInRadius(px, py, radius * 0.92, data);
 
   const wildDmg = 22 + lvl * 14;
   const wildKb = 3.4 + lvl * 0.75;

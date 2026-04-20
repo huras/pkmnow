@@ -22,6 +22,23 @@ import {
 import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-config.js';
 
+/** Copas assadas: espelha o tilt +θ para o bin esquerdo (eixo em px/py). */
+function drawCanopyWithWindFlip(ctx, canvas, px, py, ox, oy, flipX, snapPx) {
+  const left = snapPx(px - ox);
+  const top = snapPx(py - oy);
+  if (!flipX) {
+    ctx.drawImage(canvas, left, top);
+    return;
+  }
+  const pivotX = snapPx(px);
+  ctx.save();
+  ctx.translate(pivotX, 0);
+  ctx.scale(-1, 1);
+  ctx.translate(-pivotX, 0);
+  ctx.drawImage(canvas, left, top);
+  ctx.restore();
+}
+
 const DROP_GLOW_TEXTURE_PATH = 'vfx/ETF_Texture_Sparkle_02.png';
 const DROP_GLOW_PERIOD_SEC = 3;
 const DROP_GLOW_DURATION_SEC = 0.5;
@@ -127,7 +144,7 @@ export function drawScatter(ctx, item, options) {
     // Draw Top (Canopy)
     if (topPart && !isCharred) {
       const wind = item.windSway; // passed in renderItems or helper
-      const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+      const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
         canopyAnimTime,
         itemKey,
         originX,
@@ -142,7 +159,7 @@ export function drawScatter(ctx, item, options) {
       );
       const px = snapPx(originX * tileW + (cols * tileW) / 2);
       const py = snapPx(originY * tileH + tileH);
-      ctx.drawImage(scCan, px - scOx, py - scOy);
+      drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
     }
     // Draw Burning
     if (isBurning) {
@@ -224,7 +241,7 @@ export function drawTree(ctx, item, options) {
   }
 
   if (!isDestroyed && ids.top) {
-    const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+    const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       canopyAnimTime,
       treeType,
       originX,
@@ -237,7 +254,7 @@ export function drawTree(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + tileW);
     const py = snapPx(originY * tileH + tileH);
-    ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+    drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
   }
 
   if (isBurning) {
@@ -813,7 +830,7 @@ export function drawTreeTopFall(ctx, item, options) {
     if (!ids?.top?.length || alpha < 0.02) return;
     ctx.save();
     ctx.globalAlpha = ga * alpha;
-    const { canvas: ftCan, ox: ftOx, oy: ftOy } = getFormalTreeCanopyComposite(
+    const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       0,
       treeType,
       originX,
@@ -826,7 +843,7 @@ export function drawTreeTopFall(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + tileW);
     const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-    ctx.drawImage(ftCan, px - ftOx, py - ftOy);
+    drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
     ctx.restore();
     return;
   }
@@ -842,7 +859,7 @@ export function drawTreeTopFall(ctx, item, options) {
     if (!img) return;
     ctx.save();
     ctx.globalAlpha = ga * alpha;
-    const { canvas: scCan, ox: scOx, oy: scOy } = getScatterTopCanopyComposite(
+    const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
       0,
       itemKey,
       originX,
@@ -857,7 +874,7 @@ export function drawTreeTopFall(ctx, item, options) {
     );
     const px = snapPx(originX * tileW + (cols * tileW) / 2);
     const py = snapPx(originY * tileH + tileH + dropYTiles * tileH);
-    ctx.drawImage(scCan, px - scOx, py - scOy);
+    drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
     ctx.restore();
     return;
   }

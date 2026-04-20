@@ -5,6 +5,7 @@
 import { getRoleForCell } from './tessellation-logic.js';
 import { TERRAIN_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
 
 const SET_NAME = 'Palette base — rock';
 const TILE_SRC = 16;
@@ -25,15 +26,8 @@ function loadImage(src) {
   });
 }
 
-function blitTile(ctx, img, tileId, sheetCols, dx, dy) {
-  if (!img || tileId == null || tileId < 0) return;
-  const sx = (tileId % sheetCols) * TILE_SRC;
-  const sy = Math.floor(tileId / sheetCols) * TILE_SRC;
-  ctx.drawImage(img, sx, sy, TILE_SRC, TILE_SRC, dx, dy, TILE, TILE);
-}
-
-function roleToTileId(terrainSet, role) {
-  return terrainSet.roles[role] ?? terrainSet.centerId;
+function blitTile(ctx, img, tileId, sheetCols, dx, dy, flipX = false) {
+  drawTerrainCellFromSheet(ctx, img, sheetCols, TILE_SRC, tileId, dx, dy, TILE, TILE, flipX);
 }
 
 function ensureAssets() {
@@ -44,7 +38,7 @@ function ensureAssets() {
       const sheetCols = TessellationEngine.getTerrainSheetCols(terrainSet);
       const imgPath = TessellationEngine.getImagePath(terrainSet.file);
       const img = await loadImage(imgPath);
-      const centerId = roleToTileId(terrainSet, 'CENTER');
+      const centerId = getConcConvATerrainTileSpec(terrainSet, 'CENTER').tileId;
       return { terrainSet, sheetCols, setType: terrainSet.type, img, centerId };
     })();
   }
@@ -87,13 +81,14 @@ export async function drawPieceAutotile(canvas, mat) {
       const gx = OX + lx;
       if (!landAt(gy, gx)) continue;
       const role = getRoleForCell(gy, gx, GH, GW, landAt, setType);
-      const tileId = roleToTileId(terrainSet, role);
+      const spec = getConcConvATerrainTileSpec(terrainSet, role);
+      const tileId = spec.tileId;
       const px = lx * TILE;
       const py = ly * TILE;
       if (concConvAbc && role && role !== 'CENTER' && centerId != null && tileId !== centerId) {
-        blitTile(ctx, img, centerId, sheetCols, px, py);
+        blitTile(ctx, img, centerId, sheetCols, px, py, false);
       }
-      blitTile(ctx, img, tileId, sheetCols, px, py);
+      blitTile(ctx, img, tileId, sheetCols, px, py, spec.flipX);
     }
   }
 }

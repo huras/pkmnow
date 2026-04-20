@@ -9,7 +9,8 @@ import {
   canWalkMicroTile,
   pivotCellHeightTraversalOk,
   beginWalkProbeCache,
-  endWalkProbeCache
+  endWalkProbeCache,
+  syncEntityZWithTerrain
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
 import {
@@ -999,6 +1000,9 @@ export function updatePlayer(dt, data, gameTimeSec) {
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
     const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
+    
+    syncEntityZWithTerrain(player, player.x, player.y, r.x, r.y, data);
+
     player.x = r.x;
     player.y = r.y;
     player.vx = r.vx;

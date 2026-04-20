@@ -217,16 +217,20 @@
   justify-content: center;
 }
 
-/* Radial Selection Slice Indicator */
+/* Selection spoke — same geometry as dual-bind wheel (linear bar + JS rotate).
+   Conic-gradient + `from` used a different 0° axis than atan2 / button placement, so the
+   wedge looked ~90° off for mouse aim while stick aim could look “correct” by accident. */
 .play-field-skill-wheel__slice {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 580px;
-  height: 580px;
+  width: 46%;
+  height: 5.5%;
+  max-height: 32px;
   transform: translate(-50%, -50%) rotate(0deg);
-  transform-origin: center;
-  background: conic-gradient(from -15deg, transparent 0deg, rgba(107, 159, 255, 0.25) 15deg, transparent 30deg);
+  transform-origin: 50% 50%;
+  background: linear-gradient(90deg, rgba(107, 159, 255, 0.4), rgba(107, 159, 255, 0.08) 48%, transparent 100%);
+  border-radius: 5px;
   pointer-events: none;
   z-index: 1;
   transition: transform 0.1s cubic-bezier(0.1, 0.7, 0.1, 1);

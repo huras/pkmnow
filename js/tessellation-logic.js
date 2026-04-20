@@ -116,6 +116,37 @@ export function isTerrainInnerCornerRole(role) {
 }
 
 /**
+ * conc-conv(a|b|c): east-side / mirror-east roles reuse west-side sprite with flipX.
+ * EDGE_N and EDGE_S are unrelated (no N↔S mirroring).
+ * @param {string | null | undefined} setType
+ * @param {string | null | undefined} role
+ * @returns {{ drawRole: string | null | undefined, flipX: boolean }}
+ */
+export function resolveConcConvDrawRole(setType, role) {
+  if (role == null || role === '') return { drawRole: role, flipX: false };
+  const s = String(setType || '');
+  if (s !== 'conc-conv-a' && s !== 'conc-conv-b' && s !== 'conc-conv-c') {
+    return { drawRole: String(role), flipX: false };
+  }
+  const r = String(role);
+  const mirrorEastOfWest = {
+    OUT_NE: 'OUT_NW',
+    EDGE_E: 'EDGE_W',
+    OUT_SE: 'OUT_SW',
+    IN_SW: 'IN_SE',
+    IN_NW: 'IN_NE'
+  };
+  const src = mirrorEastOfWest[r];
+  if (src) return { drawRole: src, flipX: true };
+  return { drawRole: r, flipX: false };
+}
+
+/** Backward-compatible alias used by older imports. */
+export function resolveConcConvADrawRole(role) {
+  return resolveConcConvDrawRole('conc-conv-a', role);
+}
+
+/**
  * Base scatter 2C (colunas a leste da origem) pode cair em cantos internos no mesmo degrau.
  * Bloqueia OUT_* (quina exterior ao vazio) e EDGE_* (borda exposta), como no Pass 2 para 2B/grama.
  */
