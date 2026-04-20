@@ -995,8 +995,8 @@ export function render(canvas, data, options = {}) {
     addRenderFramePhaseMs('rndCamMs', performance.now() - tCam0);
 
     const tVision0 = performance.now();
-    const visionSettings = options.settings?.visionFog || {};
-    var playVision = getPlayVisionFogState(data, player, visionSettings);
+    const visionFogEnabled = options.settings?.visionFogEnabled ?? false;
+    var playVision = getPlayVisionFogState(data, player, { enabled: visionFogEnabled });
     addRenderFramePhaseMs('rndVisionMs', performance.now() - tVision0);
 
     // --- CHUNK BAKING & RENDERING ---

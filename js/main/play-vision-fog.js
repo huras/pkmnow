@@ -6,7 +6,7 @@ import {
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 
 const DEFAULTS = {
-  enabled: true,
+  enabled: false,
   radiusTiles: 16,
   recomputeEveryMs: 180,
   rayCount: 64,

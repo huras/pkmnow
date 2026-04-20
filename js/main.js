@@ -285,6 +285,7 @@ const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
 const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
 const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
+const playVisionFogToggleEl = document.getElementById('play-vision-fog-toggle');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
 const chkRotas = document.getElementById('chkRotas');
@@ -1319,7 +1320,8 @@ function getSettings() {
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
     worldMapCamera,
-    worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY
+    worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
+    visionFogEnabled: playVisionFogToggleEl?.checked ?? false
   };
 }
 
