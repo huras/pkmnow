@@ -5,6 +5,7 @@ import {
 } from './wild-groups-visual-toggle-state.js';
 import { player } from '../player.js';
 import { triggerNextFarCryNow } from './far-cry-system.js';
+import { onLocaleChanged, t } from '../i18n/index.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -26,6 +27,8 @@ export function installMinimapHudPopovers(options = {}) {
   const socialPop = document.getElementById('minimap-social-popover');
   const audioToggle = document.getElementById('minimap-audio-toggle');
   const audioPop = document.getElementById('minimap-audio-popover');
+  const languageToggle = document.getElementById('minimap-language-toggle');
+  const languagePop = document.getElementById('minimap-language-popover');
 
   if (!timeToggle || !timePop || !weatherToggle || !weatherPop || !socialToggle || !socialPop) {
     return { forceCloseAllPopovers: () => {} };
@@ -52,11 +55,17 @@ export function installMinimapHudPopovers(options = {}) {
     renderWildGroupsPopoverList(groupsList, imageCache, { showLeaderRoamTarget });
   }
 
+  function syncTranslatableButtons() {
+    if (groupsFarCryTriggerBtn) groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
+    if (groupsLeaderTargetToggle) groupsLeaderTargetToggle.textContent = t('play.leaderTarget');
+  }
+
   const popovers = [
     ...(groupsToggle && groupsPop ? [{ toggle: groupsToggle, pop: groupsPop, name: 'groups' }] : []),
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
+    ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : [])
   ];
 
@@ -107,10 +116,10 @@ export function installMinimapHudPopovers(options = {}) {
   groupsFarCryTriggerBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     const ok = triggerNextFarCryNow(player, getCurrentData());
-    groupsFarCryTriggerBtn.textContent = ok ? 'Far Cry!' : 'Sem alvo';
+    groupsFarCryTriggerBtn.textContent = ok ? t('play.farCryNow') : t('play.noTarget');
     setTimeout(() => {
       if (!groupsFarCryTriggerBtn.isConnected) return;
-      groupsFarCryTriggerBtn.textContent = 'Next Far Cry';
+      groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
     }, 900);
   });
 
@@ -129,6 +138,11 @@ export function installMinimapHudPopovers(options = {}) {
     togglePopover('social');
   });
 
+  languageToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('language');
+  });
+
   // Audio toggle is handled by minimap-audio-ui.js, but we should close others when it opens.
   // We'll add a listener to the audio toggle to close our popovers.
   audioToggle?.addEventListener('click', () => {
@@ -140,6 +154,11 @@ export function installMinimapHudPopovers(options = {}) {
   });
 
   // Global click handler to close popovers when clicking outside
+  syncTranslatableButtons();
+  const unlistenLocale = onLocaleChanged(() => {
+    syncTranslatableButtons();
+    refreshGroupsPanel();
+  });
   syncGroupsLeaderTargetToggleUi();
   document.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
@@ -153,6 +172,7 @@ export function installMinimapHudPopovers(options = {}) {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
       closeAllExcept(null);
-    }
+    },
+    destroy: () => unlistenLocale()
   };
 }

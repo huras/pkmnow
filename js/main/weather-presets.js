@@ -1,10 +1,12 @@
+import { t } from '../i18n/index.js';
+
 /**
  * Weather preset catalog — the pure "preset id + intensity → render params" mapping.
  * No state, no DOM, no side-effects. The weather system smoothly eases `activeWeatherParams`
  * toward the shape returned here whenever the target preset/intensity changes.
  *
  * To add a new preset (e.g. `'snow'`, `'fog'`, `'sandstorm'`):
- *  1. Add its id to {@link WEATHER_PRESETS} and a label to {@link WEATHER_PRESET_LABELS}.
+ *  1. Add its id to {@link WEATHER_PRESETS} and expose its localized label in {@link getWeatherPresetLabel}.
  *  2. Add a `case` to {@link resolveWeatherParams} returning its render params.
  *  3. Extend the `isWeatherPreset` type guard / any DOM buttons that pick a preset.
  *  4. Optionally wire the ambient audio layer in `weather-ambient-audio.js`.
@@ -38,13 +40,14 @@
 export const WEATHER_PRESETS = /** @type {const} */ (['clear', 'cloudy', 'rain', 'blizzard', 'sandstorm']);
 
 /** Human-readable labels for each preset. Used by the debug panel chip. */
-export const WEATHER_PRESET_LABELS = {
-  clear: 'Clear',
-  cloudy: 'Cloudy',
-  rain: 'Rain',
-  blizzard: 'Blizzard',
-  sandstorm: 'Sandstorm'
-};
+export function getWeatherPresetLabel(preset) {
+  if (preset === 'clear') return t('play.weatherClear');
+  if (preset === 'cloudy') return t('play.weatherCloudy');
+  if (preset === 'rain') return t('play.weatherRain');
+  if (preset === 'blizzard') return t('play.weatherBlizzard');
+  if (preset === 'sandstorm') return t('play.weatherSandstorm');
+  return '—';
+}
 
 /**
  * Narrowing type guard. Safer than raw equality checks scattered across UI handlers /

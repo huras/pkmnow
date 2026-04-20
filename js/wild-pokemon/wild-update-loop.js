@@ -59,9 +59,13 @@ export function resetWildUpdateFrameCounter() {
   wildUpdateFrameCounter = 0;
 }
 
-export function updateWildPokemon(dt, data, playerX, playerY) {
+export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
   if (!data) return;
   
+  const ignorePlayer = !!options.ignorePlayer;
+  const aiPlayerX = ignorePlayer ? -99999 : playerX;
+  const aiPlayerY = ignorePlayer ? -99999 : playerY;
+
   beginWildWalkProbeCache();
 
   try {
@@ -77,6 +81,8 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
     for (const [k, e] of entitiesByKey.entries()) {
       if (e?._strengthCarryHidden) continue;
       const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
+      const distToAiPlayer = ignorePlayer ? 99999 : distToPlayer;
+
       const distanceInactivated =
         distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&
         e.aiState === 'wander' &&
@@ -85,8 +91,8 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       e._distanceInactivated = distanceInactivated;
       let mark = performance.now();
       const isCloseEnough = distToPlayer < 24;
-      const fullRate = wildNeedsFullRateUpdate(e, distToPlayer);
-      const cadence = fullRate ? 1 : wildCadenceForDistance(distToPlayer);
+      const fullRate = wildNeedsFullRateUpdate(e, distToAiPlayer);
+      const cadence = fullRate ? 1 : wildCadenceForDistance(distToAiPlayer);
       const lodOffset = e._lodOffset ?? 0;
       const processThisFrame = cadence === 1 || (frameNo + lodOffset) % cadence === 0;
       e._lodDtAccum = (e._lodDtAccum || 0) + dt;
@@ -121,13 +127,13 @@ export function updateWildPokemon(dt, data, playerX, playerY) {
       mark = performance.now();
 
       decaySocialMemory(e, stepDt);
-      trackPlayerProximitySignals(e, distToPlayer, stepDt);
+      trackPlayerProximitySignals(e, distToAiPlayer, stepDt);
 
       wildUpdatePerfLast.socialMs += performance.now() - mark;
       mark = performance.now();
 
       if (!skipWanderMotion) {
-        updateWildMotion(e, stepDt, data, playerX, playerY);
+        updateWildMotion(e, stepDt, data, aiPlayerX, aiPlayerY);
       } else {
         e.vx = 0;
         e.vy = 0;

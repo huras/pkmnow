@@ -99,10 +99,12 @@ export function drawScatter(ctx, item, options) {
     snapPx,
     time,
     lodDetail,
-    canopyAnimTime,
+    canopyAnimTime: rawCanopyAnimTime,
     imageCache,
     getCached
   } = options;
+
+  const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
 
   const { objSet, originX, originY, cols, rows, itemKey, isBurning, isCharred } = item;
   const bump01 = scatterItemKeyIsTree(itemKey) ? getDetailHitShake01(`treeBump:${originX},${originY}`) : 0;
@@ -206,10 +208,13 @@ export function drawTree(ctx, item, options) {
     tileH,
     snapPx,
     time,
-    canopyAnimTime,
+    lodDetail,
+    canopyAnimTime: rawCanopyAnimTime,
     natureImg,
     imageCache
   } = options;
+
+  const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
 
   const { treeType, originX, originY, isDestroyed, isCharred, isBurning } = item;
   const ids = TREE_TILES[treeType];

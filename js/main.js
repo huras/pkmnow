@@ -36,7 +36,7 @@ import {
   getPlayResumeMacroTileFromSave
 } from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
-import { WEATHER_PRESET_LABELS } from './main/weather-presets.js';
+import { getWeatherPresetLabel } from './main/weather-presets.js';
 import {
   initWeatherSystem,
   tickWeather,
@@ -102,11 +102,24 @@ import {
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
 import { initMods } from './core/mod-loader.js';
 import { resetFarCrySystem } from './main/far-cry-system.js';
+import {
+  applyI18nDom,
+  formatNumber,
+  getBiomeNameById,
+  getLocale,
+  getSupportedLocales,
+  initI18n,
+  onLocaleChanged,
+  setLocale,
+  t
+} from './i18n/index.js';
 
 
 if (isPlayShell()) {
   setPlayPointerMode('game');
 }
+
+initI18n();
 
 const canvas = document.getElementById('map');
 
@@ -156,6 +169,9 @@ const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
+const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
+  document.getElementById('minimap-language-select')
+);
 
 function syncMinimapZoomReadout() {
   if (!minimap) return;
@@ -182,7 +198,33 @@ function wireMinimapZoomStepButtons() {
   });
 }
 
+function syncMinimapLanguageSelect() {
+  if (!minimapLanguageSelect) return;
+  minimapLanguageSelect.textContent = '';
+  const labels = {
+    'pt-BR': 'Portugues (BR)',
+    'en-US': 'English (US)',
+    'ja-JP': '日本語'
+  };
+  for (const locale of getSupportedLocales()) {
+    const option = document.createElement('option');
+    option.value = locale;
+    option.textContent = labels[locale] || locale;
+    minimapLanguageSelect.appendChild(option);
+  }
+  minimapLanguageSelect.value = getLocale();
+}
+
+function wireMinimapLanguageSelect() {
+  if (!minimapLanguageSelect) return;
+  syncMinimapLanguageSelect();
+  minimapLanguageSelect.addEventListener('change', () => {
+    setLocale(minimapLanguageSelect.value);
+  });
+}
+
 wireMinimapZoomStepButtons();
+wireMinimapLanguageSelect();
 syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
@@ -422,14 +464,18 @@ function syncMinimapPlayFooter(bio, px, py, pz) {
   const nameEl = root.querySelector('#minimap-biome-readout');
   const swatchEl = root.querySelector('#minimap-biome-swatch');
   const coordsEl = root.querySelector('#minimap-coords-readout');
-  const biomeLabel = bio?.name ?? '—';
+  const biomeLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
   if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
   if (swatchEl) {
     const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
     const bg = sw && /^#[0-9a-fA-F]{6}$/.test(sw) ? sw : '#3a3a44';
     if (swatchEl.style.background !== bg) swatchEl.style.background = bg;
   }
-  const coordsLine = `X ${px.toFixed(1)} · Y ${py.toFixed(1)} · Z ${pz.toFixed(2)}`;
+  const coordsLine = t('play.minimapCoords', {
+    x: formatNumber(px, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    y: formatNumber(py, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+    z: formatNumber(pz, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  });
   if (coordsEl && coordsEl.textContent !== coordsLine) coordsEl.textContent = coordsLine;
 }
 
@@ -441,7 +487,7 @@ function resetMinimapPlayFooter() {
   const coordsEl = root.querySelector('#minimap-coords-readout');
   if (nameEl) nameEl.textContent = '—';
   if (swatchEl) swatchEl.style.background = '#3a3a44';
-  if (coordsEl) coordsEl.textContent = 'X — · Y — · Z —';
+  if (coordsEl) coordsEl.textContent = t('play.minimapCoordsEmpty');
 }
 
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
@@ -485,12 +531,14 @@ function refreshPlayModeInfoBar(force = false) {
   if (playImmersiveHintEl) {
     if (immersive && (carryPrompt || grabPrompt)) {
       const ctxPrompt = carryPrompt || grabPrompt;
-      const label = String(ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || 'Detail');
+      const label = String(
+        ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || t('play.detailLabelFallback')
+      );
       const actionHtml = carryPrompt
-        ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Place</span><span class="play-immersive-hint__key">E</span></div>` +
-          `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">Throw</span><span class="play-immersive-hint__key">LMB</span></div>` +
+        ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">${t('play.actionPlace')}</span><span class="play-immersive-hint__key">E</span></div>` +
+          `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__action">${t('play.actionThrow')}</span><span class="play-immersive-hint__key">LMB</span></div>` +
           `${carryMobility ? `<div class="play-immersive-hint__action-row"><span class="play-immersive-hint__warn">${carryMobility.message}</span></div>` : ''}`
-        : `<span class="play-immersive-hint__action">Grab</span><span class="play-immersive-hint__key">E</span>`;
+        : `<span class="play-immersive-hint__action">${t('play.actionGrab')}</span><span class="play-immersive-hint__key">E</span>`;
       const immersiveHtml =
         `<div class="play-immersive-hint__row">` +
         `${strengthHudObjectPreviewHtmlImmersive(ctxPrompt)}` +
@@ -523,7 +571,9 @@ function syncPlayWorldTimePanel() {
     lastWorldTimePanelPhase = phase;
     playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   }
-  playWorldTimeHourEl.textContent = `${wh.toFixed(2)} h`;
+  playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
+    hours: formatNumber(wh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  });
   if (playWorldTimeSlider) {
     const stepped = Math.round(wh / 0.05) * 0.05;
     const sVal = parseFloat(playWorldTimeSlider.value);
@@ -557,7 +607,11 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   const phase = getDayPhaseFromHours(worldHours);
   lastWorldTimePanelPhase = phase;
   if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
-  if (playWorldTimeHourEl) playWorldTimeHourEl.textContent = `${worldHours.toFixed(2)} h`;
+  if (playWorldTimeHourEl) {
+    playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
+      hours: formatNumber(worldHours, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    });
+  }
   snapDayCycleTintSmoothToHours(worldHours);
   const legacy = Number(env.weatherIntensity01);
   const fallback = Number.isFinite(legacy) ? Math.max(0, Math.min(1, legacy)) : 1;
@@ -585,10 +639,10 @@ function syncPlayBgmNowPlayingPanel() {
   const title = st.currentTrackName || '—';
   const statusText =
     st.status === 'playing'
-      ? `Playing · biome ${st.playingBiomeId ?? '?'}`
+      ? t('play.bgmStatusPlayingBiomeId', { biomeId: st.playingBiomeId ?? '?' })
       : st.status === 'transitioning'
-        ? `Transitioning · target biome ${st.transitionTargetBiome ?? '?'}`
-        : 'Idle';
+        ? t('play.bgmStatusTransitionBiomeId', { biomeId: st.transitionTargetBiome ?? '?' })
+        : t('play.idle');
   const sig = `${title}|${statusText}`;
   if (sig === lastBgmUiSignature) return;
   lastBgmUiSignature = sig;
@@ -701,7 +755,7 @@ function syncWeatherUi(ev) {
     btn.classList.toggle('is-active', btn.dataset.weather === preset);
   }
   if (playWeatherCurrentEl) {
-    playWeatherCurrentEl.textContent = WEATHER_PRESET_LABELS[preset] || '—';
+    playWeatherCurrentEl.textContent = getWeatherPresetLabel(preset);
   }
   if (playWeatherCloudIntensityEl && ev?.source !== 'ui-cloud') {
     playWeatherCloudIntensityEl.value = String(Math.round(cloudIntensity01 * 100));
@@ -950,7 +1004,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   minimapHudPopovers.forceCloseAllPopovers();
   if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
-  if (playFpsEl) playFpsEl.textContent = '…';
+  if (playFpsEl) playFpsEl.textContent = t('play.fpsPlaceholder');
 
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
@@ -994,7 +1048,7 @@ btnBackToMap?.addEventListener('click', () => {
   minimapAudioUi.forceCloseMinimapAudioPopover();
   minimapHudPopovers.forceCloseAllPopovers();
   minimapSaveModal.forceClose();
-  if (infoBar) infoBar.innerHTML = 'Mova o mouse sobre o mapa para ver os detalhes do terreno';
+  if (infoBar) infoBar.innerHTML = t('play.hudHintMap');
   resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
@@ -1010,7 +1064,7 @@ btnBackToMap?.addEventListener('click', () => {
   lastBgmToastTrackKey = null;
   dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
-  if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = 'Idle';
+  if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = t('play.idle');
   resizeCanvas();
   updateView();
 });
@@ -1259,6 +1313,20 @@ document.getElementById('play-weather-lightning')?.addEventListener('click', () 
 });
 
 syncWeatherUi();
+
+onLocaleChanged(() => {
+  applyI18nDom(document);
+  syncMinimapLanguageSelect();
+  syncMinimapZoomReadout();
+  syncWeatherUi();
+  syncPlayWorldTimePanel();
+  syncPlayBgmNowPlayingPanel();
+  if (appMode === 'map' && infoBar) {
+    infoBar.innerHTML = t('play.hudHintMap');
+    resetMinimapPlayFooter();
+  }
+  refreshPlayModeInfoBar(true);
+});
 
 document.getElementById('chkCurvas')?.addEventListener('change', updateView);
 document.getElementById('chkPlayColliders')?.addEventListener('change', () => {

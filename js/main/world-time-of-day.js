@@ -1,3 +1,5 @@
+import { t } from '../i18n/index.js';
+
 /** @typedef {'dawn' | 'day' | 'afternoon' | 'night'} DayPhase */
 
 /** Inclusive start hour on 24h clock (night wraps midnight). */
@@ -140,13 +142,13 @@ export function advanceWorldHours(worldHours, dt, running, hoursPerRealSecond) {
 export function dayPhaseLabelEn(phase) {
   switch (phase) {
     case 'dawn':
-      return 'Dawn';
+      return t('play.dawn');
     case 'day':
-      return 'Day';
+      return t('play.day');
     case 'afternoon':
-      return 'Afternoon';
+      return t('play.afternoon');
     case 'night':
-      return 'Night';
+      return t('play.night');
     default:
       return String(phase);
   }

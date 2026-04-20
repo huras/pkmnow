@@ -4,6 +4,7 @@ import {
   ensureSpriteCollabPortraitLoaded,
   getSpriteCollabPortraitImage
 } from '../pokemon/spritecollab-portraits.js';
+import { t } from '../i18n/index.js';
 
 /** @param {any} e */
 function isActiveWildEntity(e) {
@@ -37,7 +38,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     listRoot.replaceChildren();
     const d = document.createElement('div');
     d.className = 'minimap-groups-popover__empty';
-    d.textContent = 'Cache de imagens indisponível.';
+    d.textContent = t('play.groupsCacheMissing');
     listRoot.appendChild(d);
     return;
   }
@@ -62,7 +63,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
   if (!entities.length) {
     const empty = document.createElement('div');
     empty.className = 'minimap-groups-popover__empty';
-    empty.textContent = 'Nenhum Pokémon selvagem ativo na simulação.';
+    empty.textContent = t('play.groupsNoneActive');
     listRoot.appendChild(empty);
     return;
   }
@@ -94,7 +95,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     img.alt = speciesLabel(dex);
     img.decoding = 'async';
     img.loading = 'lazy';
-    img.title = `${speciesLabel(dex)}${isLeader ? ' (líder)' : ''}`;
+    img.title = `${speciesLabel(dex)}${isLeader ? t('play.leaderSuffix') : ''}`;
 
     const applySrc = () => {
       if (!img.isConnected) return;
@@ -123,7 +124,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     meta.className = 'minimap-groups-popover__meta';
     const title = document.createElement('div');
     title.className = 'minimap-groups-popover__row-title';
-    title.textContent = `${n} Pokémon · fase ${phase}`;
+    title.textContent = t('play.groupsTitle', { count: n, phase });
     title.title = String(gid);
     const sub = document.createElement('div');
     sub.className = 'minimap-groups-popover__row-sub';
@@ -133,7 +134,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     if (showLeaderRoamTarget) {
       const hint = document.createElement('div');
       hint.className = 'minimap-groups-popover__row-target';
-      hint.textContent = phase === 'ROAM' ? 'Marcador do alvo do lider visivel no mapa.' : 'Sem marcador fora de ROAM.';
+      hint.textContent = phase === 'ROAM' ? t('play.groupsLeaderHintOn') : t('play.groupsLeaderHintOff');
       meta.appendChild(hint);
     }
 
@@ -153,8 +154,8 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     meta.className = 'minimap-groups-popover__meta';
     const title = document.createElement('div');
     title.className = 'minimap-groups-popover__row-title';
-    title.textContent = `Sem grupo (${solos.length})`;
-    title.title = 'Pokémon sem groupId (avulsos ou debug)';
+    title.textContent = t('play.groupsNoGroup', { count: solos.length });
+    title.title = t('play.groupsNoGroupTitle');
     meta.appendChild(title);
 
     const portraits = document.createElement('div');

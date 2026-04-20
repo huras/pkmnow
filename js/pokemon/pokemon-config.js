@@ -91,7 +91,7 @@ export const POKEMON_CONFIG = {
   70: { name: 'Weepinbell', types: ['grass', 'poison'], heightTiles: 3.1, baseSpeed: 55 },
   71: { name: 'Victreebel', types: ['grass', 'poison'], heightTiles: 5.7, baseSpeed: 70 },
   72: { name: 'Tentacool', types: ['water', 'poison'], heightTiles: 2.5, baseSpeed: 70 },
-  73: { name: 'Tentacruel', types: ['water', 'poison'], heightTiles: 7.9, baseSpeed: 100 },
+  73: { name: 'Tentacruel', types: ['water', 'poison'], heightTiles: 5.7, baseSpeed: 100 },
   74: { name: 'Geodude', types: ['rock', 'ground'], heightTiles: 1.3, baseSpeed: 20 },
   75: { name: 'Graveler', types: ['rock', 'ground'], heightTiles: 3.1, baseSpeed: 35 },
   76: { name: 'Golem', types: ['rock', 'ground'], heightTiles: 3.2, baseSpeed: 45 },

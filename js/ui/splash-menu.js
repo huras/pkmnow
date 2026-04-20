@@ -12,6 +12,15 @@ import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { summonDebugWildPokemon } from '../wild-pokemon/wild-spawn-window.js';
 import { advanceWildPokemonAnim, DIRECTION_ROW_MAP, getFacingFromAngle } from '../wild-pokemon/wild-motion-ai.js';
+import {
+  applyI18nDom,
+  getBiomeNameById,
+  getLocale,
+  getSupportedLocales,
+  initI18n,
+  onLocaleChanged,
+  setLocale
+} from '../i18n/index.js';
 
 const canvas = document.getElementById('background-canvas');
 const splashContainer = document.getElementById('splash-container');
@@ -21,18 +30,59 @@ const loadingBar = document.getElementById('loading-bar');
 const biomeNameEl = document.getElementById('biome-name');
 const biomeSwatchEl = document.getElementById('biome-swatch');
 const biomeInfoEl = document.getElementById('biome-info');
+const splashLanguageSelect = /** @type {HTMLSelectElement | null} */ (
+  document.getElementById('splash-language-select')
+);
 
 let currentData = null;
 let gameTime = 0;
 let lastCycleTime = 0;
-const CYCLE_INTERVAL = 10000; // 10 seconds
+let trackedPokemon = null;
+const CYCLE_INTERVAL = 14000; // 14 seconds for better observation
 
 const CONFIG = {
   ...DEFAULT_CONFIG,
   cityCount: 5, // Simpler map for background
 };
 
+function refreshCurrentBiomeLabel() {
+  if (!currentData || !window.fakePlayer) return;
+  const bx = Math.floor(window.fakePlayer.x / MACRO_TILE_STRIDE);
+  const by = Math.floor(window.fakePlayer.y / MACRO_TILE_STRIDE);
+  if (bx < 0 || by < 0 || bx >= currentData.width || by >= currentData.height) return;
+  const biomeId = currentData.biomes[by * currentData.width + bx];
+  biomeNameEl.textContent = getBiomeNameById(biomeId);
+}
+
+function syncSplashLanguageSelect() {
+  if (!splashLanguageSelect) return;
+  splashLanguageSelect.textContent = '';
+  const labels = {
+    'pt-BR': 'Portugues (BR)',
+    'en-US': 'English (US)',
+    'ja-JP': '日本語'
+  };
+  for (const locale of getSupportedLocales()) {
+    const option = document.createElement('option');
+    option.value = locale;
+    option.textContent = labels[locale] || locale;
+    splashLanguageSelect.appendChild(option);
+  }
+  splashLanguageSelect.value = getLocale();
+}
+
 async function init() {
+  initI18n();
+  applyI18nDom(document);
+  syncSplashLanguageSelect();
+  splashLanguageSelect?.addEventListener('change', () => {
+    setLocale(splashLanguageSelect.value);
+  });
+  onLocaleChanged(() => {
+    applyI18nDom(document);
+    syncSplashLanguageSelect();
+    refreshCurrentBiomeLabel();
+  });
   await loadTilesetImages(imageCache);
   
   // Initialize systems
@@ -65,63 +115,40 @@ function cycleBiome() {
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   
-  // Find a nice spot in the map (near center or random city)
-  let targetX = currentData.width * MACRO_TILE_STRIDE / 2;
-  let targetY = currentData.height * MACRO_TILE_STRIDE / 2;
-  
-  // Find a nice route (inter-city path) instead of just a city
-  let selectedPath = null;
-  let pathIndex = 0;
-  let pathDirection = 1;
-  
-  const hasPaths = currentData.paths && currentData.paths.length > 0;
-  if (hasPaths) {
-    // Prefer longer paths for better visual movement
-    const longPaths = currentData.paths.filter(p => p.length > 12);
-    selectedPath = longPaths.length > 0 
-      ? longPaths[Math.floor(Math.random() * longPaths.length)]
-      : currentData.paths[Math.floor(Math.random() * currentData.paths.length)];
-    
-    // Start at a random point in the path
-    pathIndex = Math.floor(Math.random() * selectedPath.length);
-    pathDirection = Math.random() > 0.5 ? 1 : -1;
-    
-    const pt = selectedPath[pathIndex];
-    targetX = pt.x * MACRO_TILE_STRIDE;
-    targetY = pt.y * MACRO_TILE_STRIDE;
-  } else if (currentData.graph.nodes.length > 0) {
-    const node = currentData.graph.nodes[Math.floor(Math.random() * currentData.graph.nodes.length)];
-    targetX = node.x * MACRO_TILE_STRIDE;
-    targetY = node.y * MACRO_TILE_STRIDE;
+  // Pick a random road tile from the whole map
+  const roadTiles = [];
+  for (let i = 0; i < currentData.roadTraffic.length; i++) {
+    if (currentData.roadTraffic[i] > 0) {
+      roadTiles.push({
+        x: i % currentData.width,
+        y: Math.floor(i / currentData.width)
+      });
+    }
   }
 
-  // Set fake player for camera tracking and spawning
-  // Randomize player pokemon species from a pool of common "protagonist" mons or biome-specific
+  let spawnX, spawnY;
+  if (roadTiles.length > 0) {
+    const road = roadTiles[Math.floor(Math.random() * roadTiles.length)];
+    spawnX = road.x * MACRO_TILE_STRIDE + 0.5;
+    spawnY = road.y * MACRO_TILE_STRIDE + 0.5;
+  } else {
+    spawnX = currentData.width * MACRO_TILE_STRIDE / 2;
+    spawnY = currentData.height * MACRO_TILE_STRIDE / 2;
+  }
+
+  // Initial spawn around this point to have candidates
+  spawnPokemonNearRoads(spawnX, spawnY);
+  
+  const entities = getWildPokemonEntities();
+  if (entities.length > 0) {
+    trackedPokemon = entities[Math.floor(Math.random() * entities.length)];
+  } else {
+    trackedPokemon = null;
+  }
+
+  const targetX = trackedPokemon ? trackedPokemon.x : spawnX;
+  const targetY = trackedPokemon ? trackedPokemon.y : spawnY;
   const bId = currentData.biomes[Math.floor(targetY / MACRO_TILE_STRIDE) * currentData.width + Math.floor(targetX / MACRO_TILE_STRIDE)];
-  const pool = getEncounters(bId);
-  let playerDex = 25; // Pikachu default
-  if (pool && pool.length > 0) {
-    const species = pool[Math.floor(Math.random() * pool.length)];
-    playerDex = encounterNameToDex(species) || 25;
-  }
-
-  window.fakePlayer = {
-    x: targetX,
-    y: targetY,
-    z: 0,
-    visualX: targetX,
-    visualY: targetY,
-    grounded: true,
-    dexId: playerDex,
-    facing: 'down',
-    animMoving: false,
-    _walkPhase: 0,
-    _wanderAngle: Math.random() * Math.PI * 2,
-    _wanderTimer: 0,
-    selectedPath,
-    pathIndex,
-    pathDirection
-  };
 
   // Spawn some random pokemon near the selected route or roads
   spawnPokemonNearRoads(targetX, targetY);
@@ -130,7 +157,7 @@ function cycleBiome() {
   // Update biome info UI
   const bio = Object.values(BIOMES).find(b => b.id === bId);
   if (bio) {
-    biomeNameEl.textContent = bio.name;
+    biomeNameEl.textContent = getBiomeNameById(bio.id);
     biomeSwatchEl.style.backgroundColor = bio.color;
     biomeInfoEl.classList.add('visible');
   }
@@ -208,80 +235,7 @@ function spawnPokemonInCities() {
   return;
 }
 
-function updateFakePlayer(dt) {
-  if (!window.fakePlayer) return;
-  const p = window.fakePlayer;
-  
-  // Use path following if a path was selected (inter-city routes)
-  if (p.selectedPath && p.selectedPath.length > 0) {
-    const targetPt = p.selectedPath[p.pathIndex];
-    const tx = targetPt.x * MACRO_TILE_STRIDE;
-    const ty = targetPt.y * MACRO_TILE_STRIDE;
-    
-    const dx = tx - p.x;
-    const dy = ty - p.y;
-    const dist = Math.hypot(dx, dy);
-    
-    if (dist < 0.15) {
-      // Reached waypoint, advance to next
-      p.pathIndex += p.pathDirection;
-      
-      // Ping-pong at ends
-      if (p.pathIndex < 0 || p.pathIndex >= p.selectedPath.length) {
-        p.pathDirection *= -1;
-        p.pathIndex += p.pathDirection * 2;
-        p.pathIndex = Math.max(0, Math.min(p.selectedPath.length - 1, p.pathIndex));
-      }
-    } else {
-      const walkSpeed = 1.8;
-      const vx = (dx / dist) * walkSpeed;
-      const vy = (dy / dist) * walkSpeed;
-      
-      p.x += vx * dt;
-      p.y += vy * dt;
-      p.visualX = p.x;
-      p.visualY = p.y;
-      
-      p.facing = getFacingFromAngle(Math.atan2(vy, vx));
-      p.animMoving = true;
-      p._walkPhase += dt * 60;
-    }
-    
-    advanceWildPokemonAnim(p, dt);
-    return;
-  }
-
-  // Fallback: simple random wander (legacy behavior)
-  p._wanderTimer -= dt;
-  if (p._wanderTimer <= 0) {
-    p._wanderTimer = 2 + Math.random() * 3;
-    p._wanderAngle = Math.random() * Math.PI * 2;
-    p.animMoving = Math.random() > 0.3;
-  }
-
-  if (p.animMoving) {
-    const speed = 1.5;
-    const vx = Math.cos(p._wanderAngle) * speed;
-    const vy = Math.sin(p._wanderAngle) * speed;
-    
-    p.x += vx * dt;
-    p.y += vy * dt;
-    p.visualX = p.x;
-    p.visualY = p.y;
-
-    const deg = (p._wanderAngle * 180) / Math.PI;
-    const normalized = (deg + 360 + 22.5) % 360;
-    const index = Math.floor(normalized / 45);
-    const dirs = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
-    p.facing = dirs[index];
-    
-    p._walkPhase += dt * 60;
-    advanceWildPokemonAnim(p, dt);
-  } else {
-    p.animFrame = 0;
-    advanceWildPokemonAnim(p, dt);
-  }
-}
+// updateFakePlayer REMOVED: Camera now follows wild pokemon directly.
 
 function loop(t) {
   const dt = (t - (window._lastT || t)) / 1000;
@@ -293,16 +247,18 @@ function loop(t) {
     return;
   }
 
-  if (t - lastCycleTime > CYCLE_INTERVAL) {
+  if (t - lastCycleTime > CYCLE_INTERVAL || (trackedPokemon && trackedPokemon.isDespawning)) {
     cycleBiome();
   }
 
-  updateFakePlayer(dt);
+  const focusX = trackedPokemon ? trackedPokemon.x : (currentData.width * MACRO_TILE_STRIDE / 2);
+  const focusY = trackedPokemon ? trackedPokemon.y : (currentData.height * MACRO_TILE_STRIDE / 2);
+
   tickWeather(dt, gameTime);
   tickEarthquakeLayer(dt, gameTime);
   
-  // Update pokemon
-  updateWildPokemon(dt, currentData, window.fakePlayer.x, window.fakePlayer.y);
+  // Update pokemon around the focus point, but ignore player reactions (to allow normal wild behavior)
+  updateWildPokemon(dt, currentData, focusX, focusY, { ignorePlayer: true });
 
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
@@ -310,7 +266,14 @@ function loop(t) {
   const settings = {
     viewType: 'terrain',
     appMode: 'play',
-    player: window.fakePlayer,
+    player: trackedPokemon ? {
+      ...trackedPokemon,
+      visualX: trackedPokemon.visualX ?? trackedPokemon.x,
+      visualY: trackedPokemon.visualY ?? trackedPokemon.y,
+      z: trackedPokemon.z ?? 0,
+      grounded: true,
+      animMoving: true
+    } : { x: focusX, y: focusY, z: 0 },
     time: gameTime,
     dayPhase: 'Day',
     worldHours: 12,

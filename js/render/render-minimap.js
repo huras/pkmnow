@@ -19,6 +19,7 @@ import {
 } from '../pokemon/spritecollab-portraits.js';
 import { drawFarCryMinimapEchoes } from './render-far-cry.js';
 import { getActiveFarCryMinimapEchoes } from '../main/far-cry-system.js';
+import { t } from '../i18n/index.js';
 
 // ---------------------------------------------------------------------------
 // Zoom level definitions
@@ -50,21 +51,21 @@ export function getMinimapZoomUiLines(zoom) {
   const r = ZOOM_RADIUS[z];
   if (r === 0) {
     return {
-      title: 'Mapa todo',
-      subtitle: 'região completa'
+      title: t('zoom.farTitle'),
+      subtitle: t('zoom.farSubtitle')
     };
   }
   const side = r * 2 * SAFE_MACRO_STRIDE;
   if (z === 'closer') {
     return {
-      title: 'Máximo',
-      subtitle: `≈${side}×${side} telhas · 2×`
+      title: t('zoom.closerTitle'),
+      subtitle: t('zoom.tilesApprox2x', { side })
     };
   }
   if (z === 'mid') {
-    return { title: 'Médio', subtitle: `≈${side}×${side} telhas` };
+    return { title: t('zoom.midTitle'), subtitle: t('zoom.tilesApprox', { side }) };
   }
-  return { title: 'Próximo', subtitle: `≈${side}×${side} telhas` };
+  return { title: t('zoom.closeTitle'), subtitle: t('zoom.tilesApprox', { side }) };
 }
 
 /** Local sprite minimap: `close` = 1 screen px per micro tile; `closer` = same mode, more zoomed in. */

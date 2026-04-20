@@ -114,6 +114,32 @@ body {
   pointer-events: auto;
 }
 
+.splash-language-row {
+  position: absolute;
+  top: 2rem;
+  right: 8%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 4;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.splash-language-row label {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.splash-language-select {
+  min-width: 140px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(14, 16, 24, 0.82);
+  color: #fff;
+  padding: 0.35rem 0.55rem;
+}
+
 .background-canvas {
   position: fixed;
   inset: 0;
@@ -298,4 +324,21 @@ body {
   background: var(--pk-red);
   width: 0%;
   transition: width 10s linear;
+}
+
+html[lang="ja-JP"] body {
+  font-family: 'Inter', 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif;
+}
+
+html[lang="ja-JP"] .splash-disclaimer,
+html[lang="ja-JP"] .game-title .subtitle,
+html[lang="ja-JP"] .menu-button,
+html[lang="ja-JP"] .press-start,
+html[lang="ja-JP"] .free-distribution {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+html[lang="ja-JP"] .menu-options {
+  width: 360px;
 }

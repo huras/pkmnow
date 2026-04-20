@@ -1300,7 +1300,7 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'tree') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
-        drawTree(ctx, item, { tileW, tileH, snapPx, time, canopyAnimTime, natureImg, imageCache });
+        drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache });
         ctx.restore();
       } else if (item.type === 'building') {
         ctx.save(); drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();

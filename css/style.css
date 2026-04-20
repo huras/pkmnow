@@ -344,15 +344,30 @@ button.btn-secondary:hover {
 
 .minimap-panel__header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 4px 5px 4px 7px;
-  min-height: 26px;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
   flex-shrink: 0;
   background: linear-gradient(180deg, #1c1c24 0%, #121218 100%);
   border-bottom: 1px solid #2e2e38;
   border-radius: 4px 4px 0 0;
+}
+
+.minimap-panel__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 5px 3px 7px;
+}
+
+.minimap-panel__header-row--top {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.minimap-panel__header-row--bottom {
+  padding-right: 5px;
 }
 
 .minimap-panel__footer {
@@ -459,6 +474,31 @@ button.btn-secondary:hover {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.minimap-panel__header-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.minimap-panel__lang-label {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+  color: rgba(220, 230, 255, 0.82);
+}
+
+.minimap-panel__lang-select {
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 16, 24, 0.92);
+  color: #f0f4ff;
+  font-size: 0.58rem;
+  padding: 0 4px;
+  max-width: 96px;
 }
 
 .minimap-panel__title {
@@ -658,6 +698,7 @@ button.btn-secondary:hover {
 }
 
 .minimap-audio-popover,
+.minimap-language-popover,
 .minimap-time-popover,
 .minimap-weather-popover,
 .minimap-social-popover,
@@ -685,6 +726,34 @@ button.btn-secondary:hover {
 
 .minimap-social-popover {
   width: min(380px, calc(100vw - 32px));
+}
+
+.minimap-language-popover {
+  width: min(220px, calc(100vw - 32px));
+}
+
+.minimap-language-popover__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.minimap-language-popover__label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(154, 216, 255, 0.9);
+}
+
+.minimap-language-popover__select {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 16, 24, 0.92);
+  color: #f0f4ff;
+  font-size: 0.68rem;
+  padding: 0 6px;
 }
 
 .minimap-groups-popover {
@@ -989,6 +1058,7 @@ button.btn-secondary:hover {
 /* Zoom in/out + help + save — same shape as music buttons */
 .minimap-panel__zoom-in-btn,
 .minimap-panel__zoom-out-btn,
+.minimap-panel__language-btn,
 .minimap-panel__groups-btn,
 .minimap-panel__help-btn,
 .minimap-panel__save-btn,
@@ -1013,6 +1083,7 @@ button.btn-secondary:hover {
 
 .minimap-panel__zoom-in-btn:hover,
 .minimap-panel__zoom-out-btn:hover,
+.minimap-panel__language-btn:hover,
 .minimap-panel__groups-btn:hover,
 .minimap-panel__help-btn:hover,
 .minimap-panel__save-btn:hover,
@@ -1027,6 +1098,7 @@ button.btn-secondary:hover {
 .minimap-panel__time-btn[aria-pressed="true"],
 .minimap-panel__weather-btn[aria-pressed="true"],
 .minimap-panel__social-btn[aria-pressed="true"],
+.minimap-panel__language-btn[aria-pressed="true"],
 .minimap-panel__groups-btn[aria-pressed="true"] {
   background: rgba(154, 216, 255, 0.18);
   border-color: rgba(154, 216, 255, 0.4);
@@ -1035,6 +1107,7 @@ button.btn-secondary:hover {
 
 .minimap-panel__zoom-in-btn:focus-visible,
 .minimap-panel__zoom-out-btn:focus-visible,
+.minimap-panel__language-btn:focus-visible,
 .minimap-panel__groups-btn:focus-visible,
 .minimap-panel__help-btn:focus-visible,
 .minimap-panel__save-btn:focus-visible,
@@ -1047,6 +1120,7 @@ button.btn-secondary:hover {
 
 .minimap-panel__zoom-in-icon,
 .minimap-panel__zoom-out-icon,
+.minimap-panel__language-icon,
 .minimap-panel__groups-icon,
 .minimap-panel__help-icon,
 .minimap-panel__save-icon,
@@ -2040,6 +2114,22 @@ body.play-mode-active {
 
 .play-weather-lightning:active {
   transform: translateY(1px);
+}
+
+html[lang="ja-JP"] body {
+  font-family: "Segoe UI", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+}
+
+html[lang="ja-JP"] .minimap-panel__title,
+html[lang="ja-JP"] .play-world-time-title,
+html[lang="ja-JP"] .play-weather-title,
+html[lang="ja-JP"] .play-bgm-now-playing-title,
+html[lang="ja-JP"] .play-bgm-toast-title,
+html[lang="ja-JP"] .minimap-audio-popover__label,
+html[lang="ja-JP"] .minimap-audio-popover__now-title,
+html[lang="ja-JP"] .play-help-wiki__title {
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 /* MODAL DE CONFIGURAÇÕES */
