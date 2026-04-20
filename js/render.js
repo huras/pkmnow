@@ -159,6 +159,7 @@ import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/ear
 import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
+import { getHoveredWildGroupEntityKey } from './main/wild-groups-hover-state.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
 import { imageCache } from './image-cache.js';
 import {
@@ -432,11 +433,16 @@ let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
 
 const GLOBAL_MAP_TRAIL_MAX_POINTS = 9000;
 const GLOBAL_MAP_TRAIL_MIN_STEP_MICRO = 2.2;
+const GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO = 22;
+const GLOBAL_MAP_TRAIL_RECENT_WINDOW_MS = 30_000;
+const GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS = 512;
 const GLOBAL_MAP_TRAIL_STORAGE_KEY = 'pkmn_global_map_player_trail_v1';
 const GLOBAL_MAP_TRAIL_PERSIST_MIN_MS = 1200;
 let globalMapTrailFingerprint = '';
 /** @type {Array<{ x: number, y: number }>} */
 let globalMapPlayerTrailMicro = [];
+/** @type {Array<{ x: number, y: number, tMs: number }>} */
+let globalMapPlayerTrailRecentMicro = [];
 let globalMapTrailDirty = false;
 let globalMapTrailLastPersistAtMs = 0;
 
@@ -454,6 +460,7 @@ function mapFingerprintForTrail(data) {
 function loadPersistedGlobalMapTrail(fp) {
   globalMapTrailFingerprint = fp;
   globalMapPlayerTrailMicro = [];
+  globalMapPlayerTrailRecentMicro = [];
   if (!fp) return;
   try {
     const raw = localStorage.getItem(GLOBAL_MAP_TRAIL_STORAGE_KEY);
@@ -525,6 +532,22 @@ function recordGlobalMapTrailPoint(data, playerRef, appMode) {
   const py = Number(playerRef.visualY ?? playerRef.y);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return;
   const clamped = clampMicroToMapBounds(px, py, data);
+  const nowMs =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  pruneRecentGlobalMapTrail(nowMs);
+  const recentLast = globalMapPlayerTrailRecentMicro[globalMapPlayerTrailRecentMicro.length - 1];
+  if (recentLast) {
+    const rdx = clamped.x - recentLast.x;
+    const rdy = clamped.y - recentLast.y;
+    if (rdx * rdx + rdy * rdy >= GLOBAL_MAP_TRAIL_MIN_STEP_MICRO * GLOBAL_MAP_TRAIL_MIN_STEP_MICRO) {
+      globalMapPlayerTrailRecentMicro.push({ x: clamped.x, y: clamped.y, tMs: nowMs });
+    }
+  } else {
+    globalMapPlayerTrailRecentMicro.push({ x: clamped.x, y: clamped.y, tMs: nowMs });
+  }
+  pruneRecentGlobalMapTrail(nowMs);
   const last = globalMapPlayerTrailMicro[globalMapPlayerTrailMicro.length - 1];
   if (last) {
     const dx = clamped.x - last.x;
@@ -551,27 +574,88 @@ function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch) {
   const tileW = cw / data.width;
   const tileH = ch / data.height;
   const lineW = Math.max(1.3, Math.min(3.2, Math.min(tileW, tileH) * 0.2));
+  const teleportJumpSq = GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO * GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO;
+  const pts = [];
+  for (let i = 0; i < trailMicro.length; i++) {
+    const p = trailMicro[i];
+    const mx = Number(p?.x);
+    const my = Number(p?.y);
+    if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
+    const gx = mx / MACRO_TILE_STRIDE;
+    const gy = my / MACRO_TILE_STRIDE;
+    pts.push({
+      mx,
+      my,
+      px: (gx + 0.5) * tileW,
+      py: (gy + 0.5) * tileH
+    });
+  }
+  if (pts.length < 2) return;
+
+  const strokeMainSegment = (startIdx, endIdx) => {
+    if (endIdx - startIdx < 1) return;
+    ctx.beginPath();
+    for (let i = startIdx; i <= endIdx; i++) {
+      const p = pts[i];
+      if (i === startIdx) ctx.moveTo(p.px, p.py);
+      else ctx.lineTo(p.px, p.py);
+    }
+    ctx.strokeStyle = 'rgba(36, 178, 255, 0.9)';
+    ctx.lineWidth = lineW + 1.6;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(176, 238, 255, 0.78)';
+    ctx.lineWidth = lineW;
+    ctx.stroke();
+  };
+
+  const strokeTeleportJump = (a, b) => {
+    ctx.save();
+    ctx.setLineDash([Math.max(4, lineW * 2.4), Math.max(3, lineW * 1.7)]);
+    ctx.lineDashOffset = 0;
+    ctx.strokeStyle = 'rgba(176, 238, 255, 0.5)';
+    ctx.lineWidth = lineW;
+    ctx.beginPath();
+    ctx.moveTo(a.px, a.py);
+    ctx.lineTo(b.px, b.py);
+    ctx.stroke();
+    ctx.restore();
+  };
+
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.globalCompositeOperation = 'screen';
-  ctx.beginPath();
-  for (let i = 0; i < trailMicro.length; i++) {
-    const p = trailMicro[i];
-    const gx = p.x / MACRO_TILE_STRIDE;
-    const gy = p.y / MACRO_TILE_STRIDE;
-    const px = (gx + 0.5) * tileW;
-    const py = (gy + 0.5) * tileH;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+  let segStart = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const dx = curr.mx - prev.mx;
+    const dy = curr.my - prev.my;
+    const isTeleportJump = dx * dx + dy * dy > teleportJumpSq;
+    if (!isTeleportJump) continue;
+    strokeMainSegment(segStart, i - 1);
+    strokeTeleportJump(prev, curr);
+    segStart = i;
   }
-  ctx.strokeStyle = 'rgba(36, 178, 255, 0.9)';
-  ctx.lineWidth = lineW + 1.6;
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(176, 238, 255, 0.78)';
-  ctx.lineWidth = lineW;
-  ctx.stroke();
+  strokeMainSegment(segStart, pts.length - 1);
   ctx.restore();
+}
+
+/**
+ * @param {number} nowMs
+ */
+function pruneRecentGlobalMapTrail(nowMs) {
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const cutoff = now - GLOBAL_MAP_TRAIL_RECENT_WINDOW_MS;
+  while (globalMapPlayerTrailRecentMicro.length > 0 && globalMapPlayerTrailRecentMicro[0].tMs < cutoff) {
+    globalMapPlayerTrailRecentMicro.shift();
+  }
+  if (globalMapPlayerTrailRecentMicro.length > GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS) {
+    globalMapPlayerTrailRecentMicro.splice(
+      0,
+      globalMapPlayerTrailRecentMicro.length - GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS
+    );
+  }
 }
 
 export function spawnJumpRingAt(x, y) {
@@ -610,6 +694,11 @@ export function render(canvas, data, options = {}) {
 
   const appMode = options.settings?.appMode || 'map';
   const player = options.settings?.player || { x: 0, y: 0 };
+  const frameNowMs =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  pruneRecentGlobalMapTrail(frameNowMs);
   const mapFp = mapFingerprintForTrail(data);
   if (mapFp && globalMapTrailFingerprint !== mapFp) {
     loadPersistedGlobalMapTrail(mapFp);
@@ -1093,6 +1182,18 @@ export function render(canvas, data, options = {}) {
 
     const batchedEffects = [];
     const showLeaderRoamTargetOverlay = isWildLeaderRoamTargetVisible();
+    const hoveredWildGroupEntityKey = getHoveredWildGroupEntityKey();
+    const getHoveredWildGroupPrompt = (item) => {
+      if (!hoveredWildGroupEntityKey || item.type !== 'wild') return null;
+      if (String(item.key || '') !== hoveredWildGroupEntityKey) return null;
+      return {
+        kind: 'faintedWild',
+        cx: Number(item.x) + 0.5,
+        cy: Number(item.y) + 0.5,
+        cols: 1,
+        rows: 1
+      };
+    };
     for (const item of renderItems) {
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
@@ -1108,6 +1209,10 @@ export function render(canvas, data, options = {}) {
         if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
           drewSplitStrengthGrabOutline = true;
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
+        }
+        const hoveredWildGroupPrompt = getHoveredWildGroupPrompt(item);
+        if (hoveredWildGroupPrompt) {
+          drawStrengthGrabTargetOutlineHalf(ctx, hoveredWildGroupPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
         // Shadow
@@ -1186,6 +1291,9 @@ export function render(canvas, data, options = {}) {
 
         if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
+        }
+        if (hoveredWildGroupPrompt) {
+          drawStrengthGrabTargetOutlineHalf(ctx, hoveredWildGroupPrompt, 'south', tileW, tileH, snapPx, time);
         }
 
         // Strength carry visual (and lift-in-progress travel from origin -> above carrier).
@@ -1292,7 +1400,7 @@ export function render(canvas, data, options = {}) {
           drewSplitStrengthGrabOutline = true;
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
         }
-        drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached });
+        drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data });
         if (isStrengthGrabTargetItem(item)) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
         }
@@ -1300,7 +1408,7 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'tree') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
-        drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache });
+        drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data });
         ctx.restore();
       } else if (item.type === 'building') {
         ctx.save(); drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
@@ -1336,7 +1444,8 @@ export function render(canvas, data, options = {}) {
           imageCache,
           getCached,
           lodDetail,
-          canopyAnimTime
+          canopyAnimTime,
+          data
         });
         ctx.restore();
       }
@@ -1664,7 +1773,9 @@ export function render(canvas, data, options = {}) {
 
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
-    if (minimapCanvas) renderMinimap(minimapCanvas, data, player);
+    if (minimapCanvas) {
+      renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro });
+    }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }
 

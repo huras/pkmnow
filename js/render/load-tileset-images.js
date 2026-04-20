@@ -15,6 +15,7 @@ export async function loadTilesetImages() {
     'tilesets/PokemonCenter.png',
     'tilesets/gengar_walk.png',
     'tilesets/gengar_idle.png',
+    'tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.png',
     'tilesets/PC _ Computer - RPG Maker VX Ace - Miscellaneous - Emotions.png'
   ];
 

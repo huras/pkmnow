@@ -817,7 +817,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     const dyT = entity.targetY - entity.y;
     const distT = Math.hypot(dxT, dyT);
 
-    if (distT < 0.2) {
+    if (distT < 1.0) {
       if (followerMode) {
         entity.vx = 0;
         entity.vy = 0;

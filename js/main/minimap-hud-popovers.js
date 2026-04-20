@@ -1,8 +1,10 @@
 import { renderWildGroupsPopoverList } from './minimap-wild-groups-popover.js';
+import { renderBerriesPopoverList } from './minimap-berries-popover.js';
 import {
   isWildLeaderRoamTargetVisible,
   setWildLeaderRoamTargetVisible
 } from './wild-groups-visual-toggle-state.js';
+import { clearHoveredWildGroupEntityKey } from './wild-groups-hover-state.js';
 import { player } from '../player.js';
 import { triggerNextFarCryNow } from './far-cry-system.js';
 import { onLocaleChanged, t } from '../i18n/index.js';
@@ -19,6 +21,9 @@ export function installMinimapHudPopovers(options = {}) {
   const groupsList = document.getElementById('minimap-groups-popover-list');
   const groupsLeaderTargetToggle = document.getElementById('minimap-groups-leader-target-toggle');
   const groupsFarCryTriggerBtn = document.getElementById('minimap-groups-far-cry-trigger');
+  const berriesToggle = document.getElementById('minimap-berries-toggle');
+  const berriesPop = document.getElementById('minimap-berries-popover');
+  const berriesList = document.getElementById('minimap-berries-popover-list');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -55,6 +60,11 @@ export function installMinimapHudPopovers(options = {}) {
     renderWildGroupsPopoverList(groupsList, imageCache, { showLeaderRoamTarget });
   }
 
+  function refreshBerriesPanel() {
+    if (!berriesList) return;
+    renderBerriesPopoverList(berriesList, player);
+  }
+
   function syncTranslatableButtons() {
     if (groupsFarCryTriggerBtn) groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
     if (groupsLeaderTargetToggle) groupsLeaderTargetToggle.textContent = t('play.leaderTarget');
@@ -62,6 +72,7 @@ export function installMinimapHudPopovers(options = {}) {
 
   const popovers = [
     ...(groupsToggle && groupsPop ? [{ toggle: groupsToggle, pop: groupsPop, name: 'groups' }] : []),
+    ...(berriesToggle && berriesPop ? [{ toggle: berriesToggle, pop: berriesPop, name: 'berries' }] : []),
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
@@ -70,7 +81,10 @@ export function installMinimapHudPopovers(options = {}) {
   ];
 
   function closeAllExcept(activeName) {
-    if (activeName !== 'groups') stopGroupsRefresh();
+    if (activeName !== 'groups') {
+      stopGroupsRefresh();
+      clearHoveredWildGroupEntityKey();
+    }
     popovers.forEach((p) => {
       if (p.name !== activeName) {
         p.pop?.classList.add('hidden');
@@ -87,7 +101,10 @@ export function installMinimapHudPopovers(options = {}) {
     if (isOpen) {
       p.pop.classList.add('hidden');
       p.toggle?.setAttribute('aria-pressed', 'false');
-      if (name === 'groups') stopGroupsRefresh();
+      if (name === 'groups') {
+        stopGroupsRefresh();
+        clearHoveredWildGroupEntityKey();
+      }
     } else {
       closeAllExcept(name);
       p.pop.classList.remove('hidden');
@@ -97,8 +114,16 @@ export function installMinimapHudPopovers(options = {}) {
         stopGroupsRefresh();
         groupsRefreshTimer = setInterval(refreshGroupsPanel, 380);
       }
+      if (name === 'berries') {
+        refreshBerriesPanel();
+      }
     }
   }
+
+  berriesToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('berries');
+  });
 
   groupsToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -171,8 +196,12 @@ export function installMinimapHudPopovers(options = {}) {
   return {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
+      clearHoveredWildGroupEntityKey();
       closeAllExcept(null);
     },
-    destroy: () => unlistenLocale()
+    destroy: () => {
+      clearHoveredWildGroupEntityKey();
+      unlistenLocale();
+    }
   };
 }

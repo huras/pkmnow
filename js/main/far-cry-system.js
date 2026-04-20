@@ -6,15 +6,17 @@ import { MACRO_TILE_STRIDE } from '../chunking.js';
 /** Time until the first auto Far Cry attempt after `resetFarCrySystem`. */
 const FAR_CRY_GAP_BEFORE_1ST_SEC = 3;
 /** After 1st successful cry, wait this long before the 2nd attempt. */
-const FAR_CRY_GAP_AFTER_1ST_SEC = 15;
+const FAR_CRY_GAP_AFTER_1ST_SEC = 7;
 /** After 2nd successful cry, wait this long before the 3rd attempt. */
-const FAR_CRY_GAP_AFTER_2ND_SEC = 20;
+const FAR_CRY_GAP_AFTER_2ND_SEC = 10;
 /** From 4th cry onward: 15s, 30s, 15s, 30s, … (4th uses 15s). */
-const FAR_CRY_ALT_SHORT_SEC = 15;
-const FAR_CRY_ALT_LONG_SEC = 30;
+const FAR_CRY_ALT_SHORT_SEC = 8;
+const FAR_CRY_ALT_LONG_SEC = 19;
 
 const FAR_CRY_WAVE_MAX_AGE_SEC = 2.2;
 const FAR_CRY_MINIMAP_ECHO_MAX_AGE_SEC = 2.6;
+/** Far Cry minimap echoes: emit second pulse this long after the first. */
+const FAR_CRY_MINIMAP_ECHO_REPEAT_DELAY_SEC = 1.25;
 /** Same cap as minimap portrait markers — pick among nearest unknowns. */
 const FAR_CRY_CANDIDATE_POOL = 24;
 
@@ -31,6 +33,8 @@ export const farCryRevealTuning = {
 
 /** @type {Array<{ x: number, y: number, age: number, maxAge: number }>} */
 const activeFarCryMinimapEchoes = [];
+/** @type {Array<{ x: number, y: number, delaySec: number }>} */
+const pendingFarCryMinimapEchoes = [];
 /** @type {Array<{ dirX: number, dirY: number, age: number, maxAge: number, seed: number }>} */
 const activeFarCryScreenWaves = [];
 
@@ -195,6 +199,11 @@ function triggerFarCryFromEntity(entity, playerX, playerY) {
     age: 0,
     maxAge: FAR_CRY_MINIMAP_ECHO_MAX_AGE_SEC
   });
+  pendingFarCryMinimapEchoes.push({
+    x: ex / MACRO_TILE_STRIDE,
+    y: ey / MACRO_TILE_STRIDE,
+    delaySec: FAR_CRY_MINIMAP_ECHO_REPEAT_DELAY_SEC
+  });
 }
 
 /**
@@ -229,11 +238,24 @@ function ageFarCryEffects(dt) {
     fx.age += d;
     if (fx.age >= fx.maxAge) activeFarCryMinimapEchoes.splice(i, 1);
   }
+  for (let i = pendingFarCryMinimapEchoes.length - 1; i >= 0; i--) {
+    const fx = pendingFarCryMinimapEchoes[i];
+    fx.delaySec -= d;
+    if (fx.delaySec > 0) continue;
+    activeFarCryMinimapEchoes.push({
+      x: fx.x,
+      y: fx.y,
+      age: 0,
+      maxAge: FAR_CRY_MINIMAP_ECHO_MAX_AGE_SEC
+    });
+    pendingFarCryMinimapEchoes.splice(i, 1);
+  }
 }
 
 export function resetFarCrySystem() {
   activeFarCryScreenWaves.length = 0;
   activeFarCryMinimapEchoes.length = 0;
+  pendingFarCryMinimapEchoes.length = 0;
   farCryPendingCycleIndex = 0;
   farCryDoneCycleIndex = 0;
   farCrySuccessCount = 0;

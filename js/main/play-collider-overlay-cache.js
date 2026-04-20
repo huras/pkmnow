@@ -4,13 +4,16 @@ import {
   formalTreeTrunkOverlapsMicroCell,
   scatterPhysicsCircleOverlapsMicroCellAny,
   getFormalTreeTrunkWorldXSpan,
-  scatterPhysicsCircleAtOrigin
+  scatterPhysicsCircleAtOrigin,
+  beginWildWalkProbeCache,
+  endWildWalkProbeCache
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
 
 /** Same radius as the play collider overlay in `render.js`. */
-export const PLAY_COLLIDER_OVERLAY_RADIUS = 18;
+/** Same radius as the play collider overlay in `render.js`. Reduced to 25 to keep the overlay responsive but larger than before. */
+export const PLAY_COLLIDER_OVERLAY_RADIUS = 25;
 
 const CELL_BLOCKED = 1;
 const CELL_FORMAL = 2;
@@ -52,85 +55,71 @@ export function buildPlayColliderOverlayCache(data, player, imageCache, overlayF
   const cellFlags = new Uint8Array(stride * rectH);
   const overlayFeetDex = player.dexId || 94;
 
-  for (let my = myMin; my <= myMax; my++) {
-    for (let mx = mxMin; mx <= mxMax; mx++) {
-      const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, !!overlayFeetMoving);
-      const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
-      let v = 0;
-      if (!feetOk) v = CELL_BLOCKED;
-      else if (formalTreeTrunkOverlapsMicroCell(mx, my, data)) v = CELL_FORMAL;
-      else if (scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data)) v = CELL_SCATTER;
-      cellFlags[(my - myMin) * stride + (mx - mxMin)] = v;
-    }
-  }
-
-  const getCached = (x, y) => getMicroTile(x, y, data);
-  const originMemo = new Map();
-
-  const formalEllipses = [];
-  const seenFormal = new Set();
-  for (let my = myMin - 1; my <= myMax; my++) {
-    if (my < 0 || my >= microH) continue;
-    for (let rootX = mxMin - 1; rootX <= mxMax; rootX++) {
-      if (rootX < 0 || rootX + 1 >= microW) continue;
-      const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
-      if (!span) continue;
-      if (
-        !circleAabbIntersectsRect(
-          span.cx,
-          span.cy,
-          span.radius,
-          mxMin,
-          myMin,
-          mxMax + 1,
-          myMax + 1
-        )
-      ) {
-        continue;
+  beginWildWalkProbeCache();
+  try {
+    for (let my = myMin; my <= myMax; my++) {
+      for (let mx = mxMin; mx <= mxMax; mx++) {
+        const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, !!overlayFeetMoving);
+        const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
+        let v = 0;
+        if (!feetOk) v = CELL_BLOCKED;
+        else if (formalTreeTrunkOverlapsMicroCell(mx, my, data)) v = CELL_FORMAL;
+        else if (scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data)) v = CELL_SCATTER;
+        cellFlags[(my - myMin) * stride + (mx - mxMin)] = v;
       }
-      const k = `f:${rootX},${my}`;
-      if (seenFormal.has(k)) continue;
-      seenFormal.add(k);
-      formalEllipses.push({ cx: span.cx, cy: span.cy, radius: span.radius });
     }
-  }
 
-  const scatterEllipses = [];
-  const seenScatter = new Set();
-  for (let oxS = mxMin - 8; oxS <= mxMax + 2; oxS++) {
-    if (oxS < 0 || oxS >= microW) continue;
-    for (let oyS = myMin - 10; oyS <= myMax + 3; oyS++) {
-      if (oyS < 0 || oyS >= microH) continue;
-      const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, originMemo, getCached);
-      if (!p) continue;
-      if (
-        !circleAabbIntersectsRect(p.cx, p.cy, p.radius, mxMin, myMin, mxMax + 1, myMax + 1)
-      ) {
-        continue;
+    const formalEllipses = [];
+    const seenFormal = new Set();
+    for (let my = myMin - 1; my <= myMax; my++) {
+      if (my < 0 || my >= microH) continue;
+      for (let rootX = mxMin - 1; rootX <= mxMax; rootX++) {
+        if (rootX < 0 || rootX + 1 >= microW) continue;
+        const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+        if (!span) continue;
+        if (!circleAabbIntersectsRect(span.cx, span.cy, span.radius, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
+        const k = `f:${rootX},${my}`;
+        if (seenFormal.has(k)) continue;
+        seenFormal.add(k);
+        formalEllipses.push({ cx: span.cx, cy: span.cy, radius: span.radius });
       }
-      const k = `s:${oxS},${oyS}`;
-      if (seenScatter.has(k)) continue;
-      seenScatter.add(k);
-      scatterEllipses.push({
-        cx: p.cx,
-        cy: p.cy,
-        radius: p.radius,
-        isTree: scatterItemKeyIsTree(p.itemKey)
-      });
     }
-  }
 
-  overlayCache = {
-    seed,
-    mxMin,
-    mxMax,
-    myMin,
-    myMax,
-    stride,
-    cellFlags,
-    formalEllipses,
-    scatterEllipses
-  };
+    const scatterEllipses = [];
+    const seenScatter = new Set();
+    for (let oxS = mxMin - 8; oxS <= mxMax + 2; oxS++) {
+      if (oxS < 0 || oxS >= microW) continue;
+      for (let oyS = myMin - 10; oyS <= myMax + 3; oyS++) {
+        if (oyS < 0 || oyS >= microH) continue;
+        const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data);
+        if (!p) continue;
+        if (!circleAabbIntersectsRect(p.cx, p.cy, p.radius, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
+        const k = `s:${oxS},${oyS}`;
+        if (seenScatter.has(k)) continue;
+        seenScatter.add(k);
+        scatterEllipses.push({
+          cx: p.cx,
+          cy: p.cy,
+          radius: p.radius,
+          isTree: scatterItemKeyIsTree(p.itemKey)
+        });
+      }
+    }
+
+    overlayCache = {
+      seed,
+      mxMin,
+      mxMax,
+      myMin,
+      myMax,
+      stride,
+      cellFlags,
+      formalEllipses,
+      scatterEllipses
+    };
+  } finally {
+    endWildWalkProbeCache();
+  }
 }
 
 export function clearPlayColliderOverlayCache() {
@@ -144,6 +133,7 @@ export function getPlayColliderOverlayCache() {
 
 /**
  * Rebuild cache if play colliders are on but cache is missing or world changed.
+ * Now dynamic: rebuilds if player gets near the edges of the cached zone.
  */
 export function ensurePlayColliderOverlayCache(data, player, imageCache, collidersOn) {
   if (!collidersOn || !data) {
@@ -152,17 +142,30 @@ export function ensurePlayColliderOverlayCache(data, player, imageCache, collide
   }
   const overlayFeetMoving =
     !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
-  if (!overlayCache || overlayCache.seed !== data.seed) {
+
+  let needRebuild = !overlayCache || overlayCache.seed !== data.seed;
+  if (!needRebuild && overlayCache) {
+    const margin = 8;
+    const px = player.x;
+    const py = player.y;
+    if (
+      px < overlayCache.mxMin + margin ||
+      px > overlayCache.mxMax - margin ||
+      py < overlayCache.myMin + margin ||
+      py > overlayCache.myMax - margin
+    ) {
+      needRebuild = true;
+    }
+  }
+
+  if (needRebuild) {
     buildPlayColliderOverlayCache(data, player, imageCache, overlayFeetMoving);
   }
 }
 
 /**
- * Clamp player pivot to the frozen micro-tile box captured when colliders were enabled.
+ * @deprecated Dynamic rebuilds mean we no longer need to clamp the player.
  */
 export function clampPlayerToPlayColliderBoundsIfActive(player) {
-  if (!overlayCache) return;
-  const { mxMin, mxMax, myMin, myMax } = overlayCache;
-  player.x = Math.min(Math.max(player.x, mxMin), mxMax);
-  player.y = Math.min(Math.max(player.y, myMin), myMax);
+  // No-op
 }

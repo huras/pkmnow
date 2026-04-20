@@ -9,7 +9,12 @@ export const TCOLS_CAVES = 50;
 export function atlasFromObjectSet(objSet, imageCache) {
   const path = TessellationEngine.getImagePath(objSet?.file);
   const img = path ? imageCache.get(path) : null;
-  const cols = path?.includes('caves') ? TCOLS_CAVES : TCOLS_NATURE;
+  let cols = TCOLS_NATURE;
+  if (path?.includes('caves')) {
+    cols = TCOLS_CAVES;
+  } else if (path?.includes('Berry Trees')) {
+    cols = 66;
+  }
   return { img, cols };
 }
 

@@ -50,6 +50,21 @@ const _BIOME_VEGETATION = {
     'green-broadleaf-1 [3x2]',
     'grass [1x1]',
     'red-flower [1x1]',
+    'berry-tree-cheri [1x1]',
+    'berry-tree-chesto [1x1]',
+    'berry-tree-pecha [1x1]',
+    'berry-tree-rawst [1x1]',
+    'berry-tree-aspear [1x1]',
+    'berry-tree-leppa [1x1]',
+    'berry-tree-oran [1x1]',
+    'berry-tree-persim [1x1]',
+    'berry-tree-lum [1x1]',
+    'berry-tree-sitrus [1x1]',
+    'berry-tree-figy [1x1]',
+    'berry-tree-wiki [1x1]',
+    'berry-tree-mago [1x1]',
+    'berry-tree-aguav [1x1]',
+    'berry-tree-lapapa [1x1]',
     // A few carryable props for Strength.
     'dirt-rock [1x1]'
   ],
@@ -60,6 +75,9 @@ const _BIOME_VEGETATION = {
     'palm-tree [2x2]',
     'vine [2x1]',
     'fern [1x1]',
+    'berry-tree-nanab [1x1]',
+    'berry-tree-wepear [1x1]',
+    'berry-tree-pinap [1x1]',
     // A few carryable props for Strength.
     'small-dirt-rocks-a [1x1]'
   ],
@@ -67,6 +85,14 @@ const _BIOME_VEGETATION = {
     'small-grass [1x1]',
     'yellow-lily [1x1]',
     'red-daisy [1x1]',
+    'berry-tree-oran [1x1]',
+    'berry-tree-rawst [1x1]',
+    'berry-tree-pomeg [1x1]',
+    'berry-tree-kelpsy [1x1]',
+    'berry-tree-qualot [1x1]',
+    'berry-tree-hondew [1x1]',
+    'berry-tree-grepa [1x1]',
+    'berry-tree-tamato [1x1]',
     // A few carryable props for Strength.
     'dirt-rock [1x1]'
   ],
@@ -83,7 +109,14 @@ const _BIOME_VEGETATION = {
     'fold-sea-shell [1x1]'
   ],
   [BIOMES.DESERT.id]: ['big-cactus-1 [2x2]', 'small-cactus [1x1]'],
-  [BIOMES.SAVANNA.id]: ['savannah-tree [3x3]', 'small-cactus [1x1]'],
+  [BIOMES.SAVANNA.id]: [
+    'savannah-tree [3x3]',
+    'small-cactus [1x1]',
+    'berry-tree-cornn [1x1]',
+    'berry-tree-magost [1x1]',
+    'berry-tree-rabuta [1x1]',
+    'berry-tree-nomel [1x1]'
+  ],
   [BIOMES.CITY.id]: ['white-daisy [1x1]', 'blue-daisy [1x1]', 'pink-daisy [1x1]', 'small-grass [1x1]'],
   [BIOMES.CITY_STREET.id]: [],
   [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'fern [1x1]'],
@@ -179,7 +212,8 @@ export function isSortableScatter(itemKey) {
     k.includes('lily') ||
     k.includes('daisy') ||
     k.includes('coreopsis') ||
-    k.includes('vine')
+    k.includes('vine') ||
+    k.includes('berry-tree')
   );
 }
 
@@ -355,6 +389,7 @@ export function getGrassParams(biomeId) {
 
 export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
 export const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Threshold para a Forragem
+export const BERRY_PATCH_THRESHOLD = 0.72;    // Threshold for dense berry clusters
 
 /** Skins de lagoa doce (roxa): grama animada = lótus; só no CENTER do pool, não nas bordas (mesma lógica que folhagem 1.2). */
 export function isLakeLotusFoliageTerrainSet(name) {

@@ -42,6 +42,7 @@ import { updateFarCrySystem } from './far-cry-system.js';
 import { PluginRegistry } from '../core/plugin-registry.js';
 import { canEntityStartSprint } from '../entity-stamina.js';
 import { beginMicroTileCache, endMicroTileCache } from '../chunking.js';
+import { updateBerryTrees, clearBerryTreeStates } from './berry-tree-system.js';
 
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
@@ -185,6 +186,7 @@ export function createGameLoop(api) {
       updateCrystalShardParticles(simDt);
       updateCrystalDropsAndPickup(simDt, player);
       updateBreakableDetailRegeneration(simDt, currentData);
+      updateBerryTrees(getGameTimeSec?.() ?? 0);
     }
 
     if (currentData && getAppMode() === 'play') {

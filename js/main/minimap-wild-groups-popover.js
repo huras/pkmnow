@@ -4,6 +4,10 @@ import {
   ensureSpriteCollabPortraitLoaded,
   getSpriteCollabPortraitImage
 } from '../pokemon/spritecollab-portraits.js';
+import {
+  setHoveredWildGroupEntityKey,
+  clearHoveredWildGroupEntityKey
+} from './wild-groups-hover-state.js';
 import { t } from '../i18n/index.js';
 
 /** @param {any} e */
@@ -35,6 +39,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
   const { showLeaderRoamTarget = false } = options;
   if (!listRoot) return;
   if (!imageCache) {
+    clearHoveredWildGroupEntityKey();
     listRoot.replaceChildren();
     const d = document.createElement('div');
     d.className = 'minimap-groups-popover__empty';
@@ -61,6 +66,7 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
   listRoot.replaceChildren();
 
   if (!entities.length) {
+    clearHoveredWildGroupEntityKey();
     const empty = document.createElement('div');
     empty.className = 'minimap-groups-popover__empty';
     empty.textContent = t('play.groupsNoneActive');
@@ -87,8 +93,10 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     const wrap = document.createElement('span');
     wrap.className = 'minimap-groups-popover__portrait-wrap';
     const dex = Math.floor(Number(ent.dexId) || 0);
+    const entityKey = ent.key == null ? '' : String(ent.key);
     const isLeader = ctx.leaderKey != null && String(ent.key || '') === String(ctx.leaderKey);
     if (isLeader) wrap.classList.add('minimap-groups-popover__portrait-wrap--leader');
+    if (entityKey) wrap.dataset.entityKey = entityKey;
 
     const img = document.createElement('img');
     img.className = 'minimap-groups-popover__portrait';
@@ -105,6 +113,19 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
 
     applySrc();
     void ensureSpriteCollabPortraitLoaded(imageCache, dex, slug).then(applySrc);
+
+    wrap.addEventListener('mouseenter', () => {
+      setHoveredWildGroupEntityKey(entityKey || null);
+    });
+    wrap.addEventListener('mouseleave', () => {
+      setHoveredWildGroupEntityKey(null);
+    });
+    wrap.addEventListener('focus', () => {
+      setHoveredWildGroupEntityKey(entityKey || null);
+    });
+    wrap.addEventListener('blur', () => {
+      setHoveredWildGroupEntityKey(null);
+    });
 
     wrap.appendChild(img);
     host.appendChild(wrap);
@@ -167,4 +188,9 @@ export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) 
     row.appendChild(portraits);
     listRoot.appendChild(row);
   }
+
+  const hoveredPortrait = listRoot.querySelector('.minimap-groups-popover__portrait-wrap:hover');
+  const hoveredKey =
+    hoveredPortrait instanceof HTMLElement ? hoveredPortrait.dataset.entityKey || null : null;
+  setHoveredWildGroupEntityKey(hoveredKey);
 }

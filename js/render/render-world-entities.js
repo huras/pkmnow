@@ -11,10 +11,14 @@ import {
   TCOLS_NATURE
 } from './render-utils-internal.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
-import { getDetailHitShake01 } from '../main/play-crystal-tackle.js';
+import { getBerryTreeState, BERRY_TREE_TILES } from '../main/berry-tree-system.js';
+import { getDetailHitShake01, isBerryTreeKey } from '../main/play-crystal-tackle.js';
+import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
+import { getPokemondbItemIconPathSync } from '../social/pokemondb-item-icon-paths.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
 import { PMD_MON_SHEET } from '../pokemon/pmd-default-timing.js';
 import { getDexAnimSlice } from '../pokemon/pmd-anim-metadata.js';
+import { parseShape } from '../tessellation-logic.js';
 import {
   resolvePmdFrameSpecForSlice,
   resolveCanonicalPmdH
@@ -107,6 +111,12 @@ export function drawScatter(ctx, item, options) {
   const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
 
   const { objSet, originX, originY, cols, rows, itemKey, isBurning, isCharred } = item;
+  
+  if (isBerryTreeKey(itemKey)) {
+    drawBerryTree(ctx, item, options);
+    return;
+  }
+
   const bump01 = scatterItemKeyIsTree(itemKey) ? getDetailHitShake01(`treeBump:${originX},${originY}`) : 0;
   const shake01 = Math.max(getDetailHitShake01(`${originX},${originY}`), bump01);
 
@@ -197,6 +207,80 @@ export function drawScatter(ctx, item, options) {
       }
     }
   }
+}
+
+/**
+ * Handles specialized drawing for berry trees with maturity stages.
+ */
+export function drawBerryTree(ctx, item, options) {
+  const { tileW, tileH, snapPx, time, imageCache, getCached, data } = options;
+  const { originX, originY, itemKey, isBurning, isCharred } = item;
+
+  const berryState = getBerryTreeState(originX, originY, data, itemKey);
+  const berryType = berryState.type;
+  const maturity = berryState.maturityStage;
+  // Animation stage 0 or 1
+  const animStage = Math.floor(time * 2) % 2;
+
+  const mapping = BERRY_TREE_TILES[berryType];
+  const frames = mapping ? mapping[maturity] : null;
+  if (!frames) return;
+
+  // Animation frame: [topId, bottomId] or just [singleId]
+  const frame = frames[animStage] || frames[0];
+  const stageIds = Array.isArray(frame) ? frame : [frame];
+  
+  const { img, cols: atlasCols } = atlasFromObjectSet(item.objSet, imageCache);
+  if (!img) return;
+
+  // Detect shape from data
+  const sCols = 1;
+  const sRows = stageIds.length;
+
+  // Reserved footprint from OBJECT_SET (e.g. 1x2)
+  const footprint = item.objSet?.shape ? parseShape(item.objSet.shape) : { cols: 1, rows: 1 };
+  const fCols = footprint.cols;
+  const fRows = footprint.rows;
+
+  const bump01 = getDetailHitShake01(`treeBump:${originX},${originY}`);
+  const shake01 = Math.max(getDetailHitShake01(`${originX},${originY}`), bump01);
+
+  ctx.save();
+  if (shake01 > 0) {
+    const a = tileW * 0.07 * shake01;
+    const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
+    const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
+    ctx.translate(sx, sy);
+  }
+
+  const prevFilter = ctx.filter;
+  const prevAlpha = ctx.globalAlpha;
+  if (isCharred) {
+    ctx.filter = 'brightness(0.18) saturate(0.05)';
+    ctx.globalAlpha = 0.97;
+  }
+
+  // Anchor to the bottom-center of the reserved footprint
+  const offsetX = (fCols - sCols) * 0.5;
+  const offsetY = fRows - sRows;
+
+  for (let r = 0; r < sRows; r++) {
+    for (let c = 0; c < sCols; c++) {
+      const tileId = stageIds[r * sCols + c];
+      if (tileId === null || tileId === undefined) continue;
+
+      const sx = (tileId % atlasCols) * 16;
+      const sy = Math.floor(tileId / atlasCols) * 16;
+      const dx = snapPx((originX + offsetX + c) * tileW);
+      const dy = snapPx((originY + offsetY + r) * tileH);
+      
+      ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileW, tileH);
+    }
+  }
+
+  ctx.filter = prevFilter;
+  ctx.globalAlpha = prevAlpha;
+  ctx.restore();
 }
 
 /**
@@ -320,6 +404,30 @@ export function drawCrystalDrop(ctx, item, options) {
     ctx.restore();
     drawDropGlow(ctx, d, imageCache, px, py, rr * 2.7, rr * 2.7);
   } else {
+    const slug = lootSlugForItemKey(d.itemKey);
+    const pngPath = slug ? getPokemondbItemIconPathSync(slug) : null;
+    const pngImg = pngPath ? imageCache.get(pngPath) : null;
+
+    if (pngImg && pngImg.naturalWidth) {
+      const suctionT = Math.max(0, Math.min(1, Number(d.collectShrink) || 0));
+      const pulse = 0.88 + Math.sin((d.age || 0) * 8 + (d.bobSeed || 0) * 6.28) * 0.12;
+      const bob = (1 - suctionT) * Math.sin((d.age || 0) * 5 + (d.bobSeed || 0) * 9.7) * tileH * 0.08;
+      const scale = 0.65 * pulse * (1 - suctionT * 0.28); // Berries slightly larger
+      
+      const dw = Math.ceil(tileW * scale);
+      const dh = Math.ceil(tileH * scale);
+      const px = snapPx(d.x * tileW);
+      const py = snapPx(d.y * tileH - bob);
+
+      ctx.save();
+      ctx.globalAlpha = 0.98 - suctionT * 0.34;
+      ctx.drawImage(pngImg, px - dw * 0.5, py - dh * 0.5, dw, dh);
+      ctx.restore();
+      
+      drawDropGlow(ctx, d, imageCache, px, py, dw * 1.5, dh * 1.5);
+      return;
+    }
+
     const path = d.imgPath;
     const img = path ? imageCache.get(path) : null;
     if (img && d.tileId != null && d.tileId >= 0 && d.cols > 0) {
@@ -353,7 +461,7 @@ export function drawCrystalDrop(ctx, item, options) {
         ctx.drawImage(img, sx, sy, 16, 16, dx, dy, tileDw, tileDh);
       }
       ctx.restore();
-      drawDropGlow(ctx, d, imageCache, px, py, footW, footH);
+      drawDropGlow(ctx, d, imageCache, px, py, footW * 1.8, footH * 1.8);
     }
   }
 }

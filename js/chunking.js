@@ -1,9 +1,9 @@
 import {
-  getBiome,
-  getBiomeWithAnomalies,
-  BIOMES,
-  resolveWaterLevel,
-  BEACH_ELEVATION_BAND
+    getBiome,
+    getBiomeWithAnomalies,
+    BIOMES,
+    resolveWaterLevel,
+    BEACH_ELEVATION_BAND
 } from './biomes.js';
 import { seededHash } from './tessellation-logic.js';
 
@@ -77,16 +77,16 @@ const microTileCacheStorage = new Map();
  * Call at start of frame (or AI batch) to enable O(1) reuse of computed micro tiles.
  */
 export function beginMicroTileCache() {
-  microTileCacheStorage.clear();
-  microTileCache = microTileCacheStorage;
+    microTileCacheStorage.clear();
+    microTileCache = microTileCacheStorage;
 }
 
 /**
  * Disables and clears the micro tile memo.
  */
 export function endMicroTileCache() {
-  microTileCache = null;
-  microTileCacheStorage.clear();
+    microTileCache = null;
+    microTileCacheStorage.clear();
 }
 
 /**
@@ -95,10 +95,10 @@ export function endMicroTileCache() {
  */
 export function getMicroTile(mx, my, macroData) {
     if (microTileCache) {
-      // Bitpack mx,my into a 32-bit integer key for Map speed (safe up to ~32k wide map)
-      const key = (mx << 15) | (my & 0x7fff);
-      const cached = microTileCache.get(key);
-      if (cached !== undefined) return cached;
+        // Bitpack mx,my into a 32-bit integer key for Map speed (safe up to ~32k wide map)
+        const key = (mx << 15) | (my & 0x7fff);
+        const cached = microTileCache.get(key);
+        if (cached !== undefined) return cached;
     }
 
     const { width, height, cells, temperature, moisture, anomaly, seed, config } = macroData;
@@ -391,13 +391,14 @@ export function getMicroTile(mx, my, macroData) {
     // New Layered Terrain Data
     let fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // Restaurado para 0.08
     if (bId === BIOMES.FLOWER_FIELDS.id) {
-      // Second FBM octave + ridge shaping → more tiles pass scatter gates while keeping macro-scale clumps.
-      const coarse = foliageDensity(mx, my, seed + 9992, 0.05);
-      const fine = foliageDensity(mx * 2.2, my * 2.2, seed + 18102, 0.19);
-      const ridge = Math.abs(fine - 0.5) * 2;
-      fDensity = Math.min(0.995, coarse * 0.42 + fine * 0.38 + ridge * 0.12 + 0.08);
+        // Second FBM octave + ridge shaping → more tiles pass scatter gates while keeping macro-scale clumps.
+        const coarse = foliageDensity(mx, my, seed + 9992, 0.05);
+        const fine = foliageDensity(mx * 2.2, my * 2.2, seed + 18102, 0.19);
+        const ridge = Math.abs(fine - 0.5) * 2;
+        fDensity = Math.min(0.995, coarse * 0.42 + fine * 0.38 + ridge * 0.12 + 0.08);
     }
     const fType = seededHash(mx, my, seed + 9993);
+    const bPatch = foliageDensity(mx, my, seed + 8881, 0.07); // Smooth noise for clustered berry patches
 
     const res = {
         biomeId: bId,
@@ -408,12 +409,13 @@ export function getMicroTile(mx, my, macroData) {
         urbanBuilding,
         roadFeature,
         foliageDensity: fDensity,
-        foliageType: fType
+        foliageType: fType,
+        berryPatchDensity: bPatch
     };
 
     if (microTileCache) {
-      const key = (mx << 15) | (my & 0x7fff);
-      microTileCache.set(key, res);
+        const key = (mx << 15) | (my & 0x7fff);
+        microTileCache.set(key, res);
     }
     return res;
 }

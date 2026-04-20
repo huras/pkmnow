@@ -580,41 +580,18 @@ function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h, zoom) 
 }
 
 /**
- * Draws a high-visibility minimap player marker with blink + pulse rings.
+ * Draws a high-visibility minimap player marker (static, no pulsating effect).
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} x
  * @param {number} y
  * @param {number} tfScale
  */
 function drawMinimapPlayerMarker(ctx, x, y, tfScale) {
-  const nowSec =
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? performance.now() * 0.001
-      : Date.now() * 0.001;
-  const baseR = Math.max(3, Math.min(5, tfScale * 0.6));
-  const blink01 = 0.5 + 0.5 * Math.sin(nowSec * 7.4);
-  const coreR = baseR * (0.88 + 0.16 * blink01);
-  const pulseSpan = Math.max(8, baseR * 4.6);
-
+  const coreR = Math.max(3, Math.min(5, tfScale * 0.58));
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  for (let i = 0; i < 2; i++) {
-    const phase = (nowSec * 0.9 + i * 0.5) % 1;
-    const ringR = coreR + 2 + phase * pulseSpan;
-    const alpha = (1 - phase) * (0.46 - i * 0.12) * (0.78 + blink01 * 0.22);
-    if (alpha <= 0.01) continue;
-    ctx.strokeStyle = `rgba(120, 232, 255, ${alpha.toFixed(4)})`;
-    ctx.lineWidth = Math.max(1, Math.min(2.1, baseR * 0.45));
-    ctx.beginPath();
-    ctx.arc(x, y, ringR, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.save();
-  ctx.shadowBlur = 10 + blink01 * 6;
-  ctx.shadowColor = `rgba(90, 220, 255, ${(0.62 + blink01 * 0.22).toFixed(4)})`;
-  ctx.fillStyle = `rgba(255, 84, 84, ${(0.86 + blink01 * 0.14).toFixed(4)})`;
+  ctx.shadowBlur = 11;
+  ctx.shadowColor = 'rgba(90, 220, 255, 0.7)';
+  ctx.fillStyle = 'rgba(255, 84, 84, 0.94)';
   ctx.strokeStyle = 'rgba(255,255,255,0.96)';
   ctx.lineWidth = 1.6;
   ctx.beginPath();
@@ -625,6 +602,84 @@ function drawMinimapPlayerMarker(ctx, x, y, tfScale) {
   ctx.beginPath();
   ctx.arc(x, y, Math.max(1.15, coreR * 0.34), 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+}
+
+const MINIMAP_TRAIL_TELEPORT_JUMP_MICRO = 22;
+
+/**
+ * Draws only the recent player trail window on minimap.
+ * Teleport jumps are dashed connectors; regular movement is split into solid segments.
+ * Opacity is 50% of the world-map trail style.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ scale: number, ox: number, oy: number }} tf
+ * @param {Array<{ x: number, y: number }>} recentTrailMicro
+ */
+function drawRecentPlayerTrailOnMinimap(ctx, tf, recentTrailMicro) {
+  if (!Array.isArray(recentTrailMicro) || recentTrailMicro.length < 2) return;
+  const teleportJumpSq = MINIMAP_TRAIL_TELEPORT_JUMP_MICRO * MINIMAP_TRAIL_TELEPORT_JUMP_MICRO;
+  const pts = [];
+  for (let i = 0; i < recentTrailMicro.length; i++) {
+    const row = recentTrailMicro[i];
+    const mx = Number(row?.x);
+    const my = Number(row?.y);
+    if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
+    const gx = mx / MACRO_TILE_STRIDE;
+    const gy = my / MACRO_TILE_STRIDE;
+    pts.push({
+      mx,
+      my,
+      sx: (gx - tf.ox + 0.5) * tf.scale,
+      sy: (gy - tf.oy + 0.5) * tf.scale
+    });
+  }
+  if (pts.length < 2) return;
+
+  const lineW = Math.max(1, Math.min(2.1, tf.scale * 0.14));
+  const strokeMainSegment = (startIdx, endIdx) => {
+    if (endIdx - startIdx < 1) return;
+    ctx.beginPath();
+    for (let i = startIdx; i <= endIdx; i++) {
+      const p = pts[i];
+      if (i === startIdx) ctx.moveTo(p.sx, p.sy);
+      else ctx.lineTo(p.sx, p.sy);
+    }
+    ctx.strokeStyle = 'rgba(36, 178, 255, 0.45)';
+    ctx.lineWidth = lineW + 1;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(176, 238, 255, 0.39)';
+    ctx.lineWidth = lineW;
+    ctx.stroke();
+  };
+  const strokeTeleportJump = (a, b) => {
+    ctx.save();
+    ctx.setLineDash([Math.max(3, lineW * 2.2), Math.max(2, lineW * 1.6)]);
+    ctx.strokeStyle = 'rgba(176, 238, 255, 0.25)';
+    ctx.lineWidth = lineW;
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  let segStart = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const dx = curr.mx - prev.mx;
+    const dy = curr.my - prev.my;
+    const isTeleportJump = dx * dx + dy * dy > teleportJumpSq;
+    if (!isTeleportJump) continue;
+    strokeMainSegment(segStart, i - 1);
+    strokeTeleportJump(prev, curr);
+    segStart = i;
+  }
+  strokeMainSegment(segStart, pts.length - 1);
   ctx.restore();
 }
 
@@ -786,8 +841,9 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
  * @param {HTMLCanvasElement} canvas
  * @param {object} data  world data (biomes, width, height, paths, graph, …)
  * @param {object} player  {x, y} in micro-tile coordinates
+ * @param {{ recentTrailMicro?: Array<{ x: number, y: number }> }} [options]
  */
-export function renderMinimap(canvas, data, player) {
+export function renderMinimap(canvas, data, player, options = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const w = canvas.width;
@@ -856,6 +912,7 @@ export function renderMinimap(canvas, data, player) {
   // --- Player marker (always screen-centred for mid/close zoom) ---
   const playerScreenX = (playerMacroX - tfOx + 0.5) * tfScale;
   const playerScreenY = (playerMacroY - tfOy + 0.5) * tfScale;
+  drawRecentPlayerTrailOnMinimap(ctx, { scale: tfScale, ox: tfOx, oy: tfOy }, options.recentTrailMicro || []);
 
   drawWildSpawnPortraitMarkers(
     ctx,

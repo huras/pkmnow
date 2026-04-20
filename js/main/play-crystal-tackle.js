@@ -10,6 +10,7 @@ import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
 import { invalidateStaticEntityCache } from '../render/static-entity-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
+import { harvestBerryTree, getBerryTreeState } from './berry-tree-system.js';
 import {
   setScatterItemKeyOverride,
   clearScatterItemKeyOverrides,
@@ -211,6 +212,10 @@ export function isPlayCrystalScatterOriginDestroyed(ox, oy) {
 
 export function isPlayDetailScatterOriginDestroyed(ox, oy) {
   return isPlayCrystalScatterOriginDestroyed(ox, oy);
+}
+
+export function isBerryTreeKey(itemKey) {
+  return String(itemKey || '').toLowerCase().includes('berry-tree');
 }
 
 export function isPlayFormalTreeRootDestroyed(rootX, my) {
@@ -1532,6 +1537,17 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
         playTreeTackleSfx({ x: hit.cx ?? hit.rootOx + 0.5, y: hit.cy ?? hit.rootOy + 0.5 });
       }
     }
+
+    if (isBerryTreeKey(hit.itemKey) && (hitSource === 'cut' || hitSource === 'tackle')) {
+      const harvestedCount = harvestBerryTree(hit.rootOx, hit.rootOy, null, data, hit.itemKey);
+      if (harvestedCount > 0) {
+        // Berry trees don't get "destroyed" in the traditional sense, they just reset to stage 0.
+        // We can add some visual feedback here if needed.
+        if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
+        continue;
+      }
+    }
+
     if (opts.gamepadRumblePlayer && !scatterItemKeyIsPureGrassDecoration(hit.itemKey)) {
       if (isTreeHit && treeDamage > 0 && (hitSource === 'cut' || hitSource === 'tackle')) {
         tryPlayerGamepadRumbleForHit(opts, 'tree');

@@ -22,7 +22,7 @@
       <div class="toolbar play-shell-toolbar">
         <div class="field">
           <label for="seed" data-i18n="play.seedLabel">シード</label>
-          <input type="text" id="seed" value="demo" autocomplete="off" spellcheck="false" />
+          <input type="text" id="seed" value="青沼英二" autocomplete="off" spellcheck="false" />
         </div>
         <button type="button" id="generate" data-i18n="play.generate">生成</button>
         <button type="button" id="btnBackToMap" class="btn-secondary hidden" data-i18n="play.backToMap">マップへ戻る</button>
@@ -74,6 +74,23 @@
               <span class="minimap-panel__title" data-i18n="play.minimapTitle">リージョン</span>
               <div class="minimap-panel__header-actions">
                 <button
+                type="button"
+                id="minimap-berries-toggle"
+                class="minimap-panel__berries-btn"
+                title="Berry Tree Status"
+                aria-label="Berry Tree Status"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__berries-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+                  <path d="M12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16Z"/>
+                  <path d="M12 8V2"/>
+                  <path d="M12 22V16"/>
+                  <path d="M8 12H2"/>
+                  <path d="M22 12H16"/>
+                </svg>
+              </button>
+              <button
                 type="button"
                 id="minimap-groups-toggle"
                 class="minimap-panel__groups-btn"
@@ -380,6 +397,12 @@
               </div>
             </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
+          </div>
+          <div id="minimap-berries-popover" class="minimap-berries-popover hidden" role="dialog" aria-label="Berry Trees on Map">
+            <div class="minimap-berries-popover__head">
+              <span>Berry Trees on Map</span>
+            </div>
+            <div id="minimap-berries-popover-list" class="minimap-berries-popover__list"></div>
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>

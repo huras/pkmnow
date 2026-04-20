@@ -8,7 +8,6 @@ import { ensurePokemondbItemIconInCache, getPokemondbItemIconPathMap } from './p
  */
 export function lootSlugForItemKey(itemKey) {
   const k = String(itemKey || '').toLowerCase();
-  if (k.includes('crystal')) return 'star-piece';
   const firstTok = (k.split(/\s+/)[0] || '').toLowerCase();
   if (/^[a-z][a-z0-9-]*$/i.test(firstTok)) return firstTok;
   return null;

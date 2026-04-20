@@ -381,7 +381,7 @@ export const POKEMON_CONFIG = {
   360: { name: 'Wynaut', types: ['psychic'], heightTiles: 2.4, baseSpeed: 23 },
   361: { name: 'Snorunt', types: ['ice'], heightTiles: 2.6, baseSpeed: 50 },
   362: { name: 'Glalie', types: ['ice'], heightTiles: 4.4, baseSpeed: 80 },
-  363: { name: 'Spheal', types: ['ice', 'water'], heightTiles: 2.9, baseSpeed: 25 },
+  363: { name: 'Spheal', types: ['ice', 'water'], heightTiles: 1.75, baseSpeed: 25 },
   364: { name: 'Sealeo', types: ['ice', 'water'], heightTiles: 3.5, baseSpeed: 45 },
   365: { name: 'Walrein', types: ['ice', 'water'], heightTiles: 4.2, baseSpeed: 65 },
   366: { name: 'Clamperl', types: ['water'], heightTiles: 2, baseSpeed: 32 },

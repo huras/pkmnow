@@ -80,6 +80,15 @@ My ideias organizadas por tópico
 - Ghost attack at night.
 - Silph Scope protege.
 - Em certas regiões perigosas, pokémons selvagens e capturados ficam berserk.
+- Boss Pokémon pode comandar seguidores para atacar o player em grupo.
+- Gatilhos para ordem de ataque:
+  - player acertou o boss
+  - player acertou um pokémon que o boss/facção "gosta" ou protege
+  - comportamento travesso/mischievous do boss (ataque por zoeira/caos)
+- Comunicação in-world via ícones, imagens e emojis (telegraph social antes do ataque coordenado).
+- Eventos sociais de troca de liderança dentro de grupos de pokémon (leader swap).
+- Troca de líder deixa movimentação de grupo mais dinâmica e menos previsível.
+- A mesma mecânica abre espaço para vários outros eventos sociais (disputa, reconciliação, proteção, fuga coordenada).
 
 
 5) Recursos, crafting e sobrevivência
@@ -275,3 +284,16 @@ My ideias organizadas por tópico
 - Jogadores que reconhecem cries identificam o pokémon pelo som e criam memória de espécie por região.
 - Esse sistema expande a "visão efetiva" do mapa sem renderizar mais chunks.
 - Vantagem estratégica: ajuda a competir com a sensação de "ver o horizonte" dos jogos 3D, mas com custo técnico menor.
+- Também mostrar ondas na própria tela de jogo vindas da direção do "far cry" (centro do círculo na borda da tela, animação simples).
+- Implementação visual simples sugerida: círculos/aneis expandindo com fade, orientados pelo lado de origem do som.
+- Ideia boba de naming/marketing: chamar esse tipo de evento de Pokémon "Far Cry" (o "Open Wild" seria 2.5D com 3D de verdade).
+
+
+18) Construções por Pokémon e automação de base
+------------------------------------------------
+- Pokémons podem construir estruturas no mundo/base.
+- Cada espécie (ou família/evolução) constrói um tipo específico de construção.
+- Cada espécie quer alterar o bioma para aproximar o ambiente do seu habitat ideal.
+- Construções podem evoluir para versões melhores.
+- Construções evoluídas podem extrair recursos automaticamente (items/materiais) para o player.
+- Parte das construções pode executar processos para o player (ex.: refino, transformação, produção, crafting assistido).

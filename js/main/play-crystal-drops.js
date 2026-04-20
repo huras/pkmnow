@@ -5,6 +5,9 @@ import { playItemPickupSfx } from '../audio/item-pickup-sfx.js';
 import { playRockSmashingSfx } from '../audio/rock-smashing-sfx.js';
 import { rumblePlayerGamepadPickupSoft } from './play-gamepad-rumble.js';
 import { notifyPlayDetailItemPickupFeedback } from './play-item-pickup-feedback.js';
+import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
+import { ensurePokemondbItemIconInCache } from '../social/pokemondb-item-icon-paths.js';
+import { clearBerryTreeStates } from './berry-tree-system.js';
 
 /** Ground pickup radius for dropped crystal items (tiles). */
 const CRYSTAL_DROP_PICK_RADIUS_TILES = 1.35;
@@ -30,6 +33,7 @@ export function clearCrystalDropPickupState() {
   activeCrystalShards.length = 0;
   activeSpawnedSmallCrystals.length = 0;
   activeCrystalDrops.length = 0;
+  clearBerryTreeStates();
   collectedDetailInventory.clear();
   crystalLootCount = 0;
   crystalDynIdSeq = 1;
@@ -169,6 +173,12 @@ export function spawnPickableCrystalDropAt(x, y, itemKey, stackCount = null) {
     ...visual,
     itemKey: resolvedItemKey
   });
+
+  // Preload high-fidelity icon if available
+  const slug = lootSlugForItemKey(resolvedItemKey);
+  if (slug) {
+    ensurePokemondbItemIconInCache(slug);
+  }
 }
 
 /**
@@ -204,7 +214,12 @@ export function spawnCrystalShards(rootOx, rootOy, itemKey, data) {
   const { rows, cols } = parseShape(objSet.shape);
   const path = TessellationEngine.getImagePath(objSet.file);
   const imgPath = path || null;
-  const atlasCols = path && path.includes('caves') ? 50 : 57;
+  let atlasCols = 57;
+  if (path && path.includes('caves')) {
+    atlasCols = 50;
+  } else if (path && path.includes('Berry Trees')) {
+    atlasCols = 66;
+  }
   const tid = base.ids[0];
   const cx = rootOx + cols * 0.5;
   const cy = rootOy + rows * 0.5;
