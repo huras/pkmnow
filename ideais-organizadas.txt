@@ -26,6 +26,9 @@ My ideias organizadas por tópico
   - Quests
   - Biomes and Flora (talvez procedural no talo)
   - Estruturas naturais (florestas, lagos, montanhas, mares)
+- Histórico no mapa-múndi das decisões do player:
+  - quando equipar/trocar ataques, registrar no mapa a posição onde isso aconteceu;
+  - usar isso como "rastro mental" para entender o que o player estava pensando ao atravessar cada região.
 - Biome Inspiration:
   - https://www.deviantart.com/yuysusl/gallery
   - https://www.deviantart.com/chromecr/gallery
@@ -297,3 +300,12 @@ My ideias organizadas por tópico
 - Construções podem evoluir para versões melhores.
 - Construções evoluídas podem extrair recursos automaticamente (items/materiais) para o player.
 - Parte das construções pode executar processos para o player (ex.: refino, transformação, produção, crafting assistido).
+
+
+19) Estudo de aventuras dos players (save sharing)
+--------------------------------------------------
+- Feature para players enviarem seus arquivos de save/adventure para você estudar.
+- Objetivo: entender decisões reais de exploração, combate, build e progressão.
+- Fluxo ideal: upload voluntário + consentimento explícito + confirmação antes de enviar.
+- Privacidade: remover/anonimizar dados sensíveis antes do compartilhamento.
+- Recompensa opcional para incentivar envio (badge, cosmético, menção, etc.).
