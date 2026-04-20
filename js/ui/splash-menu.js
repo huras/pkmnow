@@ -11,6 +11,7 @@ import { resetThrownMapDetailEntities } from '../main/thrown-map-detail-entities
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { summonDebugWildPokemon } from '../wild-pokemon/wild-spawn-window.js';
+import { advanceWildPokemonAnim, DIRECTION_ROW_MAP, getFacingFromAngle } from '../wild-pokemon/wild-motion-ai.js';
 
 const canvas = document.getElementById('background-canvas');
 const splashContainer = document.getElementById('splash-container');
@@ -68,8 +69,27 @@ function cycleBiome() {
   let targetX = currentData.width * MACRO_TILE_STRIDE / 2;
   let targetY = currentData.height * MACRO_TILE_STRIDE / 2;
   
-  const hasCities = currentData.graph.nodes.length > 0;
-  if (hasCities) {
+  // Find a nice route (inter-city path) instead of just a city
+  let selectedPath = null;
+  let pathIndex = 0;
+  let pathDirection = 1;
+  
+  const hasPaths = currentData.paths && currentData.paths.length > 0;
+  if (hasPaths) {
+    // Prefer longer paths for better visual movement
+    const longPaths = currentData.paths.filter(p => p.length > 12);
+    selectedPath = longPaths.length > 0 
+      ? longPaths[Math.floor(Math.random() * longPaths.length)]
+      : currentData.paths[Math.floor(Math.random() * currentData.paths.length)];
+    
+    // Start at a random point in the path
+    pathIndex = Math.floor(Math.random() * selectedPath.length);
+    pathDirection = Math.random() > 0.5 ? 1 : -1;
+    
+    const pt = selectedPath[pathIndex];
+    targetX = pt.x * MACRO_TILE_STRIDE;
+    targetY = pt.y * MACRO_TILE_STRIDE;
+  } else if (currentData.graph.nodes.length > 0) {
     const node = currentData.graph.nodes[Math.floor(Math.random() * currentData.graph.nodes.length)];
     targetX = node.x * MACRO_TILE_STRIDE;
     targetY = node.y * MACRO_TILE_STRIDE;
@@ -98,10 +118,14 @@ function cycleBiome() {
     _walkPhase: 0,
     _wanderAngle: Math.random() * Math.PI * 2,
     _wanderTimer: 0,
+    selectedPath,
+    pathIndex,
+    pathDirection
   };
 
-  // Spawn some random pokemon near roads
+  // Spawn some random pokemon near the selected route or roads
   spawnPokemonNearRoads(targetX, targetY);
+  // spawnPokemonInCities(); // REMOVED: User requested no inner-city entities
 
   // Update biome info UI
   const bio = Object.values(BIOMES).find(b => b.id === bId);
@@ -123,10 +147,14 @@ function cycleBiome() {
 }
 
 function spawnPokemonNearRoads(centerX, centerY) {
-  const radius = 15; // Search radius in macro tiles
-  const roadTiles = [];
+  if (!currentData) return;
+
   const w = currentData.width;
   const h = currentData.height;
+  
+  // Find all road tiles in a larger area around the player
+  const roadTiles = [];
+  const radius = 25; // Larger radius to populate the route ahead/behind
   const mx = Math.floor(centerX / MACRO_TILE_STRIDE);
   const my = Math.floor(centerY / MACRO_TILE_STRIDE);
 
@@ -142,21 +170,28 @@ function spawnPokemonNearRoads(centerX, centerY) {
     }
   }
 
-  const numToSpawn = 6 + Math.floor(Math.random() * 6);
+  // Spawn a decent amount of pokemon along the roads
+  const numToSpawn = 15 + Math.floor(Math.random() * 10);
   for (let i = 0; i < numToSpawn; i++) {
     let spawnX, spawnY;
     if (roadTiles.length > 0) {
       const road = roadTiles[Math.floor(Math.random() * roadTiles.length)];
-      // Offset slightly from road center to be "alongside"
-      spawnX = road.x * MACRO_TILE_STRIDE + (Math.random() * 2 - 1) * 2;
-      spawnY = road.y * MACRO_TILE_STRIDE + (Math.random() * 2 - 1) * 2;
+      // Offset slightly to be "walking along" or "standing by" the road
+      const offX = (Math.random() * 2 - 1) * 0.9;
+      const offY = (Math.random() * 2 - 1) * 0.9;
+      spawnX = road.x * MACRO_TILE_STRIDE + offX;
+      spawnY = road.y * MACRO_TILE_STRIDE + offY;
     } else {
-      spawnX = centerX + (Math.random() * 2 - 1) * 10;
-      spawnY = centerY + (Math.random() * 2 - 1) * 10;
+      // Fallback if no roads found (shouldn't happen on inter-city routes)
+      spawnX = centerX + (Math.random() * 2 - 1) * 8;
+      spawnY = centerY + (Math.random() * 2 - 1) * 8;
     }
 
-    // Pick random pokemon for this biome
-    const bId = currentData.biomes[Math.floor(spawnY / MACRO_TILE_STRIDE) * w + Math.floor(spawnX / MACRO_TILE_STRIDE)];
+    const bx = Math.floor(spawnX / MACRO_TILE_STRIDE);
+    const by = Math.floor(spawnY / MACRO_TILE_STRIDE);
+    if (bx < 0 || bx >= w || by < 0 || by >= h) continue;
+
+    const bId = currentData.biomes[by * w + bx];
     const pool = getEncounters(bId);
     if (pool && pool.length > 0) {
       const species = pool[Math.floor(Math.random() * pool.length)];
@@ -168,10 +203,55 @@ function spawnPokemonNearRoads(centerX, centerY) {
   }
 }
 
+function spawnPokemonInCities() {
+  // NO OP: User requested no inner-city entities in the splash background
+  return;
+}
+
 function updateFakePlayer(dt) {
   if (!window.fakePlayer) return;
   const p = window.fakePlayer;
   
+  // Use path following if a path was selected (inter-city routes)
+  if (p.selectedPath && p.selectedPath.length > 0) {
+    const targetPt = p.selectedPath[p.pathIndex];
+    const tx = targetPt.x * MACRO_TILE_STRIDE;
+    const ty = targetPt.y * MACRO_TILE_STRIDE;
+    
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist < 0.15) {
+      // Reached waypoint, advance to next
+      p.pathIndex += p.pathDirection;
+      
+      // Ping-pong at ends
+      if (p.pathIndex < 0 || p.pathIndex >= p.selectedPath.length) {
+        p.pathDirection *= -1;
+        p.pathIndex += p.pathDirection * 2;
+        p.pathIndex = Math.max(0, Math.min(p.selectedPath.length - 1, p.pathIndex));
+      }
+    } else {
+      const walkSpeed = 1.8;
+      const vx = (dx / dist) * walkSpeed;
+      const vy = (dy / dist) * walkSpeed;
+      
+      p.x += vx * dt;
+      p.y += vy * dt;
+      p.visualX = p.x;
+      p.visualY = p.y;
+      
+      p.facing = getFacingFromAngle(Math.atan2(vy, vx));
+      p.animMoving = true;
+      p._walkPhase += dt * 60;
+    }
+    
+    advanceWildPokemonAnim(p, dt);
+    return;
+  }
+
+  // Fallback: simple random wander (legacy behavior)
   p._wanderTimer -= dt;
   if (p._wanderTimer <= 0) {
     p._wanderTimer = 2 + Math.random() * 3;
@@ -184,19 +264,11 @@ function updateFakePlayer(dt) {
     const vx = Math.cos(p._wanderAngle) * speed;
     const vy = Math.sin(p._wanderAngle) * speed;
     
-    // Simple collision check or just let it walk
-    const nx = p.x + vx * dt;
-    const ny = p.y + vy * dt;
-    
-    // Check walkability if possible, else just move
-    p.x = nx;
-    p.y = ny;
-    
-    // Update visual position for smooth rendering
+    p.x += vx * dt;
+    p.y += vy * dt;
     p.visualX = p.x;
     p.visualY = p.y;
 
-    // Update facing
     const deg = (p._wanderAngle * 180) / Math.PI;
     const normalized = (deg + 360 + 22.5) % 360;
     const index = Math.floor(normalized / 45);
@@ -204,8 +276,10 @@ function updateFakePlayer(dt) {
     p.facing = dirs[index];
     
     p._walkPhase += dt * 60;
+    advanceWildPokemonAnim(p, dt);
   } else {
-    p._walkPhase = 0;
+    p.animFrame = 0;
+    advanceWildPokemonAnim(p, dt);
   }
 }
 

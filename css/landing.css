@@ -92,6 +92,18 @@ body {
   background: #1a2030;
 }
 
+.landing-btn--success {
+  background: #10b981;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.landing-btn--success:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  background: #059669;
+}
+
 .landing-note {
   font-size: 0.82rem;
   color: var(--landing-muted);
