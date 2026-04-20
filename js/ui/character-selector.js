@@ -47,6 +47,7 @@ function skillIconFileForMoveId(moveId) {
 }
 const LAYOUT_STORAGE_KEY = 'pkmn_character_selector_layout';
 const IMMERSIVE_CHROME_STORAGE_KEY = 'pkmn_play_immersive_chrome';
+const PLAY_ITEM_HUD_COLLAPSED_STORAGE_KEY = 'pkmn_play_item_hud_collapsed';
 
 function moveAbbrevFromLabel(label) {
   const parts = String(label || '')
@@ -129,6 +130,7 @@ export class CharacterSelector {
     const immStored = localStorage.getItem(IMMERSIVE_CHROME_STORAGE_KEY);
     this.playImmersiveChrome =
       immStored === '1' ? true : immStored === '0' ? false : !!opts.defaultPlayImmersiveChrome;
+    this.playItemHudCollapsed = localStorage.getItem(PLAY_ITEM_HUD_COLLAPSED_STORAGE_KEY) === '1';
 
     /** @type {Map<string, string> | null} */
     this._lootIconPathMap = null;
@@ -162,6 +164,9 @@ export class CharacterSelector {
       this._playItemHudInventoryDragActive = false;
       this._syncPlayItemHudOpacity();
     };
+    this._onTogglePlayItemHud = () => {
+      this.setPlayItemHudCollapsed(!this.playItemHudCollapsed);
+    };
 
     void getPokemondbItemIconPathMap().then((m) => {
       this._lootIconPathMap = m;
@@ -179,6 +184,24 @@ export class CharacterSelector {
     }
 
     this.init();
+  }
+
+  setPlayItemHudCollapsed(collapsed) {
+    this.playItemHudCollapsed = !!collapsed;
+    localStorage.setItem(PLAY_ITEM_HUD_COLLAPSED_STORAGE_KEY, this.playItemHudCollapsed ? '1' : '0');
+    const itemHud = this.container?.querySelector('#play-item-hud');
+    const toggleBtn = this.container?.querySelector('#play-item-hud-toggle');
+    if (itemHud instanceof HTMLElement) {
+      itemHud.classList.toggle('play-item-hud--collapsed', this.playItemHudCollapsed);
+    }
+    if (toggleBtn instanceof HTMLButtonElement) {
+      toggleBtn.setAttribute('aria-pressed', this.playItemHudCollapsed ? 'true' : 'false');
+      toggleBtn.textContent = this.playItemHudCollapsed ? 'A Expand' : 'A Min';
+      toggleBtn.title = this.playItemHudCollapsed
+        ? 'Expand item inventory (Gamepad A)'
+        : 'Minimize item inventory (Gamepad A)';
+      toggleBtn.setAttribute('aria-label', toggleBtn.title);
+    }
   }
 
   init() {
@@ -530,7 +553,17 @@ export class CharacterSelector {
         </div>
 
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
-          <div class="play-item-hud__title">Items</div>
+          <div class="play-item-hud__header">
+            <div class="play-item-hud__title">Items</div>
+            <button
+              type="button"
+              class="play-item-hud__toggle"
+              id="play-item-hud-toggle"
+              aria-pressed="false"
+              aria-label="Minimize item inventory (Gamepad A)"
+              title="Minimize item inventory (Gamepad A)"
+            >A Min</button>
+          </div>
           <div class="play-item-hud__grid" id="play-item-grid">
             <div
               class="play-item-hud__row play-item-hud__row--draggable"
@@ -625,9 +658,18 @@ export class CharacterSelector {
     window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
     window.addEventListener('play-item-hud-pickup', this._onPlayItemHudPickup);
     document.addEventListener('dragend', this._onDocInventoryDragEnd);
+    window.addEventListener('play-toggle-item-hud', this._onTogglePlayItemHud);
+
+    const itemHudToggleBtn = this.container?.querySelector('#play-item-hud-toggle');
+    if (itemHudToggleBtn instanceof HTMLButtonElement) {
+      itemHudToggleBtn.addEventListener('click', () => {
+        this.setPlayItemHudCollapsed(!this.playItemHudCollapsed);
+      });
+    }
 
     const itemHud = this.container?.querySelector('#play-item-hud');
     if (itemHud) {
+      this.setPlayItemHudCollapsed(this.playItemHudCollapsed);
       itemHud.addEventListener('pointerenter', () => {
         this._playItemHudPointerInside = true;
         this._syncPlayItemHudOpacity();

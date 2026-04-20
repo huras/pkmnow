@@ -10,7 +10,7 @@ const FAR_CRY_GAP_AFTER_1ST_SEC = 7;
 /** After 2nd successful cry, wait this long before the 3rd attempt. */
 const FAR_CRY_GAP_AFTER_2ND_SEC = 10;
 /** From 4th cry onward: 15s, 30s, 15s, 30s, … (4th uses 15s). */
-const FAR_CRY_ALT_SHORT_SEC = 8;
+const FAR_CRY_ALT_SHORT_SEC = 5;
 const FAR_CRY_ALT_LONG_SEC = 19;
 
 const FAR_CRY_WAVE_MAX_AGE_SEC = 2.2;
@@ -27,8 +27,8 @@ const FAR_CRY_CANDIDATE_POOL = 24;
  * `newRevealBaseChanceWhenMarksOnMap * perRevealedQuestionMarkMult ** (count of revealed ? on map)`.
  */
 export const farCryRevealTuning = {
-  newRevealBaseChanceWhenMarksOnMap: 0.75,
-  perRevealedQuestionMarkMult: 0.5
+  newRevealBaseChanceWhenMarksOnMap: 0.95,
+  perRevealedQuestionMarkMult: 0.75
 };
 
 /** @type {Array<{ x: number, y: number, age: number, maxAge: number }>} */

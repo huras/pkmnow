@@ -125,6 +125,7 @@ import {
 } from './render/render-debug-world.js';
 import { drawFarCryScreenWaves } from './render/render-far-cry.js';
 import { PluginRegistry } from './core/plugin-registry.js';
+import { getPlayVisionFogState, drawPlayVisionFogOverlay } from './main/play-vision-fog.js';
 
 import './render/render-debug-hotkeys.js';
 
@@ -202,6 +203,16 @@ const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
 
 /** Scratch for canopy read-through: multiply on world ctx tints the whole bbox over trees. */
 let _playerCanopySilScratch = /** @type {HTMLCanvasElement | null} */ (null);
+let _motionStutterHistoryScratch = /** @type {HTMLCanvasElement | null} */ (null);
+let _motionStutterPrevCameraPx = { x: 0, y: 0, valid: false };
+
+const MOTION_STUTTER_MASK_TUNING = {
+  enabled: true,
+  speedStart: 8.5,
+  speedFull: 22,
+  alphaMax: 0.18,
+  maxSamples: 3
+};
 
 /**
  * @param {number} iw
@@ -219,6 +230,80 @@ function ensurePlayerCanopySilScratch(iw, ih) {
     _playerCanopySilScratch.height = h;
   }
   return _playerCanopySilScratch;
+}
+
+/**
+ * @param {number} iw
+ * @param {number} ih
+ * @returns {HTMLCanvasElement}
+ */
+function ensureMotionStutterHistoryScratch(iw, ih) {
+  const w = Math.max(1, Math.ceil(iw));
+  const h = Math.max(1, Math.ceil(ih));
+  if (!_motionStutterHistoryScratch) {
+    _motionStutterHistoryScratch = document.createElement('canvas');
+  }
+  if (_motionStutterHistoryScratch.width !== w || _motionStutterHistoryScratch.height !== h) {
+    _motionStutterHistoryScratch.width = w;
+    _motionStutterHistoryScratch.height = h;
+    _motionStutterPrevCameraPx.valid = false;
+  }
+  return _motionStutterHistoryScratch;
+}
+
+function resetMotionStutterHistory() {
+  _motionStutterPrevCameraPx.valid = false;
+}
+
+/**
+ * Directional temporal blend that masks hitch perception during fast movement.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {import('./player.js').player | null | undefined} player
+ * @param {{ x: number, y: number } | null} camNoShakePx
+ */
+function applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx) {
+  if (!MOTION_STUTTER_MASK_TUNING.enabled || !camNoShakePx) {
+    resetMotionStutterHistory();
+    return;
+  }
+  const history = ensureMotionStutterHistoryScratch(cw, ch);
+  const hctx = history.getContext('2d');
+  if (!hctx) return;
+
+  const speed = Math.hypot(Number(player?.vx) || 0, Number(player?.vy) || 0);
+  const speedSpan = Math.max(0.001, MOTION_STUTTER_MASK_TUNING.speedFull - MOTION_STUTTER_MASK_TUNING.speedStart);
+  const speed01 = Math.max(
+    0,
+    Math.min(1, (speed - MOTION_STUTTER_MASK_TUNING.speedStart) / speedSpan)
+  );
+
+  if (_motionStutterPrevCameraPx.valid && speed01 > 0.001) {
+    const dCamX = camNoShakePx.x - _motionStutterPrevCameraPx.x;
+    const dCamY = camNoShakePx.y - _motionStutterPrevCameraPx.y;
+    const camStep = Math.hypot(dCamX, dCamY);
+    if (camStep > 0.01) {
+      const taps = 1 + Math.floor(MOTION_STUTTER_MASK_TUNING.maxSamples * speed01);
+      const alphaBase = MOTION_STUTTER_MASK_TUNING.alphaMax * speed01;
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.imageSmoothingEnabled = true;
+      for (let i = 1; i <= taps; i++) {
+        const t = i / (taps + 1);
+        ctx.globalAlpha = alphaBase * (1 - t) * 0.92;
+        ctx.drawImage(history, dCamX * t, dCamY * t, cw, ch);
+      }
+      ctx.restore();
+    }
+  }
+
+  hctx.setTransform(1, 0, 0, 1, 0, 0);
+  hctx.clearRect(0, 0, history.width, history.height);
+  hctx.drawImage(ctx.canvas, 0, 0);
+  _motionStutterPrevCameraPx.x = camNoShakePx.x;
+  _motionStutterPrevCameraPx.y = camNoShakePx.y;
+  _motionStutterPrevCameraPx.valid = true;
 }
 
 /** Union of non-transparent canopy texels (player-local px) for Pokémon ∩ tree read-through. */
@@ -665,6 +750,47 @@ export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
 }
 
+function renderItemVisibleInPlayerVision(item, vision) {
+  if (!vision?.enabled) return true;
+  if (!item || typeof item !== 'object') return true;
+  if (item.type === 'player') return true;
+
+  let mx = null;
+  let my = null;
+  if (Number.isFinite(item.originX) && Number.isFinite(item.originY)) {
+    if (item.type === 'tree') {
+      mx = Math.floor(item.originX);
+      my = Math.floor(item.originY);
+    } else if (item.type === 'scatter') {
+      mx = Math.floor(Number(item.originX) + Math.max(0, ((Number(item.cols) || 1) - 1) * 0.5));
+      my = Math.floor(Number(item.y) || Number(item.originY));
+    } else if (item.type === 'building') {
+      const cols = Number(item.bData?.cols) || 1;
+      const rows = Number(item.bData?.rows) || 1;
+      mx = Math.floor(Number(item.originX) + (cols - 1) * 0.5);
+      my = Math.floor(Number(item.originY) + rows - 1);
+    } else {
+      mx = Math.floor(item.originX);
+      my = Math.floor(item.originY);
+    }
+  } else if (Number.isFinite(item.x) && Number.isFinite(item.y)) {
+    mx = Math.floor(item.x);
+    my = Math.floor(item.y);
+  } else if (Number.isFinite(item.cx) && Number.isFinite(item.cy) && Number.isFinite(item.dw) && Number.isFinite(item.dh)) {
+    // Fallback from pixel-space center/pivot back to micro tile estimate is not reliable here.
+    return true;
+  }
+  if (!Number.isFinite(mx) || !Number.isFinite(my)) return true;
+  return vision.isVisible(mx, my);
+}
+
+function renderItemSortX(item) {
+  if (Number.isFinite(item?.originX)) return Number(item.originX);
+  if (Number.isFinite(item?.x)) return Number(item.x);
+  if (Number.isFinite(item?.cx)) return Number(item.cx);
+  return 0;
+}
+
 
 
 export function render(canvas, data, options = {}) {
@@ -737,6 +863,7 @@ export function render(canvas, data, options = {}) {
 
   let tileW, tileH;
   let startX = 0, startY = 0, endX = width, endY = height;
+  let camNoShakePx = null;
 
   if (appMode === 'play') {
     tileW = PLAY_BAKE_TILE_PX;
@@ -867,6 +994,11 @@ export function render(canvas, data, options = {}) {
     endY = Math.min(height * MACRO_TILE_STRIDE, playCam.endYTiles);
     addRenderFramePhaseMs('rndCamMs', performance.now() - tCam0);
 
+    const tVision0 = performance.now();
+    const visionSettings = options.settings?.visionFog || {};
+    var playVision = getPlayVisionFogState(data, player, visionSettings);
+    addRenderFramePhaseMs('rndVisionMs', performance.now() - tVision0);
+
     // --- CHUNK BAKING & RENDERING ---
     const tChunkQ0 = performance.now();
     const maxChunkXi = Math.floor((width * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
@@ -926,6 +1058,7 @@ export function render(canvas, data, options = {}) {
     const tChunkDraw0 = performance.now();
     const currentTransX = playCam.currentTransX + earthquakeShakePx.x;
     const currentTransY = playCam.currentTransY + earthquakeShakePx.y;
+    camNoShakePx = { x: playCam.currentTransX, y: playCam.currentTransY };
     const chunkDrawScale = playCam.viewScale;
     const prevSmoothing = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = chunkDrawScale < 0.999;
@@ -1067,6 +1200,7 @@ export function render(canvas, data, options = {}) {
     drawAnimatedGrassPass(ctx, { 
       lodDetail, forEachAbovePlayerTile, playerTileMx: overlayMx, playerTileMy: overlayMy, 
       playLodGrassSpriteOverlay, isGrassDeferredAroundPlayer, isGrassDeferredEwNeighbor, skipPlayerGrassOverlayDuringFlight,
+      isTileVisible: (mx, my) => !playVision?.enabled || playVision.isVisible(mx, my),
       drawGrass5aForCell: (mx, my, tile, tw, th, tx, ty, mode) => {
         drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
       }
@@ -1078,13 +1212,26 @@ export function render(canvas, data, options = {}) {
     const renderItems = collectRenderItems({ 
       data, player, startX, startY, endX, endY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
-      imageCache, tileW, tileH, isPlayerWalkingAnim, latchGround, snapPx
+      imageCache, tileW, tileH, isPlayerWalkingAnim, latchGround, snapPx, playVision
     });
+    const visibleRenderItems =
+      playVision?.enabled
+        ? renderItems.filter((it) => renderItemVisibleInPlayerVision(it, playVision))
+        : renderItems;
     
     // Sort and track effects
-    renderItems.sort((a, b) => (a.sortY ?? a.y) - (b.sortY ?? b.y));
-    trackJumpStartRings(renderItems);
-    trackRunningDust(renderItems, time);
+    visibleRenderItems.sort((a, b) => {
+      const ay = Number(a.sortY ?? a.y ?? 0);
+      const by = Number(b.sortY ?? b.y ?? 0);
+      const dy = ay - by;
+      if (Math.abs(dy) > 1e-6) return dy;
+      // Stable diagonal ordering for same-row entities (notably formal trees).
+      const ax = renderItemSortX(a);
+      const bx = renderItemSortX(b);
+      return ax - bx;
+    });
+    trackJumpStartRings(visibleRenderItems);
+    trackRunningDust(visibleRenderItems, time);
     addRenderFramePhaseMs('rndCollectMs', performance.now() - tCollect0);
 
     const tEnt0 = performance.now();
@@ -1122,7 +1269,7 @@ export function render(canvas, data, options = {}) {
         }
       }
     };
-    for (const it of renderItems) {
+    for (const it of visibleRenderItems) {
       if (it.type === 'tree') {
         markFootprintRect(it.originX, it.originY, 2, 1);
         // Strip is drawn after all sortables; canopy tiles north of the trunk are not in the footprint set.
@@ -1189,6 +1336,73 @@ export function render(canvas, data, options = {}) {
     };
 
     const batchedEffects = [];
+
+    // Pre-compute canopy shadow for the player (dark silhouette where player ∩ canopy).
+    // Stored here so we can draw it BEFORE the player sprite in the entity loop,
+    // giving a two-layer result: shadow behind, pokemon on top.
+    let _playerCanopyShadow = null;
+    if (lodDetail < 2 && !skipPlayerGrassOverlayDuringFlight) {
+      const pItem = visibleRenderItems.find((it) => it.type === 'player');
+      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction) {
+        let underCanopy = false;
+        const probes = [[0, 0], [0, -1], [0, -2], [-1, -1], [1, -1], [-1, 0], [1, 0]];
+        for (const [dx, dy] of probes) {
+          if (isGrassStripOverlayBlocked(overlayMx + dx, overlayMy + dy)) { underCanopy = true; break; }
+        }
+        if (underCanopy) {
+          const alpha = Math.max(0, Math.min(1, pItem.drawAlpha ?? 1));
+          const bury = pItem.digBuryVisual ?? 0;
+          const tackleOx = pItem.tackleOffPx || 0;
+          const tackleOy = pItem.tackleOffPy || 0;
+          const pxL = snapPx(pItem.cx - pItem.pivotX + tackleOx);
+          const pxT0 = snapPx(pItem.cy - pItem.pivotY + tackleOy);
+          const pxW = snapPx(pItem.dw);
+          const pxH = snapPx(pItem.dh);
+          const bufW = Math.max(1, Math.ceil(pxW));
+          const bufH = Math.max(1, Math.ceil(pxH));
+          const mask = ensurePlayerCanopyMaskScratch(bufW, bufH);
+          const comp = ensurePlayerCanopySilScratch(bufW, bufH);
+          const mctx = mask.getContext('2d');
+          const cctx = comp.getContext('2d');
+          if (mctx && cctx) {
+            mctx.setTransform(1, 0, 0, 1, 0, 0);
+            mctx.clearRect(0, 0, bufW, bufH);
+            mctx.imageSmoothingEnabled = false;
+            let drewMask = false;
+            for (const it of visibleRenderItems) {
+              if (it.type === 'tree') {
+                if (appendFormalTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, natureImg, canopyAnimTime, time)) drewMask = true;
+              } else if (it.type === 'scatter') {
+                if (appendScatterTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, imageCache, canopyAnimTime, time)) drewMask = true;
+              }
+            }
+            if (drewMask) {
+              cctx.setTransform(1, 0, 0, 1, 0, 0);
+              cctx.clearRect(0, 0, bufW, bufH);
+              cctx.imageSmoothingEnabled = false;
+              cctx.globalAlpha = 1;
+              cctx.globalCompositeOperation = 'source-over';
+              cctx.save();
+              if (bury > 0.004) {
+                const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
+                const bandTop = Math.max(0, pxH - visH);
+                cctx.beginPath(); cctx.rect(0, bandTop, bufW, visH); cctx.clip();
+              }
+              cctx.drawImage(pItem.sheet, pItem.sx, pItem.sy, pItem.sw, pItem.sh, 0, 0, pxW, pxH);
+              cctx.restore();
+              cctx.globalCompositeOperation = 'destination-in';
+              cctx.drawImage(mask, 0, 0);
+              cctx.globalCompositeOperation = 'source-in';
+              cctx.fillStyle = 'rgb(26, 28, 36)';
+              cctx.fillRect(-2, -2, bufW + 4, bufH + 4);
+              cctx.globalCompositeOperation = 'source-over';
+              _playerCanopyShadow = { canvas: comp, bufW, bufH, pxL, pxT0, pxW, pxH, alpha };
+            }
+          }
+        }
+      }
+    }
+
     const showLeaderRoamTargetOverlay = isWildLeaderRoamTargetVisible();
     const hoveredWildGroupEntityKey = getHoveredWildGroupEntityKey();
     const getHoveredWildGroupPrompt = (item) => {
@@ -1202,7 +1416,7 @@ export function render(canvas, data, options = {}) {
         rows: 1
       };
     };
-    for (const item of renderItems) {
+    for (const item of visibleRenderItems) {
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
         const alpha = item.type === 'wild' ? item.spawnPhase : (item.drawAlpha ?? 1);
@@ -1237,6 +1451,16 @@ export function render(canvas, data, options = {}) {
         const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset + tackleOy);
         const pxW = snapPx(item.dw);
         const pxH = snapPx(item.dh);
+
+        // Draw canopy shadow BEFORE the player sprite so it sits behind.
+        // Two images: (1) the shadow, (2) the pokemon — shadow is behind.
+        if (item.type === 'player' && _playerCanopyShadow) {
+          const s = _playerCanopyShadow;
+          ctx.save();
+          ctx.globalAlpha = s.alpha * 0.56;
+          ctx.drawImage(s.canvas, 0, 0, s.bufW, s.bufH, s.pxL, s.pxT0, s.pxW, s.pxH);
+          ctx.restore();
+        }
         
         if (item.type === 'wild' && item.hitFlashTimer > 0) ctx.filter = 'brightness(5) contrast(2) sepia(1) hue-rotate(-50deg)';
         if (bury > 0.004) {
@@ -1459,93 +1683,6 @@ export function render(canvas, data, options = {}) {
       }
     }
 
-    // Player read-through under canopy strip: dark tint only on Pokémon ∩ non-transparent canopy
-    // (mask = copas in player-local px with same bump/shake as drawTree/drawScatter; comp = player then destination-in mask then source-in fill).
-    if (lodDetail < 2 && !skipPlayerGrassOverlayDuringFlight) {
-      const pItem = renderItems.find((it) => it.type === 'player');
-      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction) {
-        let underCanopy = false;
-        const probes = [
-          [0, 0],
-          [0, -1],
-          [0, -2],
-          [-1, -1],
-          [1, -1],
-          [-1, 0],
-          [1, 0]
-        ];
-        for (const [dx, dy] of probes) {
-          const mx = overlayMx + dx;
-          const my = overlayMy + dy;
-          if (isGrassStripOverlayBlocked(mx, my)) {
-            underCanopy = true;
-            break;
-          }
-        }
-        if (underCanopy) {
-          const alpha = Math.max(0, Math.min(1, pItem.drawAlpha ?? 1));
-          const bury = pItem.digBuryVisual ?? 0;
-          const tackleOx = pItem.tackleOffPx || 0;
-          const tackleOy = pItem.tackleOffPy || 0;
-          const pxL = snapPx(pItem.cx - pItem.pivotX + tackleOx);
-          const pxT0 = snapPx(pItem.cy - pItem.pivotY + tackleOy);
-          const pxW = snapPx(pItem.dw);
-          const pxH = snapPx(pItem.dh);
-          const bufW = Math.max(1, Math.ceil(pxW));
-          const bufH = Math.max(1, Math.ceil(pxH));
-          const mask = ensurePlayerCanopyMaskScratch(bufW, bufH);
-          const comp = ensurePlayerCanopySilScratch(bufW, bufH);
-          const mctx = mask.getContext('2d');
-          const cctx = comp.getContext('2d');
-          if (mctx && cctx) {
-            mctx.setTransform(1, 0, 0, 1, 0, 0);
-            mctx.clearRect(0, 0, bufW, bufH);
-            mctx.imageSmoothingEnabled = false;
-            let drewMask = false;
-            for (const it of renderItems) {
-              if (it.type === 'tree') {
-                if (appendFormalTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, natureImg, canopyAnimTime, time)) {
-                  drewMask = true;
-                }
-              } else if (it.type === 'scatter') {
-                if (appendScatterTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, imageCache, canopyAnimTime, time)) {
-                  drewMask = true;
-                }
-              }
-            }
-            if (drewMask) {
-              cctx.setTransform(1, 0, 0, 1, 0, 0);
-              cctx.clearRect(0, 0, bufW, bufH);
-              cctx.imageSmoothingEnabled = false;
-              cctx.globalAlpha = 1;
-              cctx.globalCompositeOperation = 'source-over';
-              cctx.save();
-              if (bury > 0.004) {
-                const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
-                const bandTop = Math.max(0, pxH - visH);
-                cctx.beginPath();
-                cctx.rect(0, bandTop, bufW, visH);
-                cctx.clip();
-              }
-              cctx.drawImage(pItem.sheet, pItem.sx, pItem.sy, pItem.sw, pItem.sh, 0, 0, pxW, pxH);
-              cctx.restore();
-              cctx.globalCompositeOperation = 'destination-in';
-              cctx.drawImage(mask, 0, 0);
-              cctx.globalCompositeOperation = 'source-in';
-              cctx.fillStyle = 'rgb(26, 28, 36)';
-              cctx.fillRect(-2, -2, bufW + 4, bufH + 4);
-              cctx.globalCompositeOperation = 'source-over';
-
-              ctx.save();
-              ctx.globalAlpha = alpha * 0.56;
-              ctx.drawImage(comp, 0, 0, bufW, bufH, pxL, pxT0, pxW, pxH);
-              ctx.restore();
-            }
-          }
-        }
-      }
-    }
-
     const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
     const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
     const mergedWaterCannonBeam = getPlayerWaterCannonMergedBeamVisual();
@@ -1583,6 +1720,7 @@ export function render(canvas, data, options = {}) {
     if (strengthGrabPrompt && !drewSplitStrengthGrabOutline) {
       drawStrengthGrabTargetOutline(ctx, strengthGrabPrompt, tileW, tileH, snapPx, time);
     }
+
     addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
     // PASS 5a-deferred (grass over spirits)
@@ -1658,7 +1796,7 @@ export function render(canvas, data, options = {}) {
     const entityShadowSprites = [];
     const collectEntitySprites = cloudPresenceForShadowShift > 0.001;
     if (rainI > 0.02 || collectEntitySprites) {
-      for (const it of renderItems) {
+      for (const it of visibleRenderItems) {
         if (it.type !== 'player' && it.type !== 'wild') continue;
         const cx = it.cx;
         const cy = it.cy;
@@ -1759,6 +1897,8 @@ export function render(canvas, data, options = {}) {
       weatherVolumetricMode: options.settings?.weatherVolumetricMode ?? 'clear'
     });
 
+    drawPlayVisionFogOverlay(ctx, playVision, startX, startY, endX, endY, tileW, tileH);
+
     // --- Wet Ground Sheen Pass ---
     const wetness = getGroundWetness01();
     if (wetness > 0.01) {
@@ -1777,6 +1917,7 @@ export function render(canvas, data, options = {}) {
     }
     if (options.settings?.appMode === 'play') {
       drawFarCryScreenWaves(ctx, getActiveFarCryScreenWaves(), { w: cw, h: ch });
+      applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx);
     }
 
     const tMm0 = performance.now();
@@ -1785,6 +1926,9 @@ export function render(canvas, data, options = {}) {
       renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
+  }
+  if (appMode !== 'play') {
+    resetMotionStutterHistory();
   }
 
   if (options.hover) {

@@ -49,6 +49,263 @@ export const playFpsSampleTimes = [];
 
 let lastTimestamp = 0;
 let animFrameId = null;
+let lastBiomeBgmSyncAtMs = 0;
+let lastWeatherAmbientSyncAtMs = 0;
+let lastEarthquakeAmbientSyncAtMs = 0;
+let lastFireLoopSyncAtMs = 0;
+
+const PLAY_AUDIO_SYNC_BASE_CADENCE_MS = {
+  biomeBgm: 120,
+  weatherAmbient: 90,
+  earthquakeAmbient: 70,
+  fireLoop: 90
+};
+let playAudioSyncCadenceMs = { ...PLAY_AUDIO_SYNC_BASE_CADENCE_MS };
+
+const PLAY_SUBSYSTEM_BASE_CADENCE_SEC = {
+  wildWindow: 0,
+  wildUpdate: 0,
+  breakableRegen: 0,
+  berryTrees: 0,
+  thrownDetails: 0,
+  hud: 0,
+  farCry: 0,
+  autosave: 0
+};
+let playSubsystemCadenceSec = { ...PLAY_SUBSYSTEM_BASE_CADENCE_SEC };
+
+const PLAY_ADAPTIVE_DEFAULT = {
+  enabled: true,
+  relaxAfterMs: 4200,
+  thresholds: {
+    updateModerateMs: 6.8,
+    updateHeavyMs: 8.0,
+    updateVeryHeavyMs: 10.5,
+    renderModerateMs: 7.2,
+    renderHeavyMs: 9.0,
+    wildModerateMs: 2.5,
+    wildHeavyMs: 4.0,
+    hudHeavyMs: 1.2,
+    bgmHeavyMs: 0.8
+  },
+  moderate: {
+    subsystemCadenceSec: {
+      wildWindow: 0.05,
+      wildUpdate: 0.05,
+      breakableRegen: 0.08,
+      berryTrees: 0.12,
+      thrownDetails: 0.05,
+      hud: 0.1,
+      farCry: 0.1,
+      autosave: 0.5
+    },
+    audioCadenceMs: {
+      biomeBgm: 170,
+      weatherAmbient: 140,
+      earthquakeAmbient: 120,
+      fireLoop: 140
+    }
+  },
+  heavy: {
+    subsystemCadenceSec: {
+      wildWindow: 0.1,
+      wildUpdate: 0.1,
+      breakableRegen: 0.16,
+      berryTrees: 0.2,
+      thrownDetails: 0.1,
+      hud: 0.16,
+      farCry: 0.2,
+      autosave: 1.0
+    },
+    audioCadenceMs: {
+      biomeBgm: 260,
+      weatherAmbient: 220,
+      earthquakeAmbient: 180,
+      fireLoop: 220
+    }
+  }
+};
+const playAdaptiveConfig = {
+  enabled: PLAY_ADAPTIVE_DEFAULT.enabled,
+  relaxAfterMs: PLAY_ADAPTIVE_DEFAULT.relaxAfterMs,
+  thresholds: { ...PLAY_ADAPTIVE_DEFAULT.thresholds },
+  moderate: {
+    subsystemCadenceSec: { ...PLAY_ADAPTIVE_DEFAULT.moderate.subsystemCadenceSec },
+    audioCadenceMs: { ...PLAY_ADAPTIVE_DEFAULT.moderate.audioCadenceMs }
+  },
+  heavy: {
+    subsystemCadenceSec: { ...PLAY_ADAPTIVE_DEFAULT.heavy.subsystemCadenceSec },
+    audioCadenceMs: { ...PLAY_ADAPTIVE_DEFAULT.heavy.audioCadenceMs }
+  }
+};
+
+let playAdaptivePressure = 0;
+let playAdaptivePressureChangedAtMs = 0;
+
+/**
+ * @param {ReturnType<typeof ingestPlayPerfSample>} perf
+ * @returns {0 | 1 | 2}
+ */
+function getPlayAdaptivePressureFromPerf(perf) {
+  let score = 0;
+  const thr = playAdaptiveConfig.thresholds;
+  if (perf.p95UpdateMsStable >= thr.updateVeryHeavyMs) score += 3;
+  else if (perf.p95UpdateMsStable >= thr.updateHeavyMs) score += 2;
+  else if (perf.p95UpdateMsStable >= thr.updateModerateMs) score += 1;
+
+  if (perf.p95RenderMsStable >= thr.renderHeavyMs) score += 2;
+  else if (perf.p95RenderMsStable >= thr.renderModerateMs) score += 1;
+
+  if (perf.p95UpdWildMsStable >= thr.wildHeavyMs) score += 2;
+  else if (perf.p95UpdWildMsStable >= thr.wildModerateMs) score += 1;
+
+  if (perf.p95UpdHudMsStable >= thr.hudHeavyMs) score += 1;
+  if (perf.p95UpdBgmMsStable >= thr.bgmHeavyMs) score += 1;
+
+  if (score >= 5) return 2;
+  if (score >= 2) return 1;
+  return 0;
+}
+
+/**
+ * @param {0 | 1 | 2} level
+ */
+function applyPlayAdaptivePressure(level) {
+  playAdaptivePressure = level;
+  if (level === 2) {
+    playSubsystemCadenceSec = { ...playAdaptiveConfig.heavy.subsystemCadenceSec };
+    playAudioSyncCadenceMs = { ...playAdaptiveConfig.heavy.audioCadenceMs };
+    return;
+  }
+  if (level === 1) {
+    playSubsystemCadenceSec = { ...playAdaptiveConfig.moderate.subsystemCadenceSec };
+    playAudioSyncCadenceMs = { ...playAdaptiveConfig.moderate.audioCadenceMs };
+    return;
+  }
+  playSubsystemCadenceSec = { ...PLAY_SUBSYSTEM_BASE_CADENCE_SEC };
+  playAudioSyncCadenceMs = { ...PLAY_AUDIO_SYNC_BASE_CADENCE_MS };
+}
+
+/**
+ * @param {ReturnType<typeof ingestPlayPerfSample>} perf
+ * @param {number} nowMs
+ */
+function updatePlayAdaptivePressureFromPerf(perf, nowMs) {
+  if (!playAdaptiveConfig.enabled) {
+    if (playAdaptivePressure !== 0) {
+      applyPlayAdaptivePressure(0);
+      playAdaptivePressureChangedAtMs = nowMs;
+    }
+    return;
+  }
+  const nextLevel = getPlayAdaptivePressureFromPerf(perf);
+  if (nextLevel === playAdaptivePressure) return;
+  if (nextLevel > playAdaptivePressure) {
+    applyPlayAdaptivePressure(nextLevel);
+    playAdaptivePressureChangedAtMs = nowMs;
+    return;
+  }
+  if (nowMs - playAdaptivePressureChangedAtMs < playAdaptiveConfig.relaxAfterMs) return;
+  applyPlayAdaptivePressure(nextLevel);
+  playAdaptivePressureChangedAtMs = nowMs;
+}
+
+function clonePlayAdaptiveConfigForUi() {
+  return {
+    enabled: playAdaptiveConfig.enabled,
+    relaxAfterMs: playAdaptiveConfig.relaxAfterMs,
+    thresholds: { ...playAdaptiveConfig.thresholds },
+    moderate: {
+      subsystemCadenceSec: { ...playAdaptiveConfig.moderate.subsystemCadenceSec },
+      audioCadenceMs: { ...playAdaptiveConfig.moderate.audioCadenceMs }
+    },
+    heavy: {
+      subsystemCadenceSec: { ...playAdaptiveConfig.heavy.subsystemCadenceSec },
+      audioCadenceMs: { ...playAdaptiveConfig.heavy.audioCadenceMs }
+    },
+    runtime: {
+      pressureLevel: playAdaptivePressure,
+      activeSubsystemCadenceSec: { ...playSubsystemCadenceSec },
+      activeAudioCadenceMs: { ...playAudioSyncCadenceMs }
+    }
+  };
+}
+
+/**
+ * Runtime debug/tuning snapshot for adaptive perf caps.
+ */
+export function getPlayAdaptivePerfConfig() {
+  return clonePlayAdaptiveConfigForUi();
+}
+
+/**
+ * Runtime debug/tuning patch for adaptive perf caps.
+ * @param {object} patch
+ * @returns {ReturnType<typeof getPlayAdaptivePerfConfig>}
+ */
+export function patchPlayAdaptivePerfConfig(patch = {}) {
+  if (!patch || typeof patch !== 'object') return clonePlayAdaptiveConfigForUi();
+
+  const maybeBool = (v, fallback) => (typeof v === 'boolean' ? v : fallback);
+  const maybeNumber = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const mergeNumberObject = (target, src) => {
+    if (!src || typeof src !== 'object') return;
+    for (const k of Object.keys(target)) {
+      target[k] = maybeNumber(src[k], target[k]);
+    }
+  };
+
+  playAdaptiveConfig.enabled = maybeBool(patch.enabled, playAdaptiveConfig.enabled);
+  playAdaptiveConfig.relaxAfterMs = Math.max(
+    500,
+    maybeNumber(patch.relaxAfterMs, playAdaptiveConfig.relaxAfterMs)
+  );
+
+  if (patch.thresholds && typeof patch.thresholds === 'object') {
+    mergeNumberObject(playAdaptiveConfig.thresholds, patch.thresholds);
+  }
+  if (patch.moderate && typeof patch.moderate === 'object') {
+    mergeNumberObject(playAdaptiveConfig.moderate.subsystemCadenceSec, patch.moderate.subsystemCadenceSec);
+    mergeNumberObject(playAdaptiveConfig.moderate.audioCadenceMs, patch.moderate.audioCadenceMs);
+  }
+  if (patch.heavy && typeof patch.heavy === 'object') {
+    mergeNumberObject(playAdaptiveConfig.heavy.subsystemCadenceSec, patch.heavy.subsystemCadenceSec);
+    mergeNumberObject(playAdaptiveConfig.heavy.audioCadenceMs, patch.heavy.audioCadenceMs);
+  }
+
+  if (playAdaptivePressure > 0) {
+    applyPlayAdaptivePressure(playAdaptivePressure);
+  } else {
+    applyPlayAdaptivePressure(0);
+  }
+  return clonePlayAdaptiveConfigForUi();
+}
+
+/**
+ * Restore adaptive perf caps to built-in defaults.
+ */
+export function resetPlayAdaptivePerfConfig() {
+  playAdaptiveConfig.enabled = PLAY_ADAPTIVE_DEFAULT.enabled;
+  playAdaptiveConfig.relaxAfterMs = PLAY_ADAPTIVE_DEFAULT.relaxAfterMs;
+  playAdaptiveConfig.thresholds = { ...PLAY_ADAPTIVE_DEFAULT.thresholds };
+  playAdaptiveConfig.moderate = {
+    subsystemCadenceSec: { ...PLAY_ADAPTIVE_DEFAULT.moderate.subsystemCadenceSec },
+    audioCadenceMs: { ...PLAY_ADAPTIVE_DEFAULT.moderate.audioCadenceMs }
+  };
+  playAdaptiveConfig.heavy = {
+    subsystemCadenceSec: { ...PLAY_ADAPTIVE_DEFAULT.heavy.subsystemCadenceSec },
+    audioCadenceMs: { ...PLAY_ADAPTIVE_DEFAULT.heavy.audioCadenceMs }
+  };
+  if (playAdaptivePressure > 0) {
+    applyPlayAdaptivePressure(playAdaptivePressure);
+  } else {
+    applyPlayAdaptivePressure(0);
+  }
+  return clonePlayAdaptiveConfigForUi();
+}
 
 export function keyToDir(key) {
   if (key === 'ArrowUp' || key === 'w' || key === 'W') return 'up';
@@ -101,6 +358,35 @@ export function createGameLoop(api) {
   let lastFpsHudWriteMs = 0;
   let lastFpsHudText = '';
   let lastFpsHudCompact = null;
+  let accWildWindowSec = 0;
+  let accWildUpdateSec = 0;
+  let accBreakableRegenSec = 0;
+  let accBerryTreesSec = 0;
+  let accThrownDetailsSec = 0;
+  let accHudSec = 0;
+  let accFarCrySec = 0;
+  let accAutosaveSec = 0;
+
+  function shouldRunCadenced(nowMs, lastRunAtMs, cadenceMs) {
+    return nowMs - lastRunAtMs >= cadenceMs;
+  }
+
+  /**
+   * @param {number} accumulatorSec
+   * @param {number} dtSec
+   * @param {number} cadenceSec
+   * @returns {{ nextAccumulatorSec: number, shouldRun: boolean, stepDtSec: number }}
+   */
+  function consumeCadence(accumulatorSec, dtSec, cadenceSec) {
+    if (!(cadenceSec > 0)) {
+      return { nextAccumulatorSec: 0, shouldRun: true, stepDtSec: dtSec };
+    }
+    const nextAccumulatorSec = accumulatorSec + dtSec;
+    if (nextAccumulatorSec < cadenceSec) {
+      return { nextAccumulatorSec, shouldRun: false, stepDtSec: 0 };
+    }
+    return { nextAccumulatorSec: 0, shouldRun: true, stepDtSec: nextAccumulatorSec };
+  }
 
   function gameLoop(timestamp) {
     const tLoopStart = performance.now();
@@ -185,8 +471,20 @@ export function createGameLoop(api) {
     if (getAppMode() === 'play') {
       updateCrystalShardParticles(simDt);
       updateCrystalDropsAndPickup(simDt, player);
-      updateBreakableDetailRegeneration(simDt, currentData);
-      updateBerryTrees(getGameTimeSec?.() ?? 0);
+      const breakableGate = consumeCadence(
+        accBreakableRegenSec,
+        simDt,
+        playSubsystemCadenceSec.breakableRegen
+      );
+      accBreakableRegenSec = breakableGate.nextAccumulatorSec;
+      if (breakableGate.shouldRun) {
+        updateBreakableDetailRegeneration(breakableGate.stepDtSec, currentData);
+      }
+      const berryGate = consumeCadence(accBerryTreesSec, simDt, playSubsystemCadenceSec.berryTrees);
+      accBerryTreesSec = berryGate.nextAccumulatorSec;
+      if (berryGate.shouldRun) {
+        updateBerryTrees(getGameTimeSec?.() ?? 0);
+      }
     }
 
     if (currentData && getAppMode() === 'play') {
@@ -194,10 +492,26 @@ export function createGameLoop(api) {
       const pvy = player.visualY ?? player.y;
       syncSpatialListenerFromPlayer(player);
       const tWildWindow0 = performance.now();
-      syncWildPokemonWindow(currentData, pvx, pvy);
+      const wildWindowGate = consumeCadence(
+        accWildWindowSec,
+        simDt,
+        playSubsystemCadenceSec.wildWindow
+      );
+      accWildWindowSec = wildWindowGate.nextAccumulatorSec;
+      if (wildWindowGate.shouldRun) {
+        syncWildPokemonWindow(currentData, pvx, pvy);
+      }
       updateBreakdown.updWildWindowMs = performance.now() - tWildWindow0;
       const tWild0 = performance.now();
-      updateWildPokemon(simDt, currentData, pvx, pvy);
+      const wildUpdateGate = consumeCadence(
+        accWildUpdateSec,
+        simDt,
+        playSubsystemCadenceSec.wildUpdate
+      );
+      accWildUpdateSec = wildUpdateGate.nextAccumulatorSec;
+      if (wildUpdateGate.shouldRun) {
+        updateWildPokemon(wildUpdateGate.stepDtSec, currentData, pvx, pvy);
+      }
       updateBreakdown.updWildMs = performance.now() - tWild0;
       updateBreakdown.updWildMiscMs = wildUpdatePerfLast.miscMs;
       updateBreakdown.updWildVerticalMs = wildUpdatePerfLast.verticalMs;
@@ -207,7 +521,15 @@ export function createGameLoop(api) {
       const tPointer0 = performance.now();
       updatePlayPointerCombat(simDt, player, currentData);
       updateStrengthCarryInteraction(simDt, player, currentData);
-      updateThrownMapDetailEntities(simDt, currentData);
+      const thrownGate = consumeCadence(
+        accThrownDetailsSec,
+        simDt,
+        playSubsystemCadenceSec.thrownDetails
+      );
+      accThrownDetailsSec = thrownGate.nextAccumulatorSec;
+      if (thrownGate.shouldRun) {
+        updateThrownMapDetailEntities(thrownGate.stepDtSec, currentData);
+      }
       updateBreakdown.updPointerMs = performance.now() - tPointer0;
       const tMoves0 = performance.now();
       updateMoves(simDt, getWildPokemonEntities(), currentData, player);
@@ -234,17 +556,66 @@ export function createGameLoop(api) {
         data: currentData
       });
       const tBgm0 = performance.now();
-      syncBiomeBgm(currentData, player);
-      syncWeatherAmbientAudio();
-      syncEarthquakeAmbientAudio(getGameTimeSec?.() ?? 0);
-      syncFireLoopAudio(currentData, player);
+      const nowMs = performance.now();
+      if (
+        shouldRunCadenced(
+          nowMs,
+          lastBiomeBgmSyncAtMs,
+          playAudioSyncCadenceMs.biomeBgm
+        )
+      ) {
+        syncBiomeBgm(currentData, player);
+        lastBiomeBgmSyncAtMs = nowMs;
+      }
+      if (
+        shouldRunCadenced(
+          nowMs,
+          lastWeatherAmbientSyncAtMs,
+          playAudioSyncCadenceMs.weatherAmbient
+        )
+      ) {
+        syncWeatherAmbientAudio();
+        lastWeatherAmbientSyncAtMs = nowMs;
+      }
+      if (
+        shouldRunCadenced(
+          nowMs,
+          lastEarthquakeAmbientSyncAtMs,
+          playAudioSyncCadenceMs.earthquakeAmbient
+        )
+      ) {
+        syncEarthquakeAmbientAudio(getGameTimeSec?.() ?? 0);
+        lastEarthquakeAmbientSyncAtMs = nowMs;
+      }
+      if (
+        shouldRunCadenced(
+          nowMs,
+          lastFireLoopSyncAtMs,
+          playAudioSyncCadenceMs.fireLoop
+        )
+      ) {
+        syncFireLoopAudio(currentData, player);
+        lastFireLoopSyncAtMs = nowMs;
+      }
       updateBreakdown.updBgmMs = performance.now() - tBgm0;
       const tHud0 = performance.now();
-      refreshPlayModeInfoBar();
-      onPlayHudFrame?.(currentData);
+      const hudGate = consumeCadence(accHudSec, simDt, playSubsystemCadenceSec.hud);
+      accHudSec = hudGate.nextAccumulatorSec;
+      if (hudGate.shouldRun) {
+        refreshPlayModeInfoBar();
+        onPlayHudFrame?.(currentData);
+      }
       updateBreakdown.updHudMs = performance.now() - tHud0;
-      updateFarCrySystem(simDt, player, currentData);
-      tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
+      const farCryGate = consumeCadence(accFarCrySec, simDt, playSubsystemCadenceSec.farCry);
+      accFarCrySec = farCryGate.nextAccumulatorSec;
+      if (farCryGate.shouldRun) {
+        updateFarCrySystem(farCryGate.stepDtSec, player, currentData);
+      }
+      const autosaveGate = consumeCadence(accAutosaveSec, simDt, playSubsystemCadenceSec.autosave);
+      accAutosaveSec = autosaveGate.nextAccumulatorSec;
+      if (autosaveGate.shouldRun) {
+        tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
+      }
     }
 
       // --- Plugin Hooks: postUpdate ---
@@ -282,6 +653,7 @@ export function createGameLoop(api) {
         const updateMs = tRenderStart - tLoopStart;
         const renderMs = tRenderEnd - tRenderStart;
         const perf = ingestPlayPerfSample(frameMs, updateMs, renderMs, tEnd, updateBreakdown, getLastRenderFrameBreakdown());
+        updatePlayAdaptivePressureFromPerf(perf, tEnd);
         const stablePct = perf.stableRatio01 * 100;
         const heavyUpdateSlices = [
           ['ply', perf.p95UpdPlayerMsStable],
@@ -336,7 +708,7 @@ export function createGameLoop(api) {
           `p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable) · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms`,
           `rnd top ${top3HeavyRender}`,
           `upd top ${top3HeavyUpdate}${wildSubTag}`,
-          `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}`
+          `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}${playAdaptivePressure ? ` · cap p${playAdaptivePressure}` : ''}`
         ];
         const text = fpsHudLines.join('\n');
         if (text !== lastFpsHudText) {
@@ -356,6 +728,20 @@ export function createGameLoop(api) {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     resetPlayPerfProfiler();
     playFpsSampleTimes.length = 0;
+    lastBiomeBgmSyncAtMs = 0;
+    lastWeatherAmbientSyncAtMs = 0;
+    lastEarthquakeAmbientSyncAtMs = 0;
+    lastFireLoopSyncAtMs = 0;
+    applyPlayAdaptivePressure(0);
+    playAdaptivePressureChangedAtMs = performance.now();
+    accWildWindowSec = 0;
+    accWildUpdateSec = 0;
+    accBreakableRegenSec = 0;
+    accBerryTreesSec = 0;
+    accThrownDetailsSec = 0;
+    accHudSec = 0;
+    accFarCrySec = 0;
+    accAutosaveSec = 0;
     lastTimestamp = performance.now();
     animFrameId = requestAnimationFrame(gameLoop);
   }

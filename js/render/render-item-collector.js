@@ -34,6 +34,7 @@ import { getStaticEntitiesForChunk } from './static-entity-cache.js';
 import { aimAtCursor } from '../main/play-mouse-combat.js';
 import { wildSexHudLabel } from '../pokemon/pokemon-sex.js';
 import { defaultPortraitSlugForBalloon } from '../pokemon/spritecollab-portraits.js';
+import { scatterTreeTrunkFootprintRowOYRel } from '../walkability.js';
 
 // New imports for sprite resolution
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-heights.js';
@@ -92,7 +93,8 @@ export function collectRenderItems(options) {
     activeCrystalShards,
     activeSpawnedSmallCrystals,
     activeProjectiles,
-    activeParticles
+    activeParticles,
+    playVision
   } = options;
 
   const renderItems = [];
@@ -119,7 +121,6 @@ export function collectRenderItems(options) {
       const cFrame = Math.floor(time * 11) % Math.max(1, cCols);
       renderItems.push({
         type: 'digCompanion',
-        sortY: (player.visualY ?? player.y) + 0.44,
         sheet: cSheet,
         sx: cFrame * csw,
         sy: (player.animRow ?? 0) * csh,
@@ -128,7 +129,8 @@ export function collectRenderItems(options) {
         dw: cdw,
         dh: cdh,
         cx: snapPx(((player.visualX ?? player.x) + 0.92) * tileW),
-        cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - (player.z || 0) * tileH)
+        cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - (player.z || 0) * tileH),
+        sortY: (player.visualY ?? player.y) + 1.0,
       });
     }
   }
@@ -232,7 +234,7 @@ export function collectRenderItems(options) {
     if (player.speechBubble?.segments?.length && lodDetail < 2) {
       renderItems.push({
         type: 'playerSpeechBubble',
-        sortY: finalVY + 0.52,
+        sortY: finalVY + 1.02,
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
@@ -247,7 +249,7 @@ export function collectRenderItems(options) {
     if (playerEmotionPayload && lodDetail < 2) {
       renderItems.push({
         type: 'playerEmotion',
-        sortY: finalVY + 0.51,
+        sortY: finalVY + 1.01,
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
@@ -267,7 +269,7 @@ export function collectRenderItems(options) {
       x: player.visualX ?? player.x,
       airZ: player.z ?? 0,
       showAirGroundTether: player.flightGroundTetherVisible,
-      sortY: (player.visualY ?? player.y) + 0.5,
+      sortY: (player.visualY ?? player.y) + 1.0,
       dexId: playerDex,
       drawAlpha: player.ghostPhaseAlpha ?? 1,
       animMoving: isPlayerMoving,
@@ -299,7 +301,7 @@ export function collectRenderItems(options) {
     if (player.speechBubble?.segments?.length && lodDetail < 2) {
       renderItems.push({
         type: 'playerSpeechBubble',
-        sortY: finalVY + 0.52,
+        sortY: finalVY + 1.02,
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
@@ -314,7 +316,7 @@ export function collectRenderItems(options) {
     if (playerEmotionPayload && lodDetail < 2) {
       renderItems.push({
         type: 'playerEmotion',
-        sortY: finalVY + 0.51,
+        sortY: finalVY + 1.01,
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
@@ -358,7 +360,7 @@ export function collectRenderItems(options) {
         renderItems.push({
           type: 'wild',
           ...w,
-          sortY: (w.visualY ?? w.y) + 0.5,
+          sortY: (w.visualY ?? w.y) + 1.0,
           sheet: wSheet,
           sx: ((w.animFrame ?? 0) % animCols) * sw,
           sy: (w.animRow ?? 0) * sh,
@@ -380,7 +382,7 @@ export function collectRenderItems(options) {
         if (w.speechBubble?.segments?.length && lodDetail < 2) {
           renderItems.push({
             type: 'wildSpeechBubble',
-            sortY: (w.visualY ?? w.y) + 0.52,
+            sortY: (w.visualY ?? w.y) + 1.02,
             x: w.x,
             y: w.y,
             cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
@@ -410,7 +412,7 @@ export function collectRenderItems(options) {
         if (emotionPayload && lodDetail < 2) {
           renderItems.push({
             type: 'wildEmotion',
-            sortY: (w.visualY ?? w.y) + 0.51,
+            sortY: (w.visualY ?? w.y) + 1.01,
             x: w.x,
             y: w.y,
             cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
@@ -461,13 +463,19 @@ export function collectRenderItems(options) {
 
         if (desc.type === 'tree') {
           if (isPlayFormalTreeRootBurnedHarvested(mxScan, myScan)) continue;
+          // Early cull: don't allocate render items for fog-hidden trees.
+          // They'll be filtered by renderItemVisibleInPlayerVision anyway.
+          if (playVision?.enabled && !playVision.isVisible(mxScan, myScan)) continue;
+          const trunkSortY = myScan + 1.0;
           renderItems.push({
             type: 'tree',
             treeType: desc.treeType,
             originX: mxScan,
             originY: myScan,
-            y: myScan + 0.9,
-            sortY: myScan + 1.0,
+            y: trunkSortY,
+            // Align formal trees with their trunk/base contact row (tile bottom).
+            // Matches scatterTreeTrunkFootprintRowOYRel + 1 logic for consistency.
+            sortY: trunkSortY,
             biomeId: desc.biomeId,
             isDestroyed: isPlayFormalTreeRootDestroyed(mxScan, myScan),
             isCharred: isPlayFormalTreeRootCharred(mxScan, myScan),
@@ -476,6 +484,8 @@ export function collectRenderItems(options) {
           });
 
         } else if (desc.type === 'scatter') {
+          // Early cull fog-hidden scatters.
+          if (playVision?.enabled && !playVision.isVisible(mxScan, myScan)) continue;
           // Apply runtime override: the cached item key may have been replaced at runtime.
           const overrideKey = getScatterItemKeyOverride(mxScan, myScan);
           const sItem = overrideKey || desc.itemKey;
@@ -494,6 +504,14 @@ export function collectRenderItems(options) {
           }
           if (!isSortableScatter(sItem)) continue;
           if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
+          const isTreeScatter = scatterItemKeyIsTree(sItem);
+          const basePart = activeObjSet?.parts?.find(
+            (p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL'
+          );
+          const trunkRowOYRel = isTreeScatter
+            ? scatterTreeTrunkFootprintRowOYRel(basePart, activeRows, activeCols, sItem)
+            : Math.max(0, activeRows - 1);
+          const trunkSortY = myScan + trunkRowOYRel + 1;
           renderItems.push({
             type: 'scatter',
             itemKey: sItem,
@@ -502,13 +520,16 @@ export function collectRenderItems(options) {
             originY: myScan,
             cols: activeCols,
             rows: activeRows,
-            y: myScan + activeRows - 0.1,
-            sortY: myScan + (activeObjSet.sortYOffset !== undefined ? activeObjSet.sortYOffset : activeRows),
+            y: trunkSortY - 0.1,
+            sortY:
+              activeObjSet.sortYOffset !== undefined
+                ? myScan + activeObjSet.sortYOffset
+                : trunkSortY,
             isSortable: true,
             isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
             isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
             windSway: activeWindSway,
-            regrowFade01: scatterItemKeyIsTree(sItem)
+            regrowFade01: isTreeScatter
               ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
               : 1
           });
@@ -521,6 +542,14 @@ export function collectRenderItems(options) {
           const activeObjSet = OBJECT_SETS[overrideKey];
           if (!activeObjSet) continue;
           const { cols: activeCols, rows: activeRows } = parseShape(activeObjSet.shape);
+          const isTreeScatter = scatterItemKeyIsTree(overrideKey);
+          const basePart = activeObjSet?.parts?.find(
+            (p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL'
+          );
+          const trunkRowOYRel = isTreeScatter
+            ? scatterTreeTrunkFootprintRowOYRel(basePart, activeRows, activeCols, overrideKey)
+            : Math.max(0, activeRows - 1);
+          const trunkSortY = myScan + trunkRowOYRel + 1;
           renderItems.push({
             type: 'scatter',
             itemKey: overrideKey,
@@ -529,13 +558,16 @@ export function collectRenderItems(options) {
             originY: myScan,
             cols: activeCols,
             rows: activeRows,
-            y: myScan + activeRows - 0.1,
-            sortY: myScan + (activeObjSet.sortYOffset !== undefined ? activeObjSet.sortYOffset : activeRows),
+            y: trunkSortY - 0.1,
+            sortY:
+              activeObjSet.sortYOffset !== undefined
+                ? myScan + activeObjSet.sortYOffset
+                : trunkSortY,
             isSortable: true,
             isBurning: isPlayScatterTreeOriginBurning(mxScan, myScan),
             isCharred: isPlayScatterTreeOriginCharred(mxScan, myScan),
             windSway: scatterHasWindSway(overrideKey),
-            regrowFade01: scatterItemKeyIsTree(overrideKey)
+            regrowFade01: isTreeScatter
               ? getScatterTreeRegrowVisualAlpha01(mxScan, myScan)
               : 1
           });

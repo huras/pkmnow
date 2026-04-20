@@ -84,12 +84,14 @@ export function drawAnimatedGrassPass(ctx, options) {
     isGrassDeferredAroundPlayer,
     isGrassDeferredEwNeighbor,
     skipPlayerGrassOverlayDuringFlight,
-    drawGrass5aForCell
+    drawGrass5aForCell,
+    isTileVisible
   } = options;
 
   // LOD2 grass now allowed per user request (optimized via caching)
 
   forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+    if (typeof isTileVisible === 'function' && !isTileVisible(mx, my)) return;
     if (mx === playerTileMx && my === playerTileMy) {
       drawGrass5aForCell(mx, my, tile, tw, th, tx, ty);
       return;

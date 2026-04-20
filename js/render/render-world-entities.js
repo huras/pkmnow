@@ -285,6 +285,10 @@ export function drawBerryTree(ctx, item, options) {
 
 /**
  * Handles drawing of a formal tree.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} item
+ * @param {object} options
+ * @param {'trunk'|'canopy'|undefined} [options.phase] - Draw only trunk or only canopy. Omit for full draw (legacy).
  */
 export function drawTree(ctx, item, options) {
   const {
@@ -295,7 +299,8 @@ export function drawTree(ctx, item, options) {
     lodDetail,
     canopyAnimTime: rawCanopyAnimTime,
     natureImg,
-    imageCache
+    imageCache,
+    phase
   } = options;
 
   const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
@@ -303,6 +308,9 @@ export function drawTree(ctx, item, options) {
   const { treeType, originX, originY, isDestroyed, isCharred, isBurning } = item;
   const ids = TREE_TILES[treeType];
   if (!ids) return;
+
+  const drawTrunk = phase !== 'canopy';
+  const drawCanopy = phase !== 'trunk';
 
   const bump01 = getDetailHitShake01(`treeBump:${originX},${originY}`);
   if (bump01 > 0) {
@@ -313,23 +321,25 @@ export function drawTree(ctx, item, options) {
     ctx.translate(sx, sy);
   }
 
-  const stumpBase = TREE_TILES.palm?.base || ids.base;
-  const baseIds = isDestroyed ? stumpBase : ids.base;
-  
-  drawTile16(ctx, baseIds[0], originX * tileW, originY * tileH, natureImg, tileW, tileH, snapPx);
-  drawTile16(ctx, baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH, natureImg, tileW, tileH, snapPx);
-
-  if (isDestroyed && isCharred) {
-    const prevFilter = ctx.filter;
-    ctx.filter = 'brightness(0.2) saturate(0.05)';
-    ctx.globalAlpha = 0.96;
+  if (drawTrunk) {
+    const stumpBase = TREE_TILES.palm?.base || ids.base;
+    const baseIds = isDestroyed ? stumpBase : ids.base;
+    
     drawTile16(ctx, baseIds[0], originX * tileW, originY * tileH, natureImg, tileW, tileH, snapPx);
     drawTile16(ctx, baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH, natureImg, tileW, tileH, snapPx);
-    ctx.filter = prevFilter;
-    ctx.globalAlpha = 1.0;
+
+    if (isDestroyed && isCharred) {
+      const prevFilter = ctx.filter;
+      ctx.filter = 'brightness(0.2) saturate(0.05)';
+      ctx.globalAlpha = 0.96;
+      drawTile16(ctx, baseIds[0], originX * tileW, originY * tileH, natureImg, tileW, tileH, snapPx);
+      drawTile16(ctx, baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH, natureImg, tileW, tileH, snapPx);
+      ctx.filter = prevFilter;
+      ctx.globalAlpha = 1.0;
+    }
   }
 
-  if (!isDestroyed && ids.top) {
+  if (drawCanopy && !isDestroyed && ids.top) {
     const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       canopyAnimTime,
       treeType,
@@ -346,7 +356,7 @@ export function drawTree(ctx, item, options) {
     drawCanopyWithWindFlip(ctx, ftCan, px, py, ftOx, ftOy, ftFlip, snapPx);
   }
 
-  if (isBurning) {
+  if (drawTrunk && isBurning) {
     const img = imageCache.get('tilesets/effects/actual-fire.png');
     if (img && img.naturalWidth) {
       const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;

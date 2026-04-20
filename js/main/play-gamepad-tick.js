@@ -77,6 +77,9 @@ export function tickPlayGamepadFrame(api) {
       window.dispatchEvent(new CustomEvent('attack-wheel-dismiss'));
     }
   } else {
+    if (sm.risingA && !attackWheel.isOpen && !sm.heldLB) {
+      window.dispatchEvent(new CustomEvent('play-toggle-item-hud'));
+    }
     if (sm.risingY && !attackWheel.isOpen && !sm.heldLB) {
       tryJumpPlayer(getCurrentData());
     }

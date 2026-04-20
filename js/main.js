@@ -26,7 +26,14 @@ import {
 } from './main/tile-debug-modal.js';
 import { buildPlayModeDetailDebugPayload } from './main/play-tree-debug-payload.js';
 import { installPlayContextMenu } from './main/play-context-menu.js';
-import { createGameLoop, registerPlayKeyboard, playFpsSampleTimes } from './main/game-loop.js';
+import {
+  createGameLoop,
+  registerPlayKeyboard,
+  playFpsSampleTimes,
+  getPlayAdaptivePerfConfig,
+  patchPlayAdaptivePerfConfig,
+  resetPlayAdaptivePerfConfig
+} from './main/game-loop.js';
 import { registerPlayGamepadListeners } from './main/play-gamepad.js';
 import {
   tryApplyPlaySessionResumeOnEnter,
@@ -134,7 +141,7 @@ initI18n();
 const canvas = document.getElementById('map');
 const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementById('map-overlay-svg'));
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
-const WORLD_MAP_USE_SVG_OVERLAY = true;
+const WORLD_MAP_USE_SVG_OVERLAY = false;
 
 /** Blur inputs / buttons so WASD and hotkeys go to the game after clicking the map. */
 function blurFocusedUiAwayFromCanvas() {
@@ -182,6 +189,7 @@ const minimapPanel = document.getElementById('minimap-panel');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
+const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
@@ -336,6 +344,520 @@ const PLAY_BGM_TOAST_MS = 4600;
 function isPlayImmersiveMinimalUi() {
   return document.querySelector('.app')?.classList.contains('app--play-immersive') ?? false;
 }
+
+function installAdaptivePerfDebugPanel() {
+  const host = document.body;
+  if (!host) return;
+  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v1';
+  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v1';
+  const panel = document.createElement('details');
+  panel.id = 'play-adaptive-perf-debug-panel';
+  panel.style.position = 'fixed';
+  panel.style.right = '10px';
+  panel.style.bottom = '10px';
+  panel.style.zIndex = '1200';
+  panel.style.maxWidth = '460px';
+  panel.style.width = 'min(460px, calc(100vw - 20px))';
+  panel.style.background = 'rgba(16,22,28,0.92)';
+  panel.style.color = '#d7e0ea';
+  panel.style.border = '1px solid rgba(255,255,255,0.2)';
+  panel.style.borderRadius = '8px';
+  panel.style.padding = '6px 8px';
+  panel.style.font = '12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  panel.style.backdropFilter = 'blur(2px)';
+  panel.style.display = 'none';
+  panel.dataset.open = '0';
+
+  const summary = document.createElement('summary');
+  summary.textContent = 'Adaptive perf caps';
+  summary.style.cursor = 'pointer';
+  summary.style.userSelect = 'none';
+  summary.style.fontWeight = '600';
+  summary.style.margin = '0 0 6px 0';
+  panel.appendChild(summary);
+
+  const status = document.createElement('div');
+  status.style.marginBottom = '6px';
+  status.style.opacity = '0.9';
+  panel.appendChild(status);
+
+  const tabs = document.createElement('div');
+  tabs.style.display = 'flex';
+  tabs.style.gap = '6px';
+  tabs.style.marginBottom = '6px';
+  panel.appendChild(tabs);
+
+  const mkTabBtn = (label) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.flex = '1';
+    b.style.padding = '4px 6px';
+    b.style.borderRadius = '6px';
+    b.style.border = '1px solid rgba(255,255,255,0.25)';
+    b.style.background = 'rgba(255,255,255,0.08)';
+    b.style.color = 'inherit';
+    b.style.cursor = 'pointer';
+    return b;
+  };
+  const tabJson = mkTabBtn('JSON');
+  const tabControls = mkTabBtn('Controles');
+  tabs.append(tabJson, tabControls);
+
+  const jsonView = document.createElement('div');
+  const controlsView = document.createElement('div');
+  panel.append(jsonView, controlsView);
+
+  const text = document.createElement('textarea');
+  text.id = 'play-adaptive-perf-debug-json';
+  text.rows = 12;
+  text.style.width = '100%';
+  text.style.resize = 'vertical';
+  text.style.boxSizing = 'border-box';
+  text.style.background = 'rgba(0,0,0,0.25)';
+  text.style.color = 'inherit';
+  text.style.border = '1px solid rgba(255,255,255,0.18)';
+  text.style.borderRadius = '6px';
+  text.style.padding = '6px';
+  jsonView.appendChild(text);
+
+  const controlsGrid = document.createElement('div');
+  controlsGrid.style.display = 'grid';
+  controlsGrid.style.gridTemplateColumns = '1fr 110px';
+  controlsGrid.style.gap = '6px';
+  controlsGrid.style.maxHeight = '360px';
+  controlsGrid.style.overflow = 'auto';
+  controlsGrid.style.paddingRight = '2px';
+  controlsView.appendChild(controlsGrid);
+
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.style.gap = '6px';
+  row.style.marginTop = '6px';
+  panel.appendChild(row);
+
+  const mkBtn = (label) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.flex = '1';
+    b.style.padding = '4px 6px';
+    b.style.borderRadius = '6px';
+    b.style.border = '1px solid rgba(255,255,255,0.25)';
+    b.style.background = 'rgba(255,255,255,0.08)';
+    b.style.color = 'inherit';
+    b.style.cursor = 'pointer';
+    return b;
+  };
+  const btnApply = mkBtn('Apply JSON');
+  const btnRefresh = mkBtn('Refresh');
+  const btnReset = mkBtn('Reset defaults');
+  row.append(btnApply, btnRefresh, btnReset);
+
+  const note = document.createElement('div');
+  note.style.marginTop = '6px';
+  note.style.opacity = '0.8';
+  note.textContent = 'JSON e Controles editam o mesmo estado. Tooltips nos labels.';
+  panel.appendChild(note);
+
+  const ADAPTIVE_PRESETS = {
+    low: {
+      label: 'Low',
+      tip: 'Max performance: caps mais agressivos (menos atualizacoes por segundo).',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 5400,
+        thresholds: {
+          updateModerateMs: 5.2,
+          updateHeavyMs: 6.2,
+          updateVeryHeavyMs: 7.8,
+          renderModerateMs: 5.8,
+          renderHeavyMs: 7.0,
+          wildModerateMs: 1.9,
+          wildHeavyMs: 3.0,
+          hudHeavyMs: 0.75,
+          bgmHeavyMs: 0.55
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.08, hud: 0.16, farCry: 0.16, autosave: 0.8 },
+          audioCadenceMs: { biomeBgm: 240, weatherAmbient: 200 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.14, hud: 0.22, farCry: 0.26, autosave: 1.4 },
+          audioCadenceMs: { biomeBgm: 340, weatherAmbient: 290 }
+        }
+      }
+    },
+    medium: {
+      label: 'Medium',
+      tip: 'Balanceado: proximo dos defaults.',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 4200,
+        thresholds: {
+          updateModerateMs: 6.8,
+          updateHeavyMs: 8.0,
+          updateVeryHeavyMs: 10.5,
+          renderModerateMs: 7.2,
+          renderHeavyMs: 9.0,
+          wildModerateMs: 2.5,
+          wildHeavyMs: 4.0,
+          hudHeavyMs: 1.2,
+          bgmHeavyMs: 0.8
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.05, hud: 0.1, farCry: 0.1, autosave: 0.5 },
+          audioCadenceMs: { biomeBgm: 170, weatherAmbient: 140 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.1, hud: 0.16, farCry: 0.2, autosave: 1.0 },
+          audioCadenceMs: { biomeBgm: 260, weatherAmbient: 220 }
+        }
+      }
+    },
+    high: {
+      label: 'High',
+      tip: 'Prioriza responsividade: aciona caps so sob carga mais alta.',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 3200,
+        thresholds: {
+          updateModerateMs: 7.9,
+          updateHeavyMs: 9.6,
+          updateVeryHeavyMs: 12.0,
+          renderModerateMs: 8.4,
+          renderHeavyMs: 10.2,
+          wildModerateMs: 3.1,
+          wildHeavyMs: 4.9,
+          hudHeavyMs: 1.45,
+          bgmHeavyMs: 1.0
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.04, hud: 0.08, farCry: 0.08, autosave: 0.4 },
+          audioCadenceMs: { biomeBgm: 150, weatherAmbient: 120 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.08, hud: 0.12, farCry: 0.16, autosave: 0.8 },
+          audioCadenceMs: { biomeBgm: 210, weatherAmbient: 180 }
+        }
+      }
+    },
+    ultra: {
+      label: 'Ultra',
+      tip: 'Max quality: quase sem cap (usa cap so em emergencias).',
+      patch: {
+        enabled: true,
+        relaxAfterMs: 2400,
+        thresholds: {
+          updateModerateMs: 9.5,
+          updateHeavyMs: 11.4,
+          updateVeryHeavyMs: 13.5,
+          renderModerateMs: 9.8,
+          renderHeavyMs: 11.5,
+          wildModerateMs: 4.0,
+          wildHeavyMs: 6.0,
+          hudHeavyMs: 1.9,
+          bgmHeavyMs: 1.35
+        },
+        moderate: {
+          subsystemCadenceSec: { wildUpdate: 0.02, hud: 0.05, farCry: 0.05, autosave: 0.25 },
+          audioCadenceMs: { biomeBgm: 110, weatherAmbient: 95 }
+        },
+        heavy: {
+          subsystemCadenceSec: { wildUpdate: 0.05, hud: 0.08, farCry: 0.1, autosave: 0.5 },
+          audioCadenceMs: { biomeBgm: 150, weatherAmbient: 130 }
+        }
+      }
+    }
+  };
+  /** @type {'low'|'medium'|'high'|'ultra'|'custom'} */
+  let activePreset = 'medium';
+
+  function loadPersistedAdaptivePerfState() {
+    const rawCfg = localStorage.getItem(LS_ADAPTIVE_CFG);
+    if (rawCfg) {
+      try {
+        const parsed = JSON.parse(rawCfg);
+        if (parsed && typeof parsed === 'object') {
+          patchPlayAdaptivePerfConfig(parsed);
+        }
+      } catch {
+        /* ignore invalid storage payload */
+      }
+    }
+    const rawPreset = localStorage.getItem(LS_ADAPTIVE_PRESET);
+    if (
+      rawPreset === 'low' ||
+      rawPreset === 'medium' ||
+      rawPreset === 'high' ||
+      rawPreset === 'ultra' ||
+      rawPreset === 'custom'
+    ) {
+      activePreset = rawPreset;
+    }
+  }
+
+  function persistAdaptivePerfState() {
+    try {
+      const cfg = getPlayAdaptivePerfConfig();
+      const editable = { ...cfg };
+      delete editable.runtime;
+      localStorage.setItem(LS_ADAPTIVE_CFG, JSON.stringify(editable));
+      localStorage.setItem(LS_ADAPTIVE_PRESET, activePreset);
+    } catch {
+      /* ignore localStorage failures */
+    }
+  }
+
+  const FIELD_SCHEMA = [
+    { path: 'enabled', type: 'bool', label: 'enabled', tip: 'Liga/desliga cap adaptativo.' },
+    { path: 'relaxAfterMs', type: 'num', label: 'relaxAfterMs', tip: 'Tempo minimo para aliviar nivel de pressao.' },
+    {
+      section: 'Thresholds (ms)',
+      tip: 'Quando p95 passar destes valores, aumenta score de pressao.'
+    },
+    { path: 'thresholds.updateModerateMs', type: 'num', label: 'updateModerateMs', tip: 'update p95 inicia cap moderado.' },
+    { path: 'thresholds.updateHeavyMs', type: 'num', label: 'updateHeavyMs', tip: 'update p95 empurra para mais forte.' },
+    { path: 'thresholds.updateVeryHeavyMs', type: 'num', label: 'updateVeryHeavyMs', tip: 'update p95 muito alto, score maximo.' },
+    { path: 'thresholds.renderModerateMs', type: 'num', label: 'renderModerateMs', tip: 'render p95 contribui score moderado.' },
+    { path: 'thresholds.renderHeavyMs', type: 'num', label: 'renderHeavyMs', tip: 'render p95 contribui score alto.' },
+    { path: 'thresholds.wildModerateMs', type: 'num', label: 'wildModerateMs', tip: 'wild p95 para cap moderado.' },
+    { path: 'thresholds.wildHeavyMs', type: 'num', label: 'wildHeavyMs', tip: 'wild p95 para cap pesado.' },
+    { path: 'thresholds.hudHeavyMs', type: 'num', label: 'hudHeavyMs', tip: 'HUD p95 adiciona score.' },
+    { path: 'thresholds.bgmHeavyMs', type: 'num', label: 'bgmHeavyMs', tip: 'Audio sync p95 adiciona score.' },
+    { section: 'Moderate cadences', tip: 'Cadencias no nivel p1.' },
+    { path: 'moderate.subsystemCadenceSec.wildUpdate', type: 'num', label: 'p1 wildUpdateSec', tip: '0.05 = 20Hz.' },
+    { path: 'moderate.subsystemCadenceSec.hud', type: 'num', label: 'p1 hudSec', tip: 'Cadencia de HUD auxiliar.' },
+    { path: 'moderate.subsystemCadenceSec.farCry', type: 'num', label: 'p1 farCrySec', tip: 'Cadencia do sistema Far Cry.' },
+    { path: 'moderate.subsystemCadenceSec.autosave', type: 'num', label: 'p1 autosaveSec', tip: 'Intervalo de checagem de autosave.' },
+    { path: 'moderate.audioCadenceMs.biomeBgm', type: 'num', label: 'p1 biomeBgmMs', tip: 'Polling BGM por biome.' },
+    { path: 'moderate.audioCadenceMs.weatherAmbient', type: 'num', label: 'p1 weatherAmbientMs', tip: 'Polling audio ambiente clima.' },
+    { section: 'Heavy cadences', tip: 'Cadencias no nivel p2.' },
+    { path: 'heavy.subsystemCadenceSec.wildUpdate', type: 'num', label: 'p2 wildUpdateSec', tip: '0.1 = 10Hz.' },
+    { path: 'heavy.subsystemCadenceSec.hud', type: 'num', label: 'p2 hudSec', tip: 'HUD mais desacoplado em carga alta.' },
+    { path: 'heavy.subsystemCadenceSec.farCry', type: 'num', label: 'p2 farCrySec', tip: 'Far Cry em carga alta.' },
+    { path: 'heavy.subsystemCadenceSec.autosave', type: 'num', label: 'p2 autosaveSec', tip: 'Autosave mais espaçado em carga alta.' },
+    { path: 'heavy.audioCadenceMs.biomeBgm', type: 'num', label: 'p2 biomeBgmMs', tip: 'Polling BGM em carga alta.' },
+    { path: 'heavy.audioCadenceMs.weatherAmbient', type: 'num', label: 'p2 weatherAmbientMs', tip: 'Polling ambiente em carga alta.' }
+  ];
+
+  const controlsByPath = new Map();
+  const presetButtons = new Map();
+
+  const getByPath = (obj, path) =>
+    String(path)
+      .split('.')
+      .reduce((acc, k) => (acc && Object.prototype.hasOwnProperty.call(acc, k) ? acc[k] : undefined), obj);
+  const setByPath = (obj, path, value) => {
+    const keys = String(path).split('.');
+    let ptr = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k = keys[i];
+      if (!ptr[k] || typeof ptr[k] !== 'object') ptr[k] = {};
+      ptr = ptr[k];
+    }
+    ptr[keys[keys.length - 1]] = value;
+  };
+
+  function buildControlsForm() {
+    for (const f of FIELD_SCHEMA) {
+      if (f.section) {
+        const sec = document.createElement('div');
+        sec.style.gridColumn = '1 / -1';
+        sec.style.marginTop = '4px';
+        sec.style.paddingTop = '4px';
+        sec.style.borderTop = '1px solid rgba(255,255,255,0.12)';
+        sec.title = f.tip || '';
+        sec.textContent = f.section;
+        sec.style.fontWeight = '600';
+        controlsGrid.appendChild(sec);
+        continue;
+      }
+      const label = document.createElement('label');
+      label.textContent = f.label;
+      label.style.alignSelf = 'center';
+      label.title = f.tip || '';
+      controlsGrid.appendChild(label);
+      const input = document.createElement('input');
+      input.title = f.tip || '';
+      input.style.width = '100%';
+      input.style.boxSizing = 'border-box';
+      input.style.borderRadius = '5px';
+      input.style.border = '1px solid rgba(255,255,255,0.2)';
+      input.style.background = 'rgba(0,0,0,0.24)';
+      input.style.color = 'inherit';
+      input.style.padding = '3px 5px';
+      if (f.type === 'bool') {
+        input.type = 'checkbox';
+        input.style.width = '18px';
+        input.style.height = '18px';
+        input.style.padding = '0';
+      } else {
+        input.type = 'number';
+        input.step = '0.01';
+      }
+      controlsByPath.set(f.path, { input, field: f });
+      controlsGrid.appendChild(input);
+    }
+  }
+
+  const presetRow = document.createElement('div');
+  presetRow.style.display = 'grid';
+  presetRow.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+  presetRow.style.gap = '6px';
+  presetRow.style.marginBottom = '6px';
+  controlsView.insertBefore(presetRow, controlsGrid);
+
+  buildControlsForm();
+
+  function renderPresetButtons() {
+    presetRow.textContent = '';
+    presetButtons.clear();
+    for (const key of ['low', 'medium', 'high', 'ultra']) {
+      const def = ADAPTIVE_PRESETS[key];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = def.label;
+      b.title = def.tip;
+      b.style.padding = '4px 6px';
+      b.style.borderRadius = '6px';
+      b.style.border = '1px solid rgba(255,255,255,0.25)';
+      b.style.background = 'rgba(255,255,255,0.08)';
+      b.style.color = 'inherit';
+      b.style.cursor = 'pointer';
+      b.addEventListener('click', () => {
+        const cfg = patchPlayAdaptivePerfConfig(def.patch);
+        activePreset = /** @type {any} */ (key);
+        text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+        persistAdaptivePerfState();
+        refreshFromRuntime();
+      });
+      presetButtons.set(key, b);
+      presetRow.appendChild(b);
+    }
+  }
+  renderPresetButtons();
+
+  function refreshPresetButtons() {
+    for (const [key, btn] of presetButtons.entries()) {
+      const active = key === activePreset;
+      btn.style.background = active ? 'rgba(86,154,255,0.35)' : 'rgba(255,255,255,0.08)';
+      btn.style.borderColor = active ? 'rgba(120,180,255,0.8)' : 'rgba(255,255,255,0.25)';
+      btn.style.fontWeight = active ? '700' : '500';
+    }
+  }
+
+  function syncControlsFromConfig(cfg) {
+    for (const [path, meta] of controlsByPath.entries()) {
+      if (document.activeElement === meta.input) continue;
+      const v = getByPath(cfg, path);
+      if (meta.field.type === 'bool') {
+        meta.input.checked = !!v;
+      } else {
+        meta.input.value = Number.isFinite(Number(v)) ? String(v) : '';
+      }
+    }
+  }
+
+  function buildPatchFromControls() {
+    const patch = {};
+    for (const [path, meta] of controlsByPath.entries()) {
+      if (meta.field.type === 'bool') {
+        setByPath(patch, path, !!meta.input.checked);
+      } else {
+        const n = Number(meta.input.value);
+        if (Number.isFinite(n)) setByPath(patch, path, n);
+      }
+    }
+    return patch;
+  }
+
+  function toEditableConfig(cfg) {
+    const editable = { ...cfg };
+    delete editable.runtime;
+    return editable;
+  }
+
+  const setActiveTab = (tab) => {
+    const isJson = tab === 'json';
+    jsonView.style.display = isJson ? '' : 'none';
+    controlsView.style.display = isJson ? 'none' : '';
+    tabJson.style.background = isJson ? 'rgba(86,154,255,0.35)' : 'rgba(255,255,255,0.08)';
+    tabControls.style.background = isJson ? 'rgba(255,255,255,0.08)' : 'rgba(86,154,255,0.35)';
+  };
+
+  function refreshFromRuntime() {
+    const cfg = getPlayAdaptivePerfConfig();
+    const rt = cfg.runtime || {};
+    status.textContent =
+      `pressure p${rt.pressureLevel ?? 0}` +
+      ` · enabled ${cfg.enabled ? 'yes' : 'no'}` +
+      ` · relax ${cfg.relaxAfterMs}ms`;
+    if (document.activeElement !== text) {
+      text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    }
+    syncControlsFromConfig(cfg);
+    refreshPresetButtons();
+  }
+
+  btnApply.addEventListener('click', () => {
+    try {
+      const parsed = JSON.parse(text.value || '{}');
+      if (parsed && typeof parsed === 'object' && 'runtime' in parsed) delete parsed.runtime;
+      const cfg = patchPlayAdaptivePerfConfig(parsed);
+      activePreset = 'custom';
+      text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+      persistAdaptivePerfState();
+      refreshFromRuntime();
+    } catch (err) {
+      status.textContent = `JSON parse error: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  });
+  btnRefresh.addEventListener('click', refreshFromRuntime);
+  btnReset.addEventListener('click', () => {
+    const cfg = resetPlayAdaptivePerfConfig();
+    activePreset = 'medium';
+    text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    persistAdaptivePerfState();
+    refreshFromRuntime();
+  });
+  tabJson.addEventListener('click', () => setActiveTab('json'));
+  tabControls.addEventListener('click', () => setActiveTab('controls'));
+
+  const btnApplyControls = mkBtn('Apply controls');
+  btnApplyControls.style.marginTop = '6px';
+  controlsView.appendChild(btnApplyControls);
+  btnApplyControls.addEventListener('click', () => {
+    const cfg = patchPlayAdaptivePerfConfig(buildPatchFromControls());
+    activePreset = 'custom';
+    text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
+    persistAdaptivePerfState();
+    refreshFromRuntime();
+  });
+
+  loadPersistedAdaptivePerfState();
+  host.appendChild(panel);
+  setActiveTab('controls');
+  refreshFromRuntime();
+  setInterval(refreshFromRuntime, 900);
+
+  const setPanelOpen = (nextOpen) => {
+    const open = !!nextOpen;
+    panel.style.display = open ? '' : 'none';
+    panel.dataset.open = open ? '1' : '0';
+    if (open) panel.open = true;
+    if (btnMinimapAdaptivePerfToggle) {
+      btnMinimapAdaptivePerfToggle.setAttribute('aria-pressed', open ? 'true' : 'false');
+    }
+  };
+
+  btnMinimapAdaptivePerfToggle?.addEventListener('click', () => {
+    const open = panel.dataset.open === '1';
+    setPanelOpen(!open);
+  });
+}
+
+installAdaptivePerfDebugPanel();
 
 function dismissPlayBgmToast() {
   if (playBgmToastHideTimer) {
@@ -844,6 +1366,9 @@ function updateView() {
   }
 }
 
+const PLAY_AUX_HUD_SYNC_CADENCE_MS = 120;
+let lastPlayAuxHudSyncAtMs = 0;
+
 const { startGameLoop, stopGameLoop } = createGameLoop({
   getAppMode: () => appMode,
   setGameTime: (t) => {
@@ -865,6 +1390,9 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
   },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
+    const nowMs = performance.now();
+    if (nowMs - lastPlayAuxHudSyncAtMs < PLAY_AUX_HUD_SYNC_CADENCE_MS) return;
+    lastPlayAuxHudSyncAtMs = nowMs;
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
     playCharacterSelector?.updatePlayFieldMoveChargeHud();
@@ -957,6 +1485,7 @@ document.querySelectorAll('input[name="viewType"], #chkRotas, #chkGrafo').forEac
 
 let lastHoverTile = null;
 let lastMapHoverRenderTs = 0;
+let lastMapNoiseProgressRenderTs = 0;
 
 canvas.addEventListener(
   'wheel',
@@ -1084,6 +1613,14 @@ canvas.addEventListener('mouseleave', () => {
     invalidatePlayPointerHover();
   }
   if (currentData && appMode === 'map') updateView();
+});
+
+window.addEventListener('pkmn-map-overview-noise-progress', () => {
+  if (appMode !== 'map' || !currentData) return;
+  const now = performance.now();
+  if (now - lastMapNoiseProgressRenderTs < 33) return;
+  lastMapNoiseProgressRenderTs = now;
+  updateView();
 });
 
 /**
