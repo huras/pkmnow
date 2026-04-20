@@ -1,4 +1,5 @@
 /* --- Base Group Tuning --- */
+export const ENABLE_BOIDS = false;
 export const WILD_GROUP_RADIUS = 3.6;     // General radius for alignment and cohesion
 export const WILD_GROUP_TOLERANCE = 3.85; // How loosely others are allowed to drift (0.5 = tight, 1.5 = very loose)
 
@@ -119,6 +120,7 @@ export function resolveGroupFollowTarget(entity, entitiesByKey) {
  * @param {(value:number,min:number,max:number)=>number} clamp
  */
 export function resolveGroupCohesionTarget(entity, entitiesByKey, clamp) {
+  if (!ENABLE_BOIDS) return null;
   const groupId = String(entity.groupId || '');
   if (!groupId) return null;
   const ttl = Number(entity.groupCohesionSec) || 0;
@@ -159,6 +161,7 @@ export function resolveGroupCohesionTarget(entity, entitiesByKey, clamp) {
  * @param {(value:number,min:number,max:number)=>number} clamp
  */
 export function resolveGroupBoidsSteer(entity, entitiesByKey, clamp) {
+  if (!ENABLE_BOIDS) return null;
   const groupId = String(entity.groupId || '');
   if (!groupId) return null;
   if ((Number(entity.groupCohesionSec) || 0) <= 0) return null;

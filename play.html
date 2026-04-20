@@ -70,10 +70,11 @@
                 aria-pressed="false"
               >
                 <svg class="minimap-panel__groups-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="7" cy="14" r="2.5"/>
-                  <circle cx="17" cy="14" r="2.5"/>
-                  <circle cx="12" cy="8" r="2.5"/>
-                  <path d="M3.5 20v-1a4 4 0 0 1 4-4h1.5M20.5 20v-1a4 4 0 0 0-4-4h-1.5M9 11.5v-1a3 3 0 0 1 6 0v1"/>
+                  <circle cx="18" cy="5" r="2.2"/>
+                  <circle cx="6" cy="12" r="2.2"/>
+                  <circle cx="18" cy="19" r="2.2"/>
+                  <path d="M8 12l7.8-5"/>
+                  <path d="M8 12l7.8 7"/>
                 </svg>
               </button>
               <button
@@ -293,7 +294,19 @@
           </div>
 
           <div id="minimap-groups-popover" class="minimap-groups-popover hidden" role="dialog" aria-label="Grupos de Pokémon selvagens">
-            <div class="minimap-groups-popover__head">Grupos simulados</div>
+            <div class="minimap-groups-popover__head">
+              <span>Grupos simulados</span>
+              <button
+                type="button"
+                id="minimap-groups-leader-target-toggle"
+                class="minimap-groups-popover__head-toggle"
+                aria-pressed="false"
+                title="Mostrar alvo do líder apenas quando em ROAM"
+                aria-label="Mostrar alvo do líder apenas quando em ROAM"
+              >
+                Alvo líder
+              </button>
+            </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
           </div>
         </div>

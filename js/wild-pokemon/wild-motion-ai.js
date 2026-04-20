@@ -86,18 +86,17 @@ function enforceFollowerLeaderMaxDistance(entity, data) {
   const air = wildIsAirborne(entity);
 
   // Never teleport/snap follower. Keep movement continuous.
-  if (wildWalkOk(tx, ty, data, entity.x, entity.y, entity, air, true)) {
-    entity.targetX = tx;
-    entity.targetY = ty;
-  }
+  assignWildTargetIfEndpointClear(entity, tx, ty, data, air);
 
   // Fallback: force a catch-up impulse toward leader if clamped point is blocked.
   const pull = groupBehavior.normalizeVec(lx - (Number(entity.x) || 0), ly - (Number(entity.y) || 0));
   const catchupSpeed = WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 1.1;
   entity.vx = pull.x * catchupSpeed;
   entity.vy = pull.y * catchupSpeed;
-  entity.targetX = follow.targetX;
-  entity.targetY = follow.targetY;
+  if (!assignWildTargetIfEndpointClear(entity, follow.targetX, follow.targetY, data, air)) {
+    entity.targetX = null;
+    entity.targetY = null;
+  }
 }
 
 function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX, targetY) {
@@ -161,6 +160,38 @@ export function tryWildPokemonJump(entity) {
 
 export function wildFeetDeltaForEntity(entity) {
   return getPmdFeetDeltaWorldTiles(imageCache, entity.dexId ?? 1, !!entity.animMoving);
+}
+
+const WILD_TARGET_ENDPOINT_CLEARANCE = 0.24;
+
+function isWildTargetEndpointClear(entity, targetX, targetY, data, air) {
+  if (!Number.isFinite(targetX) || !Number.isFinite(targetY) || !data || !entity) return false;
+  const ft = worldFeetFromPivotCell(targetX, targetY, imageCache, entity.dexId ?? 1, !!entity.animMoving);
+  if (!canWildPokemonWalkMicroTile(ft.x, ft.y, data, undefined, undefined, !!air, false)) return false;
+  if (air) return true;
+
+  const r = WILD_TARGET_ENDPOINT_CLEARANCE;
+  const samples = [
+    [r, 0],
+    [-r, 0],
+    [0, r],
+    [0, -r],
+    [r * 0.7071, r * 0.7071],
+    [r * 0.7071, -r * 0.7071],
+    [-r * 0.7071, r * 0.7071],
+    [-r * 0.7071, -r * 0.7071]
+  ];
+  for (const [ox, oy] of samples) {
+    if (!canWildPokemonWalkMicroTile(ft.x + ox, ft.y + oy, data, undefined, undefined, false, false)) return false;
+  }
+  return true;
+}
+
+function assignWildTargetIfEndpointClear(entity, targetX, targetY, data, air) {
+  if (!isWildTargetEndpointClear(entity, targetX, targetY, data, air)) return false;
+  entity.targetX = targetX;
+  entity.targetY = targetY;
+  return true;
 }
 
 export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTreeTrunks = false) {
@@ -736,24 +767,21 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
 
     if (followerMode) {
       entity.idlePauseTimer = 0;
-      entity.targetX = groupFollow.targetX;
-      entity.targetY = groupFollow.targetY;
+      if (!assignWildTargetIfEndpointClear(entity, groupFollow.targetX, groupFollow.targetY, data, wildIsAirborne(entity))) {
+        entity.targetX = null;
+        entity.targetY = null;
+      }
     }
 
     if (entity.targetX === null || entity.targetY === null) {
       if (followerMode) {
-        entity.targetX = groupFollow.targetX;
-        entity.targetY = groupFollow.targetY;
+        assignWildTargetIfEndpointClear(entity, groupFollow.targetX, groupFollow.targetY, data, wildIsAirborne(entity));
       } else {
         if (groupBoids) {
           const pull = Math.max(1.25, Math.min(WILD_WANDER_RADIUS_TILES * 0.28, 1.8 + groupBoids.neighborCount * 0.4));
           const tx = entity.x + groupBoids.nx * pull;
           const ty = entity.y + groupBoids.ny * pull;
-          const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
-          if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-            entity.targetX = tx;
-            entity.targetY = ty;
-          }
+          assignWildTargetIfEndpointClear(entity, tx, ty, data, false);
         }
         if (groupCohesion) {
           const dxG = groupCohesion.x - entity.x;
@@ -763,11 +791,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
             const pullDist = Math.max(0.85, Math.min(WILD_WANDER_RADIUS_TILES * 0.78, distG * 0.72));
             const tx = entity.x + (dxG / (distG || 1)) * pullDist;
             const ty = entity.y + (dyG / (distG || 1)) * pullDist;
-            const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
-            if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-              entity.targetX = tx;
-              entity.targetY = ty;
-            }
+            assignWildTargetIfEndpointClear(entity, tx, ty, data, false);
           }
         }
         for (let attempt = 0; attempt < 10; attempt++) {
@@ -777,14 +801,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
           const dist = Math.random() * WILD_WANDER_RADIUS_TILES;
           const tx = entity.centerX + Math.cos(ang) * dist;
           const ty = entity.centerY + Math.sin(ang) * dist;
-          const wanderEntity = isUndergroundBurrowerDex(entity.dexId ?? 0) ? { ...entity, animMoving: true } : entity;
-          if (wildWalkOk(tx, ty, data, entity.x, entity.y, wanderEntity, false, true)) {
-            // Avoid wander targets past a cliff while grounded (same rule for all species until aerial roam exists).
-            if (!isCliffDrop(entity.x, entity.y, tx, ty, data)) {
-              entity.targetX = tx;
-              entity.targetY = ty;
-              break;
-            }
+          // Path may be blocked; only the endpoint must be valid and not too close to colliders.
+          if (!isCliffDrop(entity.x, entity.y, tx, ty, data) && assignWildTargetIfEndpointClear(entity, tx, ty, data, false)) {
+            break;
           }
         }
       }

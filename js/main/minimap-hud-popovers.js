@@ -1,4 +1,8 @@
 import { renderWildGroupsPopoverList } from './minimap-wild-groups-popover.js';
+import {
+  isWildLeaderRoamTargetVisible,
+  setWildLeaderRoamTargetVisible
+} from './wild-groups-visual-toggle-state.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -9,6 +13,7 @@ export function installMinimapHudPopovers(options = {}) {
   const groupsToggle = document.getElementById('minimap-groups-toggle');
   const groupsPop = document.getElementById('minimap-groups-popover');
   const groupsList = document.getElementById('minimap-groups-popover-list');
+  const groupsLeaderTargetToggle = document.getElementById('minimap-groups-leader-target-toggle');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -24,6 +29,12 @@ export function installMinimapHudPopovers(options = {}) {
 
   /** @type {ReturnType<typeof setInterval> | null} */
   let groupsRefreshTimer = null;
+  let showLeaderRoamTarget = isWildLeaderRoamTargetVisible();
+
+  function syncGroupsLeaderTargetToggleUi() {
+    if (!groupsLeaderTargetToggle) return;
+    groupsLeaderTargetToggle.setAttribute('aria-pressed', showLeaderRoamTarget ? 'true' : 'false');
+  }
 
   function stopGroupsRefresh() {
     if (groupsRefreshTimer != null) {
@@ -34,7 +45,7 @@ export function installMinimapHudPopovers(options = {}) {
 
   function refreshGroupsPanel() {
     if (!groupsList || !imageCache) return;
-    renderWildGroupsPopoverList(groupsList, imageCache);
+    renderWildGroupsPopoverList(groupsList, imageCache, { showLeaderRoamTarget });
   }
 
   const popovers = [
@@ -81,6 +92,14 @@ export function installMinimapHudPopovers(options = {}) {
     togglePopover('groups');
   });
 
+  groupsLeaderTargetToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showLeaderRoamTarget = !showLeaderRoamTarget;
+    setWildLeaderRoamTargetVisible(showLeaderRoamTarget);
+    syncGroupsLeaderTargetToggleUi();
+    refreshGroupsPanel();
+  });
+
   timeToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('time');
@@ -107,6 +126,7 @@ export function installMinimapHudPopovers(options = {}) {
   });
 
   // Global click handler to close popovers when clicking outside
+  syncGroupsLeaderTargetToggleUi();
   document.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     const isInsideAnyPopover = popovers.some(p => p.pop?.contains(target) || p.toggle?.contains(target));

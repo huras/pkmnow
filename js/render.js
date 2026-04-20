@@ -109,8 +109,10 @@ import {
   drawCrystalShard,
   drawSpawnedSmallCrystal,
   drawStrengthThrowRock,
-  drawStrengthThrowFaintedWild
+  drawStrengthThrowFaintedWild,
+  drawWildLeaderRoamTarget
 } from './render/render-world-entities.js';
+import { isWildLeaderRoamTargetVisible } from './main/wild-groups-visual-toggle-state.js';
 import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
@@ -703,6 +705,7 @@ export function render(canvas, data, options = {}) {
     };
 
     const batchedEffects = [];
+    const showLeaderRoamTargetOverlay = isWildLeaderRoamTargetVisible();
     for (const item of renderItems) {
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
@@ -767,6 +770,15 @@ export function render(canvas, data, options = {}) {
           ctx.arc(item.cx, item.cy, sr * 0.52, 0, Math.PI * 2);
           ctx.stroke();
           ctx.restore();
+        }
+        if (
+          showLeaderRoamTargetOverlay &&
+          item.type === 'wild' &&
+          item.groupId &&
+          String(item.groupLeaderKey || '') === String(item.key || '') &&
+          String(item.groupPhase || '') === 'ROAM'
+        ) {
+          drawWildLeaderRoamTarget(ctx, item, { snapPx, tileW, tileH, time });
         }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
         drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);

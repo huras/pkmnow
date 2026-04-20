@@ -755,6 +755,55 @@ export function drawStrengthThrowIdleTarget(ctx, item, options) {
 }
 
 /**
+ * Shows the active move target for a wild group leader while it is in ROAM.
+ */
+export function drawWildLeaderRoamTarget(ctx, item, options) {
+  const { snapPx, tileW, tileH, time = 0 } = options;
+  const tx = Number(item?.targetX);
+  const ty = Number(item?.targetY);
+  if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+
+  const sx = snapPx((Number(item.x) + 0.5) * tileW);
+  const sy = snapPx((Number(item.y) + 0.5) * tileH);
+  const cx = snapPx((tx + 0.5) * tileW);
+  const cy = snapPx((ty + 0.5) * tileH);
+  const pulse = 0.5 + 0.5 * Math.sin(time * 7.2);
+  const ringR = Math.max(5, tileW * (0.24 + pulse * 0.06));
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 224, 132, 0.95)';
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(cx, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = 'rgba(255, 208, 100, 0.14)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 184, 88, 0.95)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const cross = ringR * 0.56;
+  ctx.strokeStyle = 'rgba(255, 241, 188, 0.92)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(cx - cross, cy);
+  ctx.lineTo(cx + cross, cy);
+  ctx.moveTo(cx, cy - cross);
+  ctx.lineTo(cx, cy + cross);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
  * Handles drawing of the psybeam charge ball.
  */
 export function drawPsybeamChargeBall(ctx, item, options) {

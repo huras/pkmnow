@@ -28,8 +28,10 @@ function speciesLabel(dex) {
 /**
  * @param {HTMLElement} listRoot
  * @param {Map<string, HTMLImageElement>} imageCache
+ * @param {{ showLeaderRoamTarget?: boolean }} [options]
  */
-export function renderWildGroupsPopoverList(listRoot, imageCache) {
+export function renderWildGroupsPopoverList(listRoot, imageCache, options = {}) {
+  const { showLeaderRoamTarget = false } = options;
   if (!listRoot) return;
   if (!imageCache) {
     listRoot.replaceChildren();
@@ -128,6 +130,12 @@ export function renderWildGroupsPopoverList(listRoot, imageCache) {
     sub.textContent = formatGroupTitleLine(gid);
     meta.appendChild(title);
     meta.appendChild(sub);
+    if (showLeaderRoamTarget) {
+      const hint = document.createElement('div');
+      hint.className = 'minimap-groups-popover__row-target';
+      hint.textContent = phase === 'ROAM' ? 'Marcador do alvo do lider visivel no mapa.' : 'Sem marcador fora de ROAM.';
+      meta.appendChild(hint);
+    }
 
     const portraits = document.createElement('div');
     portraits.className = 'minimap-groups-popover__portraits';

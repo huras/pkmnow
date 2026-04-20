@@ -688,12 +688,46 @@ button.btn-secondary:hover {
 }
 
 .minimap-groups-popover__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgba(154, 216, 255, 0.95);
   flex-shrink: 0;
+}
+
+.minimap-groups-popover__head-toggle {
+  border: 1px solid rgba(154, 216, 255, 0.45);
+  background: rgba(12, 17, 28, 0.9);
+  color: rgba(214, 238, 255, 0.95);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.56rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background-color 130ms ease, border-color 130ms ease, color 130ms ease;
+}
+
+.minimap-groups-popover__head-toggle:hover {
+  border-color: rgba(180, 232, 255, 0.75);
+  background: rgba(20, 30, 48, 0.95);
+}
+
+.minimap-groups-popover__head-toggle[aria-pressed="true"] {
+  border-color: rgba(255, 221, 145, 0.92);
+  color: rgba(255, 238, 185, 0.98);
+  background: rgba(58, 42, 18, 0.9);
+}
+
+.minimap-groups-popover__head-toggle:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 2px;
 }
 
 .minimap-groups-popover__list {
@@ -746,6 +780,12 @@ button.btn-secondary:hover {
   font-size: 0.62rem;
   color: rgba(160, 170, 190, 0.9);
   word-break: break-all;
+}
+
+.minimap-groups-popover__row-target {
+  font-size: 0.6rem;
+  color: rgba(255, 225, 158, 0.93);
+  letter-spacing: 0.02em;
 }
 
 .minimap-groups-popover__portraits {
