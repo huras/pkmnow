@@ -31,6 +31,11 @@ My ideias organizadas por tópico
   - https://www.deviantart.com/chromecr/gallery
   - https://www.deviantart.com/kyle-dove/gallery
   - https://www.deviantart.com/snakemasterz
+  - https://www.deviantart.com/phyromatical/gallery
+  - https://www.deviantart.com/ekat99/gallery
+  - https://www.deviantart.com/nbdycrls/favourites/98107803/pkmn-maps#content
+  - https://www.deviantart.com/sydk25/favourites/79433699/outdoor-maps#content
+  - https://www.deviantart.com/daspirit/art/Pokemon-3D-Engine-Test-317546760
 
 
 3) Spawn, encontros e comportamento selvagem
@@ -249,3 +254,24 @@ My ideias organizadas por tópico
   - Nintendo
   - Michael
   - Hunf
+
+
+15) Ambientação sonora e ecossistema
+------------------------------------
+- Tocar cry de pokémons que pertencem à área, mesmo quando eles não estão visíveis no momento.
+- Objetivo: ajudar o player a conhecer melhor a região e dar mais vida ao ecossistema.
+
+
+16) Emboscadas e alteração de terreno
+-------------------------------------
+- Emboscada de Dugtrios: o chão “afunda” 1 nível e forma um pit (depressão súbita).
+- No pit aparecem 1 Dugtrio + 3 ou 5 Digletts para atacar o jogador (encounter tipo armadilha / boss rush leve).
+
+
+17) Minimap acústico e percepção de mundo
+-----------------------------------------
+- Quando disparar evento de cry offscreen no minimapa, usar o cry de um dos pokémons marcados com `?` nas proximidades.
+- Mostrar no minimapa uma onda circular (wave / echo) expandindo a partir da origem do cry.
+- Jogadores que reconhecem cries identificam o pokémon pelo som e criam memória de espécie por região.
+- Esse sistema expande a "visão efetiva" do mapa sem renderizar mais chunks.
+- Vantagem estratégica: ajuda a competir com a sensação de "ver o horizonte" dos jogos 3D, mas com custo técnico menor.
