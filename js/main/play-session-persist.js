@@ -11,9 +11,10 @@ import { applyPlayerWorldResumePosition } from '../player.js';
 import { flashPlaySessionSaveIndicator } from './play-save-indicator-ui.js';
 import { getWeatherTarget } from './weather-system.js';
 import { getEarthquakeActiveIntensity01 } from './earthquake-layer.js';
-import { getSunLightRaysActiveIntensity01 } from './sun-light-rays-layer.js';
+import { getSunLightRaysTargetIntensity01 } from './sun-light-rays-layer.js';
 import { isWeatherPreset } from './weather-presets.js';
 import { wrapHours } from './world-time-of-day.js';
+import { getFogDiscoveredSnapshot, restoreFogDiscoveredFromSnapshot } from './play-vision-fog.js';
 
 export const PLAY_SESSION_SAVE_VERSION = 2;
 const STORAGE_KEY = 'pkmn_play_session_save_v1';
@@ -229,6 +230,10 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
     restoreCollectedDetailInventoryFromSnapshot(saved.inventory?.rows);
     did = true;
   }
+  if (saved.fogDiscovered) {
+    restoreFogDiscoveredFromSnapshot(saved.fogDiscovered, data);
+    did = true;
+  }
   if (applyPosition) {
     const px = Number(saved.player?.x);
     const py = Number(saved.player?.y);
@@ -308,8 +313,10 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   out.weatherIntensity01 = Number.isFinite(wiLegacy) ? Math.max(0, Math.min(1, wiLegacy)) : 1;
   const eq = Number(persistExtra?.earthquakeIntensity01 ?? getEarthquakeActiveIntensity01());
   out.earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
-  const sr = Number(persistExtra?.sunLightRaysIntensity01 ?? getSunLightRaysActiveIntensity01());
+  const sr = Number(persistExtra?.sunLightRaysIntensity01 ?? getSunLightRaysTargetIntensity01());
   out.sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
+  const fogSnap = getFogDiscoveredSnapshot();
+  if (fogSnap) out.fogDiscovered = fogSnap;
   return out;
 }
 

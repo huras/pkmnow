@@ -1924,7 +1924,7 @@ export function render(canvas, data, options = {}) {
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) {
-      renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro });
+      renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro, playVision });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }

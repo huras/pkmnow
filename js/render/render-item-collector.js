@@ -335,6 +335,8 @@ export function collectRenderItems(options) {
   for (const w of wildList) {
     if (w?._strengthCarryHidden) continue;
     if (w.x >= startX - 2 && w.x < endX + 2 && w.y >= startY - 2 && w.y < endY + 2) {
+      // Early cull: skip render items for fog-hidden wild Pokémon.
+      if (playVision?.enabled && !playVision.isVisible(Math.floor(w.x), Math.floor(w.y))) continue;
       const wDex = w.dexId || 1;
       const { walk: wWalk, idle: wIdle, hurt: wHurt, sleep: wSleep, faint: wFaint } = getResolvedSheets(imageCache, wDex);
       if (wWalk && wIdle) {

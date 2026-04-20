@@ -1,6 +1,11 @@
 import { renderWildGroupsPopoverList } from './minimap-wild-groups-popover.js';
 import { renderBerriesPopoverList } from './minimap-berries-popover.js';
 import {
+  renderSocialInspectorList,
+  populateScenarioSelect,
+  triggerScenarioOnNearestGroup
+} from './social-inspector-popover.js';
+import {
   isWildLeaderRoamTargetVisible,
   setWildLeaderRoamTargetVisible
 } from './wild-groups-visual-toggle-state.js';
@@ -34,6 +39,11 @@ export function installMinimapHudPopovers(options = {}) {
   const audioPop = document.getElementById('minimap-audio-popover');
   const languageToggle = document.getElementById('minimap-language-toggle');
   const languagePop = document.getElementById('minimap-language-popover');
+  const inspectorToggle = document.getElementById('minimap-social-inspector-toggle');
+  const inspectorPop = document.getElementById('minimap-social-inspector-popover');
+  const inspectorList = document.getElementById('social-inspector-list');
+  const inspectorScenarioSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('social-inspector-scenario-select'));
+  const inspectorTriggerBtn = document.getElementById('social-inspector-trigger-btn');
 
   if (!timeToggle || !timePop || !weatherToggle || !weatherPop || !socialToggle || !socialPop) {
     return { forceCloseAllPopovers: () => {} };
@@ -41,6 +51,8 @@ export function installMinimapHudPopovers(options = {}) {
 
   /** @type {ReturnType<typeof setInterval> | null} */
   let groupsRefreshTimer = null;
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let inspectorRefreshTimer = null;
   let showLeaderRoamTarget = isWildLeaderRoamTargetVisible();
 
   function syncGroupsLeaderTargetToggleUi() {
@@ -55,6 +67,13 @@ export function installMinimapHudPopovers(options = {}) {
     }
   }
 
+  function stopInspectorRefresh() {
+    if (inspectorRefreshTimer != null) {
+      clearInterval(inspectorRefreshTimer);
+      inspectorRefreshTimer = null;
+    }
+  }
+
   function refreshGroupsPanel() {
     if (!groupsList || !imageCache) return;
     renderWildGroupsPopoverList(groupsList, imageCache, { showLeaderRoamTarget });
@@ -63,6 +82,11 @@ export function installMinimapHudPopovers(options = {}) {
   function refreshBerriesPanel() {
     if (!berriesList) return;
     renderBerriesPopoverList(berriesList, player);
+  }
+
+  function refreshInspectorPanel() {
+    if (!inspectorList || !imageCache) return;
+    renderSocialInspectorList(inspectorList, imageCache);
   }
 
   function syncTranslatableButtons() {
@@ -76,6 +100,7 @@ export function installMinimapHudPopovers(options = {}) {
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
+    ...(inspectorToggle && inspectorPop ? [{ toggle: inspectorToggle, pop: inspectorPop, name: 'inspector' }] : []),
     ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : [])
   ];
@@ -84,6 +109,9 @@ export function installMinimapHudPopovers(options = {}) {
     if (activeName !== 'groups') {
       stopGroupsRefresh();
       clearHoveredWildGroupEntityKey();
+    }
+    if (activeName !== 'inspector') {
+      stopInspectorRefresh();
     }
     popovers.forEach((p) => {
       if (p.name !== activeName) {
@@ -105,6 +133,9 @@ export function installMinimapHudPopovers(options = {}) {
         stopGroupsRefresh();
         clearHoveredWildGroupEntityKey();
       }
+      if (name === 'inspector') {
+        stopInspectorRefresh();
+      }
     } else {
       closeAllExcept(name);
       p.pop.classList.remove('hidden');
@@ -117,12 +148,36 @@ export function installMinimapHudPopovers(options = {}) {
       if (name === 'berries') {
         refreshBerriesPanel();
       }
+      if (name === 'inspector') {
+        populateScenarioSelect(inspectorScenarioSelect);
+        refreshInspectorPanel();
+        stopInspectorRefresh();
+        inspectorRefreshTimer = setInterval(refreshInspectorPanel, 350);
+      }
     }
   }
 
   berriesToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('berries');
+  });
+
+  inspectorToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('inspector');
+  });
+
+  inspectorTriggerBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const scenarioId = inspectorScenarioSelect?.value;
+    if (!scenarioId) return;
+    const ok = triggerScenarioOnNearestGroup(scenarioId);
+    if (inspectorTriggerBtn) {
+      inspectorTriggerBtn.textContent = ok ? '✓ Started!' : '✗ No group';
+      setTimeout(() => {
+        if (inspectorTriggerBtn.isConnected) inspectorTriggerBtn.textContent = '▶ Go';
+      }, 1200);
+    }
   });
 
   groupsToggle?.addEventListener('click', (e) => {
@@ -196,11 +251,13 @@ export function installMinimapHudPopovers(options = {}) {
   return {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
+      stopInspectorRefresh();
       clearHoveredWildGroupEntityKey();
       closeAllExcept(null);
     },
     destroy: () => {
       clearHoveredWildGroupEntityKey();
+      stopInspectorRefresh();
       unlistenLocale();
     }
   };

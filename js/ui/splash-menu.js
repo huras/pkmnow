@@ -294,7 +294,7 @@ function loop(t) {
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: 0,
-    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(),
+    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(12),
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,

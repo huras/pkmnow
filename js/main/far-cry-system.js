@@ -17,6 +17,11 @@ const FAR_CRY_WAVE_MAX_AGE_SEC = 2.2;
 const FAR_CRY_MINIMAP_ECHO_MAX_AGE_SEC = 2.6;
 /** Far Cry minimap echoes: emit second pulse this long after the first. */
 const FAR_CRY_MINIMAP_ECHO_REPEAT_DELAY_SEC = 1.25;
+/**
+ * Extra full-screen wave bursts after the initial one (seconds each). Same cadence as
+ * {@link FAR_CRY_MINIMAP_ECHO_REPEAT_DELAY_SEC} by default; push more numbers for more rings.
+ */
+const FAR_CRY_SCREEN_WAVE_EXTRA_BURST_DELAYS_SEC = [FAR_CRY_MINIMAP_ECHO_REPEAT_DELAY_SEC];
 /** Same cap as minimap portrait markers — pick among nearest unknowns. */
 const FAR_CRY_CANDIDATE_POOL = 24;
 
@@ -37,6 +42,8 @@ const activeFarCryMinimapEchoes = [];
 const pendingFarCryMinimapEchoes = [];
 /** @type {Array<{ dirX: number, dirY: number, age: number, maxAge: number, seed: number }>} */
 const activeFarCryScreenWaves = [];
+/** @type {Array<{ dirX: number, dirY: number, delaySec: number, maxAge: number, seed: number }>} */
+const pendingFarCryScreenWaves = [];
 
 let farCryNextTriggerSec = 0;
 /** Successful Far Cry emissions since last reset; drives interval schedule and first-three guaranteed new intros. */
@@ -174,6 +181,7 @@ function triggerFarCryFromEntity(entity, playerX, playerY) {
   const dx = ex - playerX;
   const dy = ey - playerY;
   const dir = normalize2(dx, dy);
+  const waveSeed = ((ex * 0.173 + ey * 0.289) % 1 + 1) % 1;
   markWildFarCryMinimapIntroduced(entity);
   playPokemonCry(entity?.dexId ?? 1, {
     lane: 'emotion',
@@ -191,8 +199,20 @@ function triggerFarCryFromEntity(entity, playerX, playerY) {
     dirY: dir.y,
     age: 0,
     maxAge: FAR_CRY_WAVE_MAX_AGE_SEC,
-    seed: ((ex * 0.173 + ey * 0.289) % 1 + 1) % 1
+    seed: waveSeed
   });
+  for (let b = 0; b < FAR_CRY_SCREEN_WAVE_EXTRA_BURST_DELAYS_SEC.length; b++) {
+    const delayRaw = FAR_CRY_SCREEN_WAVE_EXTRA_BURST_DELAYS_SEC[b];
+    const delaySec = Math.max(0, Number(delayRaw) || 0);
+    if (delaySec <= 0) continue;
+    pendingFarCryScreenWaves.push({
+      dirX: dir.x,
+      dirY: dir.y,
+      delaySec,
+      maxAge: FAR_CRY_WAVE_MAX_AGE_SEC,
+      seed: ((waveSeed + (b + 1) * 0.217 + delaySec * 0.031) % 1 + 1) % 1
+    });
+  }
   activeFarCryMinimapEchoes.push({
     x: ex / MACRO_TILE_STRIDE,
     y: ey / MACRO_TILE_STRIDE,
@@ -250,10 +270,24 @@ function ageFarCryEffects(dt) {
     });
     pendingFarCryMinimapEchoes.splice(i, 1);
   }
+  for (let i = pendingFarCryScreenWaves.length - 1; i >= 0; i--) {
+    const fx = pendingFarCryScreenWaves[i];
+    fx.delaySec -= d;
+    if (fx.delaySec > 0) continue;
+    activeFarCryScreenWaves.push({
+      dirX: fx.dirX,
+      dirY: fx.dirY,
+      age: 0,
+      maxAge: Math.max(0.05, Number(fx.maxAge) || FAR_CRY_WAVE_MAX_AGE_SEC),
+      seed: Number(fx.seed) || 0
+    });
+    pendingFarCryScreenWaves.splice(i, 1);
+  }
 }
 
 export function resetFarCrySystem() {
   activeFarCryScreenWaves.length = 0;
+  pendingFarCryScreenWaves.length = 0;
   activeFarCryMinimapEchoes.length = 0;
   pendingFarCryMinimapEchoes.length = 0;
   farCryPendingCycleIndex = 0;

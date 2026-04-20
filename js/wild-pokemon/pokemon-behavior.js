@@ -191,6 +191,17 @@ SPECIES_BEHAVIOR.set(487, aggressive(11, 1.45, 3.0)); // Giratina
 SPECIES_BEHAVIOR.set(491, skittish(10, 4.8)); // Darkrai
 SPECIES_BEHAVIOR.set(493, neutral(12)); // Arceus
 
+// ── Flocking species (boids-enabled) ────────────────────────────────────────
+// These species use boids cohesion/alignment/separation when in groups.
+// Overrides the behavior with flocks: true while keeping existing archetype.
+for (const dex of [16, 12, 21, 41, 84, 278, 425]) {
+  const existing = SPECIES_BEHAVIOR.get(dex);
+  if (existing) {
+    SPECIES_BEHAVIOR.set(dex, Object.freeze({ ...existing, flocks: true }));
+  }
+}
+// 16=Pidgey, 12=Butterfree, 21=Spearow, 41=Zubat, 84=Doduo, 278=Wingull, 425=Drifloon
+
 /**
  * Get the behavior profile for a species.
  * @param {number} dexId  National dex number

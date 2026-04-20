@@ -52,6 +52,8 @@ const WILD_JUMP_COOLDOWN_SEC = 0.85;
 const WILD_TREE_BODY_R = 0.28;
 const WILD_VISION_RANGE_BASE_MULT = 1.45;
 const WILD_VISION_RANGE_MIN_TILES = 8.5;
+const WILD_STALL_PROGRESS_THRESHOLD = 0.015;
+const WILD_STALL_ABANDON_SEC = 0.9;
 
 export function ensureWildPhysicsState(entity) {
   if (entity.z == null) entity.z = 0;
@@ -516,6 +518,12 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
 
 const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
+/* ── High-Affinity Follow ───────────────────────────────────────────────── */
+const FOLLOW_PLAYER_AFFINITY_ENTER = 2.2;   // affinity needed to START following
+const FOLLOW_PLAYER_AFFINITY_EXIT  = 1.0;   // drop below this → stop following
+const FOLLOW_PLAYER_STOP_DIST      = 2.2;   // tiles – stop walking when this close
+const FOLLOW_PLAYER_WALK_SPEED     = 1.6;   // tiles/sec when following
+
 export function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
   scenarioOrchestrator.update(dt);
@@ -584,6 +592,34 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
 
+  /* ── follow_player state ──────────────────────────────────────────── */
+  if (entity.aiState === 'follow_player') {
+    const mem = entity.socialMemory;
+    const aff = mem ? (mem.affinity || 0) : 0;
+    // Exit condition: affinity dropped or player too far
+    if (aff < FOLLOW_PLAYER_AFFINITY_EXIT || distP > 30) {
+      entity.aiState = 'wander';
+      setEmotion(entity, 7, false); // Sigh (goodbye)
+      entity.targetX = null;
+      entity.targetY = null;
+    } else if (distP > FOLLOW_PLAYER_STOP_DIST) {
+      // Walk toward player
+      const ang = Math.atan2(-dyP, -dxP);
+      steerTowardAngle(entity, ang, FOLLOW_PLAYER_WALK_SPEED, data, wildIsAirborne(entity), false);
+    } else {
+      // Close enough — idle and face player
+      entity.vx = 0;
+      entity.vy = 0;
+      entity.animMoving = false;
+      entity.facing = getFacingFromAngle(Math.atan2(-dyP, -dxP));
+      // Occasionally show a happy emotion
+      if (!entity.speechBubble && entity.emotionType === null && Math.random() < 0.003) {
+        setEmotion(entity, 3, false); // Happy
+      }
+    }
+    return;
+  }
+
   const prevState = entity.aiState;
 
   if (entity.aiState === 'sleep') {
@@ -598,8 +634,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
 
   const playerThreatInRange = distP < effectiveAlertRadius;
   const environmentalThreatInRange = !followerTeamMode && envDanger > 0.62;
+  const isFollowingPlayer = entity.aiState === 'follow_player';
 
-  if (playerThreatInRange || environmentalThreatInRange) {
+  if ((playerThreatInRange || environmentalThreatInRange) && !isFollowingPlayer) {
     if (followerTeamMode) {
       // Followers stay in team-follow mode and do not run independent player reaction states.
       entity.aiState = 'wander';
@@ -671,7 +708,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vy = 0;
       }
     }
-  } else if (distP >= effectiveAlertRadius * 1.5 && envDanger < 0.28 && entity.aiState !== 'sleep') {
+  } else if (distP >= effectiveAlertRadius * 1.5 && envDanger < 0.28 && entity.aiState !== 'sleep' && !isFollowingPlayer) {
     entity.aiState = 'wander';
     entity._neutralPostAlertCooldown = 0;
   }
@@ -716,6 +753,16 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (entity.aiState === 'wander') {
     const groupFollow = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
     const followerMode = !!groupFollow && !groupFollow.isLeader;
+
+    // ── High-Affinity → Follow Player ──
+    if (!followerMode && entity.socialMemory) {
+      const aff = entity.socialMemory.affinity || 0;
+      if (aff >= FOLLOW_PLAYER_AFFINITY_ENTER && distP < 18 && !entity.groupPhase?.startsWith('SCENIC')) {
+        entity.aiState = 'follow_player';
+        setEmotion(entity, 2, false); // Joyous
+        return;
+      }
+    }
 
     // ── Phase Lifecycle & Organic Discovery ──
     if (entity.groupId && !followerMode) {
@@ -1004,6 +1051,26 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   const wildMovedTiles = Math.hypot(entity.x - wildFootX0, entity.y - wildFootY0);
+
+  // Stall detection: entity has velocity and a target but trunk resolution keeps
+  // pushing it back (e.g. trying to squeeze between two close circle colliders).
+  const expectedMove = Math.hypot(entity.vx || 0, entity.vy || 0) * dt;
+  if (
+    entity.targetX != null &&
+    expectedMove > WILD_STALL_PROGRESS_THRESHOLD &&
+    wildMovedTiles < expectedMove * 0.15
+  ) {
+    entity._stallProgressSec = (entity._stallProgressSec || 0) + dt;
+    if (entity._stallProgressSec >= WILD_STALL_ABANDON_SEC) {
+      entity.targetX = null;
+      entity.targetY = null;
+      entity.vx = 0;
+      entity.vy = 0;
+      entity._stallProgressSec = 0;
+    }
+  } else {
+    entity._stallProgressSec = 0;
+  }
 
   clampVelocityToWalkCapIfNoStamina(entity);
   const spd = Math.hypot(entity.vx, entity.vy);

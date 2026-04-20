@@ -63,7 +63,8 @@ import {
   initSunLightRaysLayer,
   tickSunLightRaysLayer,
   setSunLightRaysTargetIntensity01,
-  getSunLightRaysActiveIntensity01
+  getSunLightRaysActiveIntensity01,
+  getSunLightRaysTargetIntensity01
 } from './main/sun-light-rays-layer.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
@@ -1142,7 +1143,7 @@ function buildPlaySessionPersistExtra() {
     weatherPrecipIntensity01: wt.precipIntensity01,
     weatherIntensity01: wt.precipIntensity01,
     earthquakeIntensity01: getEarthquakeActiveIntensity01(),
-    sunLightRaysIntensity01: getSunLightRaysActiveIntensity01()
+    sunLightRaysIntensity01: getSunLightRaysTargetIntensity01()
   };
 }
 
@@ -1361,7 +1362,7 @@ function getSettings() {
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
-    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(),
+    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(hoursWrapped),
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
@@ -1440,7 +1441,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
     tickWeather(dt, gameTime);
     tickEarthquakeLayer(dt, gameTime);
-    tickSunLightRaysLayer(dt);
+    tickSunLightRaysLayer(dt, { data: currentData, player });
   },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {

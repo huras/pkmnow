@@ -75,7 +75,7 @@ export class WildScenarioOrchestrator {
       if (bubble) {
         setWildSpeechBubble(target, bubble, { 
           durationSec: step.duration,
-          kind: 'say'
+          kind: step.bubbleKind || 'say'
         });
       }
 

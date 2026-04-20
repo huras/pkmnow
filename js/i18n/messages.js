@@ -142,7 +142,8 @@ export const MESSAGES = {
       17: 'Rua de Cidade',
       18: 'Vila Rural',
       19: 'Rua de Vila',
-      20: 'Campos Floridos'
+      20: 'Campos Floridos',
+      99: 'Terras corrompidas'
     }
   },
   'en-US': {
@@ -284,7 +285,8 @@ export const MESSAGES = {
       17: 'City Street',
       18: 'Rural Town',
       19: 'Town Street',
-      20: 'Flower Fields'
+      20: 'Flower Fields',
+      99: 'Corrupted lands'
     }
   },
   'ja-JP': {
@@ -426,7 +428,8 @@ export const MESSAGES = {
       17: '都市道路',
       18: '村',
       19: '村道',
-      20: '花畑'
+      20: '花畑',
+      99: '堕落の大地'
     }
   }
 };

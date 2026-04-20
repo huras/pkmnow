@@ -207,6 +207,20 @@
               </button>
               <button
                 type="button"
+                id="minimap-social-inspector-toggle"
+                class="minimap-panel__social-inspector-btn"
+                title="Social Inspector"
+                aria-label="Social Inspector"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__social-inspector-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+                  <circle cx="18" cy="18" r="4" fill="rgba(14,16,24,0.85)" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M18 16.5v3M16.5 18h3" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+              </button>
+              <button
+                type="button"
                 id="minimap-audio-toggle"
                 class="minimap-panel__music-btn"
                 data-i18n-title="play.minimapAudioToggle"
@@ -432,6 +446,20 @@
               <span>Berry Trees on Map</span>
             </div>
             <div id="minimap-berries-popover-list" class="minimap-berries-popover__list"></div>
+          </div>
+
+          <!-- Social Inspector panel -->
+          <div id="minimap-social-inspector-popover" class="minimap-social-inspector-popover hidden" role="dialog" aria-label="Social Inspector">
+            <div class="social-inspector__head">
+              <span class="social-inspector__title">Social Inspector</span>
+              <div class="social-inspector__head-actions">
+                <select id="social-inspector-scenario-select" class="social-inspector__scenario-select" title="Trigger scenario on nearest group">
+                  <option value="">Trigger Scenario…</option>
+                </select>
+                <button type="button" id="social-inspector-trigger-btn" class="social-inspector__trigger-btn" title="Run selected scenario">▶ Go</button>
+              </div>
+            </div>
+            <div id="social-inspector-list" class="social-inspector__list"></div>
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>

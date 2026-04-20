@@ -1,5 +1,6 @@
 import { BIOMES } from '../biomes.js';
 import { MACRO_TILE_STRIDE, foliageDensity, getMicroTile } from '../chunking.js';
+import { getFogDiscoveredRevision, isFogMicroTileDiscovered } from '../main/play-vision-fog.js';
 import {
   BIOME_VEGETATION,
   FOLIAGE_DENSITY_THRESHOLD,
@@ -149,6 +150,7 @@ let localMinimapCacheOriginY = 0;
 let localMinimapCacheZoom = '';
 let localMinimapCacheChunkRevision = -1;
 let localMinimapCacheLastRebuildAtMs = 0;
+let localMinimapCacheFogRevision = -1;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -413,6 +415,7 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   const originX = Math.floor(playerX - microSpanW * 0.5);
   const originY = Math.floor(playerY - microSpanH * 0.5);
   const chunkRevision = getPlayChunkCacheRevision();
+  const fogRevision = getFogDiscoveredRevision();
   const nowMs = performance.now();
   const needsRebuild =
     !localMinimapCacheCanvas ||
@@ -422,7 +425,8 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
     localMinimapCacheZoom !== zoom ||
     localMinimapCacheOriginX !== originX ||
     localMinimapCacheOriginY !== originY ||
-    localMinimapCacheChunkRevision !== chunkRevision;
+    localMinimapCacheChunkRevision !== chunkRevision ||
+    localMinimapCacheFogRevision !== fogRevision;
 
   if (!needsRebuild) {
     ctx.drawImage(localMinimapCacheCanvas, 0, 0);
@@ -462,44 +466,24 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   const startY = Math.max(0, originY);
   const endX = Math.min(microW, originX + microSpanW);
   const endY = Math.min(microH, originY + microSpanH);
-  if (startX < endX && startY < endY) {
-    const startCx = Math.floor(startX / PLAY_CHUNK_SIZE);
-    const startCy = Math.floor(startY / PLAY_CHUNK_SIZE);
-    const endCx = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
-    const endCy = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
-
-    for (let cy = startCy; cy <= endCy; cy++) {
-      for (let cx = startCx; cx <= endCx; cx++) {
-        const key = `${cx},${cy}`;
-        if (!hasPlayChunk(key)) continue;
-
-        const chunkX0 = cx * PLAY_CHUNK_SIZE;
-        const chunkY0 = cy * PLAY_CHUNK_SIZE;
-        const x0 = Math.max(startX, chunkX0);
-        const y0 = Math.max(startY, chunkY0);
-        const x1 = Math.min(endX, chunkX0 + PLAY_CHUNK_SIZE);
-        const y1 = Math.min(endY, chunkY0 + PLAY_CHUNK_SIZE);
-
-        for (let my = y0; my < y1; my++) {
-          for (let mx = x0; mx < x1; mx++) {
-            const tile = getMicroTile(mx, my, data);
-            const kind = classifyLocalMinimapTile(mx, my, tile, data);
-            const color = localMinimapColor(tile?.biomeId, kind);
-            const sx0 = Math.floor((mx - originX) * pxPerMicro);
-            const sy0 = Math.floor((my - originY) * pxPerMicro);
-            for (let dy = 0; dy < pxPerMicro; dy++) {
-              for (let dx = 0; dx < pxPerMicro; dx++) {
-                const sx = sx0 + dx;
-                const sy = sy0 + dy;
-                if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
-                const p = (sy * w + sx) * 4;
-                pix[p] = color.r;
-                pix[p + 1] = color.g;
-                pix[p + 2] = color.b;
-                pix[p + 3] = 255;
-              }
-            }
-          }
+  for (let my = startY; my < endY; my++) {
+    for (let mx = startX; mx < endX; mx++) {
+      if (!isFogMicroTileDiscovered(mx, my)) continue;
+      const tile = getMicroTile(mx, my, data);
+      const kind = classifyLocalMinimapTile(mx, my, tile, data);
+      const color = localMinimapColor(tile?.biomeId, kind);
+      const sx0 = Math.floor((mx - originX) * pxPerMicro);
+      const sy0 = Math.floor((my - originY) * pxPerMicro);
+      for (let dy = 0; dy < pxPerMicro; dy++) {
+        for (let dx = 0; dx < pxPerMicro; dx++) {
+          const sx = sx0 + dx;
+          const sy = sy0 + dy;
+          if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+          const p = (sy * w + sx) * 4;
+          pix[p] = color.r;
+          pix[p + 1] = color.g;
+          pix[p + 2] = color.b;
+          pix[p + 3] = 255;
         }
       }
     }
@@ -514,6 +498,7 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   localMinimapCacheOriginY = originY;
   localMinimapCacheZoom = zoom;
   localMinimapCacheChunkRevision = chunkRevision;
+  localMinimapCacheFogRevision = fogRevision;
   localMinimapCacheLastRebuildAtMs = nowMs;
   ctx.drawImage(cacheCanvas, 0, 0);
 }
@@ -898,6 +883,34 @@ export function renderMinimap(canvas, data, player, options = {}) {
     ctx.translate(-tfOx * tfScale, -tfOy * tfScale);
     ctx.drawImage(baseCacheCanvas, 0, 0, data.width * tfScale, data.height * tfScale);
     ctx.restore();
+
+    // Fog overlay for far/mid zoom: darken undiscovered macro tiles.
+    const fogEnabled = options.playVision?.enabled;
+    if (fogEnabled) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.92)';
+      const mtw = tfScale;
+      const mth = tfScale;
+      for (let ty = 0; ty < data.height; ty++) {
+        for (let tx = 0; tx < data.width; tx++) {
+          // A macro tile is "discovered" if any of its micro tiles are discovered.
+          const mx0 = tx * MACRO_TILE_STRIDE;
+          const my0 = ty * MACRO_TILE_STRIDE;
+          let found = false;
+          for (let dy = 0; dy < MACRO_TILE_STRIDE && !found; dy += 2) {
+            for (let dx = 0; dx < MACRO_TILE_STRIDE && !found; dx += 2) {
+              if (isFogMicroTileDiscovered(mx0 + dx, my0 + dy)) found = true;
+            }
+          }
+          if (!found) {
+            const sx = (tx - tfOx) * tfScale;
+            const sy = (ty - tfOy) * tfScale;
+            ctx.fillRect(sx, sy, mtw + 0.5, mth + 0.5);
+          }
+        }
+      }
+      ctx.restore();
+    }
   }
 
   // --- Viewport border pulse for local sprite zooms ---

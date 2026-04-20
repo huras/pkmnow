@@ -1,4 +1,5 @@
 import { DEFAULT_LOCALE, HELP_ARTICLES, MESSAGES, SUPPORTED_LOCALES } from './messages.js';
+import { PluginRegistry } from '../core/plugin-registry.js';
 
 const STORAGE_KEY = 'pkmn.locale';
 const LOCALE_EVENT = 'app:locale-changed';
@@ -66,7 +67,12 @@ export function t(key, vars) {
 export function getBiomeNameById(id) {
   const n = Number(id);
   if (!Number.isFinite(n)) return '—';
-  return t(`biome.${String(Math.floor(n))}`);
+  const path = `biome.${String(Math.floor(n))}`;
+  const fromT = t(path);
+  if (fromT !== path) return fromT;
+  const mod = PluginRegistry.getBiomeById(n);
+  if (mod && typeof mod.name === 'string' && mod.name.trim()) return mod.name.trim();
+  return fromT;
 }
 
 export function getPlayHelpArticles() {

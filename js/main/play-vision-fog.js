@@ -31,6 +31,9 @@ const fogState = {
   lastComputedAtMs: 0
 };
 
+let _discoveredRevision = 0;
+let _fogEnabled = false;
+
 function fingerprintForMap(data) {
   const w = Math.max(0, Math.floor(Number(data?.width) || 0));
   const h = Math.max(0, Math.floor(Number(data?.height) || 0));
@@ -150,7 +153,7 @@ function recomputeVisibilityInto(data, player, cfg, targetVisible) {
       if (inBounds(cx2, cy2, coarseW, coarseH)) {
         const k = idx(cx2, cy2, coarseW);
         vis[k] = 1;
-        if (discovered) discovered[k] = 1;
+        if (discovered && !discovered[k]) { discovered[k] = 1; _discoveredRevision++; }
       }
     }
   }
@@ -178,7 +181,7 @@ function recomputeVisibilityInto(data, player, cfg, targetVisible) {
       if (ddx * ddx + ddy * ddy > r2) break;
       const k = idx(cx, cy, coarseW);
       vis[k] = 1;
-      if (discovered) discovered[k] = 1;
+      if (discovered && !discovered[k]) { discovered[k] = 1; _discoveredRevision++; }
       if (blocksVisionAtCoarseCell(cx, cy, data, playerHeightStep)) break;
     }
   }
@@ -270,6 +273,12 @@ export function getPlayVisionFogState(data, player, opts = {}) {
     }
   }
   ensureFogBuffers(data);
+  const wasEnabled = _fogEnabled;
+  _fogEnabled = !!cfg.enabled;
+  if (_fogEnabled !== wasEnabled) _discoveredRevision++;
+  // Always stamp discovery around the player (even with fog off) so the
+  // minimap knows which areas were explored and can persist them.
+  stampDiscoveryAroundPlayer(data, player, cfg);
   if (!cfg.enabled) {
     return {
       enabled: false,
@@ -332,8 +341,31 @@ export function getPlayVisionFogState(data, player, opts = {}) {
 
 /**
  * Draws black unexplored + dim explored fog overlay in play mode.
- * Batches into two fill passes (unseen / explored) to minimise fillStyle switches.
+ * Renders into a small offscreen canvas at coarse resolution, then upscales with
+ * bilinear smoothing so the fog edges look soft instead of hard grid squares.
  */
+
+/** @type {OffscreenCanvas | HTMLCanvasElement | null} */
+let _fogOffscreen = null;
+/** @type {CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null} */
+let _fogOffCtx = null;
+let _fogOffW = 0;
+let _fogOffH = 0;
+
+function ensureFogOffscreen(w, h) {
+  if (_fogOffscreen && _fogOffW === w && _fogOffH === h) return;
+  _fogOffW = w;
+  _fogOffH = h;
+  if (typeof OffscreenCanvas !== 'undefined') {
+    _fogOffscreen = new OffscreenCanvas(w, h);
+  } else {
+    _fogOffscreen = document.createElement('canvas');
+    _fogOffscreen.width = w;
+    _fogOffscreen.height = h;
+  }
+  _fogOffCtx = _fogOffscreen.getContext('2d', { willReadFrequently: false });
+}
+
 export function drawPlayVisionFogOverlay(ctx, vision, startX, startY, endX, endY, tileW, tileH) {
   if (!vision?.enabled) return;
   const unseenAlpha = vision.unseenAlpha ?? DEFAULTS.unseenAlpha;
@@ -343,30 +375,155 @@ export function drawPlayVisionFogOverlay(ctx, vision, startX, startY, endX, endY
   const y0 = Math.floor((Number(startY) || 0) / cell);
   const x1 = Math.ceil((Number(endX) || 0) / cell);
   const y1 = Math.ceil((Number(endY) || 0) / cell);
-  const cellW = tileW * cell + 1;
-  const cellH = tileH * cell + 1;
-  ctx.save();
+
+  // Build a tiny 1-pixel-per-coarse-cell offscreen buffer.
+  const offW = x1 - x0;
+  const offH = y1 - y0;
+  if (offW <= 0 || offH <= 0) return;
+  ensureFogOffscreen(offW, offH);
+  if (!_fogOffCtx) return;
+  const oc = _fogOffCtx;
+  oc.clearRect(0, 0, offW, offH);
+
   // Pass 1: unseen (full black)
-  ctx.fillStyle = `rgba(0,0,0,${unseenAlpha})`;
+  oc.fillStyle = `rgba(0,0,0,${unseenAlpha})`;
   for (let cy = y0; cy < y1; cy++) {
     for (let cx = x0; cx < x1; cx++) {
       const mx = cx * cell;
       const my = cy * cell;
       if (!vision.isDiscovered(mx, my)) {
-        ctx.fillRect(mx * tileW, my * tileH, cellW, cellH);
+        oc.fillRect(cx - x0, cy - y0, 1, 1);
       }
     }
   }
   // Pass 2: discovered-but-not-visible (dim)
-  ctx.fillStyle = `rgba(0,0,0,${exploredAlpha})`;
+  oc.fillStyle = `rgba(0,0,0,${exploredAlpha})`;
   for (let cy = y0; cy < y1; cy++) {
     for (let cx = x0; cx < x1; cx++) {
       const mx = cx * cell;
       const my = cy * cell;
       if (vision.isDiscovered(mx, my) && !vision.isVisible(mx, my)) {
-        ctx.fillRect(mx * tileW, my * tileH, cellW, cellH);
+        oc.fillRect(cx - x0, cy - y0, 1, 1);
       }
     }
   }
+
+  // Upscale the tiny fog texture onto the main canvas with bilinear smoothing.
+  const destX = x0 * cell * tileW;
+  const destY = y0 * cell * tileH;
+  const destW = offW * cell * tileW;
+  const destH = offH * cell * tileH;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'low';
+  ctx.drawImage(/** @type {any} */ (_fogOffscreen), 0, 0, offW, offH, destX, destY, destW, destH);
   ctx.restore();
+}
+
+// --- Fog discovered buffer snapshot / restore (for save/load) ---
+
+/**
+ * Returns a compact snapshot of the discovered fog buffer, or null if empty/disabled.
+ * Bit-packs the 0/1 Uint8Array (8 cells per byte) then base64-encodes for JSON storage.
+ * @returns {{ w: number, h: number, cell: number, b64: string } | null}
+ */
+export function getFogDiscoveredSnapshot() {
+  const { coarseW, coarseH, coarseCellSize, discovered } = fogState;
+  if (!discovered || coarseW <= 0 || coarseH <= 0) return null;
+  // Quick check: any cell discovered?
+  let any = false;
+  for (let i = 0, len = discovered.length; i < len; i++) {
+    if (discovered[i]) { any = true; break; }
+  }
+  if (!any) return null;
+  // Bit-pack: 8 cells per byte, MSB-first.
+  const totalCells = coarseW * coarseH;
+  const packedLen = (totalCells + 7) >>> 3;
+  const packed = new Uint8Array(packedLen);
+  for (let i = 0; i < totalCells; i++) {
+    if (discovered[i]) packed[i >>> 3] |= (1 << (7 - (i & 7)));
+  }
+  // Base64 encode
+  let binary = '';
+  for (let i = 0; i < packedLen; i++) binary += String.fromCharCode(packed[i]);
+  const b64 = btoa(binary);
+  return { w: coarseW, h: coarseH, cell: coarseCellSize, b64 };
+}
+
+/**
+ * Restores the discovered fog buffer from a snapshot. Must be called after ensureFogBuffers.
+ * @param {{ w: number, h: number, cell: number, b64: string } | null | undefined} snapshot
+ * @param {object} data — map data (to ensure buffers are allocated)
+ */
+export function restoreFogDiscoveredFromSnapshot(snapshot, data) {
+  if (!snapshot || !snapshot.b64 || !data) return;
+  ensureFogBuffers(data);
+  const { coarseW, coarseH, discovered } = fogState;
+  if (!discovered || coarseW <= 0 || coarseH <= 0) return;
+  // Dimensions must match — if the map changed, discard stale snapshot.
+  if (snapshot.w !== coarseW || snapshot.h !== coarseH) return;
+  try {
+    const binary = atob(snapshot.b64);
+    const totalCells = coarseW * coarseH;
+    const packedLen = (totalCells + 7) >>> 3;
+    if (binary.length < packedLen) return;
+    for (let i = 0; i < totalCells; i++) {
+      if (binary.charCodeAt(i >>> 3) & (1 << (7 - (i & 7)))) {
+        if (!discovered[i]) { discovered[i] = 1; _discoveredRevision++; }
+      }
+    }
+  } catch {
+    // Corrupted b64 — silently ignore.
+  }
+}
+
+/**
+ * Cheap circle stamp: marks all coarse cells within the configured radius as
+ * discovered.  No raycasting, no occlusion — used every frame so that the
+ * minimap always knows what the player has seen (even with fog rendering off).
+ */
+function stampDiscoveryAroundPlayer(data, player, cfg) {
+  const { coarseW, coarseH, coarseCellSize, discovered } = fogState;
+  if (!discovered || coarseW <= 0 || coarseH <= 0) return;
+  const playerMx = Math.floor(Number(player?.visualX ?? player?.x) || 0);
+  const playerMy = Math.floor(Number(player?.visualY ?? player?.y) || 0);
+  const px = Math.floor(playerMx / Math.max(1, coarseCellSize));
+  const py = Math.floor(playerMy / Math.max(1, coarseCellSize));
+  const radius = Math.max(4, Math.floor(Number(cfg.radiusTiles) || DEFAULTS.radiusTiles));
+  const coarseR = Math.max(2, Math.ceil(radius / coarseCellSize));
+  const r2 = coarseR * coarseR;
+  const x0 = Math.max(0, px - coarseR);
+  const y0 = Math.max(0, py - coarseR);
+  const x1 = Math.min(coarseW - 1, px + coarseR);
+  const y1 = Math.min(coarseH - 1, py + coarseR);
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      const ddx = cx - px;
+      const ddy = cy - py;
+      if (ddx * ddx + ddy * ddy > r2) continue;
+      const k = cy * coarseW + cx;
+      if (!discovered[k]) { discovered[k] = 1; _discoveredRevision++; }
+    }
+  }
+}
+
+// --- Exports for minimap fog integration ---
+
+/** Monotonically increasing counter; bumps each time a new coarse cell is marked discovered. */
+export function getFogDiscoveredRevision() {
+  return _discoveredRevision;
+}
+
+/**
+ * Direct discovered check for a micro-tile (no fog-state wrapper needed).
+ * Returns true if either fog buffers aren't allocated or the cell is discovered.
+ */
+export function isFogMicroTileDiscovered(mx, my) {
+  const { discovered, coarseW, coarseH, coarseCellSize } = fogState;
+  if (!discovered || coarseW <= 0 || coarseH <= 0) return true;
+  const cx = Math.floor(mx / Math.max(1, coarseCellSize));
+  const cy = Math.floor(my / Math.max(1, coarseCellSize));
+  if (cx < 0 || cy < 0 || cx >= coarseW || cy >= coarseH) return false;
+  return discovered[cy * coarseW + cx] === 1;
 }

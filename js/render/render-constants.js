@@ -19,7 +19,7 @@ export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
 export const PLAY_CHUNK_SIZE = 6;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
-export const PLAY_BAKE_TILE_PX = 41;
+export const PLAY_BAKE_TILE_PX = 42;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
 export const PLAY_CAMERA_Z_REF = 58;
@@ -47,3 +47,12 @@ export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTT
 
 /** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
 export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
+/* ── Sun Light Rays ─────────────────────────────────────────────────────── */
+/** Intensity (0..1) applied when standing under a formal broadleaf tree canopy. */
+export const FORMAL_TREES_SUN_RAYS_BOOST_INTENSITY = 0.45;
+/** Seconds for the biome boost to fade in/out (~99 % exponential). */
+export const FORMAL_TREES_SUN_RAYS_FADE_SEC = 1.8;
+/** Hours of fade-in ramp near dawn. */
+export const SUN_LIGHT_RAYS_DAWN_EDGE_FADE_HOURS = 1.0;
+/** Hours of fade-out ramp near nightfall. */
+export const SUN_LIGHT_RAYS_NIGHT_EDGE_FADE_HOURS = 1.5;
