@@ -201,7 +201,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
           baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
         }
         if (baseId != null) {
-          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
           const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
           blitGrassQuad(frame, ty - tileH, tileH * 2);
         }
@@ -211,7 +211,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
         const vTiles = GRASS_TILES[vt];
         const topId = vTiles.originalTop;
         if (topId) {
-          const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+          const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
           const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
           blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
         }
@@ -288,7 +288,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       baseId = ftPick < 0.5 ? gTiles.original : gTiles.grass2;
     }
     if (baseId != null) {
-      const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+      const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
       const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH, tileH * 2);
     }
@@ -299,7 +299,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
     const vTiles = GRASS_TILES[vt];
     const topId = vTiles.originalTop;
     if (topId) {
-      const fIdx = AnimationRenderer.getFrameIndex(vegAnimTime, mx, my);
+      const fIdx = AnimationRenderer.getGrassFrameIndex(vegAnimTime, mx, my);
       const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
     }

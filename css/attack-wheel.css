@@ -229,7 +229,8 @@
   max-height: 32px;
   transform: translate(-50%, -50%) rotate(0deg);
   transform-origin: 50% 50%;
-  background: linear-gradient(90deg, rgba(107, 159, 255, 0.4), rgba(107, 159, 255, 0.08) 48%, transparent 100%);
+  /* Keep the spoke geometry, but make the "pointing" side face the selected wedge. */
+  background: linear-gradient(90deg, transparent 0%, rgba(107, 159, 255, 0.08) 52%, rgba(107, 159, 255, 0.4) 100%);
   border-radius: 5px;
   pointer-events: none;
   z-index: 1;

@@ -217,7 +217,11 @@ export function preloadPokemonCry(dex) {
 function borrowAudio(dex) {
   const pool = ensureCryPool(dex);
   for (const a of pool) {
+    if (a._cryAwaitDecode) continue;
     if (a.paused || a.ended) return a;
+  }
+  for (const a of pool) {
+    if (!a._cryAwaitDecode) return a;
   }
   return pool[0];
 }
@@ -257,12 +261,16 @@ function noteLane(entity, lane, minGapSec) {
  *   envelope?: CryEnvelope
  * }} [opts]
  */
-export function playPokemonCry(dex, opts = {}) {
+/**
+ * @param {number} dex
+ * @param {object} opts
+ * @param {boolean} warmRetry after {@link preloadPokemonCry} — skips deferred preload only
+ */
+function playPokemonCryImpl(dex, opts, warmRetry) {
   const entity = opts.entity;
   const lane = opts.lane ?? 'emotion';
   const minGap = opts.minGapSec ?? 1.25;
   if (!canPlayLane(entity, lane)) return false;
-
   if (entity) stopOngoingCryForEntity(entity);
 
   const a = borrowAudio(dex);
@@ -285,40 +293,60 @@ export function playPokemonCry(dex, opts = {}) {
     r0 = r1 = rate;
   }
 
-  a.volume = Math.max(0, Math.min(1, v0));
-  a.playbackRate = Math.max(0.55, Math.min(1.45, r0));
-  try {
-    a.currentTime = 0;
-  } catch {
-    /* ignore */
+  const startPlayback = () => {
+    a._cryAwaitDecode = false;
+    a.volume = Math.max(0, Math.min(1, v0));
+    a.playbackRate = Math.max(0.55, Math.min(1.45, r0));
+    try {
+      a.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+
+    void resumeSpatialAudioContext();
+    const graph = wireSpatialMediaElement(a);
+    if (entity && Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+      setSpatialSourceWorldPosition(graph, entity.x, entity.y, Number(entity.z) || 0);
+    } else {
+      centerSpatialSourceOnListener(graph);
+    }
+
+    const p = a.play();
+    if (p !== undefined && typeof p.catch === 'function') {
+      p.catch(() => {});
+    }
+    if (entity) bindActiveCryToEntity(entity, a);
+
+    noteLane(entity, lane, minGap);
+
+    if (env || v0 !== v1 || r0 !== r1) {
+      attachCryEnvelope(a, {
+        v0,
+        v1,
+        r0,
+        r1,
+        fallbackDur: env?.fallbackDurationSec ?? 0.9
+      });
+    }
+  };
+
+  if (!warmRetry && a.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    a._cryAwaitDecode = true;
+    void preloadPokemonCry(clampDex(dex))
+      .catch(() => {})
+      .finally(() => {
+        a._cryAwaitDecode = false;
+        playPokemonCryImpl(dex, opts, true);
+      });
+    return true;
   }
 
-  void resumeSpatialAudioContext();
-  const graph = wireSpatialMediaElement(a);
-  if (entity && Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
-    setSpatialSourceWorldPosition(graph, entity.x, entity.y, Number(entity.z) || 0);
-  } else {
-    centerSpatialSourceOnListener(graph);
-  }
-
-  const p = a.play();
-  if (p !== undefined && typeof p.catch === 'function') {
-    p.catch(() => {});
-  }
-  if (entity) bindActiveCryToEntity(entity, a);
-
-  noteLane(entity, lane, minGap);
-
-  if (env || v0 !== v1 || r0 !== r1) {
-    attachCryEnvelope(a, {
-      v0,
-      v1,
-      r0,
-      r1,
-      fallbackDur: env?.fallbackDurationSec ?? 0.9
-    });
-  }
+  startPlayback();
   return true;
+}
+
+export function playPokemonCry(dex, opts = {}) {
+  return playPokemonCryImpl(dex, opts, false);
 }
 
 /**

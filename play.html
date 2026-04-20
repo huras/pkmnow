@@ -57,6 +57,11 @@
               <div id="minimap-audio-track" class="minimap-audio-popover__track"></div>
               <div id="minimap-audio-status" class="minimap-audio-popover__status"></div>
             </div>
+            <div class="minimap-audio-popover__row">
+              <button type="button" id="minimap-bgm-next-track" class="minimap-audio-popover__btn">
+                Próxima música
+              </button>
+            </div>
           </div>
           <header class="minimap-panel__header">
             <span class="minimap-panel__title">Região</span>
@@ -277,8 +282,11 @@
                 <button type="button" class="play-weather-preset" data-weather="blizzard">Blizzard</button>
                 <button type="button" class="play-weather-preset" data-weather="sandstorm">Sandstorm</button>
               </div>
-              <label class="play-weather-row">Intensity
-                <input type="range" id="play-weather-intensity" min="0" max="100" step="1" value="100" />
+              <label class="play-weather-row">Cloud intensity
+                <input type="range" id="play-weather-cloud-intensity" min="0" max="100" step="1" value="75" />
+              </label>
+              <label class="play-weather-row">Rain intensity
+                <input type="range" id="play-weather-rain-intensity" min="0" max="100" step="1" value="75" title="Rain, snow, or sand particles depending on preset" />
               </label>
               <label class="play-weather-row">Earthquake layer
                 <input type="range" id="play-earthquake-intensity" min="0" max="100" step="1" value="0" title="Independent ground shake; stacks with sky weather" />
@@ -296,16 +304,27 @@
           <div id="minimap-groups-popover" class="minimap-groups-popover hidden" role="dialog" aria-label="Grupos de Pokémon selvagens">
             <div class="minimap-groups-popover__head">
               <span>Grupos simulados</span>
-              <button
-                type="button"
-                id="minimap-groups-leader-target-toggle"
-                class="minimap-groups-popover__head-toggle"
-                aria-pressed="false"
-                title="Mostrar alvo do líder apenas quando em ROAM"
-                aria-label="Mostrar alvo do líder apenas quando em ROAM"
-              >
-                Alvo líder
-              </button>
+              <div class="minimap-groups-popover__head-actions">
+                <button
+                  type="button"
+                  id="minimap-groups-far-cry-trigger"
+                  class="minimap-groups-popover__head-toggle"
+                  title="Disparar agora um Far Cry"
+                  aria-label="Disparar agora um Far Cry"
+                >
+                  Next Far Cry
+                </button>
+                <button
+                  type="button"
+                  id="minimap-groups-leader-target-toggle"
+                  class="minimap-groups-popover__head-toggle"
+                  aria-pressed="false"
+                  title="Mostrar alvo do líder apenas quando em ROAM"
+                  aria-label="Mostrar alvo do líder apenas quando em ROAM"
+                >
+                  Alvo líder
+                </button>
+              </div>
             </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
           </div>

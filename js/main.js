@@ -56,7 +56,8 @@ import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
   clearPlayCrystalTackleState,
-  spawnPickableCrystalDropAt,
+  placeInventoryItemAsScatterDetailNear,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './main/play-crystal-tackle.js';
 import { getStrengthGrabPromptInfo, getStrengthCarryMobilityInfo } from './main/play-strength-carry.js';
@@ -100,6 +101,7 @@ import {
 } from './main/world-time-of-day.js';
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
 import { initMods } from './core/mod-loader.js';
+import { resetFarCrySystem } from './main/far-cry-system.js';
 
 
 if (isPlayShell()) {
@@ -217,7 +219,8 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
-const playWeatherIntensityEl = document.getElementById('play-weather-intensity');
+const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
+const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
@@ -334,7 +337,7 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
-const minimapHudPopovers = installMinimapHudPopovers({ imageCache });
+const minimapHudPopovers = installMinimapHudPopovers({ imageCache, getCurrentData: () => currentData });
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
   getPlayer: () => player,
@@ -535,14 +538,16 @@ function buildPlaySessionPersistExtra() {
   return {
     worldHours: wrapHours(worldHours),
     weatherPreset: wt.preset,
-    weatherIntensity01: wt.intensity01,
+    weatherCloudIntensity01: wt.cloudIntensity01,
+    weatherPrecipIntensity01: wt.precipIntensity01,
+    weatherIntensity01: wt.precipIntensity01,
     earthquakeIntensity01: getEarthquakeActiveIntensity01()
   };
 }
 
 /**
  * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
- * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01: number, earthquakeIntensity01: number }} env
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} env
  */
 function applyRestoredPlayEnvironmentFromSave(env) {
   if (!env) return;
@@ -554,7 +559,18 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   if (playWorldTimeHourEl) playWorldTimeHourEl.textContent = `${worldHours.toFixed(2)} h`;
   snapDayCycleTintSmoothToHours(worldHours);
-  setWeatherTarget({ preset: env.weatherPreset, intensity01: env.weatherIntensity01 }, 'external');
+  const legacy = Number(env.weatherIntensity01);
+  const fallback = Number.isFinite(legacy) ? Math.max(0, Math.min(1, legacy)) : 1;
+  const wc = Number(env.weatherCloudIntensity01);
+  const wp = Number(env.weatherPrecipIntensity01);
+  setWeatherTarget(
+    {
+      preset: env.weatherPreset,
+      cloudIntensity01: Number.isFinite(wc) ? wc : fallback,
+      precipIntensity01: Number.isFinite(wp) ? wp : fallback
+    },
+    'external'
+  );
   syncWeatherUi();
   setEarthquakeTargetIntensity01(env.earthquakeIntensity01);
   if (playEarthquakeIntensityEl) {
@@ -645,7 +661,8 @@ function getSettings() {
     worldHours: hoursWrapped,
     dayCycleTint,
     weatherPreset: weatherTarget.preset,
-    weatherIntensity: weatherTarget.intensity01,
+    weatherCloudIntensity01: weatherTarget.cloudIntensity01,
+    weatherPrecipIntensity01: weatherTarget.precipIntensity01,
     weatherCloudPresence: weather.cloudPresence,
     weatherCloudThreshold: weather.cloudThreshold,
     weatherCloudMinMul: weather.cloudMinMul,
@@ -675,20 +692,22 @@ function getSettings() {
  * `setWeatherTarget` calls keep the UI in lockstep without scattering `syncWeatherUi()`
  * calls throughout the file.
  *
- * The `ui` source is skipped for the slider because the user is actively dragging it —
- * writing back would fight their input and cause jitter on some browsers.
- * @param {{ preset: import('./main/weather-presets.js').WeatherPresetId, intensity01: number, source: string }} [ev]
+ * `ui-cloud` / `ui-precip` skip the matching range so the active drag is not overwritten.
+ * @param {{ preset: import('./main/weather-presets.js').WeatherPresetId, cloudIntensity01: number, precipIntensity01: number, source: string }} [ev]
  */
 function syncWeatherUi(ev) {
-  const { preset, intensity01 } = ev ?? getWeatherTarget();
+  const { preset, cloudIntensity01, precipIntensity01 } = ev ?? getWeatherTarget();
   for (const btn of playWeatherPresetBtns) {
     btn.classList.toggle('is-active', btn.dataset.weather === preset);
   }
   if (playWeatherCurrentEl) {
     playWeatherCurrentEl.textContent = WEATHER_PRESET_LABELS[preset] || '—';
   }
-  if (playWeatherIntensityEl && ev?.source !== 'ui') {
-    playWeatherIntensityEl.value = String(Math.round(intensity01 * 100));
+  if (playWeatherCloudIntensityEl && ev?.source !== 'ui-cloud') {
+    playWeatherCloudIntensityEl.value = String(Math.round(cloudIntensity01 * 100));
+  }
+  if (playWeatherRainIntensityEl && ev?.source !== 'ui-precip') {
+    playWeatherRainIntensityEl.value = String(Math.round(precipIntensity01 * 100));
   }
 }
 
@@ -781,6 +800,7 @@ installPlayContextMenu({
 function run() {
   resizeCanvas();
   sessionEnteredPlayOnCurrentMap = false;
+  resetFarCrySystem();
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
@@ -876,7 +896,10 @@ canvas.addEventListener('drop', (e) => {
     mousePxY,
     player
   );
-  spawnPickableCrystalDropAt(worldX, worldY, spent.itemKey, 1);
+  const placed = placeInventoryItemAsScatterDetailNear(worldX, worldY, spent.itemKey, currentData, 12);
+  if (!placed) {
+    refundOneInventoryUnitFromGroundDrop(spent.itemKey);
+  }
   playCharacterSelector?.invalidatePlayItemsHudSignature?.();
   playCharacterSelector?.updatePlayItemsHud?.();
   focusGameCanvas();
@@ -955,6 +978,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
+  resetFarCrySystem();
   stopBiomeBgm();
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
@@ -1213,9 +1237,13 @@ for (const btn of playWeatherPresetBtns) {
     setWeatherTarget({ preset: next }, 'ui');
   });
 }
-playWeatherIntensityEl?.addEventListener('input', () => {
-  const v = Number(playWeatherIntensityEl.value);
-  setWeatherTarget({ intensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui');
+playWeatherCloudIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherCloudIntensityEl.value);
+  setWeatherTarget({ cloudIntensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui-cloud');
+});
+playWeatherRainIntensityEl?.addEventListener('input', () => {
+  const v = Number(playWeatherRainIntensityEl.value);
+  setWeatherTarget({ precipIntensity01: (Number.isFinite(v) ? v : 100) / 100 }, 'ui-precip');
 });
 
 playEarthquakeIntensityEl?.addEventListener('input', () => {

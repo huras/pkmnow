@@ -38,6 +38,7 @@ import { getSocialActionByNumpadCode } from '../social/social-actions.js';
 import { tickPlaySessionAutosave } from './play-session-persist.js';
 import { tickPlayGamepadFrame } from './play-gamepad.js';
 import { getGameplaySimDt } from './play-dual-bind-wheel-time.js';
+import { updateFarCrySystem } from './far-cry-system.js';
 import { PluginRegistry } from '../core/plugin-registry.js';
 import { canEntityStartSprint } from '../entity-stamina.js';
 import { beginMicroTileCache, endMicroTileCache } from '../chunking.js';
@@ -240,6 +241,7 @@ export function createGameLoop(api) {
       refreshPlayModeInfoBar();
       onPlayHudFrame?.(currentData);
       updateBreakdown.updHudMs = performance.now() - tHud0;
+      updateFarCrySystem(simDt, player, currentData);
       tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
     }
 

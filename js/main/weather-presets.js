@@ -91,81 +91,84 @@ function V(v) {
  *    erodes clouds to scattered wisps — lets day-cycle sky read through.
  *
  * @param {WeatherPresetId | string} preset  Unknown ids fall through to `clear`.
- * @param {number} intensity01
+ * @param {number} cloudIntensity01  0..1 — cloud mask / opacity ramp.
+ * @param {number} precipIntensity01 0..1 — rain, snow, sand particles, and coupled gameplay rain meter.
  * @returns {WeatherRenderParams}
  */
-export function resolveWeatherParams(preset, intensity01) {
-  const t = Math.max(0, Math.min(1, Number(intensity01) || 0));
-  const lerp = (a, b) => a + (b - a) * t;
+export function resolveWeatherParams(preset, cloudIntensity01, precipIntensity01) {
+  const c = Math.max(0, Math.min(1, Number(cloudIntensity01) || 0));
+  const p = Math.max(0, Math.min(1, Number(precipIntensity01) || 0));
+  const lerpC = (a, b) => a + (b - a) * c;
+  const lerpP = (a, b) => a + (b - a) * p;
   switch (preset) {
     case 'rain':
       return {
         cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.02),
-        cloudMinMul: lerp(0.45, 0.7),
-        cloudMaxMul: lerp(1.55, 1.95),
-        cloudAlphaMul: lerp(1, 1.25),
-        rainIntensity: t,
-        screenTint: t > 0 ? { r: 110, g: 120, b: 145, a: lerp(0, 0.28) } : null,
+        cloudThreshold: lerpC(0.42, 0.02),
+        cloudMinMul: lerpC(0.45, 0.7),
+        cloudMaxMul: lerpC(1.55, 1.95),
+        cloudAlphaMul: lerpC(1, 1.25),
+        rainIntensity: p,
+        screenTint: p > 0 ? { r: 110, g: 120, b: 145, a: lerpP(0, 0.28) } : null,
         ...V({
           weatherMode: 'rain',
-          volumetricParticleDensity: lerp(0.22, 1) * t,
-          volumetricVolumeDepth: lerp(0.35, 1) * t,
-          volumetricFallSpeed: lerp(0.5, 1) * t,
-          volumetricWindCarry: lerp(0.32, 0.95) * t,
-          volumetricTurbulence: lerp(0.08, 0.38) * t,
-          volumetricAbsorptionBias: lerp(0.42, 0.88) * t,
-          volumetricSplashBias: lerp(0.55, 1) * t
+          volumetricParticleDensity: lerpP(0.22, 1) * p,
+          volumetricVolumeDepth: lerpP(0.35, 1) * p,
+          volumetricFallSpeed: lerpP(0.5, 1) * p,
+          volumetricWindCarry: lerpP(0.32, 0.95) * p,
+          volumetricTurbulence: lerpP(0.08, 0.38) * p,
+          volumetricAbsorptionBias: lerpP(0.42, 0.88) * p,
+          volumetricSplashBias: lerpP(0.55, 1) * p
         })
       };
     case 'blizzard':
       // Heavy overcast + strong horizontal precip (reuses rain streaks) + icy wash; wind scales in `wind-state`.
       return {
         cloudPresence: 1,
-        cloudThreshold: lerp(0.36, 0.015),
-        cloudMinMul: lerp(0.52, 0.82),
-        cloudMaxMul: lerp(1.62, 2.05),
-        cloudAlphaMul: lerp(1.08, 1.32),
-        rainIntensity: lerp(0.55, 0.98),
-        screenTint: t > 0 ? { r: 210, g: 228, b: 248, a: lerp(0.08, 0.34) } : null,
+        cloudThreshold: lerpC(0.36, 0.015),
+        cloudMinMul: lerpC(0.52, 0.82),
+        cloudMaxMul: lerpC(1.62, 2.05),
+        cloudAlphaMul: lerpC(1.08, 1.32),
+        rainIntensity: lerpP(0.55, 0.98),
+        screenTint: p > 0 ? { r: 210, g: 228, b: 248, a: lerpP(0.08, 0.34) } : null,
         ...V({
           weatherMode: 'snow',
-          volumetricParticleDensity: lerp(0.45, 1) * t,
-          volumetricVolumeDepth: lerp(0.5, 1) * t,
-          volumetricFallSpeed: lerp(0.18, 0.42) * t,
-          volumetricWindCarry: lerp(0.55, 0.98) * t,
-          volumetricTurbulence: lerp(0.12, 0.45) * t,
-          volumetricAbsorptionBias: lerp(0.72, 0.98) * t,
-          volumetricSplashBias: lerp(0.12, 0.35) * t
+          volumetricParticleDensity: lerpP(0.45, 1) * p,
+          volumetricVolumeDepth: lerpP(0.5, 1) * p,
+          volumetricFallSpeed: lerpP(0.18, 0.42) * p,
+          volumetricWindCarry: lerpP(0.55, 0.98) * p,
+          volumetricTurbulence: lerpP(0.12, 0.45) * p,
+          volumetricAbsorptionBias: lerpP(0.72, 0.98) * p,
+          volumetricSplashBias: lerpP(0.12, 0.35) * p
         })
       };
     case 'sandstorm':
       // Arid haze + strong wind-driven dust; minimal rain audio/gameplay coupling (rainIntensity stays low).
       return {
         cloudPresence: 1,
-        cloudThreshold: lerp(0.38, 0.08),
-        cloudMinMul: lerp(0.5, 0.72),
-        cloudMaxMul: lerp(1.5, 1.88),
-        cloudAlphaMul: lerp(1.02, 1.22),
-        rainIntensity: lerp(0, 0.06) * t,
-        screenTint: t > 0 ? { r: 205, g: 178, b: 132, a: lerp(0.06, 0.26) } : null,
+        cloudThreshold: lerpC(0.38, 0.08),
+        cloudMinMul: lerpC(0.5, 0.72),
+        cloudMaxMul: lerpC(1.5, 1.88),
+        cloudAlphaMul: lerpC(1.02, 1.22),
+        rainIntensity: lerpP(0, 0.06) * p,
+        screenTint: p > 0 ? { r: 205, g: 178, b: 132, a: lerpP(0.06, 0.26) } : null,
         ...V({
           weatherMode: 'sandstorm',
-          volumetricParticleDensity: lerp(0.5, 1) * t,
-          volumetricVolumeDepth: lerp(0.55, 1) * t,
-          volumetricFallSpeed: lerp(0.08, 0.22) * t,
-          volumetricWindCarry: lerp(0.85, 1) * t,
-          volumetricTurbulence: lerp(0.22, 0.55) * t,
-          volumetricAbsorptionBias: lerp(0.35, 0.55) * t,
-          volumetricSplashBias: lerp(0.2, 0.4) * t
+          volumetricParticleDensity: lerpP(0.5, 1) * p,
+          volumetricVolumeDepth: lerpP(0.55, 1) * p,
+          volumetricFallSpeed: lerpP(0.08, 0.22) * p,
+          volumetricWindCarry: lerpP(0.85, 1) * p,
+          volumetricTurbulence: lerpP(0.22, 0.55) * p,
+          volumetricAbsorptionBias: lerpP(0.35, 0.55) * p,
+          volumetricSplashBias: lerpP(0.2, 0.4) * p
         })
       };
     case 'cloudy':
       return {
         cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.22),
+        cloudThreshold: lerpC(0.42, 0.22),
         cloudMinMul: 0.45,
-        cloudMaxMul: lerp(1.55, 1.7),
+        cloudMaxMul: lerpC(1.55, 1.7),
         cloudAlphaMul: 1,
         rainIntensity: 0,
         screenTint: null,
@@ -175,10 +178,10 @@ export function resolveWeatherParams(preset, intensity01) {
     default:
       return {
         cloudPresence: 1,
-        cloudThreshold: lerp(0.42, 0.78),
+        cloudThreshold: lerpC(0.42, 0.78),
         cloudMinMul: 0.4,
-        cloudMaxMul: lerp(1.55, 1.1),
-        cloudAlphaMul: lerp(1, 0.75),
+        cloudMaxMul: lerpC(1.55, 1.1),
+        cloudAlphaMul: lerpC(1, 0.75),
         rainIntensity: 0,
         screenTint: null,
         ...V({ weatherMode: 'clear', volumetricParticleDensity: 0 })

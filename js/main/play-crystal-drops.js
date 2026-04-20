@@ -357,6 +357,20 @@ function spendOneUnitForItemKey(itemKey) {
 }
 
 /**
+ * Restores one inventory unit when a map placement attempt fails.
+ * @param {string} itemKey
+ * @returns {boolean}
+ */
+export function refundOneInventoryUnitFromGroundDrop(itemKey) {
+  const key = String(itemKey || '');
+  if (!key) return false;
+  const prev = collectedDetailInventory.get(key) ?? 0;
+  collectedDetailInventory.set(key, Math.max(0, prev | 0) + 1);
+  if (isCrystalItemKey(key)) crystalLootCount = Math.max(0, (crystalLootCount | 0) + 1);
+  return true;
+}
+
+/**
  * Removes one inventory unit so it can be spawned as a ground pickup. Crystal HUD uses
  * {@link PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}: picks a concrete crystal `itemKey` with stock.
  * @param {string} tokenOrItemKey

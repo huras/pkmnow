@@ -411,16 +411,21 @@ button.btn-secondary:hover {
 .minimap-panel__biome-readout {
   flex: 0 1 auto;
   max-width: 100%;
-  min-height: 1.1em;
+  min-height: 1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: Inter, system-ui, sans-serif;
   font-size: 0.78rem;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.02em;
   color: #b8e8c8;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transform: translateY(-1px);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -700,6 +705,14 @@ button.btn-secondary:hover {
   flex-shrink: 0;
 }
 
+.minimap-groups-popover__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .minimap-groups-popover__head-toggle {
   border: 1px solid rgba(154, 216, 255, 0.45);
   background: rgba(12, 17, 28, 0.9);
@@ -802,12 +815,24 @@ button.btn-secondary:hover {
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
+  box-sizing: border-box;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
   background: rgba(6, 8, 14, 0.95);
 }
 
 .minimap-groups-popover__portrait-wrap--leader {
-  box-shadow: 0 0 0 2px rgba(255, 214, 120, 0.85), 0 0 0 3px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.minimap-groups-popover__portrait-wrap--leader::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 214, 120, 0.95),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.45);
 }
 
 .minimap-groups-popover__portrait {
@@ -889,6 +914,29 @@ button.btn-secondary:hover {
   font-size: 0.65rem;
   color: rgba(182, 205, 231, 0.92);
   word-break: break-word;
+}
+
+.minimap-audio-popover__btn {
+  width: 100%;
+  border: 1px solid rgba(154, 216, 255, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(17, 29, 49, 0.96), rgba(10, 18, 33, 0.96));
+  color: #d7edff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: filter 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.minimap-audio-popover__btn:hover {
+  filter: brightness(1.08);
+  border-color: rgba(182, 230, 255, 0.72);
+}
+
+.minimap-audio-popover__btn:active {
+  transform: translateY(1px);
 }
 
 .minimap-panel__zoom-readout {

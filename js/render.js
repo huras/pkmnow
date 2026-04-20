@@ -35,6 +35,7 @@ import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { resolveMapGlobalPlayerMicroForMarker } from './main/play-session-persist.js';
 import { renderMinimap } from './render/render-minimap.js';
 import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
+import { getDetailHitShake01 } from './main/play-crystal-tackle.js';
 import {
   FIRE_FRAME_W,
   FIRE_FRAME_H,
@@ -122,6 +123,7 @@ import {
   drawFieldCombatChargeBar,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
+import { drawFarCryScreenWaves } from './render/render-far-cry.js';
 import { PluginRegistry } from './core/plugin-registry.js';
 
 import './render/render-debug-hotkeys.js';
@@ -170,6 +172,7 @@ import {
   finalizeRenderFrameProfile,
   clearRenderFrameBreakdown
 } from './render/render-frame-phases.js';
+import { getActiveFarCryScreenWaves } from './main/far-cry-system.js';
 
 export {
   PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
@@ -196,11 +199,380 @@ const _tileCachePool = new Map();
  */
 const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
 
+/** Scratch for canopy read-through: multiply on world ctx tints the whole bbox over trees. */
+let _playerCanopySilScratch = /** @type {HTMLCanvasElement | null} */ (null);
+
+/**
+ * @param {number} iw
+ * @param {number} ih
+ * @returns {HTMLCanvasElement}
+ */
+function ensurePlayerCanopySilScratch(iw, ih) {
+  const w = Math.max(1, Math.ceil(iw));
+  const h = Math.max(1, Math.ceil(ih));
+  if (!_playerCanopySilScratch) {
+    _playerCanopySilScratch = document.createElement('canvas');
+  }
+  if (_playerCanopySilScratch.width !== w || _playerCanopySilScratch.height !== h) {
+    _playerCanopySilScratch.width = w;
+    _playerCanopySilScratch.height = h;
+  }
+  return _playerCanopySilScratch;
+}
+
+/** Union of non-transparent canopy texels (player-local px) for Pokémon ∩ tree read-through. */
+let _playerCanopyMaskScratch = /** @type {HTMLCanvasElement | null} */ (null);
+
+/**
+ * @param {number} iw
+ * @param {number} ih
+ */
+function ensurePlayerCanopyMaskScratch(iw, ih) {
+  const w = Math.max(1, Math.ceil(iw));
+  const h = Math.max(1, Math.ceil(ih));
+  if (!_playerCanopyMaskScratch) {
+    _playerCanopyMaskScratch = document.createElement('canvas');
+  }
+  if (_playerCanopyMaskScratch.width !== w || _playerCanopyMaskScratch.height !== h) {
+    _playerCanopyMaskScratch.width = w;
+    _playerCanopyMaskScratch.height = h;
+  }
+  return _playerCanopyMaskScratch;
+}
+
+function rectsOverlap2D(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+/**
+ * @param {any} item
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ * @param {HTMLImageElement | null | undefined} natureImg
+ * @param {number} canopyAnimTime
+ */
+function getFormalCanopyMaskMeta(item, tileW, tileH, snapPx, natureImg, canopyAnimTime) {
+  if (!item || item.isDestroyed) return null;
+  const ids = TREE_TILES[item.treeType];
+  if (!ids?.top || !natureImg) return null;
+  const { canvas, ox, oy, flipX } = getFormalTreeCanopyComposite(
+    canopyAnimTime,
+    item.treeType,
+    item.originX,
+    item.originY,
+    ids.top,
+    natureImg,
+    TCOLS_NATURE,
+    tileW,
+    tileH
+  );
+  if (!canvas?.width) return null;
+  const px = snapPx(item.originX * tileW + tileW);
+  const py = snapPx(item.originY * tileH + tileH);
+  const left = snapPx(px - ox);
+  const top = snapPx(py - oy);
+  return {
+    canvas,
+    left,
+    top,
+    w: canvas.width,
+    h: canvas.height,
+    flipX: !!flipX,
+    anchorX: px
+  };
+}
+
+/**
+ * @param {any} item
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ * @param {Map<string, HTMLImageElement>} imageCache
+ * @param {number} canopyAnimTime
+ */
+function getScatterCanopyMaskMeta(item, tileW, tileH, snapPx, imageCache, canopyAnimTime) {
+  if (!item || !scatterItemKeyIsTree(item.itemKey) || item.isCharred) return null;
+  const objSet = item.objSet;
+  if (!objSet) return null;
+  const topPart = objSet.parts?.find((p) => p.role === 'top' || p.role === 'tops');
+  if (!topPart) return null;
+  const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
+  if (!img) return null;
+  const cols = Math.max(1, item.cols || 1);
+  const { canvas, ox, oy, flipX } = getScatterTopCanopyComposite(
+    canopyAnimTime,
+    item.itemKey,
+    item.originX,
+    item.originY,
+    topPart,
+    cols,
+    img,
+    atlasCols,
+    tileW,
+    tileH,
+    item.windSway
+  );
+  if (!canvas?.width) return null;
+  const px = snapPx(item.originX * tileW + (cols * tileW) / 2);
+  const py = snapPx(item.originY * tileH + tileH);
+  const left = snapPx(px - ox);
+  const top = snapPx(py - oy);
+  return {
+    canvas,
+    left,
+    top,
+    w: canvas.width,
+    h: canvas.height,
+    flipX: !!flipX,
+    anchorX: px
+  };
+}
+
+/**
+ * @param {CanvasRenderingContext2D} mctx
+ * @param {{ canvas: HTMLCanvasElement, left: number, top: number, flipX: boolean, anchorX: number }} meta
+ * @param {number} pxL
+ * @param {number} pxT0
+ * @param {(n: number) => number} snapPx
+ */
+function drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx) {
+  const dx = meta.left - pxL;
+  const dy = meta.top - pxT0;
+  mctx.save();
+  mctx.imageSmoothingEnabled = false;
+  mctx.globalAlpha = 1;
+  mctx.globalCompositeOperation = 'source-over';
+  if (!meta.flipX) {
+    mctx.drawImage(meta.canvas, dx, dy);
+  } else {
+    const pivotX = snapPx(meta.anchorX) - pxL;
+    mctx.translate(pivotX, 0);
+    mctx.scale(-1, 1);
+    mctx.translate(-pivotX, 0);
+    mctx.drawImage(meta.canvas, dx, dy);
+  }
+  mctx.restore();
+}
+
+/**
+ * @returns {boolean} true if any canopy pixels were stamped into the mask
+ */
+function appendFormalTreeCanopyToPlayerMask(
+  mctx,
+  item,
+  pxL,
+  pxT0,
+  pxW,
+  pxH,
+  tileW,
+  tileH,
+  snapPx,
+  natureImg,
+  canopyAnimTime,
+  time
+) {
+  const meta = getFormalCanopyMaskMeta(item, tileW, tileH, snapPx, natureImg, canopyAnimTime);
+  if (!meta) return false;
+  if (!rectsOverlap2D(meta.left, meta.top, meta.w, meta.h, pxL, pxT0, pxW, pxH)) return false;
+  const { originX, originY } = item;
+  const bump01 = getDetailHitShake01(`treeBump:${originX},${originY}`);
+  mctx.save();
+  if (bump01 > 0) {
+    const a = tileW * 0.07 * bump01;
+    const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
+    const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
+    mctx.translate(sx, sy);
+  }
+  drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx);
+  mctx.restore();
+  return true;
+}
+
+/**
+ * @returns {boolean} true if any canopy pixels were stamped into the mask
+ */
+function appendScatterTreeCanopyToPlayerMask(
+  mctx,
+  item,
+  pxL,
+  pxT0,
+  pxW,
+  pxH,
+  tileW,
+  tileH,
+  snapPx,
+  imageCache,
+  canopyAnimTime,
+  time
+) {
+  const meta = getScatterCanopyMaskMeta(item, tileW, tileH, snapPx, imageCache, canopyAnimTime);
+  if (!meta) return false;
+  if (!rectsOverlap2D(meta.left, meta.top, meta.w, meta.h, pxL, pxT0, pxW, pxH)) return false;
+  const { originX, originY, itemKey } = item;
+  const bump01 = scatterItemKeyIsTree(itemKey) ? getDetailHitShake01(`treeBump:${originX},${originY}`) : 0;
+  const shake01 = Math.max(getDetailHitShake01(`${originX},${originY}`), bump01);
+  mctx.save();
+  if (shake01 > 0) {
+    const a = tileW * 0.07 * shake01;
+    const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
+    const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
+    mctx.translate(sx, sy);
+  }
+  drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx);
+  mctx.restore();
+  return true;
+}
+
 /**
  * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
  * when the player is standing still. Invalidate when tile / facing / carry state changes.
  */
 let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
+
+const GLOBAL_MAP_TRAIL_MAX_POINTS = 9000;
+const GLOBAL_MAP_TRAIL_MIN_STEP_MICRO = 2.2;
+const GLOBAL_MAP_TRAIL_STORAGE_KEY = 'pkmn_global_map_player_trail_v1';
+const GLOBAL_MAP_TRAIL_PERSIST_MIN_MS = 1200;
+let globalMapTrailFingerprint = '';
+/** @type {Array<{ x: number, y: number }>} */
+let globalMapPlayerTrailMicro = [];
+let globalMapTrailDirty = false;
+let globalMapTrailLastPersistAtMs = 0;
+
+function mapFingerprintForTrail(data) {
+  if (!data) return '';
+  const w = Math.max(0, Math.floor(Number(data.width) || 0));
+  const h = Math.max(0, Math.floor(Number(data.height) || 0));
+  const seed = Number.isFinite(Number(data.seed)) ? Number(data.seed) : 0;
+  return `${w}x${h}@${seed}`;
+}
+
+/**
+ * @param {string} fp
+ */
+function loadPersistedGlobalMapTrail(fp) {
+  globalMapTrailFingerprint = fp;
+  globalMapPlayerTrailMicro = [];
+  if (!fp) return;
+  try {
+    const raw = localStorage.getItem(GLOBAL_MAP_TRAIL_STORAGE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload || payload.fingerprint !== fp || !Array.isArray(payload.points)) return;
+    const kept = [];
+    for (const row of payload.points) {
+      const x = Number(row?.x);
+      const y = Number(row?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      kept.push({ x, y });
+      if (kept.length >= GLOBAL_MAP_TRAIL_MAX_POINTS) break;
+    }
+    globalMapPlayerTrailMicro = kept;
+  } catch {}
+}
+
+/**
+ * @param {boolean} force
+ */
+function persistGlobalMapTrailIfNeeded(force = false) {
+  if (!globalMapTrailDirty || !globalMapTrailFingerprint) return;
+  const nowMs = typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+  if (!force && nowMs - globalMapTrailLastPersistAtMs < GLOBAL_MAP_TRAIL_PERSIST_MIN_MS) return;
+  try {
+    localStorage.setItem(
+      GLOBAL_MAP_TRAIL_STORAGE_KEY,
+      JSON.stringify({
+        fingerprint: globalMapTrailFingerprint,
+        points: globalMapPlayerTrailMicro
+      })
+    );
+    globalMapTrailDirty = false;
+    globalMapTrailLastPersistAtMs = nowMs;
+  } catch {}
+}
+
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {object} data
+ */
+function clampMicroToMapBounds(x, y, data) {
+  const gw = Math.max(1, Number(data.width) * MACRO_TILE_STRIDE);
+  const gh = Math.max(1, Number(data.height) * MACRO_TILE_STRIDE);
+  const pad = 0.51;
+  return {
+    x: Math.max(pad, Math.min(gw - pad, Number(x) || 0)),
+    y: Math.max(pad, Math.min(gh - pad, Number(y) || 0))
+  };
+}
+
+/**
+ * @param {object} data
+ * @param {import('./player.js').player | null | undefined} playerRef
+ * @param {'map' | 'play'} appMode
+ */
+function recordGlobalMapTrailPoint(data, playerRef, appMode) {
+  if (appMode !== 'play' || !data || !playerRef) return;
+  const fp = mapFingerprintForTrail(data);
+  if (!fp) return;
+  if (globalMapTrailFingerprint !== fp) {
+    loadPersistedGlobalMapTrail(fp);
+  }
+  const px = Number(playerRef.visualX ?? playerRef.x);
+  const py = Number(playerRef.visualY ?? playerRef.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+  const clamped = clampMicroToMapBounds(px, py, data);
+  const last = globalMapPlayerTrailMicro[globalMapPlayerTrailMicro.length - 1];
+  if (last) {
+    const dx = clamped.x - last.x;
+    const dy = clamped.y - last.y;
+    if (dx * dx + dy * dy < GLOBAL_MAP_TRAIL_MIN_STEP_MICRO * GLOBAL_MAP_TRAIL_MIN_STEP_MICRO) return;
+  }
+  globalMapPlayerTrailMicro.push(clamped);
+  if (globalMapPlayerTrailMicro.length > GLOBAL_MAP_TRAIL_MAX_POINTS) {
+    globalMapPlayerTrailMicro.splice(0, globalMapPlayerTrailMicro.length - GLOBAL_MAP_TRAIL_MAX_POINTS);
+  }
+  globalMapTrailDirty = true;
+  persistGlobalMapTrailIfNeeded(false);
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Array<{ x: number, y: number }>} trailMicro
+ * @param {object} data
+ * @param {number} cw
+ * @param {number} ch
+ */
+function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch) {
+  if (!Array.isArray(trailMicro) || trailMicro.length < 2 || !data?.width || !data?.height) return;
+  const tileW = cw / data.width;
+  const tileH = ch / data.height;
+  const lineW = Math.max(1.3, Math.min(3.2, Math.min(tileW, tileH) * 0.2));
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalCompositeOperation = 'screen';
+  ctx.beginPath();
+  for (let i = 0; i < trailMicro.length; i++) {
+    const p = trailMicro[i];
+    const gx = p.x / MACRO_TILE_STRIDE;
+    const gy = p.y / MACRO_TILE_STRIDE;
+    const px = (gx + 0.5) * tileW;
+    const py = (gy + 0.5) * tileH;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = 'rgba(36, 178, 255, 0.9)';
+  ctx.lineWidth = lineW + 1.6;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(176, 238, 255, 0.78)';
+  ctx.lineWidth = lineW;
+  ctx.stroke();
+  ctx.restore();
+}
 
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
@@ -238,6 +610,12 @@ export function render(canvas, data, options = {}) {
 
   const appMode = options.settings?.appMode || 'map';
   const player = options.settings?.player || { x: 0, y: 0 };
+  const mapFp = mapFingerprintForTrail(data);
+  if (mapFp && globalMapTrailFingerprint !== mapFp) {
+    loadPersistedGlobalMapTrail(mapFp);
+  }
+  recordGlobalMapTrailPoint(data, player, appMode);
+  persistGlobalMapTrailIfNeeded(false);
   if (appMode !== 'play') {
     resetPlayChunkBakeAutoTuner();
     setLastPlayChunkFrameStats({
@@ -309,6 +687,9 @@ export function render(canvas, data, options = {}) {
       { sessionEnteredPlayOnCurrentMap: !!options.settings?.sessionEnteredPlayOnCurrentMap }
     );
     if (mapPlayerMicro && data.width > 0 && data.height > 0) {
+      if (globalMapTrailFingerprint === mapFp && globalMapPlayerTrailMicro.length > 1) {
+        drawGlobalMapPlayerTrail(ctx, globalMapPlayerTrailMicro, data, cw, ch);
+      }
       const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
       const gy = mapPlayerMicro.y / MACRO_TILE_STRIDE;
       const tileW = cw / data.width;
@@ -326,6 +707,7 @@ export function render(canvas, data, options = {}) {
       ctx.stroke();
       ctx.restore();
     }
+    persistGlobalMapTrailIfNeeded(false);
     addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
     const tCam0 = performance.now();
@@ -499,7 +881,7 @@ export function render(canvas, data, options = {}) {
       }
       return t;
     };
-    if (lodDetail < 2) {
+    {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) getCached(mx, my);
       }
@@ -508,7 +890,7 @@ export function render(canvas, data, options = {}) {
 
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
-    const vegAnimTime = lodDetail === 0 ? time : 0;
+    const vegAnimTime = time;
     const canopyAnimTime = vegAnimTime;
 
     // Pre-compute the set of grass-eligible tiles ONCE per frame.
@@ -516,7 +898,7 @@ export function render(canvas, data, options = {}) {
     // and in the playerTopOverlay path (O(viewport) → O(1) lookup).
     // Only needed at LOD 0/1 — at LOD 2 animated grass is fully skipped.
     const grassEligibleSet = new Set();
-    if (lodDetail < 2) {
+    {
       const _mH = height * MACRO_TILE_STRIDE;
       const _mW = width * MACRO_TILE_STRIDE;
       for (let my = startY; my < endY; my++) {
@@ -545,11 +927,16 @@ export function render(canvas, data, options = {}) {
     // forEachAbovePlayerTile iterates the pre-computed grassEligibleSet instead of
     // calling getRoleForCell per tile per frame. At LOD >= 2, the animated-grass
     // pass returns immediately anyway, so skip building the closure entirely.
-    const forEachAbovePlayerTile = lodDetail >= 2 ? (_fn) => {} : (fn) => {
+    const forEachAbovePlayerTile = (fn) => {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) {
-          if (!grassEligibleSet.has(_tileKeyInt(mx, my))) continue;
+          if (lodDetail < 2) {
+            if (!grassEligibleSet.has(_tileKeyInt(mx, my))) continue;
+          }
           const tile = getCached(mx, my);
+          if (lodDetail >= 2) {
+            if (!tile || tile.heightStep < 1) continue;
+          }
           fn(mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), Math.floor(mx * tileW), Math.floor(my * tileH));
         }
       }
@@ -955,6 +1342,93 @@ export function render(canvas, data, options = {}) {
       }
     }
 
+    // Player read-through under canopy strip: dark tint only on Pokémon ∩ non-transparent canopy
+    // (mask = copas in player-local px with same bump/shake as drawTree/drawScatter; comp = player then destination-in mask then source-in fill).
+    if (lodDetail < 2 && !skipPlayerGrassOverlayDuringFlight) {
+      const pItem = renderItems.find((it) => it.type === 'player');
+      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction) {
+        let underCanopy = false;
+        const probes = [
+          [0, 0],
+          [0, -1],
+          [0, -2],
+          [-1, -1],
+          [1, -1],
+          [-1, 0],
+          [1, 0]
+        ];
+        for (const [dx, dy] of probes) {
+          const mx = overlayMx + dx;
+          const my = overlayMy + dy;
+          if (isGrassStripOverlayBlocked(mx, my)) {
+            underCanopy = true;
+            break;
+          }
+        }
+        if (underCanopy) {
+          const alpha = Math.max(0, Math.min(1, pItem.drawAlpha ?? 1));
+          const bury = pItem.digBuryVisual ?? 0;
+          const tackleOx = pItem.tackleOffPx || 0;
+          const tackleOy = pItem.tackleOffPy || 0;
+          const pxL = snapPx(pItem.cx - pItem.pivotX + tackleOx);
+          const pxT0 = snapPx(pItem.cy - pItem.pivotY + tackleOy);
+          const pxW = snapPx(pItem.dw);
+          const pxH = snapPx(pItem.dh);
+          const bufW = Math.max(1, Math.ceil(pxW));
+          const bufH = Math.max(1, Math.ceil(pxH));
+          const mask = ensurePlayerCanopyMaskScratch(bufW, bufH);
+          const comp = ensurePlayerCanopySilScratch(bufW, bufH);
+          const mctx = mask.getContext('2d');
+          const cctx = comp.getContext('2d');
+          if (mctx && cctx) {
+            mctx.setTransform(1, 0, 0, 1, 0, 0);
+            mctx.clearRect(0, 0, bufW, bufH);
+            mctx.imageSmoothingEnabled = false;
+            let drewMask = false;
+            for (const it of renderItems) {
+              if (it.type === 'tree') {
+                if (appendFormalTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, natureImg, canopyAnimTime, time)) {
+                  drewMask = true;
+                }
+              } else if (it.type === 'scatter') {
+                if (appendScatterTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, imageCache, canopyAnimTime, time)) {
+                  drewMask = true;
+                }
+              }
+            }
+            if (drewMask) {
+              cctx.setTransform(1, 0, 0, 1, 0, 0);
+              cctx.clearRect(0, 0, bufW, bufH);
+              cctx.imageSmoothingEnabled = false;
+              cctx.globalAlpha = 1;
+              cctx.globalCompositeOperation = 'source-over';
+              cctx.save();
+              if (bury > 0.004) {
+                const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
+                const bandTop = Math.max(0, pxH - visH);
+                cctx.beginPath();
+                cctx.rect(0, bandTop, bufW, visH);
+                cctx.clip();
+              }
+              cctx.drawImage(pItem.sheet, pItem.sx, pItem.sy, pItem.sw, pItem.sh, 0, 0, pxW, pxH);
+              cctx.restore();
+              cctx.globalCompositeOperation = 'destination-in';
+              cctx.drawImage(mask, 0, 0);
+              cctx.globalCompositeOperation = 'source-in';
+              cctx.fillStyle = 'rgb(26, 28, 36)';
+              cctx.fillRect(-2, -2, bufW + 4, bufH + 4);
+              cctx.globalCompositeOperation = 'source-over';
+
+              ctx.save();
+              ctx.globalAlpha = alpha * 0.56;
+              ctx.drawImage(comp, 0, 0, bufW, bufH, pxL, pxT0, pxW, pxH);
+              ctx.restore();
+            }
+          }
+        }
+      }
+    }
+
     const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
     const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
     const mergedWaterCannonBeam = getPlayerWaterCannonMergedBeamVisual();
@@ -1183,6 +1657,9 @@ export function render(canvas, data, options = {}) {
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, cw, ch);
       ctx.restore();
+    }
+    if (options.settings?.appMode === 'play') {
+      drawFarCryScreenWaves(ctx, getActiveFarCryScreenWaves(), { w: cw, h: ch });
     }
 
     const tMm0 = performance.now();

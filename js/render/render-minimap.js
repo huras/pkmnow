@@ -17,6 +17,8 @@ import {
   ensureSpriteCollabPortraitLoaded,
   getSpriteCollabPortraitImage
 } from '../pokemon/spritecollab-portraits.js';
+import { drawFarCryMinimapEchoes } from './render-far-cry.js';
+import { getActiveFarCryMinimapEchoes } from '../main/far-cry-system.js';
 
 // ---------------------------------------------------------------------------
 // Zoom level definitions
@@ -577,6 +579,55 @@ function drawPlayChunkBakeDebugOverlay(ctx, data, playerX, playerY, w, h, zoom) 
 }
 
 /**
+ * Draws a high-visibility minimap player marker with blink + pulse rings.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {number} tfScale
+ */
+function drawMinimapPlayerMarker(ctx, x, y, tfScale) {
+  const nowSec =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now() * 0.001
+      : Date.now() * 0.001;
+  const baseR = Math.max(3, Math.min(5, tfScale * 0.6));
+  const blink01 = 0.5 + 0.5 * Math.sin(nowSec * 7.4);
+  const coreR = baseR * (0.88 + 0.16 * blink01);
+  const pulseSpan = Math.max(8, baseR * 4.6);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < 2; i++) {
+    const phase = (nowSec * 0.9 + i * 0.5) % 1;
+    const ringR = coreR + 2 + phase * pulseSpan;
+    const alpha = (1 - phase) * (0.46 - i * 0.12) * (0.78 + blink01 * 0.22);
+    if (alpha <= 0.01) continue;
+    ctx.strokeStyle = `rgba(120, 232, 255, ${alpha.toFixed(4)})`;
+    ctx.lineWidth = Math.max(1, Math.min(2.1, baseR * 0.45));
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.shadowBlur = 10 + blink01 * 6;
+  ctx.shadowColor = `rgba(90, 220, 255, ${(0.62 + blink01 * 0.22).toFixed(4)})`;
+  ctx.fillStyle = `rgba(255, 84, 84, ${(0.86 + blink01 * 0.14).toFixed(4)})`;
+  ctx.strokeStyle = 'rgba(255,255,255,0.96)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(x, y, coreR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(228, 249, 255, 0.98)';
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(1.15, coreR * 0.34), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
  * Draws wild spawn markers with portrait heads on minimap.
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ scale: number, ox: number, oy: number }} tf
@@ -588,6 +639,8 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
   for (const ent of entitiesByKey.values()) {
     if (!ent || ent.isDespawning || ent.deadState) continue;
     if (!Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(ent.dexId)) continue;
+    // Unknown species: no minimap marker until Far Cry “introduces” them (reduces ? spam).
+    if (!ent.minimapSpeciesKnown && !ent.minimapFarCryIntroduced) continue;
     const mx = ent.x / MACRO_TILE_STRIDE;
     const my = ent.y / MACRO_TILE_STRIDE;
     const distSq = (mx - playerMacro.x) ** 2 + (my - playerMacro.y) ** 2;
@@ -803,30 +856,19 @@ export function renderMinimap(canvas, data, player) {
   const playerScreenX = (playerMacroX - tfOx + 0.5) * tfScale;
   const playerScreenY = (playerMacroY - tfOy + 0.5) * tfScale;
 
-  const dotR = Math.max(3, Math.min(5, tfScale * 0.6));
-
-  // Outer glow
-  ctx.save();
-  ctx.shadowBlur = 8;
-  ctx.shadowColor = 'rgba(255, 80, 80, 0.9)';
-  ctx.fillStyle = '#ff2222';
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(playerScreenX, playerScreenY, dotR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  // Direction tick (small white line in movement direction — optional, skipped if speed unknown)
-  // (kept simple for now — just the dot)
-
   drawWildSpawnPortraitMarkers(
     ctx,
     { scale: tfScale, ox: tfOx, oy: tfOy },
     { x: playerMacroX, y: playerMacroY },
     { w, h }
   );
+  drawFarCryMinimapEchoes(
+    ctx,
+    getActiveFarCryMinimapEchoes(),
+    { scale: tfScale, ox: tfOx, oy: tfOy },
+    { w, h }
+  );
+  drawMinimapPlayerMarker(ctx, playerScreenX, playerScreenY, tfScale);
 
   // --- City labels for mid/close (re-render on top so they survive clipping) ---
   // Already in the base cache; visible automatically once tileW is large enough.

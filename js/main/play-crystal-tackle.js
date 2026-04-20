@@ -40,6 +40,7 @@ import {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export {
@@ -52,6 +53,7 @@ export {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
 export { appendTreeTopFallRenderItems } from './play-tree-top-fall.js';
@@ -1049,6 +1051,75 @@ export function strengthRelocateCarriedDetailNear(
     ) {
       return true;
     }
+  }
+  return false;
+}
+
+/**
+ * Places one inventory item back into the world as a scatter detail (not pickup drop).
+ * Resulting detail is breakable again via normal map-detail combat flow.
+ * @param {number} landX
+ * @param {number} landY
+ * @param {string} itemKey
+ * @param {object | null | undefined} data
+ * @param {number} [chebRadius]
+ * @returns {boolean}
+ */
+export function placeInventoryItemAsScatterDetailNear(landX, landY, itemKey, data, chebRadius = 8) {
+  if (!data) return false;
+  const resolvedItemKey = String(itemKey || '');
+  if (!resolvedItemKey) return false;
+  const objSet = OBJECT_SETS[resolvedItemKey];
+  if (!objSet) return false;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const cx = Math.max(0.5, Math.min(microW - 0.5, Number(landX) || 0.5));
+  const cy = Math.max(0.5, Math.min(microH - 0.5, Number(landY) || 0.5));
+  const ix = Math.floor(cx);
+  const iy = Math.floor(cy);
+  const R = Math.max(0, Math.floor(Number(chebRadius) || 0));
+  /** @type {{ ox: number, oy: number, d2: number }[]} */
+  const cand = [];
+  for (let oy = iy - R; oy <= iy + R; oy++) {
+    for (let ox = ix - R; ox <= ix + R; ox++) {
+      if (ox < 0 || oy < 0 || ox >= microW || oy >= microH) continue;
+      const ddx = ox + 0.5 - cx;
+      const ddy = oy + 0.5 - cy;
+      cand.push({ ox, oy, d2: ddx * ddx + ddy * ddy });
+    }
+  }
+  cand.sort((a, b) => a.d2 - b.d2);
+  const nowSec = performance.now() * 0.001;
+  for (const c of cand) {
+    const tile = getMicroTile(c.ox, c.oy, data);
+    if (!tile || !tileSurfaceAllowsScatterVegetation(tile)) continue;
+    if (isPlayScatterTreeOriginCharred(c.ox, c.oy) || isPlayScatterTreeOriginBurning(c.ox, c.oy)) continue;
+    if (scatterPhysicsCircleAtOrigin(c.ox, c.oy, data)) continue;
+    const key = `${c.ox},${c.oy}`;
+    const exSt = detailBreakStateByOrigin.get(key);
+    if (exSt && !exSt.destroyed) continue;
+    strengthCarriedBlockRegenKeys.delete(key);
+    detailBreakStateByOrigin.delete(key);
+    detailHitHpBars.delete(key);
+    detailHitShakeAtSec.delete(key);
+    unregisterDestroyedDetailOrigin(c.ox, c.oy);
+    burnedScatterTreeOrigins.delete(key);
+    harvestedBurnedScatterTreeOrigins.delete(key);
+    burningScatterTreeEndsAtSecByOrigin.delete(key);
+    scatterTreeBurnMeterByOrigin.delete(key);
+    scatterTreeFireSpreadDepthByOrigin.delete(key);
+    const st = getOrCreateDetailBreakState(c.ox, c.oy, resolvedItemKey, objSet, nowSec);
+    st.hitsRemaining = Math.max(1, Math.floor(Number(st.hitsMax) || 1));
+    st.destroyed = false;
+    st.regenAtSec = 0;
+    st.lastHitAtSec = nowSec;
+    st.strengthReloPlaced = true;
+    destroyedCrystalScatterOrigins.delete(key);
+    setScatterItemKeyOverride(c.ox, c.oy, resolvedItemKey);
+    invalidateChunksOverlappingFootprint(c.ox, c.oy, st.cols, st.rows);
+    clearScatterSolidBlockCache();
+    invalidateStaticEntityCache();
+    return true;
   }
   return false;
 }

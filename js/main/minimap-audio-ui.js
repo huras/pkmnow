@@ -8,7 +8,11 @@ import {
   isBgmTrackChangeToastSuppressed,
   setBgmTrackChangeToastSuppressed
 } from '../audio/play-audio-mix-settings.js';
-import { getBiomeBgmUiState, applyBgmUserMixFromStorage } from '../audio/biome-bgm.js';
+import {
+  getBiomeBgmUiState,
+  applyBgmUserMixFromStorage,
+  forceNextBiomeBgmTrack
+} from '../audio/biome-bgm.js';
 import { applySpatialAudioMuteFromStorage } from '../audio/spatial-audio.js';
 import { BIOMES } from '../biomes.js';
 
@@ -40,6 +44,9 @@ export function installMinimapAudioUi() {
   const muteChk = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-audio-mute'));
   const toastSuppressChk = /** @type {HTMLInputElement | null} */ (
     document.getElementById('minimap-bgm-toast-suppress')
+  );
+  const nextTrackBtn = /** @type {HTMLButtonElement | null} */ (
+    document.getElementById('minimap-bgm-next-track')
   );
   const trackEl = document.getElementById('minimap-audio-track');
   const statusEl = document.getElementById('minimap-audio-status');
@@ -96,6 +103,11 @@ export function installMinimapAudioUi() {
     if (toastSuppressChk.checked) {
       document.getElementById('play-bgm-toast')?.classList.remove('play-bgm-toast--visible');
     }
+  });
+
+  nextTrackBtn?.addEventListener('click', () => {
+    forceNextBiomeBgmTrack();
+    syncNowPlayingText();
   });
 
   function syncNowPlayingText() {

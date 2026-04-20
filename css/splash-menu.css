@@ -1,0 +1,299 @@
+:root {
+  --pk-red: #ff1c1c;
+  --pk-blue: #3b4cca;
+  --pk-yellow: #ffde00;
+  --pk-gold: #b3a125;
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #000;
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+.splash-container {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+  z-index: 1000;
+  transition: opacity 1s ease-in-out;
+}
+
+.splash-screen {
+  position: absolute;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.8s ease-in-out, transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: center;
+  pointer-events: none;
+}
+
+.splash-screen.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.splash-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  align-items: center;
+}
+
+.splash-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.splash-disclaimer {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.splash-logo {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.nintendo-logo {
+  font-family: serif;
+  border: 3px solid #fff;
+  padding: 0.4rem 1.5rem;
+  border-radius: 100px;
+  font-size: 3rem;
+  font-weight: bold;
+}
+
+.game-freak-logo {
+  font-style: italic;
+  font-weight: 900;
+  font-size: 2rem;
+}
+
+/* Main Menu */
+.main-menu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.5s ease-in-out;
+}
+
+.main-menu.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.background-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  filter: brightness(0.7) contrast(1.1);
+}
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.game-title {
+  margin-bottom: 4rem;
+  text-align: center;
+  animation: titleFloat 4s ease-in-out infinite;
+}
+
+.game-title h1 {
+  font-size: 5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+  background: linear-gradient(to bottom, #fff, #ccc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
+}
+
+.game-title .subtitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--pk-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-top: -0.5rem;
+  display: block;
+}
+
+.menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 300px;
+}
+
+.menu-button {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  padding: 1.2rem 2rem;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.menu-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateX(10px);
+  border-color: #fff;
+}
+
+.menu-button .icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.menu-button:hover .icon {
+  opacity: 1;
+}
+
+.play-button {
+  background: linear-gradient(135deg, var(--pk-red), #d32f2f);
+  border: none;
+  box-shadow: 0 10px 20px rgba(211, 47, 47, 0.3);
+}
+
+.play-button:hover {
+  background: linear-gradient(135deg, #ff5252, var(--pk-red));
+  box-shadow: 0 15px 30px rgba(211, 47, 47, 0.4);
+}
+
+.press-start {
+  position: absolute;
+  bottom: 15%;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #fff;
+  animation: blink 1.5s ease-in-out infinite;
+  cursor: pointer;
+}
+
+@keyframes titleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.menu-footer {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  width: 100%;
+  padding: 0 2rem;
+  z-index: 5;
+}
+
+.disclaimer-row {
+  margin-bottom: 0.2rem;
+}
+
+.free-distribution {
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.5rem;
+}
+
+.biome-info {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  padding: 0.8rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.biome-info.visible {
+  opacity: 1;
+}
+
+.biome-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.loading-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: var(--pk-red);
+  width: 0%;
+  transition: width 10s linear;
+}

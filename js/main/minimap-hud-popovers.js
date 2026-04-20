@@ -3,6 +3,8 @@ import {
   isWildLeaderRoamTargetVisible,
   setWildLeaderRoamTargetVisible
 } from './wild-groups-visual-toggle-state.js';
+import { player } from '../player.js';
+import { triggerNextFarCryNow } from './far-cry-system.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -10,10 +12,12 @@ import {
  */
 export function installMinimapHudPopovers(options = {}) {
   const { imageCache } = options;
+  const getCurrentData = typeof options.getCurrentData === 'function' ? options.getCurrentData : () => null;
   const groupsToggle = document.getElementById('minimap-groups-toggle');
   const groupsPop = document.getElementById('minimap-groups-popover');
   const groupsList = document.getElementById('minimap-groups-popover-list');
   const groupsLeaderTargetToggle = document.getElementById('minimap-groups-leader-target-toggle');
+  const groupsFarCryTriggerBtn = document.getElementById('minimap-groups-far-cry-trigger');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -98,6 +102,16 @@ export function installMinimapHudPopovers(options = {}) {
     setWildLeaderRoamTargetVisible(showLeaderRoamTarget);
     syncGroupsLeaderTargetToggleUi();
     refreshGroupsPanel();
+  });
+
+  groupsFarCryTriggerBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const ok = triggerNextFarCryNow(player, getCurrentData());
+    groupsFarCryTriggerBtn.textContent = ok ? 'Far Cry!' : 'Sem alvo';
+    setTimeout(() => {
+      if (!groupsFarCryTriggerBtn.isConnected) return;
+      groupsFarCryTriggerBtn.textContent = 'Next Far Cry';
+    }, 900);
   });
 
   timeToggle.addEventListener('click', (e) => {

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon - Procedural Region</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/splash-menu.css">
+</head>
+<body>
+    <div id="splash-container" class="splash-container">
+        <div class="splash-screen splash-grid active">
+            <div class="splash-item">
+                <span class="splash-disclaimer">Not licensed by</span>
+                <div class="splash-logo">The Pokémon Company</div>
+            </div>
+            <div class="splash-item">
+                <span class="splash-disclaimer">Not licensed by</span>
+                <div class="nintendo-logo">Nintendo</div>
+            </div>
+            <div class="splash-item">
+                <span class="splash-disclaimer">Not licensed by</span>
+                <div class="game-freak-logo">GAME FREAK</div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="background-canvas" class="background-canvas"></canvas>
+    <div class="menu-overlay"></div>
+
+    <main id="main-menu" class="main-menu">
+        <div class="game-title">
+            <span class="subtitle">Procedural</span>
+            <h1>Pokémon</h1>
+            <span class="subtitle">Region Generator</span>
+        </div>
+
+        <div class="menu-options">
+            <button id="play-btn" class="menu-button play-button">
+                <span>Novo Jogo</span>
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            </button>
+            <button class="menu-button">
+                <span>Opções</span>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
+            <button class="menu-button">
+                <span>Créditos</span>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+            </button>
+        </div>
+
+        <div id="press-start" class="press-start">Pressione START para Jogar</div>
+
+        <footer class="menu-footer">
+            <div class="disclaimer-row">Not licensed by Nintendo · Not licensed by Game Freak · Not licensed by The Pokémon Company</div>
+            <div class="free-distribution">Distributed freely · Not allowed to sell to anyone</div>
+        </footer>
+
+        <div id="biome-info" class="biome-info">
+            <span id="biome-swatch" class="biome-swatch"></span>
+            <span id="biome-name">Região Desconhecida</span>
+        </div>
+
+        <div id="loading-bar" class="loading-bar"></div>
+    </main>
+
+    <script type="module" src="js/ui/splash-menu.js"></script>
+</body>
+</html>
