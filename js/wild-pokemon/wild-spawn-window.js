@@ -21,7 +21,11 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { rollNature } from './wild-natures.js';
-import { WILD_MACRO_SUBDIVISION, WILD_MAX_SIMULTANEOUS_SLOTS } from './wild-pokemon-constants.js';
+import {
+  GRASS_WALK_HOSTILE_AGGRO_SEC,
+  WILD_MACRO_SUBDIVISION,
+  WILD_MAX_SIMULTANEOUS_SLOTS
+} from './wild-pokemon-constants.js';
 import { bindStandardWildTakeDamage } from './wild-entity-factory.js';
 import {
   buildWildNeededSlotKeys,
@@ -247,24 +251,18 @@ export function findWalkableWildSpawnNear(data, dex, ox, oy) {
   return null;
 }
 
+const SALT_GRASS_HOSTILE_BOSS = 0x67826173;
+
 /**
- * Play mode: spawn a wild Pokémon by dex at a free tile near the player.
- * Persists across wild slot sync.
+ * @param {object} data
+ * @param {number} spawnX
+ * @param {number} spawnY
+ * @param {number} dex
+ * @param {string} key
+ * @param {number} sexSalt
+ * @param {{ wildTempAggressiveSec: number, hp: number, maxHp: number, isBoss: boolean, wildGrassHostileDeathBattle?: boolean }} combat
  */
-export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
-  if (!data) return false;
-  const dex = Math.floor(Number(dexId)) || 0;
-  if (!getPokemonConfig(dex)) return false;
-
-  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
-  if (!pos) return false;
-
-  void preloadPokemonCry(dex);
-
-  pruneDebugSummonsIfNeeded();
-  const key = allocateDebugSummonKey();
-  const spawnX = pos.spawnX;
-  const spawnY = pos.spawnY;
+function registerDebugStyleWildAtPosition(data, spawnX, spawnY, dex, key, sexSalt, combat) {
   const w = data.width;
   const h = data.height;
   const macroX = Math.floor(spawnX / MACRO_TILE_STRIDE);
@@ -277,7 +275,6 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
   const subY = Math.max(0, Math.min(subN - 1, Math.floor(ly / cellW)));
   const biomeId =
     macroX >= 0 && macroY >= 0 && macroX < w && macroY < h ? data.biomes[macroY * w + macroX] : 0;
-  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
   const sex = rollWildSex(dex, sexSalt >>> 0);
 
   let spawnType = 'land';
@@ -309,7 +306,8 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     nature: rollNature(key, data.seed),
     sex,
     provoked01: 0,
-    wildTempAggressiveSec: 0,
+    wildTempAggressiveSec: combat.wildTempAggressiveSec,
+    wildGrassHostileDeathBattle: !!combat.wildGrassHostileDeathBattle,
     animMeta: getDexAnimMeta(dex),
     facing: 'down',
     animRow: 0,
@@ -338,15 +336,15 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     jumping: false,
     jumpCooldown: 0,
     _blockedMoveFrames: 0,
-    hp: 50,
-    maxHp: 50,
+    hp: combat.hp,
+    maxHp: combat.maxHp,
     deadState: null,
     deadTimer: 0,
     deadAnimTimer: 0,
     hurtTimer: 0,
     hurtAnimTimer: 0,
     hitFlashTimer: 0,
-    isBoss: false,
+    isBoss: combat.isBoss,
     socialMemory: {
       affinity: 0,
       threat: 0,
@@ -372,6 +370,70 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
   entitiesByKey.set(key, entity);
   void ensurePokemonSheetsLoaded(imageCache, dex);
   void probeSpriteCollabPortraitPrefix(dex).catch(() => {});
+}
+
+/**
+ * Play mode: spawn a wild Pokémon by dex at a free tile near the player.
+ * Persists across wild slot sync.
+ */
+export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
+  if (!data) return false;
+  const dex = Math.floor(Number(dexId)) || 0;
+  if (!getPokemonConfig(dex)) return false;
+
+  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
+  if (!pos) return false;
+
+  void preloadPokemonCry(dex);
+
+  pruneDebugSummonsIfNeeded();
+  const key = allocateDebugSummonKey();
+  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
+  registerDebugStyleWildAtPosition(data, pos.spawnX, pos.spawnY, dex, key, sexSalt, {
+    wildTempAggressiveSec: 0,
+    hp: 50,
+    maxHp: 50,
+    isBoss: false
+  });
+  return true;
+}
+
+/**
+ * Spawns one persistent wild (debug-slot style) from a base encounter dex, with permanent death-battle aggro.
+ * Boss promotion uses the player's macro cell for the roll (area-consistent).
+ */
+export function summonGrassHostileWildNearPlayer(data, nearWorldX, nearWorldY, baseDex) {
+  if (!data) return false;
+  const d0 = Math.floor(Number(baseDex)) || 0;
+  if (!getPokemonConfig(d0)) return false;
+
+  const w = data.width;
+  const h = data.height;
+  let pmx = Math.floor(Number(nearWorldX) / MACRO_TILE_STRIDE);
+  let pmy = Math.floor(Number(nearWorldY) / MACRO_TILE_STRIDE);
+  if (pmx < 0 || pmy < 0 || pmx >= w || pmy >= h) {
+    pmx = Math.max(0, Math.min(w - 1, pmx));
+    pmy = Math.max(0, Math.min(h - 1, pmy));
+  }
+
+  const bossRoll = rollBossPromotedDex(d0, pmx, pmy, 0, 0, data.seed ^ SALT_GRASS_HOSTILE_BOSS);
+  const dex = bossRoll.dex;
+  if (!getPokemonConfig(dex)) return false;
+
+  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
+  if (!pos) return false;
+
+  void preloadPokemonCry(dex);
+  pruneDebugSummonsIfNeeded();
+  const key = allocateDebugSummonKey('grassHostile');
+  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
+  registerDebugStyleWildAtPosition(data, pos.spawnX, pos.spawnY, dex, key, sexSalt, {
+    wildTempAggressiveSec: GRASS_WALK_HOSTILE_AGGRO_SEC,
+    hp: bossRoll.hp,
+    maxHp: bossRoll.maxHp,
+    isBoss: !!bossRoll.isBoss,
+    wildGrassHostileDeathBattle: true
+  });
   return true;
 }
 

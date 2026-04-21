@@ -575,7 +575,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
   const effectiveAlertRadius = Math.max(
     WILD_VISION_RANGE_MIN_TILES,
-    (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT + (entity.wildTempAggressiveSec > 0 ? 1.0 : 0)
+    (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT +
+      (entity.wildTempAggressiveSec > 0 || entity.wildGrassHostileDeathBattle ? 1.0 : 0)
   );
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
@@ -632,7 +633,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     return;
   }
 
-  const playerThreatInRange = distP < effectiveAlertRadius;
+  const playerThreatInRange =
+    distP < effectiveAlertRadius || !!entity.wildGrassHostileDeathBattle;
   const environmentalThreatInRange = !followerTeamMode && envDanger > 0.62;
   const isFollowingPlayer = entity.aiState === 'follow_player';
 
@@ -689,7 +691,15 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.aiState = 'approach';
       if (distP > beh.stopDist) {
         const approachAng = Math.atan2(-dyP, -dxP);
-        steerTowardAngle(entity, approachAng, beh.approachSpeed, data, wildIsAirborne(entity), true);
+        // Match normal wild wander walk speed (same cap as player-aligned roaming).
+        steerTowardAngle(
+          entity,
+          approachAng,
+          WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+          data,
+          wildIsAirborne(entity),
+          false
+        );
       } else {
         entity.vx = 0;
         entity.vy = 0;
@@ -708,7 +718,13 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.vy = 0;
       }
     }
-  } else if (distP >= effectiveAlertRadius * 1.5 && envDanger < 0.28 && entity.aiState !== 'sleep' && !isFollowingPlayer) {
+  } else if (
+    distP >= effectiveAlertRadius * 1.5 &&
+    envDanger < 0.28 &&
+    entity.aiState !== 'sleep' &&
+    !isFollowingPlayer &&
+    !entity.wildGrassHostileDeathBattle
+  ) {
     entity.aiState = 'wander';
     entity._neutralPostAlertCooldown = 0;
   }
@@ -739,9 +755,13 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (entity.aiState === 'alert') {
     entity.alertTimer -= dt;
     if (entity.alertTimer <= 0) {
-      entity.aiState = 'wander';
-      if (beh.archetype === 'neutral') {
-        entity._neutralPostAlertCooldown = 2.6 + Math.random() * 2.8;
+      if (entity.wildGrassHostileDeathBattle && beh.archetype === 'aggressive') {
+        entity.aiState = 'approach';
+      } else {
+        entity.aiState = 'wander';
+        if (beh.archetype === 'neutral') {
+          entity._neutralPostAlertCooldown = 2.6 + Math.random() * 2.8;
+        }
       }
     }
     const ang = Math.atan2(-dyP, -dxP);
@@ -755,7 +775,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     const followerMode = !!groupFollow && !groupFollow.isLeader;
 
     // ── High-Affinity → Follow Player ──
-    if (!followerMode && entity.socialMemory) {
+    if (!followerMode && entity.socialMemory && !entity.wildGrassHostileDeathBattle) {
       const aff = entity.socialMemory.affinity || 0;
       if (aff >= FOLLOW_PLAYER_AFFINITY_ENTER && distP < 18 && !entity.groupPhase?.startsWith('SCENIC')) {
         entity.aiState = 'follow_player';

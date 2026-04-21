@@ -1,16 +1,7 @@
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 
-/**
- * Runtime overlay: non-aggressive species can temporarily act aggressive
- * (`wildTempAggressiveSec` on the entity, managed in the wild update/social modules).
- *
- * @param {object | null | undefined} entity
- */
-export function getEffectiveWildBehavior(entity) {
-  const base = entity?.behavior || getSpeciesBehavior(entity?.dexId ?? 1);
-  const t = Number(entity?.wildTempAggressiveSec) || 0;
-  if (t <= 0 || base.archetype === 'aggressive') return base;
-
+/** @param {object} base species behavior profile from {@link getSpeciesBehavior} */
+function provokedAggressiveOverlay(base) {
   let approachSpeed = 1.12;
   if (base.archetype === 'timid') approachSpeed = 0.92;
   else if (base.archetype === 'skittish') approachSpeed = 1.02;
@@ -27,6 +18,22 @@ export function getEffectiveWildBehavior(entity) {
 }
 
 /**
+ * Runtime overlay: non-aggressive species can temporarily act aggressive
+ * (`wildTempAggressiveSec` on the entity, managed in the wild update/social modules).
+ * Grass random-encounter hostiles use `wildGrassHostileDeathBattle` on the entity instead (no timer).
+ *
+ * @param {object | null | undefined} entity
+ */
+export function getEffectiveWildBehavior(entity) {
+  const base = entity?.behavior || getSpeciesBehavior(entity?.dexId ?? 1);
+  if (base.archetype === 'aggressive') return base;
+  if (entity?.wildGrassHostileDeathBattle) return provokedAggressiveOverlay(base);
+  const t = Number(entity?.wildTempAggressiveSec) || 0;
+  if (t <= 0) return base;
+  return provokedAggressiveOverlay(base);
+}
+
+/**
  * Shorter wild move cooldown when a peaceful species is provoked into aggression.
  * @param {object | null | undefined} entity
  * @returns {number} multiplier in (0,1]
@@ -34,6 +41,6 @@ export function getEffectiveWildBehavior(entity) {
 export function getWildAggressiveMoveCooldownMultiplier(entity) {
   const base = entity?.behavior || getSpeciesBehavior(entity?.dexId ?? 1);
   if (base.archetype === 'aggressive') return 1;
-  if ((Number(entity?.wildTempAggressiveSec) || 0) <= 0) return 1;
+  if ((Number(entity?.wildTempAggressiveSec) || 0) <= 0 && !entity?.wildGrassHostileDeathBattle) return 1;
   return 0.88;
 }

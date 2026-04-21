@@ -16,3 +16,12 @@ export const WILD_MAX_SIMULTANEOUS_SLOTS = 25;
  * Max wander distance from each slot's center in micro tiles (tune down when {@link WILD_MACRO_SUBDIVISION} is large).
  */
 export const WILD_WANDER_RADIUS_TILES = 15;
+
+/** Chance (0..1) per tall-grass walking footstep (rustle cadence) to spawn one hostile wild from the current biome. */
+export const GRASS_WALK_HOSTILE_SPAWN_CHANCE = 1.00;
+
+/** Initial `wildTempAggressiveSec` for grass hostiles (decay skipped when `wildGrassHostileDeathBattle` is set on the entity). */
+export const GRASS_WALK_HOSTILE_AGGRO_SEC = 22;
+
+/** Minimum seconds between grass-hostile spawns (reduces streaky RNG). */
+export const GRASS_WALK_HOSTILE_SPAWN_COOLDOWN_SEC = 30;

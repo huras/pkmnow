@@ -1,5 +1,6 @@
 import { playerHasAnimatedGrassUnderfoot } from '../play-grass-cut.js';
 import { speciesHasFlyingType } from '../pokemon/pokemon-type-helpers.js';
+import { tryGrassWalkHostileWildSpawn } from '../wild-pokemon/grass-walk-hostile-spawn.js';
 import { isPlayerUndergroundBurrowWalkActive } from '../wild-pokemon/underground-burrow.js';
 import { playGrassRustleSfx } from './grass-rustle-sfx.js';
 
@@ -70,5 +71,6 @@ export function updatePlayGrassRustle(dt, player, data) {
   if (walking && rustleCooldownSec <= 0) {
     playGrassRustleSfx(player);
     rustleCooldownSec = WALK_RUSTLE_INTERVAL_SEC;
+    tryGrassWalkHostileWildSpawn(player, data);
   }
 }
