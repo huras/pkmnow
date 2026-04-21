@@ -309,3 +309,12 @@ My ideias organizadas por tópico
 - Fluxo ideal: upload voluntário + consentimento explícito + confirmação antes de enviar.
 - Privacidade: remover/anonimizar dados sensíveis antes do compartilhamento.
 - Recompensa opcional para incentivar envio (badge, cosmético, menção, etc.).
+
+
+20) Recrutamento sem Pokébolas (vínculo tipo Harvest Moon)
+----------------------------------------------------------
+- Sem captura por Pokébola: o jogo não usa Pokébolas como mecânica principal de obter companheiros.
+- Recrutamento via relacionamento: dar comida, tratar ferimentos, completar quests pessoais do pokémon, etc.
+- Foco em afeto, confiança e "meaningfulness" na relação humano–pokémon (não só barra cheia = capturou).
+- Sistema social robusto na mesma direção de Harvest Moon / Back to Nature (cotidiano, cuidado, rotina, consequência).
+- Implicação de design: crafting de comida/medicina e eventos sociais viram progressão de party tão importantes quanto combate.

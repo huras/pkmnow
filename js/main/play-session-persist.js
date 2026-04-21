@@ -105,6 +105,98 @@ function writeSaveToStorage(payload) {
 }
 
 /**
+ * @param {string} mapFingerprint
+ * @returns {{ width: number, height: number, seed: number } | null}
+ */
+export function parseMapFingerprint(mapFingerprint) {
+  if (typeof mapFingerprint !== 'string') return null;
+  const m = mapFingerprint.match(/^(\d+)x(\d+)@([0-9a-z]+)$/i);
+  if (!m) return null;
+  const width = Number(m[1]);
+  const height = Number(m[2]);
+  const seed = parseInt(m[3], 36) >>> 0;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return { width, height, seed };
+}
+
+/**
+ * UTF-8 byte length of JSON (matches typical `.json` file size).
+ * @param {unknown} value
+ */
+export function utf8JsonByteLength(value) {
+  return new Blob([JSON.stringify(value)]).size;
+}
+
+/**
+ * @param {object | null | undefined} data
+ * @param {import('../player.js').player} playerRef
+ * @param {PlaySessionPersistExtra | null | undefined} persistExtra
+ */
+export function estimatePlaySessionSaveUtf8Bytes(data, playerRef, persistExtra = null) {
+  if (!data || !playerRef) return 0;
+  const p = buildPlaySessionSavePayload(data, playerRef, persistExtra);
+  return utf8JsonByteLength(p);
+}
+
+/** @returns {number | null} */
+export function estimateStoredPlaySessionSaveUtf8Bytes() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return new Blob([raw]).size;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @returns {PlaySessionSaveV2 | null}
+ */
+export function readStoredPlaySessionSavePayload() {
+  return readSaveFromStorage();
+}
+
+/**
+ * Validates and replaces browser save slot (same storage key as autosave).
+ * @param {unknown} o
+ * @returns {{ ok: true } | { ok: false, reason: string }}
+ */
+export function tryImportPlaySessionSavePayload(o) {
+  if (!o || typeof o !== 'object') return { ok: false, reason: 'empty' };
+  const v = /** @type {{ version?: unknown, mapFingerprint?: unknown, player?: unknown }} */ (o);
+  if (v.version !== 1 && v.version !== 2) return { ok: false, reason: 'version' };
+  if (typeof v.mapFingerprint !== 'string' || !v.mapFingerprint) return { ok: false, reason: 'fingerprint' };
+  const px = Number(v.player?.x);
+  const py = Number(v.player?.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return { ok: false, reason: 'player' };
+  writeSaveToStorage(/** @type {PlaySessionSaveV2} */ (o));
+  return { ok: true };
+}
+
+/**
+ * @param {object | null | undefined} data
+ * @param {import('../player.js').player} playerRef
+ * @param {PlaySessionPersistExtra | null | undefined} persistExtra
+ * @param {string} [filenameBase]
+ */
+export function downloadPlaySessionSaveJsonFile(data, playerRef, persistExtra = null, filenameBase = 'pkmn-play-save') {
+  if (!data || !playerRef) return;
+  const p = buildPlaySessionSavePayload(data, playerRef, persistExtra);
+  const safeFp = String(p.mapFingerprint || 'map').replace(/[^\w@-]+/g, '_');
+  const jsonStr = JSON.stringify(p, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = `${filenameBase}-${safeFp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+/**
  * @param {object | null | undefined} data
  * @returns {PlaySessionSaveV2 | null}
  */

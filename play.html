@@ -506,8 +506,11 @@
         </header>
         <p class="minimap-save-modal__desc" data-i18n="play.saveModalDesc">同じシードとサイズのリージョンに対して、位置とインベントリをブラウザへ保存します。再入場時に復元できます。削除は保存データのみを消去します。</p>
         <p id="minimap-save-modal-status" class="minimap-save-modal__status" aria-live="polite"></p>
-        <div class="minimap-save-modal__actions">
-          <button type="button" id="minimap-save-modal-save" data-i18n="play.saveNow">今すぐ保存</button>
+        <input type="file" id="minimap-save-modal-file-input" class="hidden" accept="application/json,.json" />
+        <div class="minimap-save-modal__actions minimap-save-modal__actions--stack">
+          <button type="button" id="minimap-save-modal-save" data-i18n="play.saveToBrowser">ブラウザに保存</button>
+          <button type="button" id="minimap-save-modal-save-file" data-i18n="play.saveToFile">JSON をダウンロード</button>
+          <button type="button" id="minimap-save-modal-load-file" data-i18n="play.loadFromFile">ファイルから読み込む</button>
           <button type="button" id="minimap-save-modal-clear" data-i18n="play.clearSave">保存を削除</button>
         </div>
       </div>

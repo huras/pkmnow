@@ -415,6 +415,20 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     }
   }
 
+  // Keep whole groups alive: if any member's slot is still needed, un-despawn
+  // every member of that group so individual followers don't vanish mid-pack.
+  const aliveGroupIds = new Set();
+  for (const [k, ent] of entitiesByKey.entries()) {
+    if (!ent.isDespawning && ent.groupId) aliveGroupIds.add(ent.groupId);
+  }
+  if (aliveGroupIds.size > 0) {
+    for (const ent of entitiesByKey.values()) {
+      if (ent.isDespawning && ent.groupId && aliveGroupIds.has(ent.groupId)) {
+        ent.isDespawning = false;
+      }
+    }
+  }
+
   const usedPickIndexesByMacroBiome = new Map();
   for (const ent of entitiesByKey.values()) {
     if (typeof ent.biomeId !== 'number' || typeof ent.pickIndex !== 'number') continue;

@@ -1255,6 +1255,10 @@ button.btn-secondary:hover {
   gap: 10px;
 }
 
+.minimap-save-modal__actions--stack {
+  flex-direction: column;
+}
+
 .minimap-save-modal__actions button {
   flex: 1 1 auto;
   min-width: 120px;
@@ -1266,6 +1270,11 @@ button.btn-secondary:hover {
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
+.minimap-save-modal__actions--stack button {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
 #minimap-save-modal-save {
   background: linear-gradient(180deg, rgba(60, 140, 90, 0.95), rgba(35, 95, 60, 0.98));
   color: #fff;
@@ -1274,6 +1283,26 @@ button.btn-secondary:hover {
 
 #minimap-save-modal-save:hover {
   filter: brightness(1.06);
+}
+
+#minimap-save-modal-save-file {
+  background: rgba(50, 78, 140, 0.55);
+  color: #e8eeff;
+  border-color: rgba(140, 170, 255, 0.35);
+}
+
+#minimap-save-modal-save-file:hover {
+  filter: brightness(1.08);
+}
+
+#minimap-save-modal-load-file {
+  background: rgba(55, 55, 70, 0.55);
+  color: #eef0ff;
+  border-color: rgba(200, 200, 255, 0.22);
+}
+
+#minimap-save-modal-load-file:hover {
+  filter: brightness(1.08);
 }
 
 #minimap-save-modal-clear {

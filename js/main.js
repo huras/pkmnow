@@ -40,7 +40,8 @@ import {
   resetPlayAutosaveSchedule,
   flushPlaySessionSave,
   peekPlaySessionSaveForMap,
-  getPlayResumeMacroTileFromSave
+  getPlayResumeMacroTileFromSave,
+  parseMapFingerprint
 } from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
 import { getWeatherPresetLabel } from './main/weather-presets.js';
@@ -934,7 +935,11 @@ const minimapHudPopovers = installMinimapHudPopovers({ imageCache, getCurrentDat
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
   getPlayer: () => player,
-  getPersistExtra: () => buildPlaySessionPersistExtra()
+  getPersistExtra: () => buildPlaySessionPersistExtra(),
+  onImportedSaveNeedRegenerate: (mapFingerprint) => {
+    const meta = parseMapFingerprint(mapFingerprint);
+    if (meta && seedInput) seedInput.value = String(meta.seed >>> 0);
+  }
 });
 installPlayHelpWikiModal({
   forceCloseMinimapAudioPopover: () => {
@@ -1510,6 +1515,15 @@ function run() {
   resetWorldMapCamera();
   sessionEnteredPlayOnCurrentMap = false;
   resetFarCrySystem();
+  try {
+    const hint = sessionStorage.getItem('pkmn_resume_seed_hint');
+    if (hint != null && hint !== '') {
+      sessionStorage.removeItem('pkmn_resume_seed_hint');
+      if (seedInput) seedInput.value = hint;
+    }
+  } catch {
+    /* ignore */
+  }
   currentData = generate(seedInput.value, currentConfig);
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();

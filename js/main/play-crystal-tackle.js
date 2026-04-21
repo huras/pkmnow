@@ -150,6 +150,7 @@ const DETAIL_HIT_SHAKE_SEC = 0.18;
 
 const chunkRebakeBatchKeys = new Set();
 let chunkRebakeBatchDepth = 0;
+let _scatterCacheDirtyInBatch = false;
 
 function beginChunkRebakeBatch() {
   chunkRebakeBatchDepth++;
@@ -159,6 +160,10 @@ function endChunkRebakeBatch() {
   if (chunkRebakeBatchDepth <= 0) return;
   chunkRebakeBatchDepth--;
   if (chunkRebakeBatchDepth > 0) return;
+  if (_scatterCacheDirtyInBatch) {
+    _scatterCacheDirtyInBatch = false;
+    clearScatterSolidBlockCache();
+  }
   if (chunkRebakeBatchKeys.size === 0) return;
   for (const key of chunkRebakeBatchKeys) {
     const [sx, sy] = key.split(',');
@@ -364,7 +369,8 @@ export function clearPlayCrystalTackleState() {
 
 function registerDestroyedCrystalOrigin(rootOx, rootOy) {
   destroyedCrystalScatterOrigins.add(`${rootOx},${rootOy}`);
-  clearScatterSolidBlockCache();
+  if (chunkRebakeBatchDepth > 0) { _scatterCacheDirtyInBatch = true; }
+  else { clearScatterSolidBlockCache(); }
 }
 
 function registerDestroyedFormalTreeRoot(rootX, my, nowSec, cause = 'cut', data = null) {
@@ -725,7 +731,8 @@ function tryHarvestCharredScatterTreeAtOrigin(ox, oy, data) {
 
 function unregisterDestroyedDetailOrigin(rootOx, rootOy) {
   destroyedCrystalScatterOrigins.delete(`${rootOx},${rootOy}`);
-  clearScatterSolidBlockCache();
+  if (chunkRebakeBatchDepth > 0) { _scatterCacheDirtyInBatch = true; }
+  else { clearScatterSolidBlockCache(); }
 }
 
 function getDetailHpBarDisplayedHp(bar, nowSec) {
