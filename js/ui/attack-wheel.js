@@ -54,6 +54,7 @@ export function getMoveType(moveId) {
     case 'megaDrain':
     case 'petalDance':
     case 'solarBeam':
+    case 'vineWhip':
       return 'grass';
     case 'bubble':
     case 'waterBurst':
@@ -86,6 +87,7 @@ export function getMoveType(moveId) {
     case 'psychic':
     case 'psywave':
     case 'psybeam':
+    case 'psychoCut':
     case 'prismaticLaser':
     case 'dreamEater':
       return 'psychic';
@@ -104,9 +106,8 @@ export function getMoveType(moveId) {
     case 'triAttack':
     case 'ultimate':
     case 'tackle':
-      return 'normal';
     case 'cut':
-      return 'grass';
+      return 'normal';
     default:
       return 'normal';
   }

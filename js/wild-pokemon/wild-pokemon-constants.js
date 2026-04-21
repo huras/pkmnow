@@ -15,4 +15,4 @@ export const WILD_MAX_SIMULTANEOUS_SLOTS = 25;
 /**
  * Max wander distance from each slot's center in micro tiles (tune down when {@link WILD_MACRO_SUBDIVISION} is large).
  */
-export const WILD_WANDER_RADIUS_TILES = 45;
+export const WILD_WANDER_RADIUS_TILES = 15;

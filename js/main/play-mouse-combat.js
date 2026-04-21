@@ -178,8 +178,8 @@ function getMoveTypeClass(moveId) {
       return 'type-normal';
     case 'tackle':
     case 'scratch':
-      return 'type-normal';
     case 'cut':
+      return 'type-normal';
     case 'vineWhip':
       return 'type-grass';
     case 'psychoCut':

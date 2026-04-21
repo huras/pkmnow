@@ -21,7 +21,7 @@ export const INPUT_SLOT_DIGIT_CODES = /** @type {const string[]} */ ([
 
 /** Every move selectable in play (field melee + full special list). */
 export const PLAYER_BINDABLE_MOVE_IDS = Object.freeze(
-  /** @type {string[]} */ (['tackle', 'cut', ...PLAYER_SPECIAL_WHEEL_MOVE_IDS])
+  /** @type {string[]} */ (['tackle', 'cut', 'psychoCut', 'vineWhip', ...PLAYER_SPECIAL_WHEEL_MOVE_IDS])
 );
 
 const STORAGE_KEY_V2 = 'pkmn_player_input_slots_v2';
