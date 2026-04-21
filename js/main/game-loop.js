@@ -694,6 +694,18 @@ export function createGameLoop(api) {
           .slice(0, 3)
           .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
           .join(' | ');
+        const vegHeavy = [
+          ['vgb', perf.renderP95Stable.rndVegGrassBaseMs ?? 0],
+          ['vgt', perf.renderP95Stable.rndVegGrassTopMs ?? 0],
+          ['vgf', perf.renderP95Stable.rndVegGrassFireMs ?? 0],
+          ['vsc', perf.renderP95Stable.rndVegScatterMs ?? 0],
+          ['vtr', perf.renderP95Stable.rndVegTreeMs ?? 0]
+        ]
+          .sort((a, b) => b[1] - a[1]);
+        const top3VegRender = vegHeavy
+          .slice(0, 3)
+          .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+          .join(' | ');
         const chunkStats = getPlayChunkFrameStats();
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
@@ -708,6 +720,7 @@ export function createGameLoop(api) {
           `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms · p50 ${perf.p50Fps.toFixed(1)}fps`,
           `p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable) · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms`,
           `rnd top ${top3HeavyRender}`,
+          `veg top ${top3VegRender}`,
           `upd top ${top3HeavyUpdate}${wildSubTag}`,
           `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}${playAdaptivePressure ? ` · cap p${playAdaptivePressure}` : ''}`
         ];

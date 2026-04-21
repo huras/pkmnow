@@ -32,7 +32,10 @@ export const PHASE_ROAM_MIN_SEC = 45;
 export const PHASE_ROAM_MAX_SEC = 75;
 export const PHASE_EXPLORE_MIN_SEC = 30;
 export const PHASE_EXPLORE_MAX_SEC = 50;
-export const DISCOVERY_CHANCE_TICK = 0.08; // Chance per second during explore phase
+export const DISCOVERY_CHANCE_TICK = 0.03; // Chance per second during explore phase
+export const DISCOVERY_INITIAL_COOLDOWN_SEC = 20;
+export const DISCOVERY_GROUP_COOLDOWN_MIN_SEC = 120;
+export const DISCOVERY_GROUP_COOLDOWN_MAX_SEC = 180;
 
 /** @param {number} x @param {number} y */
 export function normalizeVec(x, y) {
@@ -47,7 +50,7 @@ export function ensureGroupBehaviorState(entity) {
   if (entity.groupPhaseTimer == null) {
     entity.groupPhaseTimer = PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
   }
-  if (entity.discoveryCooldown == null) entity.discoveryCooldown = 10; // Extra buffer before first discovery possible
+  if (entity.discoveryCooldown == null) entity.discoveryCooldown = DISCOVERY_INITIAL_COOLDOWN_SEC;
   if (entity.scenicCooldown == null) entity.scenicCooldown = 15.0 + Math.random() * 20.0;
 }
 

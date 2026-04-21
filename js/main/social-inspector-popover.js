@@ -8,6 +8,7 @@ import {
 import { WILD_SOCIAL_SCENARIOS } from '../wild-pokemon/wild-scenario-data.js';
 import { scenarioOrchestrator } from '../wild-pokemon/wild-scenario-orchestrator.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
+import * as groupBehavior from '../wild-pokemon/wild-group-behavior.js';
 
 const INSPECTOR_RADIUS = 20; // tiles
 const MAX_ENTITIES = 12;
@@ -277,7 +278,9 @@ export function triggerScenarioOnNearestGroup(scenarioId) {
   // Mark scenic
   for (const m of bestGroup.members) {
     m.groupPhase = 'SCENIC';
-    m.discoveryCooldown = 60 + Math.random() * 40;
+    m.discoveryCooldown =
+      groupBehavior.DISCOVERY_GROUP_COOLDOWN_MIN_SEC +
+      Math.random() * (groupBehavior.DISCOVERY_GROUP_COOLDOWN_MAX_SEC - groupBehavior.DISCOVERY_GROUP_COOLDOWN_MIN_SEC);
   }
 
   return true;

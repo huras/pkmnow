@@ -12,7 +12,6 @@ import { resolvePmdFrameSpecForSlice } from './pokemon/pmd-layout-metrics.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
-import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
 import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
@@ -266,6 +265,7 @@ const settingsModal = document.getElementById('settingsModal');
 const btnApplySettings = document.getElementById('btnApplySettings');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
 const btnExportWorldSettings = document.getElementById('btnExportWorldSettings');
+const btnContinuePlay = document.getElementById('btnContinuePlay');
 const btnBackToMap = document.getElementById('btnBackToMap');
 const playFpsEl = document.getElementById('play-fps');
 const playContextMenu = document.getElementById('play-context-menu');
@@ -344,6 +344,7 @@ let playBgmToastHideTimer = 0;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
 let worldMapCameraRaf = 0;
+let worldMapRenderLoopRaf = 0;
 let mapDragPointerId = -1;
 let mapDragMovedPx = 0;
 let mapDragLastClientX = 0;
@@ -1243,6 +1244,32 @@ function syncRegionViewShell() {
   }
 }
 
+function hasMapContinuePosition() {
+  if (appMode !== 'map' || !currentData || !sessionEnteredPlayOnCurrentMap) return false;
+  const px = Number(player.visualX ?? player.x);
+  const py = Number(player.visualY ?? player.y);
+  return Number.isFinite(px) && Number.isFinite(py);
+}
+
+function syncMapContinueButtonVisibility() {
+  if (!btnContinuePlay) return;
+  btnContinuePlay.classList.toggle('hidden', !hasMapContinuePosition());
+}
+
+function continueFromMapToPlay() {
+  if (!currentData || appMode !== 'map') return;
+  const px = Number(player.visualX ?? player.x);
+  const py = Number(player.visualY ?? player.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+  const mapMicroW = Math.max(1, Number(currentData.width) * MACRO_TILE_STRIDE);
+  const mapMicroH = Math.max(1, Number(currentData.height) * MACRO_TILE_STRIDE);
+  const clampedX = Math.max(0, Math.min(mapMicroW - 1, px));
+  const clampedY = Math.max(0, Math.min(mapMicroH - 1, py));
+  const gx = Math.floor(clampedX / MACRO_TILE_STRIDE);
+  const gy = Math.floor(clampedY / MACRO_TILE_STRIDE);
+  enterPlayMode(gx, gy, { resumePosition: false });
+}
+
 /**
  * @param {object} data
  * @returns {{ gx: number, gy: number }}
@@ -1266,6 +1293,7 @@ function updateWorldMapCameraBounds() {
 
 function requestWorldMapCameraFrame() {
   if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || appMode !== 'map') return;
+  if (worldMapRenderLoopRaf) return;
   if (worldMapCameraRaf) return;
   worldMapCameraRaf = requestAnimationFrame(() => {
     worldMapCameraRaf = 0;
@@ -1273,6 +1301,28 @@ function requestWorldMapCameraFrame() {
     updateView();
     if (moving) requestWorldMapCameraFrame();
   });
+}
+
+function worldMapRenderLoop() {
+  worldMapRenderLoopRaf = 0;
+  if (appMode !== 'map' || !currentData) return;
+  if (WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) {
+    tickWorldMapCamera(performance.now());
+  }
+  updateView();
+  worldMapRenderLoopRaf = requestAnimationFrame(worldMapRenderLoop);
+}
+
+function startWorldMapRenderLoop() {
+  if (appMode !== 'map' || !currentData) return;
+  if (worldMapRenderLoopRaf) return;
+  worldMapRenderLoopRaf = requestAnimationFrame(worldMapRenderLoop);
+}
+
+function stopWorldMapRenderLoop() {
+  if (!worldMapRenderLoopRaf) return;
+  cancelAnimationFrame(worldMapRenderLoopRaf);
+  worldMapRenderLoopRaf = 0;
 }
 
 function mapClientToCanvasPx(clientX, clientY) {
@@ -1410,6 +1460,7 @@ addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
   const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
+  syncMapContinueButtonVisibility();
   if (appMode === 'map') updateWorldMapCameraBounds();
   const settings = getSettings();
   if (currentData) {
@@ -1530,9 +1581,12 @@ function run() {
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   playDetailColliderHighlight = null;
+  stopWorldMapRenderLoop();
+  syncMapContinueButtonVisibility();
   syncRegionViewShell();
   resizeCanvas();
   updateView();
+  startWorldMapRenderLoop();
 }
 
 function downloadJsonFile(filename, payload) {
@@ -1721,6 +1775,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   playInputState.mouseValid = false;
   invalidatePlayPointerHover();
   appMode = 'play';
+  syncMapContinueButtonVisibility();
   btnExport?.classList.add('hidden');
   btnBackToMap?.classList.remove('hidden');
   if (minimapPanel) minimapPanel.classList.remove('hidden');
@@ -1747,6 +1802,7 @@ function enterPlayMode(gx, gy, opts = {}) {
 
   syncRegionViewShell();
   resizeCanvas();
+  stopWorldMapRenderLoop();
   startGameLoop();
   refreshPlayModeInfoBar(true);
 }
@@ -1766,6 +1822,7 @@ btnBackToMap?.addEventListener('click', () => {
   clearPlayCameraSnapshot();
   playInputState.fieldChargeUiActive = null;
   appMode = 'map';
+  syncMapContinueButtonVisibility();
   btnExport?.classList.remove('hidden');
   btnBackToMap?.classList.add('hidden');
   if (minimapPanel) minimapPanel.classList.add('hidden');
@@ -1791,6 +1848,11 @@ btnBackToMap?.addEventListener('click', () => {
   syncRegionViewShell();
   resizeCanvas();
   updateView();
+  startWorldMapRenderLoop();
+});
+
+btnContinuePlay?.addEventListener('click', () => {
+  continueFromMapToPlay();
 });
 
 function resizeCanvas() {
@@ -2075,9 +2137,6 @@ syncForceLod0FromUi();
 void initMods();
 
 loadTilesetImages().then(async () => {
-  if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {
-    new BiomesModal();
-  }
   playCharacterSelector = new CharacterSelector('character-selector-container', {
     getCurrentData: () => currentData,
     getAppMode: () => appMode,

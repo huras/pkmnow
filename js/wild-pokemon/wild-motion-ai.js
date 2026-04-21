@@ -788,7 +788,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
                     // Mark entire group as Scenic
                     for(const m of groupMembers) {
                       m.groupPhase = 'SCENIC';
-                      m.discoveryCooldown = 60 + Math.random() * 40; // Global cooldown for group
+                      m.discoveryCooldown =
+                        groupBehavior.DISCOVERY_GROUP_COOLDOWN_MIN_SEC +
+                        Math.random() * (groupBehavior.DISCOVERY_GROUP_COOLDOWN_MAX_SEC - groupBehavior.DISCOVERY_GROUP_COOLDOWN_MIN_SEC);
                     }
                 }
             }

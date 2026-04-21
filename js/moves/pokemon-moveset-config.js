@@ -41,6 +41,7 @@ export const MOVE_LABELS = Object.freeze({
   thunderbolt: 'Thunderbolt',
   triAttack: 'Tri Attack',
   confusion: 'Confusion',
+  cut: 'Cut',
   bubble: 'Bubble',
   waterBurst: 'Water Burst',
   waterGun: 'Water Gun',
