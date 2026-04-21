@@ -2,6 +2,17 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, Number(v) || 0));
 }
 
+// Far-cry visual tuning knobs (opacity/fade per ring).
+const FAR_CRY_SCREEN_RING_COUNT = 3;
+const FAR_CRY_SCREEN_ALPHA_BASE = 0.32;
+const FAR_CRY_SCREEN_ALPHA_PER_RING = 0.045;
+const FAR_CRY_SCREEN_ALPHA_CUTOFF = 0.003;
+
+const FAR_CRY_MINIMAP_RING_COUNT = 3;
+const FAR_CRY_MINIMAP_ALPHA_BASE = 0.7;
+const FAR_CRY_MINIMAP_ALPHA_PER_RING = 0.14;
+const FAR_CRY_MINIMAP_ALPHA_CUTOFF = 0.01;
+
 /**
  * Draw directional "Far Cry" rings entering from the screen edge.
  * @param {CanvasRenderingContext2D} ctx
@@ -29,16 +40,15 @@ export function drawFarCryScreenWaves(ctx, waves, canvasSize) {
     const edgePad = Math.max(18, Math.min(w, h) * 0.06);
     const cx = w * 0.5 + dx * (edgeRadius + edgePad);
     const cy = h * 0.5 + dy * (edgeRadius + edgePad);
-    const ringCount = 3;
     const seed = Number(wave.seed) || 0;
-    for (let i = 0; i < ringCount; i++) {
+    for (let i = 0; i < FAR_CRY_SCREEN_RING_COUNT; i++) {
       const phase = clamp01(t - i * 0.11);
       if (phase <= 0) continue;
       const r =
         Math.max(w, h) * (0.1 + phase * 0.6) +
         (i * 5 + seed * 9);
-      const alpha = fade * (0.22 - i * 0.045);
-      if (alpha <= 0.003) continue;
+      const alpha = fade * (FAR_CRY_SCREEN_ALPHA_BASE - i * FAR_CRY_SCREEN_ALPHA_PER_RING);
+      if (alpha <= FAR_CRY_SCREEN_ALPHA_CUTOFF) continue;
       const lineW = Math.max(1.2, Math.min(w, h) * (0.0028 + (1 - phase) * 0.0018));
       ctx.strokeStyle = `rgba(140, 220, 255, ${alpha.toFixed(4)})`;
       ctx.lineWidth = lineW;
@@ -73,13 +83,12 @@ export function drawFarCryMinimapEchoes(ctx, echoes, tf, canvasSize) {
     const sx = (Number(fx.x) - ox + 0.5) * scale;
     const sy = (Number(fx.y) - oy + 0.5) * scale;
     if (sx < -24 || sy < -24 || sx > w + 24 || sy > h + 24) continue;
-    const ringCount = 3;
-    for (let i = 0; i < ringCount; i++) {
+    for (let i = 0; i < FAR_CRY_MINIMAP_RING_COUNT; i++) {
       const phase = clamp01(t - i * 0.12);
       if (phase <= 0) continue;
       const r = Math.max(4, scale * (0.16 + phase * 0.9)) + i * 1.7;
-      const alpha = fade * (0.7 - i * 0.14);
-      if (alpha <= 0.01) continue;
+      const alpha = fade * (FAR_CRY_MINIMAP_ALPHA_BASE - i * FAR_CRY_MINIMAP_ALPHA_PER_RING);
+      if (alpha <= FAR_CRY_MINIMAP_ALPHA_CUTOFF) continue;
       ctx.strokeStyle = `rgba(120, 240, 255, ${alpha.toFixed(4)})`;
       ctx.lineWidth = Math.max(1, Math.min(2.4, scale * 0.06));
       ctx.beginPath();

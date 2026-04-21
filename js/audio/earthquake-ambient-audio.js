@@ -1,10 +1,10 @@
 /**
  * Earthquake ground-shake bed: loops `audio/sfx/Earthquake.mp3`, gain follows shake intensity.
- * Separate from sky weather ambient (`weather-ambient-audio.js`). Uses the same BGM user gain.
+ * Separate from sky weather ambient (`weather-ambient-audio.js`). Uses the ambience user gain.
  */
 
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
-import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
+import { getEffectiveAmbienceMix01 } from './play-audio-mix-settings.js';
 import { getEarthquakeActiveIntensity01, getEarthquakeShakePx } from '../main/earthquake-layer.js';
 
 const EARTHQUAKE_MP3_URL = new URL('../../audio/sfx/Earthquake.mp3', import.meta.url).href;
@@ -68,7 +68,7 @@ function ensureGraph() {
   const bedGain = ctx.createGain();
   bedGain.gain.value = 0;
   const userGain = ctx.createGain();
-  userGain.gain.value = getEffectiveBgmMix01();
+  userGain.gain.value = getEffectiveAmbienceMix01();
   source.connect(bedGain);
   bedGain.connect(userGain);
   userGain.connect(ctx.destination);
@@ -113,12 +113,12 @@ function pauseBedNow() {
 }
 
 /**
- * Apply persisted BGM mix slider (same knob as rain/wind beds).
+ * Apply persisted ambience mix slider (same knob as rain/wind beds).
  */
 export function applyEarthquakeAmbientUserMixFromStorage() {
   if (!graph) return;
   try {
-    graph.userGain.gain.value = getEffectiveBgmMix01();
+    graph.userGain.gain.value = getEffectiveAmbienceMix01();
   } catch {
     /* ignore */
   }

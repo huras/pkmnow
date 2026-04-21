@@ -443,6 +443,8 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
           const hRight = getCachedTile(rx, myScan)?.heightStep;
 
           if (hRight === tile.heightStep) {
+            const roleRight = setRoot ? getRoleAtOrAboveHeight(rx, myScan, tile.heightStep, setRoot.type) : 'CENTER';
+            if (!terrainRoleAllowsScatter2CContinuation(roleRight)) continue;
             const ids = TREE_TILES[treeType];
             if (ids) {
               // Part 0 (Left half)

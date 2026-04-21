@@ -42,12 +42,11 @@ import {
   PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL
 } from './fire-spin-move.js';
 import { castAbsorbMove } from './absorb-move.js';
-import { resolveWildMoveIdForDex } from './wild-move-table.js';
 import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
-import { updatePlayerCombatTimers, tryJumpPlayer } from '../player.js';
+import { updatePlayerCombatTimers, tryDamagePlayerFromProjectile, tryJumpPlayer } from '../player.js';
 import { strengthCarryBlocksWalk } from '../main/play-strength-carry.js';
 import {
   isChargeStrongAttackEligible,
@@ -1210,38 +1209,11 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
   entity.wildMoveCd = (entity.wildMoveCd ?? 0) - dt;
   if (entity.wildMoveCd > 0) return;
 
-  const moveId = resolveWildMoveIdForDex(entity.dexId ?? 1);
-  const opts = { fromWild: true, pushProjectile, pushParticle };
-  if (moveId === 'ember') {
-    castEmberVolley(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'waterBurst') {
-    castWaterBurstVolley(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'flamethrower') {
-    castFlamethrower(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'confusion') {
-    castConfusion(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'bubble') {
-    castBubble(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'waterGun') {
-    castWaterGun(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'psybeam') {
-    castPsybeam(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'prismaticLaser') {
-    castPrismaticLaser(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'steelBeam') {
-    castSteelBeam(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'waterCannon') {
-    castWaterCannon(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'poisonPowder') {
-    castPoisonPowder(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'fireBlast') {
-    castFireBlast(entity.x, entity.y, playerX, playerY, entity, { ...opts, tier: 2 });
-  } else if (moveId === 'incinerate') {
-    castIncinerate(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else if (moveId === 'silkShoot') {
-    castSilkShoot(entity.x, entity.y, playerX, playerY, entity, opts);
-  } else {
-    castPoisonStingOnce(entity.x, entity.y, playerX, playerY, entity, opts);
+  // Temporary test mode: all wild aggro uses melee Cut only.
+  const ang = Math.atan2(playerY - entity.y, playerX - entity.x);
+  spawnFieldCutSlashFx(entity.x, entity.y, ang, { radiusTiles: 1.28, lifeSec: 0.24, z: 0.06 });
+  if (distP <= 1.7) {
+    tryDamagePlayerFromProjectile(8, false, null);
   }
   entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT * getWildAggressiveMoveCooldownMultiplier(entity);
   playWildAttackCry(entity);

@@ -863,13 +863,15 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
             assignWildTargetIfEndpointClear(entity, tx, ty, data, false);
           }
         }
+        const wanderCx = entity.wildGrassHostileDeathBattle ? entity.x : entity.centerX;
+        const wanderCy = entity.wildGrassHostileDeathBattle ? entity.y : entity.centerY;
         for (let attempt = 0; attempt < 10; attempt++) {
           if (followerMode) break;
           if (entity.targetX != null && entity.targetY != null) break;
           const ang = Math.random() * Math.PI * 2;
           const dist = Math.random() * WILD_WANDER_RADIUS_TILES;
-          const tx = entity.centerX + Math.cos(ang) * dist;
-          const ty = entity.centerY + Math.sin(ang) * dist;
+          const tx = wanderCx + Math.cos(ang) * dist;
+          const ty = wanderCy + Math.sin(ang) * dist;
           // Path may be blocked; only the endpoint must be valid and not too close to colliders.
           if (!isCliffDrop(entity.x, entity.y, tx, ty, data) && assignWildTargetIfEndpointClear(entity, tx, ty, data, false)) {
             break;
@@ -1048,7 +1050,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   applyWildTreeTrunkResolution(entity, data);
   enforceFollowerLeaderMaxDistance(entity, data);
 
-  if (!followerTeamMode) {
+  if (!followerTeamMode && !entity.wildGrassHostileDeathBattle) {
     const dx = entity.x - entity.centerX;
     const dy = entity.y - entity.centerY;
     const dist = Math.hypot(dx, dy);

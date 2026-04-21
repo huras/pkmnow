@@ -7,6 +7,7 @@ import {
   GRASS_WALK_HOSTILE_SPAWN_COOLDOWN_SEC
 } from './wild-pokemon-constants.js';
 import { summonGrassHostileWildNearPlayer } from './wild-spawn-window.js';
+import { startEncounterCinematic, isEncounterCinematicActive } from '../encounter/encounter-cinematic.js';
 
 /** `-Infinity` so the first successful spawn is never blocked by cooldown (only rolls chance). */
 let lastGrassHostileSpawnMs = -Infinity;
@@ -18,6 +19,7 @@ let lastGrassHostileSpawnMs = -Infinity;
  */
 export function tryGrassWalkHostileWildSpawn(player, data) {
   if (!player || !data) return;
+  if (isEncounterCinematicActive()) return;
   const now = performance.now();
   if (now - lastGrassHostileSpawnMs < GRASS_WALK_HOSTILE_SPAWN_COOLDOWN_SEC * 1000) return;
   if (Math.random() >= GRASS_WALK_HOSTILE_SPAWN_CHANCE) return;
@@ -38,7 +40,13 @@ export function tryGrassWalkHostileWildSpawn(player, data) {
   const baseDex = encounterNameToDex(name);
   if (baseDex == null || !getPokemonConfig(baseDex)) return;
 
-  if (summonGrassHostileWildNearPlayer(data, nearWorldX, nearWorldY, baseDex)) {
-    lastGrassHostileSpawnMs = now;
-  }
+  lastGrassHostileSpawnMs = now;
+
+  // Capture spawn position now (player may move during cinematic)
+  const spawnNearX = nearWorldX;
+  const spawnNearY = nearWorldY;
+
+  startEncounterCinematic(player, baseDex, spawnNearX, spawnNearY, () => {
+    return summonGrassHostileWildNearPlayer(data, spawnNearX, spawnNearY, baseDex);
+  });
 }

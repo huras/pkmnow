@@ -36,6 +36,7 @@ const STORAGE_KEY = 'pkmn_play_session_save_v1';
  * @property {number} [weatherPrecipIntensity01]
  * @property {number} [earthquakeIntensity01]
  * @property {number} [sunLightRaysIntensity01]
+ * @property {boolean} [moonlightEnabled]
  */
 
 /** First autosave after entering play (seconds). */
@@ -44,6 +45,11 @@ const AUTOSAVE_FIRST_DELAY_SEC = 10;
 const AUTOSAVE_INTERVAL_SEC = 30;
 
 let nextAutosaveWallSec = 0;
+let autosaveFlushScheduled = false;
+let autosaveFlushHandle = 0;
+let queuedAutosavePayloadArgs = null;
+let autosaveFlushRunning = false;
+let autosaveFlushNeedsReplay = false;
 
 function wallSecNow() {
   return performance.now() * 0.001;
@@ -267,7 +273,7 @@ function readSavedWeatherPreset(saved) {
 /**
  * Weather + clock block for cold resume (v2+).
  * @param {PlaySessionSaveV2 | null | undefined} saved
- * @returns {{ worldHours: number, playSessionSeconds: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number, sunLightRaysIntensity01: number } | null}
+ * @returns {{ worldHours: number, playSessionSeconds: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number, sunLightRaysIntensity01: number, moonlightEnabled: boolean } | null}
  */
 export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!saved || saved.version < 2) return null;
@@ -287,6 +293,7 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
   const earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
   const sr = Number(saved.sunLightRaysIntensity01);
   const sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
+  const moonlightEnabled = saved.moonlightEnabled !== false;
   return {
     worldHours,
     playSessionSeconds,
@@ -295,7 +302,8 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
     weatherCloudIntensity01,
     weatherPrecipIntensity01,
     earthquakeIntensity01,
-    sunLightRaysIntensity01
+    sunLightRaysIntensity01,
+    moonlightEnabled
   };
 }
 
@@ -363,7 +371,7 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
 }
 
 /**
- * @typedef {{ worldHours: number, playSessionSeconds?: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} PlaySessionPersistExtra
+ * @typedef {{ worldHours: number, playSessionSeconds?: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number, moonlightEnabled?: boolean }} PlaySessionPersistExtra
  */
 
 /**
@@ -426,6 +434,7 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   out.earthquakeIntensity01 = Number.isFinite(eq) ? Math.max(0, Math.min(1, eq)) : 0;
   const sr = Number(persistExtra?.sunLightRaysIntensity01 ?? getSunLightRaysTargetIntensity01());
   out.sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
+  out.moonlightEnabled = persistExtra?.moonlightEnabled !== false;
   const fogSnap = getFogDiscoveredSnapshot();
   if (fogSnap) out.fogDiscovered = fogSnap;
   return out;
@@ -446,8 +455,71 @@ export function flushPlaySessionSave(data, playerRef, persistExtra = null) {
   writeSaveToStorage(p);
 }
 
+/**
+ * @param {object | null | undefined} data
+ * @param {import('../player.js').player} playerRef
+ * @param {PlaySessionPersistExtra | null} persistExtra
+ */
+function queuePlaySessionAutosave(data, playerRef, persistExtra = null) {
+  if (!data || !playerRef) return;
+  queuedAutosavePayloadArgs = { data, playerRef, persistExtra };
+  if (autosaveFlushRunning) {
+    autosaveFlushNeedsReplay = true;
+    return;
+  }
+  if (autosaveFlushScheduled) return;
+  autosaveFlushScheduled = true;
+  if (typeof window.requestIdleCallback === 'function') {
+    autosaveFlushHandle = window.requestIdleCallback(runDeferredAutosaveFlush, { timeout: 700 });
+    return;
+  }
+  autosaveFlushHandle = window.setTimeout(runDeferredAutosaveFlush, 0);
+}
+
+function clearAutosaveFlushSchedule() {
+  if (!autosaveFlushScheduled) return;
+  if (typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(autosaveFlushHandle);
+  } else {
+    clearTimeout(autosaveFlushHandle);
+  }
+  autosaveFlushHandle = 0;
+  autosaveFlushScheduled = false;
+}
+
+function runDeferredAutosaveFlush() {
+  autosaveFlushHandle = 0;
+  autosaveFlushScheduled = false;
+  const args = queuedAutosavePayloadArgs;
+  if (!args) return;
+  queuedAutosavePayloadArgs = null;
+  autosaveFlushRunning = true;
+  try {
+    const { data, playerRef, persistExtra } = args;
+    if (!data || !playerRef) return;
+    const fp = buildPlayMapFingerprint(data);
+    if (!fp) return;
+    const payload = buildPlaySessionSavePayload(data, playerRef, persistExtra);
+    writeSaveToStorage(payload);
+    flashPlaySessionSaveIndicator();
+  } finally {
+    autosaveFlushRunning = false;
+    if (autosaveFlushNeedsReplay || queuedAutosavePayloadArgs) {
+      autosaveFlushNeedsReplay = false;
+      queuePlaySessionAutosave(
+        queuedAutosavePayloadArgs?.data ?? args.data,
+        queuedAutosavePayloadArgs?.playerRef ?? args.playerRef,
+        queuedAutosavePayloadArgs?.persistExtra ?? args.persistExtra
+      );
+    }
+  }
+}
+
 /** Removes the persisted play snapshot from localStorage (next resume for this map will be empty). */
 export function clearPlaySessionSave() {
+  clearAutosaveFlushSchedule();
+  queuedAutosavePayloadArgs = null;
+  autosaveFlushNeedsReplay = false;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch (e) {
@@ -459,6 +531,9 @@ export function clearPlaySessionSave() {
  * Resets the wall-clock autosave schedule (first fire at +10s, then every +30s).
  */
 export function resetPlayAutosaveSchedule() {
+  clearAutosaveFlushSchedule();
+  queuedAutosavePayloadArgs = null;
+  autosaveFlushNeedsReplay = false;
   const t = wallSecNow();
   nextAutosaveWallSec = t + AUTOSAVE_FIRST_DELAY_SEC;
 }
@@ -473,6 +548,6 @@ export function tickPlaySessionAutosave(wallSec, data, playerRef, persistExtra =
   if (!data || !playerRef) return;
   if (!Number.isFinite(wallSec) || nextAutosaveWallSec <= 0) return;
   if (wallSec < nextAutosaveWallSec) return;
-  flushPlaySessionSave(data, playerRef, persistExtra);
+  queuePlaySessionAutosave(data, playerRef, persistExtra);
   nextAutosaveWallSec = wallSec + AUTOSAVE_INTERVAL_SEC;
 }

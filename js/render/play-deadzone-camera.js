@@ -2,183 +2,374 @@
  * SNES Zelda: A Link to the Past — screen-grid camera.
  *
  * The world is treated as a grid of screen-sized "rooms".  While the player
- * stays inside the current room the camera is perfectly still (translation
- * is a compile-time-constant for that room).  When the player steps across
- * a room boundary the camera performs a fast, fixed-duration scroll to the
- * adjacent room — identical to how ALTTP scrolls the overworld.
+ * stays inside the current room the camera is perfectly still.  When the
+ * player steps across a room boundary the camera performs a fast,
+ * fixed-duration scroll to the adjacent room.
  *
- * When active the zoom is locked at ground level (scale = 1.0) so the room
- * grid stays pixel-stable no matter the player's altitude.  Jump and flight
- * only move the sprite — the camera never budges vertically for Z changes.
- *
- * Performance payoff: during the ~95 % of gameplay where the player is
- * moving *within* a room, currentTransX/Y are constants → every chunk
- * keeps its exact pixel position → the compositor can skip all
- * resampling / sub-pixel interpolation.
+ * Supports two activation modes:
+ *   – **Manual toggle** (G key / minimap icon) — persisted in localStorage,
+ *     snaps on/off instantly.
+ *   – **Encounter-driven** — activated programmatically centered on a world
+ *     position, with smooth cross-fade from center-follow to grid-locked
+ *     (and smooth fade-out when the encounter ends).
  *
  * Zero per-frame heap allocation.  All state is module-level primitives.
- *
- * Toggle: G key or minimap icon at runtime.  Persisted in localStorage.
  */
 
-/* ── Scroll transition speed ──────────────────────────────────────────── */
+/* ── Transition timing ────────────────────────────────────────────────── */
 
-/**
- * Seconds for a full-screen scroll transition.
- * ALTTP original is ~16 frames at 60 fps ≈ 0.267s.
- */
-const SCROLL_DURATION_S = 0.27;
+/** Seconds for a full-screen room-to-room scroll. */
+let _scrollDurationS = 0.75;
+
+/** Seconds to cross-fade centre-follow → grid-locked (encounter blend-in). */
+let _blendInS = 0.4;
+
+/** Seconds to cross-fade grid-locked → centre-follow (encounter blend-out). */
+let _blendOutS = 0.45;
 
 /* ── State (primitives only — zero GC pressure) ──────────────────────── */
 
 const LS_KEY = 'pkmn_dz_cam';
-let _on = false;
+let _manualOn = false;
 
-/** Current "room" the camera is locked to (integer grid coords). */
 let _roomX = 0;
 let _roomY = 0;
-
-/** Screen dimensions in world tiles at ground zoom (locked effTile = BAKE_TILE_PX). */
 let _screenW = 0;
 let _screenH = 0;
 
-/** Is the camera mid-scroll-transition? */
 let _scrolling = false;
-
-/** Scroll origin room and target room (integer grid). */
 let _fromRoomX = 0;
 let _fromRoomY = 0;
 let _toRoomX = 0;
 let _toRoomY = 0;
-
-/** Progress 0..1 through the current scroll transition. */
 let _scrollT = 0;
 
-/** NaN = uninitialised → snap to player's room on first frame. */
+/** NaN = uninitialised → snap to room on first frame. */
 let _initDone = NaN;
-
 let _lastPerfMs = 0;
+let _prevPlayerVx = NaN;
+let _prevPlayerVy = NaN;
 
-/** Listeners notified on toggle (for UI sync). */
+/* ── Encounter-driven activation ──────────────────────────────────────── */
+
+let _encounterActive = false;
+let _encounterAnchorX = 0;
+let _encounterAnchorY = 0;
+let _allowManualRoomTransitions = true;
+
+/**
+ * Blend factor 0..1: 0 = pure centre-follow, 1 = pure grid-locked.
+ * Smoothly animated toward target each frame.
+ */
+let _blend = 0;
+
+/** Listeners notified on effective-state change (for UI sync). */
 const _listeners = [];
 
-// Self-init from localStorage at import time.
-try { _on = localStorage.getItem(LS_KEY) === '1'; } catch (_) { /* noop */ }
+// Self-init from localStorage.
+try { _manualOn = localStorage.getItem(LS_KEY) === '1'; } catch (_) { /* noop */ }
+// If manual was persisted ON, start fully blended.
+if (_manualOn) _blend = 1;
 
-/* ── Public helpers ───────────────────────────────────────────────────── */
+/* ── Derived helpers ──────────────────────────────────────────────────── */
 
-/** @returns {boolean} */
-export function isScreenGridCameraOn() { return _on; }
+function _isEffectivelyOn() { return _manualOn || _encounterActive; }
 
-/** Subscribe to toggle changes.  Returns unsubscribe function. */
+function _roomIndexFromCoord(coord, anchor, screenSpan) {
+  return Math.floor((coord - (anchor - screenSpan * 0.5)) / screenSpan);
+}
+
+function _roomCenterFromIndex(roomIndex, anchor, screenSpan) {
+  return anchor + roomIndex * screenSpan;
+}
+
+function _notifyListeners() {
+  const on = _isEffectivelyOn();
+  for (let i = 0; i < _listeners.length; i++) _listeners[i](on);
+}
+
+/* ── Public API ───────────────────────────────────────────────────────── */
+
+/** @returns {boolean} Whether the grid camera is logically active. */
+export function isScreenGridCameraOn() { return _isEffectivelyOn(); }
+
+/** @returns {boolean} Manual toggle state (ignoring encounter). */
+export function isScreenGridCameraManualOn() { return _manualOn; }
+
+/** Subscribe to toggle changes. Returns unsubscribe function. */
 export function onScreenGridCameraChange(fn) {
   _listeners.push(fn);
   return () => { const i = _listeners.indexOf(fn); if (i >= 0) _listeners.splice(i, 1); };
 }
 
-/** Enable / disable and persist.  Resets state so the next frame snaps cleanly. */
+/** Enable / disable manual mode. Persists in localStorage. */
 export function setScreenGridCameraOn(v) {
-  _on = !!v;
+  _manualOn = !!v;
   _initDone = NaN;
   _scrolling = false;
   _lastPerfMs = 0;
-  try { localStorage.setItem(LS_KEY, _on ? '1' : '0'); } catch (_) { /* noop */ }
-  for (let i = 0; i < _listeners.length; i++) _listeners[i](_on);
+  _prevPlayerVx = NaN;
+  _prevPlayerVy = NaN;
+  if (_manualOn) _blend = 1; // manual toggle snaps fully on
+  else if (!_encounterActive) _blend = 0;
+  try { localStorage.setItem(LS_KEY, _manualOn ? '1' : '0'); } catch (_) { /* noop */ }
+  _notifyListeners();
 }
 
-/** Toggle and return the new state. */
-export function toggleScreenGridCamera() { setScreenGridCameraOn(!_on); return _on; }
+/** Toggle manual mode and return the new state. */
+export function toggleScreenGridCamera() { setScreenGridCameraOn(!_manualOn); return _manualOn; }
 
-// Keep old names as aliases so game-loop.js import still works.
+/**
+ * Activate grid camera centred on a world position (encounter mode).
+ * Blends in smoothly over BLEND_IN_S.
+ *
+ * @param {number} centerX — world tile X of encounter
+ * @param {number} centerY — world tile Y of encounter
+ * @param {number} tw — current effTileW (for screen-size calc)
+ * @param {number} th — current effTileH
+ * @param {number} cw — canvas width
+ * @param {number} ch — canvas height
+ */
+export function activateEncounterScreenGrid(centerX, centerY, tw, th, cw, ch) {
+  _encounterActive = true;
+  const sw = cw / tw;
+  const sh = ch / th;
+  _screenW = sw;
+  _screenH = sh;
+  _encounterAnchorX = Number(centerX) || 0;
+  _encounterAnchorY = Number(centerY) || 0;
+  _roomX = 0;
+  _roomY = 0;
+  _scrolling = false;
+  _initDone = 1;
+  _lastPerfMs = 0;
+  _prevPlayerVx = NaN;
+  _prevPlayerVy = NaN;
+  // Encounter must snap directly to spawn-centered Zelda room.
+  _blend = 1;
+  _notifyListeners();
+}
+
+/** Deactivate encounter mode (blends out smoothly). */
+export function deactivateEncounterScreenGrid() {
+  _encounterActive = false;
+  // Encounter end: avoid long lerp back to player-follow camera.
+  // If manual mode is still on, keep grid fully active.
+  if (_manualOn) {
+    _blend = 1;
+    // Reinitialize room from the live player position on next frame.
+    // Prevents carrying encounter-relative room state into manual mode.
+    _scrolling = false;
+    _initDone = NaN;
+    _lastPerfMs = 0;
+    _prevPlayerVx = NaN;
+    _prevPlayerVy = NaN;
+  } else {
+    _blend = 0;
+    _scrolling = false;
+    _initDone = NaN;
+    _lastPerfMs = 0;
+    _prevPlayerVx = NaN;
+    _prevPlayerVy = NaN;
+  }
+  _notifyListeners();
+}
+
+// Aliases for game-loop.js backward compat.
 export { isScreenGridCameraOn as isDeadzoneCameraOn };
 export { toggleScreenGridCamera as toggleDeadzoneCamera };
+
+/**
+ * Current blend factor 0..1 (0 = centre-follow, 1 = grid-locked).
+ * Used by play-view-camera to blend zoom locking.
+ */
+export function getScreenGridBlend() { return _blend; }
+
+/**
+ * Current Zelda room in world tiles for the active grid camera.
+ * @returns {{ centerX: number, centerY: number, minX: number, maxX: number, minY: number, maxY: number, screenW: number, screenH: number } | null}
+ */
+export function getScreenGridCurrentRoomBounds() {
+  if (!_isEffectivelyOn() || _blend <= 0.001 || _screenW <= 0 || _screenH <= 0) return null;
+  const centerX = _encounterActive
+    ? _roomCenterFromIndex(_roomX, _encounterAnchorX, _screenW)
+    : (_roomX + 0.5) * _screenW;
+  const centerY = _encounterActive
+    ? _roomCenterFromIndex(_roomY, _encounterAnchorY, _screenH)
+    : (_roomY + 0.5) * _screenH;
+  const halfW = _screenW * 0.5;
+  const halfH = _screenH * 0.5;
+  return {
+    centerX,
+    centerY,
+    minX: centerX - halfW,
+    maxX: centerX + halfW,
+    minY: centerY - halfH,
+    maxY: centerY + halfH,
+    screenW: _screenW,
+    screenH: _screenH
+  };
+}
+
+/**
+ * Runtime camera tuning for ALTTP grid mode.
+ * @returns {{ scrollDurationS: number, blendInS: number, blendOutS: number }}
+ */
+export function getScreenGridCameraConfig() {
+  return {
+    scrollDurationS: _scrollDurationS,
+    blendInS: _blendInS,
+    blendOutS: _blendOutS,
+    allowManualRoomTransitions: _allowManualRoomTransitions
+  };
+}
+
+/**
+ * @param {{ scrollDurationS?: number, blendInS?: number, blendOutS?: number, allowManualRoomTransitions?: boolean }} next
+ */
+export function setScreenGridCameraConfig(next = {}) {
+  if (Number.isFinite(next.scrollDurationS)) {
+    _scrollDurationS = Math.max(0.05, Math.min(1.25, Number(next.scrollDurationS)));
+  }
+  if (Number.isFinite(next.blendInS)) {
+    _blendInS = Math.max(0.05, Math.min(1.5, Number(next.blendInS)));
+  }
+  if (Number.isFinite(next.blendOutS)) {
+    _blendOutS = Math.max(0.05, Math.min(1.5, Number(next.blendOutS)));
+  }
+  if (typeof next.allowManualRoomTransitions === 'boolean') {
+    _allowManualRoomTransitions = !!next.allowManualRoomTransitions;
+  }
+}
 
 /* ── Per-frame core ───────────────────────────────────────────────────── */
 
 /**
- * Compute screen-grid camera translation.
- *
- * The caller (computePlayViewState) must ensure that when this is active,
- * `tw`/`th` are PLAY_BAKE_TILE_PX (ground zoom, scale = 1.0) — not the
- * flight-zoomed effTileW.  This keeps room boundaries pixel-stable.
- *
- * @param {number} _idealTX  (unused — grid computes its own TX)
- * @param {number} _idealTY  (unused — grid computes its own TY)
- * @param {number} vx       Player world X (tiles, continuous)
- * @param {number} vy       Player world Y (tiles, continuous)
- * @param {number} tw       Tile width in px (should be PLAY_BAKE_TILE_PX when active)
- * @param {number} th       Tile height in px
- * @param {number} cw       Canvas width  (px)
+ * @param {number} idealTX  Centre-follow currentTransX (px)
+ * @param {number} idealTY  Centre-follow currentTransY (px)
+ * @param {number} vx       Player world X (tiles)
+ * @param {number} vy       Player world Y (tiles)
+ * @param {number} tw       Tile width (px)
+ * @param {number} th       Tile height (px)
+ * @param {number} cw       Canvas width (px)
  * @param {number} ch       Canvas height (px)
  * @returns {{ tx: number, ty: number, ax: number, ay: number } | null}
- *          `null` when disabled — caller keeps centre-follow values.
- *          `ax`/`ay` = camera centre in world tiles (for tile-bound computation).
  */
-export function applyScreenGridCamera(_idealTX, _idealTY, vx, vy, tw, th, cw, ch) {
-  if (!_on) return null;
-
+export function applyScreenGridCamera(idealTX, idealTY, vx, vy, tw, th, cw, ch) {
   /* ── dt ──────────────────────────────────────────────────────────────── */
   const now = performance.now();
   const dt = _lastPerfMs ? Math.min(0.1, (now - _lastPerfMs) / 1000) : 1 / 60;
   _lastPerfMs = now;
 
-  /* ── screen size in world tiles ─────────────────────────────────────── */
+  /* ── Animate blend toward target ────────────────────────────────────── */
+  const wantOn = _isEffectivelyOn();
+  if (wantOn) {
+    _blend = Math.min(1, _blend + dt / _blendInS);
+  } else {
+    _blend = Math.max(0, _blend - dt / _blendOutS);
+  }
+
+  if (_blend <= 0.001) { _blend = 0; return null; }
+
+  /* ── Screen size in world tiles ─────────────────────────────────────── */
   _screenW = cw / tw;
   _screenH = ch / th;
 
-  /* ── first frame → snap to player's room ────────────────────────────── */
+  /* ── First frame → snap to player's room ────────────────────────────── */
   if (_initDone !== _initDone) { // NaN !== NaN
-    _roomX = Math.floor(vx / _screenW);
-    _roomY = Math.floor(vy / _screenH);
+    if (_encounterActive) {
+      _roomX = _roomIndexFromCoord(vx, _encounterAnchorX, _screenW);
+      _roomY = _roomIndexFromCoord(vy, _encounterAnchorY, _screenH);
+    } else {
+      _roomX = Math.floor(vx / _screenW);
+      _roomY = Math.floor(vy / _screenH);
+    }
     _initDone = 1;
   }
 
-  /* ── detect room crossing (only when not already scrolling) ─────────── */
-  if (!_scrolling) {
-    const playerRoomX = Math.floor(vx / _screenW);
-    const playerRoomY = Math.floor(vy / _screenH);
+  // Teleport/respawn guard: large instantaneous jumps should re-snap room
+  // instead of animating a long scroll from stale room coordinates.
+  if (!_encounterActive && _prevPlayerVx === _prevPlayerVx && _prevPlayerVy === _prevPlayerVy) {
+    const jumpDx = Math.abs(vx - _prevPlayerVx);
+    const jumpDy = Math.abs(vy - _prevPlayerVy);
+    if (jumpDx > _screenW * 0.75 || jumpDy > _screenH * 0.75) {
+      _roomX = Math.floor(vx / _screenW);
+      _roomY = Math.floor(vy / _screenH);
+      _scrolling = false;
+      _scrollT = 0;
+    }
+  }
+  _prevPlayerVx = vx;
+  _prevPlayerVy = vy;
 
-    if (playerRoomX !== _roomX || playerRoomY !== _roomY) {
+  /* ── Detect room crossing ───────────────────────────────────────────── */
+  const roomTransitionsEnabled = _encounterActive ? false : _allowManualRoomTransitions;
+  if (!_scrolling && roomTransitionsEnabled) {
+    const prx = _encounterActive
+      ? _roomIndexFromCoord(vx, _encounterAnchorX, _screenW)
+      : Math.floor(vx / _screenW);
+    const pry = _encounterActive
+      ? _roomIndexFromCoord(vy, _encounterAnchorY, _screenH)
+      : Math.floor(vy / _screenH);
+    if (prx !== _roomX || pry !== _roomY) {
       _scrolling = true;
       _scrollT = 0;
       _fromRoomX = _roomX;
       _fromRoomY = _roomY;
-      _toRoomX = playerRoomX;
-      _toRoomY = playerRoomY;
+      _toRoomX = prx;
+      _toRoomY = pry;
     }
   }
 
-  /* ── advance scroll transition ──────────────────────────────────────── */
-  let camCentreX, camCentreY;
+  /* ── Advance room scroll ────────────────────────────────────────────── */
+  let camCX, camCY;
 
   if (_scrolling) {
-    _scrollT = Math.min(1, _scrollT + dt / SCROLL_DURATION_S);
-    // Smoothstep for that classic SNES feel (ease in-out).
+    _scrollT = Math.min(1, _scrollT + dt / _scrollDurationS);
     const t = _scrollT * _scrollT * (3 - 2 * _scrollT);
-
-    const fromCX = (_fromRoomX + 0.5) * _screenW;
-    const fromCY = (_fromRoomY + 0.5) * _screenH;
-    const toCX   = (_toRoomX   + 0.5) * _screenW;
-    const toCY   = (_toRoomY   + 0.5) * _screenH;
-
-    camCentreX = fromCX + (toCX - fromCX) * t;
-    camCentreY = fromCY + (toCY - fromCY) * t;
-
+    const fCX = _encounterActive
+      ? _roomCenterFromIndex(_fromRoomX, _encounterAnchorX, _screenW)
+      : (_fromRoomX + 0.5) * _screenW;
+    const fCY = _encounterActive
+      ? _roomCenterFromIndex(_fromRoomY, _encounterAnchorY, _screenH)
+      : (_fromRoomY + 0.5) * _screenH;
+    const tCX = _encounterActive
+      ? _roomCenterFromIndex(_toRoomX, _encounterAnchorX, _screenW)
+      : (_toRoomX + 0.5) * _screenW;
+    const tCY = _encounterActive
+      ? _roomCenterFromIndex(_toRoomY, _encounterAnchorY, _screenH)
+      : (_toRoomY + 0.5) * _screenH;
+    camCX = fCX + (tCX - fCX) * t;
+    camCY = fCY + (tCY - fCY) * t;
     if (_scrollT >= 1) {
       _scrolling = false;
       _roomX = _toRoomX;
       _roomY = _toRoomY;
-      camCentreX = toCX;
-      camCentreY = toCY;
+      camCX = tCX;
+      camCY = tCY;
     }
   } else {
-    camCentreX = (_roomX + 0.5) * _screenW;
-    camCentreY = (_roomY + 0.5) * _screenH;
+    camCX = _encounterActive
+      ? _roomCenterFromIndex(_roomX, _encounterAnchorX, _screenW)
+      : (_roomX + 0.5) * _screenW;
+    camCY = _encounterActive
+      ? _roomCenterFromIndex(_roomY, _encounterAnchorY, _screenH)
+      : (_roomY + 0.5) * _screenH;
   }
 
-  /* ── Translation: centre the camera on camCentre ────────────────────── */
-  const tx = Math.round(cw / 2 - camCentreX * tw);
-  const ty = Math.round(ch / 2 - camCentreY * th);
+  /* ── Grid translation ───────────────────────────────────────────────── */
+  const gridTX = Math.round(cw / 2 - camCX * tw);
+  const gridTY = Math.round(ch / 2 - camCY * th);
 
-  return { tx, ty, ax: camCentreX, ay: camCentreY };
+  /* ── Cross-fade between centre-follow and grid ──────────────────────── */
+  const b = _blend * _blend * (3 - 2 * _blend); // smoothstep
+  const tx = Math.round(idealTX + (gridTX - idealTX) * b);
+  const ty = Math.round(idealTY + (gridTY - idealTY) * b);
+
+  const idealCX = (cw / 2 - idealTX) / tw;
+  const idealCY = (cw / 2 - idealTY) / th;  // intentional: inverse of translation
+  const ax = idealCX + (camCX - idealCX) * b;
+  const ay = idealCY + (camCY - idealCY) * b;
+
+  return { tx, ty, ax, ay };
 }

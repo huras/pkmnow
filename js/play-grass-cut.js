@@ -2,11 +2,11 @@ import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
 import { playChunkMap } from './render/play-chunk-cache.js';
 
-const CUT_GRASS_REGROW_SEC = 12;
+const CUT_GRASS_REGROW_SEC = 30;
 /** Seconds: animated grass alpha 1 → 0 after Cut (then stays off until regrow). */
 const CUT_GRASS_FADE_OUT_SEC = 0.48;
 /** Seconds: alpha 0 → 1 after regrow timer (matches tree regrow fade). */
-const CUT_GRASS_FADE_IN_SEC = 0.48;
+const CUT_GRASS_FADE_IN_SEC = 0.88;
 /** Below this fade factor, treat tile as cut for rustle / foot grass checks. */
 const CUT_GRASS_FADE_GONE_EPS = 0.04;
 

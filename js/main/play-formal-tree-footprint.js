@@ -12,7 +12,7 @@ import {
   tileSurfaceAllowsScatterVegetation
 } from '../biome-tiles.js';
 import { TERRAIN_SETS } from '../tessellation-data.js';
-import { getRoleForCell } from '../tessellation-logic.js';
+import { getRoleForCell, terrainRoleAllowsScatter2CContinuation } from '../tessellation-logic.js';
 import { isPlayFormalTreeRootDestroyed, getFormalTreeRegrowVisualAlpha01 } from './play-crystal-tackle.js';
 
 /**
@@ -53,6 +53,12 @@ export function isPlayerMicroOnFormalTreeFootprint(mx, my, data, getTile = null)
     if (!terrainCenterAt(rx, ry)) return false;
     const tr = gt(rx + 1, ry);
     if (!tr || tr.heightStep !== t.heightStep) return false;
+    const set = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
+    if (set) {
+      const checkAtOrAbove = (r, c) => (gt(c, r)?.heightStep ?? -1) >= t.heightStep;
+      const roleRight = getRoleForCell(ry, rx + 1, microRows, microCols, checkAtOrAbove, set.type);
+      if (!terrainRoleAllowsScatter2CContinuation(roleRight)) return false;
+    }
     return true;
   };
 

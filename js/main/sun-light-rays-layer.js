@@ -79,15 +79,39 @@ export function getSunLightRaysTargetIntensity01() {
   return targetIntensity01;
 }
 
+/** Smoothed user/biome rays intensity before day/night gating. */
+export function getSunLightRaysCoreActiveIntensity01() {
+  const ui = Math.max(0, Math.min(1, activeIntensity01));
+  const bio = Math.max(0, Math.min(1, biomeBoostActive01));
+  return Math.min(1, Math.max(ui, bio));
+}
+
 /**
  * @param {number} [worldHoursWrapped] when set (play), scales by daylight; splash/menu can pass fixed hour (e.g. 12).
  */
 export function getSunLightRaysActiveIntensity01(worldHoursWrapped) {
   const h = Number(worldHoursWrapped);
   const dayMul = Number.isFinite(h) ? getSunRaysDaylightVisibility01(h) : getSunRaysDaylightVisibility01(12);
-  const ui = Math.max(0, Math.min(1, activeIntensity01));
-  const bio = Math.max(0, Math.min(1, biomeBoostActive01));
-  return Math.min(1, Math.max(ui, bio) * dayMul);
+  return Math.min(1, getSunLightRaysCoreActiveIntensity01() * dayMul);
+}
+
+/**
+ * 0..1 moonlight gate, inverse of daylight visibility with soft edge shaping.
+ * @param {number} worldHoursWrapped hour in [0, 24)
+ */
+export function getMoonRaysNightVisibility01(worldHoursWrapped) {
+  const d = getSunRaysDaylightVisibility01(worldHoursWrapped);
+  return smoothstep01(1 - d);
+}
+
+/**
+ * Night-only counterpart for the same screen-space rays intensity envelope.
+ * @param {number} [worldHoursWrapped] when omitted, assumes midnight.
+ */
+export function getMoonLightRaysActiveIntensity01(worldHoursWrapped) {
+  const h = Number(worldHoursWrapped);
+  const nightMul = Number.isFinite(h) ? getMoonRaysNightVisibility01(h) : getMoonRaysNightVisibility01(0);
+  return Math.min(1, getSunLightRaysCoreActiveIntensity01() * nightMul);
 }
 
 /**

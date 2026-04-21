@@ -7,7 +7,7 @@
 import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { MACRO_TILE_STRIDE, getMicroTile, foliageDensity } from './chunking.js';
-import { getRoleForCell, isTerrainInnerCornerRole, parseShape, seededHash } from './tessellation-logic.js';
+import { getRoleForCell, isTerrainInnerCornerRole, parseShape, seededHash, terrainRoleAllowsScatter2CContinuation } from './tessellation-logic.js';
 import {
   scatterSolidBaseBlocksMicroTile,
   validScatterOriginMicro,
@@ -167,6 +167,8 @@ export function pivotCellHeightTraversalOk(pivotX, pivotY, srcPivotX, srcPivotY,
   const st = getMicroTile(smx0, smy0, macroData);
   if (!pt || !st) return false;
   if (pt.heightStep === st.heightStep) return true;
+  // Allow drops: walking to a lower height step is always OK (player will fall).
+  if (pt.heightStep < st.heightStep) return true;
   return okHeightStepTransition(st, pt);
 }
 
@@ -446,8 +448,12 @@ export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
   const set = TERRAIN_SETS[BIOME_TO_TERRAIN[rootTile.biomeId] || 'grass'];
   if (set) {
     const checkAtOrAbove = (r, c) => (getMicroTile(c, r, data)?.heightStep ?? -99) >= rootTile.heightStep;
-    const role = getRoleForCell(rootY, rootX, data.height * MACRO_TILE_STRIDE, data.width * MACRO_TILE_STRIDE, checkAtOrAbove, set.type);
+    const microH = data.height * MACRO_TILE_STRIDE;
+    const microW = data.width * MACRO_TILE_STRIDE;
+    const role = getRoleForCell(rootY, rootX, microH, microW, checkAtOrAbove, set.type);
     if (role !== 'CENTER') return false;
+    const rightRole = getRoleForCell(rootY, rootX + 1, microH, microW, checkAtOrAbove, set.type);
+    if (!terrainRoleAllowsScatter2CContinuation(rightRole)) return false;
   }
   return true;
 }
@@ -518,9 +524,9 @@ export function getFormalTreeTrunkWorldXSpan(rootX, my, data, memo = null) {
 
 /**
  * Row index (0 = north row of footprint) where the narrow trunk strip should sit, from `base` part layout.
- * Tall shapes (rows≥3) with a single base row at the top (savannah 3×3, large broadleaf) collide on that row;
- * two-row props: palm 2×2 keeps trunk on the footprint bottom (stem south); big-cactus 2×2 keeps trunk on the
- * base row north (same row as the 2 base tiles — stem with base, not one tile south).
+ * A single base row defined at the top (`minB===0`) means the trunk collider should stay on that same
+ * base row (row 0), independent of total footprint height. This matches render placement where scatter
+ * tree bases are anchored on `originY` and canopy extends upward.
  * @param {string | null} [itemKey] — optional OBJECT_SET key for 2×2 disambiguation (e.g. big-cactus vs palm).
  */
 export function scatterTreeTrunkFootprintRowOYRel(basePart, shapeRows, cols, itemKey = null) {
@@ -535,14 +541,7 @@ export function scatterTreeTrunkFootprintRowOYRel(basePart, shapeRows, cols, ite
   if (!Number.isFinite(minB)) minB = 0;
   const baseSpanRows = maxB - minB + 1;
 
-  if (baseSpanRows === 1 && minB === 0 && shapeRows >= 3) {
-    return maxB;
-  }
-  if (baseSpanRows === 1 && minB === 0 && shapeRows === 2) {
-    const k = itemKey ? String(itemKey).toLowerCase() : '';
-    if (k.includes('big-cactus')) return maxB;
-    return shapeRows - 1;
-  }
+  if (baseSpanRows === 1 && minB === 0) return maxB;
   return maxB;
 }
 
@@ -807,6 +806,54 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
   return out;
 }
 
+/** Height (in tile z-units) at which a player can stand on top of a formal tree canopy. */
+const FORMAL_TREE_CANOPY_Z = 2;
+/** Height for scatter-tree canopy (smaller procedural trees). */
+const SCATTER_TREE_CANOPY_Z = 1.5;
+/** Canopy detection uses trunk radius × this multiplier for coverage area. */
+const CANOPY_RADIUS_MULT = 2.5;
+
+/**
+ * Returns the effective "floor Z" at a world point, accounting for tree canopies.
+ * If the point is over a tree canopy, returns the canopy height; otherwise 0.
+ * Used for landing-on-treetop mechanics.
+ */
+export function getTreeCanopyZAtPoint(wx, wy, data) {
+  if (!data) return 0;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  if (wx < 0 || wy < 0 || wx >= microW || wy >= microH) return 0;
+  const ix = Math.floor(wx);
+  const iy = Math.floor(wy);
+
+  // Check formal broadleaf trees
+  for (let trunkMy = Math.max(0, iy - 3); trunkMy <= Math.min(microH - 1, iy + 3); trunkMy++) {
+    for (let rootX = Math.max(0, ix - 2); rootX <= Math.min(microW - 2, ix + 2); rootX++) {
+      const c = getFormalTreeTrunkCircle(rootX, trunkMy, data);
+      if (!c) continue;
+      const canopyR = c.r * CANOPY_RADIUS_MULT;
+      const dx = wx - c.cx;
+      const dy = wy - c.cy;
+      if (dx * dx + dy * dy <= canopyR * canopyR) return FORMAL_TREE_CANOPY_Z;
+    }
+  }
+
+  // Check scatter trees
+  const originMemo = new Map();
+  for (let oy0 = Math.max(0, iy - 5); oy0 <= Math.min(microH - 1, iy + 2); oy0++) {
+    for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
+      const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
+      if (!p || !scatterItemKeyIsTree(p.itemKey)) continue;
+      const canopyR = p.radius * CANOPY_RADIUS_MULT;
+      const dx = wx - p.cx;
+      const dy = wy - p.cy;
+      if (dx * dx + dy * dy <= canopyR * canopyR) return SCATTER_TREE_CANOPY_Z;
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Detects if a tile is blocked by a "prop" (Scatter object, Building core). Formal trees use narrow world hit in `formalTreeTrunkBlocksWorldPoint`.
  * `mx,my` are micro-tile cell indices (typically `floor` of world feet from `canWalkMicroTile`).
@@ -880,14 +927,18 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
   if (!targetTile) return finish(false);
 
   // 1. Height Context Check
+  let _isCliffDrop = false;
   if (srcX !== undefined && srcY !== undefined) {
     const smx = Math.floor(srcX);
     const smy = Math.floor(srcY);
     const sourceTile = getMicroTile(smx, smy, data);
     
     if (sourceTile && targetTile.heightStep !== sourceTile.heightStep) {
-      if (!okHeightStepTransition(sourceTile, targetTile)) {
-        return finish(false); // Physical barrier (cliff/drop)
+      if (targetTile.heightStep < sourceTile.heightStep) {
+        // Drop: always allowed — player will fall via gravity.
+        _isCliffDrop = true;
+      } else if (!okHeightStepTransition(sourceTile, targetTile)) {
+        return finish(false); // Physical barrier (cliff wall from below)
       }
     }
   }
@@ -895,11 +946,27 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
   // 1.5 Role-Based Wall Block
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return finish(false);
+    if (WALL_ROLES.has(role)) {
+      // Allow walking through cliff-face tiles when dropping from same/higher height.
+      if (!_isCliffDrop) {
+        if (srcX !== undefined && srcY !== undefined) {
+          const smx = Math.floor(srcX);
+          const smy = Math.floor(srcY);
+          const sourceTile = getMicroTile(smx, smy, data);
+          if (!sourceTile || sourceTile.heightStep < targetTile.heightStep) {
+            return finish(false);
+          }
+          // Same height, walking onto cliff edge — allow (cliff drop path).
+          _isCliffDrop = true;
+        } else {
+          return finish(false);
+        }
+      }
+    }
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
-  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) return finish(false);
+  if (!isAirborne && !_isCliffDrop && !isBaseTerrainSpriteWalkable(sid)) return finish(false);
 
   const overlayId =
     cachedFoliageOverlayId === undefined ? getFoliageOverlayTileId(mx, my, data) : cachedFoliageOverlayId;

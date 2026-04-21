@@ -2,6 +2,7 @@ import { playPokemonCry } from '../pokemon/pokemon-cries.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import { markWildFarCryMinimapIntroduced } from '../wild-pokemon/wild-minimap-species-known.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
+import { pushPlayEventLog } from './play-event-log-state.js';
 
 /** Time until the first auto Far Cry attempt after `resetFarCrySystem`. */
 const FAR_CRY_GAP_BEFORE_1ST_SEC = 3;
@@ -54,6 +55,43 @@ let farCryPendingIntervalSec = FAR_CRY_GAP_BEFORE_1ST_SEC;
 let farCryPendingCycleIndex = 0;
 /** Rotates through already-introduced `?` picks when a new intro is rolled off. */
 let farCryDoneCycleIndex = 0;
+
+const FAR_CRY_LOCAL_EVENT_DISTANCE_MACRO = 18;
+
+function directionLabelFromUnitVector(dx, dy) {
+  const a = Math.atan2(Number(dy) || 0, Number(dx) || 0);
+  const octants = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
+  const idx = Math.round((a / (Math.PI / 4))) & 7;
+  return octants[idx] || 'unknown';
+}
+
+/**
+ * Emits a feed message for each far cry attempt that produced audio/visual effects.
+ * Species stays hidden here; far-cry purpose is directional awareness.
+ * @param {any} entity
+ * @param {number} playerX
+ * @param {number} playerY
+ * @param {number} dirX
+ * @param {number} dirY
+ * @param {boolean} introducedNow
+ */
+function logFarCryEvent(entity, playerX, playerY, dirX, dirY, introducedNow) {
+  const ex = Number(entity?.x) || 0;
+  const ey = Number(entity?.y) || 0;
+  const dx = ex - playerX;
+  const dy = ey - playerY;
+  const distMacro = Math.hypot(dx, dy) / MACRO_TILE_STRIDE;
+  const direction = directionLabelFromUnitVector(dirX, dirY);
+  const channel = distMacro <= FAR_CRY_LOCAL_EVENT_DISTANCE_MACRO ? 'local' : 'global';
+  const noveltyText = introducedNow ? 'new source marked' : 'known source echoed';
+  pushPlayEventLog({
+    channel,
+    text: `Far Cry from ${direction} (${noveltyText}).`,
+    dedupeKey: `farcry:${Math.round(ex)}:${Math.round(ey)}:${direction}`,
+    portraitDexId: Math.floor(Number(entity?.dexId) || 0),
+    hoverEntityKey: String(entity?.key || '')
+  });
+}
 
 /**
  * After a successful emission, `successCount` is already incremented (1 = just finished 1st cry).
@@ -182,7 +220,9 @@ function triggerFarCryFromEntity(entity, playerX, playerY) {
   const dy = ey - playerY;
   const dir = normalize2(dx, dy);
   const waveSeed = ((ex * 0.173 + ey * 0.289) % 1 + 1) % 1;
+  const introducedNow = !entity?.minimapFarCryIntroduced;
   markWildFarCryMinimapIntroduced(entity);
+  logFarCryEvent(entity, playerX, playerY, dir.x, dir.y, introducedNow);
   playPokemonCry(entity?.dexId ?? 1, {
     lane: 'emotion',
     minGapSec: 0.01,

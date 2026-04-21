@@ -41,6 +41,8 @@ import {
 } from './moves/move-constants.js';
 import { getGroundWetness01 } from './main/weather-state.js';
 
+import { drawEncounterCinematicOverlay } from './encounter/encounter-cinematic.js';
+
 import {
   drawBatchedProjectile,
   drawPrismaticStreamGradientBeam,
@@ -1890,7 +1892,9 @@ export function render(canvas, data, options = {}) {
       entityShadowSprites,
       earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
       sunLightRaysIntensity01: options.settings?.weatherSunLightRaysIntensity ?? 0,
-      cloudWhiteLayerAlphaMul
+      moonLightRaysIntensity01: options.settings?.weatherMoonLightRaysIntensity ?? 0,
+      cloudWhiteLayerAlphaMul,
+      worldHours: options.settings?.worldHours
     });
     addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);
 
@@ -1943,6 +1947,7 @@ export function render(canvas, data, options = {}) {
     if (options.settings?.appMode === 'play') {
       drawFarCryScreenWaves(ctx, getActiveFarCryScreenWaves(), { w: cw, h: ch });
       applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx);
+      drawEncounterCinematicOverlay(ctx, cw, ch);
     }
 
     const tMm0 = performance.now();

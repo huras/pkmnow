@@ -1,6 +1,5 @@
 import { player, setPlayerSpecies } from '../player.js';
-import { summonDebugWildPokemon } from '../wild-pokemon/index.js';
-import { getGen1SpeciesName, padDex3, NATIONAL_DEX_MAX } from '../pokemon/gen1-name-to-dex.js';
+import { getGen1SpeciesName } from '../pokemon/gen1-name-to-dex.js';
 import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
@@ -105,7 +104,6 @@ export class CharacterSelector {
     this.container = document.getElementById(containerId);
     this.getCurrentData = typeof opts.getCurrentData === 'function' ? opts.getCurrentData : () => null;
     this.getAppMode = typeof opts.getAppMode === 'function' ? opts.getAppMode : () => '';
-    this.allSpecies = [];
     this.isOpen = false;
     /** @type {import('./pokemon-box-modal.js').PokemonBoxModal | null} */
     this._boxModal = null;
@@ -176,13 +174,6 @@ export class CharacterSelector {
       this.updatePlayItemsHud();
     });
 
-    for (let i = 1; i <= NATIONAL_DEX_MAX; i++) {
-      this.allSpecies.push({
-        id: i,
-        name: getGen1SpeciesName(i)
-      });
-    }
-
     this.init();
   }
 
@@ -252,17 +243,19 @@ export class CharacterSelector {
         'aria-label',
         minimal ? 'Show full character panel' : 'Use minimal character panel'
       );
-      btn.title = minimal
-        ? 'Show search and right-click mode bar'
-        : 'Hide search and right-click mode bar';
+      btn.title = minimal ? 'Show right-click mode bar' : 'Hide right-click mode bar';
       btn.textContent = minimal ? 'Full' : 'Min';
     }
   }
 
   /** Play mode: ground = `player.z`; sea = `heightStep` + `z` (0 beach, − ocean). Both always on-screen. */
   updatePlayAltitudeHud(data) {
-    const gVal = this.container?.querySelector('#player-alt-ground-val');
-    const sVal = this.container?.querySelector('#player-alt-sea-val');
+    const gVal =
+      this.container?.querySelector('#player-alt-ground-val') ||
+      document.getElementById('minimap-alt-ground-val');
+    const sVal =
+      this.container?.querySelector('#player-alt-sea-val') ||
+      document.getElementById('minimap-alt-sea-val');
     if (!gVal || !sVal) return;
 
     if (!data) {
@@ -472,7 +465,7 @@ export class CharacterSelector {
               id="character-selector-layout-toggle"
               aria-pressed="false"
               aria-label="Use minimal character panel"
-              title="Hide search and right-click mode bar"
+              title="Hide right-click mode bar"
             >Min</button>
             <button
               type="button"
@@ -483,23 +476,6 @@ export class CharacterSelector {
               title="Minimal UI (portrait + minimap)"
             >·</button>
           </div>
-        </div>
-
-        <div
-          class="player-alt-compact"
-          role="status"
-          aria-live="polite"
-          aria-label="Ground height above tile underfoot, and sea level in tiles (beach is zero, negative is ocean)"
-        >
-          <span class="player-alt-compact__item">
-            <span class="player-alt-compact__label">Ground</span>
-            <span class="player-alt-compact__v" id="player-alt-ground-val">—</span>
-          </span>
-          <span class="player-alt-compact__dot" aria-hidden="true"></span>
-          <span class="player-alt-compact__item player-alt-compact__item--sea">
-            <span class="player-alt-compact__label player-alt-compact__label--sea">Sea</span>
-            <span class="player-alt-compact__v player-alt-compact__v--sea" id="player-alt-sea-val">—</span>
-          </span>
         </div>
 
         <div
@@ -542,16 +518,6 @@ export class CharacterSelector {
           <div class="player-moves-list" id="current-player-moves"></div>
         </div>
 
-
-
-        <div class="search-container">
-          <span class="search-icon">🔍</span>
-          <input type="text" class="selector-search" id="species-search" placeholder="Search…" autocomplete="off" spellcheck="false">
-          <div class="results-list" id="search-results">
-            <!-- Results injected here -->
-          </div>
-        </div>
-
         <div class="play-item-hud" id="play-item-hud" aria-label="Collected items">
           <div class="play-item-hud__header">
             <div class="play-item-hud__title">Items</div>
@@ -588,8 +554,6 @@ export class CharacterSelector {
   }
 
   attachEvents() {
-    const searchInput = this.container.querySelector('#species-search');
-    const resultsList = this.container.querySelector('#search-results');
     const pointerBar = this.container.querySelector('#play-pointer-mode-bar');
 
     // Pokémon Box modal — triggered by clicking the portrait pill
@@ -617,29 +581,6 @@ export class CharacterSelector {
         });
       }
     }
-
-    searchInput.addEventListener('focus', () => {
-      void this.showResults('');
-      resultsList.classList.add('active');
-    });
-
-    searchInput.addEventListener('input', (e) => {
-      void this.showResults(e.target.value);
-    });
-
-    document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target)) {
-        resultsList.classList.remove('active');
-      }
-    });
-
-    // Keyboard navigation
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        resultsList.classList.remove('active');
-        searchInput.blur();
-      }
-    });
 
     const layoutBtn = this.container.querySelector('#character-selector-layout-toggle');
     if (layoutBtn) {
@@ -728,84 +669,16 @@ export class CharacterSelector {
     }
   }
 
-
-
-  async showResults(query) {
-    const resultsList = this.container.querySelector('#search-results');
-    const filtered = this.allSpecies.filter(s => 
-      s.name.toLowerCase().includes(query.toLowerCase()) || 
-      String(s.id).includes(query)
-    ).slice(0, 10); // Limit to 10 for performance
-
-    if (filtered.length === 0) {
-      resultsList.innerHTML = `<div class="result-item" style="opacity: 0.5; pointer-events: none;">No species found</div>`;
-      return;
-    }
-
-    resultsList.innerHTML = filtered.map(s => {
-      const cfg = getPokemonConfig(s.id);
-      const typesHtml = cfg?.types.map(t => `<span class="type-icon type-${t}">${t.toUpperCase()}</span>`).join(' ') || '';
-      return `
-      <div class="result-item ${s.id === player.dexId ? 'selected' : ''}" data-id="${s.id}">
-        <span class="result-portrait-mask" aria-hidden="true">
-          <img class="result-icon-portrait result-icon-portrait--pending" alt="" width="30" height="30" data-dex="${s.id}" decoding="async" />
-        </span>
-        <div class="result-details">
-          <span class="result-name">${s.name}</span>
-          <div class="result-types">${typesHtml}</div>
-        </div>
-        <span class="result-id">#${padDex3(s.id)}</span>
-      </div>
-    `}).join('');
-
-    await Promise.all(
-      [...resultsList.querySelectorAll('img.result-icon-portrait[data-dex]')].map(async (img) => {
-        const id = parseInt(img.dataset.dex, 10);
-        const prefix = await probeSpriteCollabPortraitPrefix(id);
-        if (prefix) {
-          img.onload = () => img.classList.remove('result-icon-portrait--pending');
-          img.onerror = () => {
-            img.classList.remove('result-icon-portrait--pending');
-            img.classList.add('result-icon-portrait--missing');
-          };
-          img.src = `${prefix}Normal.png`;
-        } else {
-          img.classList.remove('result-icon-portrait--pending');
-          img.classList.add('result-icon-portrait--missing');
-        }
-      })
-    );
-
-    resultsList.querySelectorAll('.result-item').forEach((item) => {
-      item.addEventListener('click', (ev) => {
-        const id = parseInt(item.dataset.id, 10);
-        const data = this.getCurrentData?.() ?? null;
-        const inPlay = this.getAppMode?.() === 'play';
-        if ((ev.ctrlKey || ev.metaKey) && inPlay && data) {
-          summonDebugWildPokemon(id, data, player.x, player.y);
-        } else {
-          void this.selectSpecies(id);
-        }
-        resultsList.classList.remove('active');
-        const si = this.container.querySelector('#species-search');
-        if (si) si.value = '';
-      });
-    });
-  }
-
   async selectSpecies(id) {
     // 1. Update player data
     setPlayerSpecies(id);
     syncSelectedFieldSkillForDex(id);
     syncSelectedSpecialAttackForDex(id);
     
-    // 2. Clear focus/search
-    this.container.querySelector('#species-search')?.blur();
-
-    // 3. Ensure assets are loading/loaded
+    // 2. Ensure assets are loading/loaded
     await ensurePokemonSheetsLoaded(imageCache, id);
 
-    // 4. Update UI
+    // 3. Update UI
     await this.updatePreview();
   }
 

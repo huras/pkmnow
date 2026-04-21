@@ -1,6 +1,7 @@
 import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { getPlayLodDetail } from '../render/play-view-camera.js';
 import { toggleDeadzoneCamera } from '../render/play-deadzone-camera.js';
+import { updateEncounterCinematic, isEncounterCinematicActive, isEncounterCinematicBlocking } from '../encounter/encounter-cinematic.js';
 import { getPlayChunkFrameStats } from '../render.js';
 import { playInputState } from './play-input-state.js';
 import {
@@ -448,6 +449,12 @@ export function createGameLoop(api) {
       player.inputY = 0;
     }
 
+    // Encounter cinematic blocks player input (only during tension/reveal bars)
+    if (isEncounterCinematicBlocking()) {
+      player.inputX = 0;
+      player.inputY = 0;
+    }
+
     const updateBreakdown = {
       updPlayerMs: 0,
       updWildWindowMs: 0,
@@ -471,6 +478,7 @@ export function createGameLoop(api) {
     const tUpdPlayer0 = performance.now();
     updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+    updateEncounterCinematic(player, simDt);
     updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
@@ -883,7 +891,7 @@ export function registerPlayKeyboard(api) {
       }
 
       if (e.key === ' ' && !e.repeat) {
-        tryJumpPlayer(getCurrentData());
+        if (!isEncounterCinematicBlocking()) tryJumpPlayer(getCurrentData());
       }
 
       if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {

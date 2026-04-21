@@ -10,7 +10,8 @@ import {
   pivotCellHeightTraversalOk,
   beginWalkProbeCache,
   endWalkProbeCache,
-  syncEntityZWithTerrain
+  syncEntityZWithTerrain,
+  getTreeCanopyZAtPoint
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
 import {
@@ -132,6 +133,8 @@ export const player = {
   vy: 0,
   vz: 0,
   z: 0,
+  /** Effective ground height at the player's current position (0 for terrain, >0 on tree canopies). */
+  groundZ: 0,
   inputX: 0,
   inputY: 0,
   facing: 'down',
@@ -495,29 +498,43 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     sfy = s.y;
   }
 
+  // Detect cliff drop: source height > destination height
+  let isDropMovement = false;
+  if (sfx !== undefined && sfy !== undefined) {
+    const srcTile = getMicroTile(Math.floor(sfx), Math.floor(sfy), data);
+    const dstTile = getMicroTile(Math.floor(fx), Math.floor(fy), data);
+    if (srcTile && dstTile && srcTile.heightStep > dstTile.heightStep) {
+      isDropMovement = true;
+    }
+  }
+
   // 1. LOGICAL TRAVERSAL (The "Feet"):
-  // Se estiver no ar, o centro pode ignorar clifs.
-  // Se estiver no chão, o centro DEVE obedecer às regras de altura (escadas, mesma altura, etc).
-  // Probes usam deslocamento PMD (pivot → pés) alinhado ao render.
   if (!isAirborne) {
     if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks)) {
       return false;
     }
-    // Pivot pode entrar no tile ao norte antes dos pés saírem do platô (offset PMD para sul).
     if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data)) {
       return false;
     }
   } else {
-    // No ar, verificamos apenas se o centro não bateu em algo sólido (prop horizontal).
-    // canWalkMicroTile sem srcX/Y pula o check de altura.
+    // Airborne: enforce z-gated height climbing.
+    // The player must have enough z to reach a higher heightStep.
+    if (sfx !== undefined && sfy !== undefined) {
+      const srcTile = getMicroTile(Math.floor(sfx), Math.floor(sfy), data);
+      const dstTile = getMicroTile(Math.floor(fx), Math.floor(fy), data);
+      if (srcTile && dstTile && dstTile.heightStep > srcTile.heightStep) {
+        const heightDiff = dstTile.heightStep - srcTile.heightStep;
+        if ((player.z || 0) < heightDiff) return false;
+      }
+    }
     if (!canWalkMicroTile(fx, fy, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
       return false;
     }
   }
 
   // 2. PHYSICAL BODY (The "Corners"):
-  // O corpo físico só pára por obstáculos REAIS (paredes, árvores, casas).
-  // Ele NÃO liga para altura do chão (heightStep).
+  // For cliff drops, treat corners as airborne so they pass through cliff-face wall tiles.
+  const cornerAirborne = isAirborne || isDropMovement;
   const points = [
     { x: fx - GROUND_R, y: fy - GROUND_R },
     { x: fx + GROUND_R, y: fy - GROUND_R },
@@ -530,9 +547,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     const my = Math.floor(p.y);
     if (mx < 0 || my < 0 || mx >= data.width * MACRO_TILE_STRIDE || my >= data.height * MACRO_TILE_STRIDE) return false;
 
-    // Chamamos canWalkMicroTile SEM srcX/srcY para ignorar o check de "heightStepMismatch".
-    // Isso permite que um ombro do player sobreponha um tile de altura diferente sem travar.
-    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks)) {
       return false;
     }
   }
@@ -725,7 +740,8 @@ export function updatePlayer(dt, data, gameTimeSec) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
   const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
-  const isAirborne = player.jumping || player.z > 0.05 || flightMove;
+  const gZ = player.groundZ || 0;
+  const isAirborne = player.jumping || player.z > gZ + 0.05 || flightMove;
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
 
@@ -1009,6 +1025,16 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player.y = r.y;
     player.vx = r.vx;
     player.vy = r.vy;
+
+    // After height sync: if z rose above groundZ, player stepped off a cliff → become airborne.
+    if (player.z > (player.groundZ || 0) + 0.05) {
+      player.grounded = false;
+    }
+  }
+
+  // Airborne height sync: keep visual height consistent when crossing heightStep boundaries mid-jump.
+  if (!player.grounded && isAirborne && !flightMove && data) {
+    syncEntityZWithTerrain(player, ox, oy, player.x, player.y, data);
   }
 
   const movedWorldTiles = Math.hypot(player.x - ox, player.y - oy);
@@ -1022,6 +1048,19 @@ export function updatePlayer(dt, data, gameTimeSec) {
   advanceRainFootstepFxForDistance(player, movedWorldTiles, wantFootFloorSfx, feetForFx.x, feetForFx.y);
 
   // 3. Vertical — creative flight (Flying) or jump / gravity
+  // Update groundZ: detect tree canopy beneath the player.
+  {
+    const feetForGZ = worldFeetFromPivotCell(player.x, player.y, imageCache, player.dexId || 94, true);
+    const canopyZ = data ? getTreeCanopyZAtPoint(feetForGZ.x, feetForGZ.y, data) : 0;
+    const prevGroundZ = player.groundZ || 0;
+    player.groundZ = canopyZ;
+    // If grounded on an elevated surface (tree/cliff) and groundZ dropped (walked off edge), become airborne.
+    if (player.grounded && !flightMove && canopyZ < prevGroundZ && player.z > canopyZ + 0.05) {
+      player.grounded = false;
+    }
+  }
+  const effectiveGroundZ = player.groundZ || 0;
+
   if (flightMove) {
     const zFlightPrev = player.z;
     const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
@@ -1029,14 +1068,14 @@ export function updatePlayer(dt, data, gameTimeSec) {
     const up = cutLock ? 0 : isPlaySpaceAscendHeld() ? vSp : 0;
     const down = cutLock ? 0 : isPlayGroundDigShiftHeld() ? vSp : 0;
     const dz = (up - down) * dt;
-    player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
+    player.z = Math.min(FLIGHT_MAX_Z, Math.max(effectiveGroundZ, player.z + dz));
     player.vz = 0;
     player.jumping = false;
-    if (player.z <= 1e-4) {
-      player.z = 0;
+    if (player.z <= effectiveGroundZ + 1e-4) {
+      player.z = effectiveGroundZ;
       player.grounded = true;
       player.jumpsUsed = 0;
-      if (zFlightPrev > 0.14) playFloorHit2Sfx(player);
+      if (zFlightPrev > effectiveGroundZ + 0.14) playFloorHit2Sfx(player);
     } else {
       player.grounded = false;
     }
@@ -1047,13 +1086,14 @@ export function updatePlayer(dt, data, gameTimeSec) {
     const vzBeforePositionStep = player.vz;
     player.z += player.vz * dt;
 
-    if (player.z <= 0) {
-      player.z = 0;
+    // Land on ground or tree canopy — whichever is higher.
+    if (player.z <= effectiveGroundZ) {
+      player.z = effectiveGroundZ;
       player.vz = 0;
       player.grounded = true;
       player.jumping = false;
       player.jumpsUsed = 0;
-      if (zJumpPrev > 0.04) playFloorHit2Sfx(player);
+      if (zJumpPrev > effectiveGroundZ + 0.04) playFloorHit2Sfx(player);
       const gt =
         gameTimeSec != null && Number.isFinite(gameTimeSec)
           ? gameTimeSec

@@ -14,8 +14,10 @@ import { player } from '../player.js';
 import { triggerNextFarCryNow } from './far-cry-system.js';
 import { onLocaleChanged, t } from '../i18n/index.js';
 import {
-  isScreenGridCameraOn,
-  toggleScreenGridCamera,
+  isScreenGridCameraManualOn,
+  setScreenGridCameraOn,
+  getScreenGridCameraConfig,
+  setScreenGridCameraConfig,
   onScreenGridCameraChange
 } from '../render/play-deadzone-camera.js';
 
@@ -49,6 +51,16 @@ export function installMinimapHudPopovers(options = {}) {
   const inspectorList = document.getElementById('social-inspector-list');
   const inspectorScenarioSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('social-inspector-scenario-select'));
   const inspectorTriggerBtn = document.getElementById('social-inspector-trigger-btn');
+  const screenGridToggle = document.getElementById('minimap-screen-grid-cam-toggle');
+  const cameraPop = document.getElementById('minimap-camera-popover');
+  const cameraEnableToggle = document.getElementById('minimap-camera-enable-toggle');
+  const cameraAllowOtherScreensToggle = document.getElementById('minimap-camera-allow-other-screens-toggle');
+  const cameraScrollRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-scroll-duration'));
+  const cameraBlendInRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-blend-in'));
+  const cameraBlendOutRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-blend-out'));
+  const cameraScrollReadout = document.getElementById('minimap-camera-scroll-duration-readout');
+  const cameraBlendInReadout = document.getElementById('minimap-camera-blend-in-readout');
+  const cameraBlendOutReadout = document.getElementById('minimap-camera-blend-out-readout');
 
   if (!timeToggle || !timePop || !weatherToggle || !weatherPop || !socialToggle || !socialPop) {
     return { forceCloseAllPopovers: () => {} };
@@ -107,7 +119,8 @@ export function installMinimapHudPopovers(options = {}) {
     { toggle: socialToggle, pop: socialPop, name: 'social' },
     ...(inspectorToggle && inspectorPop ? [{ toggle: inspectorToggle, pop: inspectorPop, name: 'inspector' }] : []),
     ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
-    ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : [])
+    ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : []),
+    ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : [])
   ];
 
   function closeAllExcept(activeName) {
@@ -253,16 +266,50 @@ export function installMinimapHudPopovers(options = {}) {
     }
   });
 
-  /* ── Screen-grid camera toggle (no popover, just a state toggle) ──── */
-  const screenGridToggle = document.getElementById('minimap-screen-grid-cam-toggle');
-  function syncScreenGridToggleUi(on) {
-    screenGridToggle?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  function syncScreenGridManualUi(on) {
+    cameraEnableToggle?.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
-  syncScreenGridToggleUi(isScreenGridCameraOn());
-  const unlistenScreenGrid = onScreenGridCameraChange(syncScreenGridToggleUi);
+  function syncCameraConfigUi() {
+    const cfg = getScreenGridCameraConfig();
+    if (cameraScrollRange) cameraScrollRange.value = String(cfg.scrollDurationS);
+    if (cameraBlendInRange) cameraBlendInRange.value = String(cfg.blendInS);
+    if (cameraBlendOutRange) cameraBlendOutRange.value = String(cfg.blendOutS);
+    if (cameraScrollReadout) cameraScrollReadout.textContent = `${cfg.scrollDurationS.toFixed(2)}s`;
+    if (cameraBlendInReadout) cameraBlendInReadout.textContent = `${cfg.blendInS.toFixed(2)}s`;
+    if (cameraBlendOutReadout) cameraBlendOutReadout.textContent = `${cfg.blendOutS.toFixed(2)}s`;
+    cameraAllowOtherScreensToggle?.setAttribute('aria-pressed', cfg.allowManualRoomTransitions ? 'true' : 'false');
+  }
+  syncScreenGridManualUi(isScreenGridCameraManualOn());
+  syncCameraConfigUi();
+  const unlistenScreenGrid = onScreenGridCameraChange(() => {
+    syncScreenGridManualUi(isScreenGridCameraManualOn());
+  });
   screenGridToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleScreenGridCamera();
+    togglePopover('camera');
+  });
+  cameraEnableToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setScreenGridCameraOn(!isScreenGridCameraManualOn());
+    syncScreenGridManualUi(isScreenGridCameraManualOn());
+  });
+  cameraAllowOtherScreensToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const cfg = getScreenGridCameraConfig();
+    setScreenGridCameraConfig({ allowManualRoomTransitions: !cfg.allowManualRoomTransitions });
+    syncCameraConfigUi();
+  });
+  cameraScrollRange?.addEventListener('input', () => {
+    setScreenGridCameraConfig({ scrollDurationS: Number(cameraScrollRange.value) || 0.75 });
+    syncCameraConfigUi();
+  });
+  cameraBlendInRange?.addEventListener('input', () => {
+    setScreenGridCameraConfig({ blendInS: Number(cameraBlendInRange.value) || 0.4 });
+    syncCameraConfigUi();
+  });
+  cameraBlendOutRange?.addEventListener('input', () => {
+    setScreenGridCameraConfig({ blendOutS: Number(cameraBlendOutRange.value) || 0.45 });
+    syncCameraConfigUi();
   });
 
   return {

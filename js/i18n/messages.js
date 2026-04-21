@@ -42,7 +42,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'Tempo do mundo',
       minimapWeatherToggle: 'Clima',
       minimapSocialToggle: 'Ações sociais (numpad)',
-      minimapAudioToggle: 'Volume de BGM e cries',
+      minimapAudioToggle: 'Volume de BGM, ME, ambiente e SFX',
       mapCanvasLabel: 'Mapa e jogo',
       minimapCanvasLabel: 'Minimapa da região',
       minimapBiomeStatus: 'Bioma atual e posição (X, Y, Z)',
@@ -50,6 +50,7 @@ export const MESSAGES = {
       minimapZoomOut: 'Afastar o minimapa',
       minimapZoomIn: 'Aproximar o minimapa',
       minimapBack: 'Voltar ao mapa global',
+      minimapBiomeWithTime: '{biome} · {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: 'Tocando agora',
@@ -75,14 +76,17 @@ export const MESSAGES = {
       rainIntensity: 'Intensidade da precipitação',
       earthquakeLayer: 'Camada de terremoto',
       sunLightRaysLayer: 'Raios de sol (camada)',
+      moonPresence: 'Lua presente (raios noturnos)',
       strikeNow: 'Raio agora',
       groupsSimulated: 'Grupos simulados',
       nextFarCry: 'Próximo Far Cry',
       farCryNow: 'Far Cry!',
       noTarget: 'Sem alvo',
       leaderTarget: 'Alvo do líder',
-      volumeMusic: 'Volume e música',
+      volumeMusic: 'Volume e áudio',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: 'Ambiente',
       sfx: 'SFX',
       mute: 'Mutar',
       suppressBgmToast: 'Não mostrar aviso ao trocar de música',
@@ -124,7 +128,7 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokémon sem groupId (avulsos ou debug)',
       leaderSuffix: ' (líder)',
       weatherLightningTitle: 'Disparar um raio próximo ao jogador',
-      worldTimeHour: '{hours} h',
+      worldTimeHour: '{time}',
       playSessionTime: 'Tempo em jogo: {time}'
     },
     zoom: {
@@ -200,7 +204,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'World time',
       minimapWeatherToggle: 'Weather',
       minimapSocialToggle: 'Social actions (numpad)',
-      minimapAudioToggle: 'BGM and cries volume',
+      minimapAudioToggle: 'BGM, ME, ambience, and SFX volume',
       mapCanvasLabel: 'Map and game',
       minimapCanvasLabel: 'Region minimap',
       minimapBiomeStatus: 'Current biome and position (X, Y, Z)',
@@ -208,6 +212,7 @@ export const MESSAGES = {
       minimapZoomOut: 'Zoom out minimap',
       minimapZoomIn: 'Zoom in minimap',
       minimapBack: 'Return to world map',
+      minimapBiomeWithTime: '{biome} · {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: 'Now playing',
@@ -233,14 +238,17 @@ export const MESSAGES = {
       rainIntensity: 'Precipitation intensity',
       earthquakeLayer: 'Earthquake layer',
       sunLightRaysLayer: 'Sun light rays',
+      moonPresence: 'Moon present (night rays)',
       strikeNow: 'Strike now',
       groupsSimulated: 'Simulated groups',
       nextFarCry: 'Next Far Cry',
       farCryNow: 'Far Cry!',
       noTarget: 'No target',
       leaderTarget: 'Leader target',
-      volumeMusic: 'Volume and music',
+      volumeMusic: 'Volume and audio',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: 'Ambience',
       sfx: 'SFX',
       mute: 'Mute',
       suppressBgmToast: 'Do not show track change toast',
@@ -282,7 +290,7 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokemon without groupId (solo or debug)',
       leaderSuffix: ' (leader)',
       weatherLightningTitle: 'Trigger a lightning strike near the player',
-      worldTimeHour: '{hours} h',
+      worldTimeHour: '{time}',
       playSessionTime: 'In-game time: {time}'
     },
     zoom: {
@@ -358,7 +366,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'ワールド時間',
       minimapWeatherToggle: '天候',
       minimapSocialToggle: 'ソーシャルアクション (テンキー)',
-      minimapAudioToggle: 'BGMと鳴き声の音量',
+      minimapAudioToggle: 'BGM・ME・環境音・SFXの音量',
       mapCanvasLabel: 'マップとゲーム',
       minimapCanvasLabel: 'リージョンミニマップ',
       minimapBiomeStatus: '現在のバイオームと座標 (X, Y, Z)',
@@ -366,6 +374,7 @@ export const MESSAGES = {
       minimapZoomOut: 'ミニマップを縮小',
       minimapZoomIn: 'ミニマップを拡大',
       minimapBack: 'ワールドマップへ戻る',
+      minimapBiomeWithTime: '{biome} ・ {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: '再生中',
@@ -391,14 +400,17 @@ export const MESSAGES = {
       rainIntensity: '降水強度',
       earthquakeLayer: '地震レイヤー',
       sunLightRaysLayer: '日光の筋',
+      moonPresence: '月あり (夜の光線)',
       strikeNow: '今すぐ落雷',
       groupsSimulated: 'シミュレート中のグループ',
       nextFarCry: '次のFar Cry',
       farCryNow: 'Far Cry!',
       noTarget: '対象なし',
       leaderTarget: 'リーダー目標',
-      volumeMusic: '音量と音楽',
+      volumeMusic: '音量とオーディオ',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: '環境音',
       sfx: 'SFX',
       mute: 'ミュート',
       suppressBgmToast: '曲変更トーストを表示しない',
@@ -440,7 +452,7 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'groupIdなしのポケモン (単独 / デバッグ)',
       leaderSuffix: ' (リーダー)',
       weatherLightningTitle: 'プレイヤー付近に落雷を発生',
-      worldTimeHour: '{hours} h',
+      worldTimeHour: '{time}',
       playSessionTime: 'プレイ時間: {time}'
     },
     zoom: {
@@ -504,7 +516,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'Áudio',
-      html: '<h2 class="play-help-wiki__h2">Áudio</h2><p class="play-help-wiki__p">No ícone de música você ajusta BGM, SFX, mute e o aviso de troca de trilha.</p>'
+      html: '<h2 class="play-help-wiki__h2">Áudio</h2><p class="play-help-wiki__p">No ícone de música você ajusta BGM, ME, ambiente, SFX, mute e o aviso de troca de trilha.</p>'
     }
   ],
   'en-US': [
@@ -531,7 +543,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'Audio',
-      html: '<h2 class="play-help-wiki__h2">Audio</h2><p class="play-help-wiki__p">Open the music icon to manage BGM, SFX, mute, and track-change toast behavior.</p>'
+      html: '<h2 class="play-help-wiki__h2">Audio</h2><p class="play-help-wiki__p">Open the music icon to manage BGM, ME, ambience, SFX, mute, and track-change toast behavior.</p>'
     }
   ],
   'ja-JP': [
@@ -558,7 +570,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'オーディオ',
-      html: '<h2 class="play-help-wiki__h2">オーディオ</h2><p class="play-help-wiki__p">音楽アイコンからBGM、SFX、ミュート、曲変更通知を設定できます。</p>'
+      html: '<h2 class="play-help-wiki__h2">オーディオ</h2><p class="play-help-wiki__p">音楽アイコンからBGM、ME、環境音、SFX、ミュート、曲変更通知を設定できます。</p>'
     }
   ]
 };

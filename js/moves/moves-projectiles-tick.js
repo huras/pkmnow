@@ -43,6 +43,16 @@ import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { spawnWaterGunImpactWaveParticles } from './water-gun-ball.js';
 import { rumblePlayerGamepadPokemonHitDealt } from '../main/play-gamepad-rumble.js';
 
+const WATER_PROJECTILES_NO_VEG_DAMAGE = new Set([
+  'waterShot',
+  'waterGunShot',
+  'waterGunBall',
+  'bubbleShot',
+  'bubbleBeamShot',
+  'waterBurstShot',
+  'waterCannonShot'
+]);
+
 /**
  * @param {{
  *   dt: number,
@@ -142,7 +152,7 @@ export function tickActiveProjectiles(ctx) {
         });
       }
 
-      if (proj.hasTackleTrait && data) {
+      if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
         tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle', pz: zBeam });
@@ -289,7 +299,7 @@ export function tickActiveProjectiles(ctx) {
         });
       }
 
-      if (proj.hasTackleTrait && data) {
+      if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
         tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {

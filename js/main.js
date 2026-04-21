@@ -62,6 +62,7 @@ import {
 import {
   initSunLightRaysLayer,
   tickSunLightRaysLayer,
+  getMoonLightRaysActiveIntensity01,
   setSunLightRaysTargetIntensity01,
   getSunLightRaysActiveIntensity01,
   getSunLightRaysTargetIntensity01
@@ -98,10 +99,13 @@ import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
 import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
 import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
+import { stopEncounterMeLoop } from './audio/encounter-me.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
+import { installMinimapEventLogUi } from './main/minimap-event-log-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { installMinimapSaveModal } from './main/minimap-save-modal.js';
+import { clearPlayEventLog, pushPlayEventLog } from './main/play-event-log-state.js';
 import { renderMapOverlaySvg } from './render/render-map-overlay-svg.js';
 import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
 import {
@@ -193,16 +197,110 @@ if (canvas) {
 
 const minimap = document.getElementById('minimap');
 const minimapPanel = document.getElementById('minimap-panel');
+const minimapToolbarHeader = minimapPanel instanceof HTMLElement ? minimapPanel.querySelector('.minimap-panel__header') : null;
+const minimapToolbarDragHandle = document.getElementById('minimap-toolbar-drag-handle');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
+const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
+const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
 const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
+const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
+const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
+const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
 let minimapShowAllSpawnedDebug = false;
+let minimapEventLogVisibleDebug = false;
+let minimapEventLogUi = null;
+let minimapToolbarDragPointerId = null;
+let minimapToolbarDragStartClientX = 0;
+let minimapToolbarDragStartClientY = 0;
+let minimapToolbarDragStartLeft = 0;
+let minimapToolbarDragStartTop = 0;
+
+function clampMinimapToolbarPosition(left, top) {
+  const fallbackWidth = 84;
+  const fallbackHeight = 160;
+  const width = Math.max(1, minimapToolbarHeader?.offsetWidth || fallbackWidth);
+  const height = Math.max(1, minimapToolbarHeader?.offsetHeight || fallbackHeight);
+  const margin = 8;
+  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+  const maxTop = Math.max(margin, window.innerHeight - height - margin);
+  return {
+    left: Math.max(margin, Math.min(maxLeft, Math.round(Number(left) || 0))),
+    top: Math.max(margin, Math.min(maxTop, Math.round(Number(top) || 0)))
+  };
+}
+
+function setMinimapToolbarPosition(left, top, persist = true) {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  const pos = clampMinimapToolbarPosition(left, top);
+  minimapToolbarHeader.style.left = `${pos.left}px`;
+  minimapToolbarHeader.style.top = `${pos.top}px`;
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_MINIMAP_TOOLBAR_LEFT, String(pos.left));
+    localStorage.setItem(LS_MINIMAP_TOOLBAR_TOP, String(pos.top));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function restoreMinimapToolbarPosition() {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  let leftRaw = null;
+  let topRaw = null;
+  try {
+    leftRaw = localStorage.getItem(LS_MINIMAP_TOOLBAR_LEFT);
+    topRaw = localStorage.getItem(LS_MINIMAP_TOOLBAR_TOP);
+  } catch {
+    leftRaw = null;
+    topRaw = null;
+  }
+  const left = Number(leftRaw);
+  const top = Number(topRaw);
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+  if (minimapToolbarHeader.offsetWidth <= 1 || minimapToolbarHeader.offsetHeight <= 1) {
+    requestAnimationFrame(() => setMinimapToolbarPosition(left, top, true));
+    return;
+  }
+  setMinimapToolbarPosition(left, top, true);
+}
+
+function onMinimapToolbarPointerMove(ev) {
+  if (minimapToolbarDragPointerId == null) return;
+  if (ev.pointerId !== minimapToolbarDragPointerId) return;
+  const dx = ev.clientX - minimapToolbarDragStartClientX;
+  const dy = ev.clientY - minimapToolbarDragStartClientY;
+  setMinimapToolbarPosition(minimapToolbarDragStartLeft + dx, minimapToolbarDragStartTop + dy, false);
+}
+
+function stopMinimapToolbarDrag(pointerId, persist = true) {
+  if (minimapToolbarDragPointerId == null) return;
+  if (pointerId != null && pointerId !== minimapToolbarDragPointerId) return;
+  minimapToolbarDragPointerId = null;
+  window.removeEventListener('pointermove', onMinimapToolbarPointerMove);
+  window.removeEventListener('pointerup', onMinimapToolbarPointerUp);
+  window.removeEventListener('pointercancel', onMinimapToolbarPointerCancel);
+  if (!persist || !(minimapToolbarHeader instanceof HTMLElement)) return;
+  const left = Number.parseFloat(minimapToolbarHeader.style.left || '');
+  const top = Number.parseFloat(minimapToolbarHeader.style.top || '');
+  if (Number.isFinite(left) && Number.isFinite(top)) {
+    setMinimapToolbarPosition(left, top, true);
+  }
+}
+
+function onMinimapToolbarPointerUp(ev) {
+  stopMinimapToolbarDrag(ev.pointerId, true);
+}
+
+function onMinimapToolbarPointerCancel(ev) {
+  stopMinimapToolbarDrag(ev.pointerId, false);
+}
 
 function syncMinimapShowSpawnedToggleUi() {
   btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
@@ -218,6 +316,43 @@ function setMinimapShowSpawnedDebug(next) {
   }
 }
 
+function syncMinimapEventLogToggleUi() {
+  btnMinimapEventLogToggle?.setAttribute('aria-pressed', minimapEventLogVisibleDebug ? 'true' : 'false');
+}
+
+function isColliderDebugEnabled() {
+  const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
+  return !!showPlayColliders || !!window.debugColliders;
+}
+
+function syncMinimapColliderToggleUi() {
+  btnMinimapColliderToggle?.setAttribute('aria-pressed', isColliderDebugEnabled() ? 'true' : 'false');
+}
+
+function toggleColliderDebugFromMinimapToolbar() {
+  const chk = document.getElementById('chkPlayColliders');
+  if (chk instanceof HTMLInputElement) {
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
+  window.debugColliders = !window.debugColliders;
+  updateView();
+  syncMinimapColliderToggleUi();
+}
+
+function setMinimapEventLogVisibleDebug(next, persist = true) {
+  minimapEventLogVisibleDebug = !!next;
+  syncMinimapEventLogToggleUi();
+  minimapEventLogUi?.setPlayEventLogVisible(minimapEventLogVisibleDebug);
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE, minimapEventLogVisibleDebug ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
 try {
   minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
 } catch {
@@ -226,6 +361,40 @@ try {
 syncMinimapShowSpawnedToggleUi();
 btnMinimapShowSpawnedToggle?.addEventListener('click', () => {
   setMinimapShowSpawnedDebug(!minimapShowAllSpawnedDebug);
+});
+restoreMinimapToolbarPosition();
+minimapToolbarDragHandle?.addEventListener('pointerdown', (ev) => {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  minimapToolbarDragPointerId = ev.pointerId;
+  minimapToolbarDragStartClientX = ev.clientX;
+  minimapToolbarDragStartClientY = ev.clientY;
+  minimapToolbarDragStartLeft = Number.parseFloat(minimapToolbarHeader.style.left || String(minimapToolbarHeader.offsetLeft || 18));
+  minimapToolbarDragStartTop = Number.parseFloat(minimapToolbarHeader.style.top || String(minimapToolbarHeader.offsetTop || 86));
+  minimapToolbarDragHandle.setPointerCapture(ev.pointerId);
+  window.addEventListener('pointermove', onMinimapToolbarPointerMove);
+  window.addEventListener('pointerup', onMinimapToolbarPointerUp);
+  window.addEventListener('pointercancel', onMinimapToolbarPointerCancel);
+  ev.preventDefault();
+});
+window.addEventListener('resize', () => {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  const left = Number.parseFloat(minimapToolbarHeader.style.left || '');
+  const top = Number.parseFloat(minimapToolbarHeader.style.top || '');
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+  setMinimapToolbarPosition(left, top, true);
+});
+syncMinimapColliderToggleUi();
+btnMinimapColliderToggle?.addEventListener('click', () => {
+  toggleColliderDebugFromMinimapToolbar();
+});
+try {
+  minimapEventLogVisibleDebug = localStorage.getItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE) === '1';
+} catch {
+  minimapEventLogVisibleDebug = false;
+}
+syncMinimapEventLogToggleUi();
+btnMinimapEventLogToggle?.addEventListener('click', () => {
+  setMinimapEventLogVisibleDebug(!minimapEventLogVisibleDebug);
 });
 
 function syncMinimapZoomReadout() {
@@ -322,6 +491,7 @@ const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-
 const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
 const playSunLightRaysIntensityEl = document.getElementById('play-sun-light-rays-intensity');
+const playMoonlightEnabledEl = document.getElementById('play-moonlight-enabled');
 const playVisionFogToggleEl = document.getElementById('play-vision-fog-toggle');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
@@ -364,6 +534,8 @@ let sessionEnteredPlayOnCurrentMap = false;
 initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
 initEarthquakeLayer({ intensity01: 0 });
 initSunLightRaysLayer({ intensity01: 0 });
+let moonlightEnabled = true;
+if (playMoonlightEnabledEl) playMoonlightEnabledEl.checked = moonlightEnabled;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -962,6 +1134,8 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
+minimapEventLogUi = installMinimapEventLogUi();
+setMinimapEventLogVisibleDebug(minimapEventLogVisibleDebug, false);
 const minimapHudPopovers = installMinimapHudPopovers({ imageCache, getCurrentData: () => currentData });
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
@@ -1011,6 +1185,42 @@ function detailPreviewHtmlForImmersiveHint(itemKey) {
   );
 }
 
+let minimapLocaleTimeFormatter = null;
+let minimapLocaleTimeFormatterLocale = '';
+
+/**
+ * Formats world hours ([0,24)) using the active UI locale conventions.
+ * @param {number} worldHoursWrapped
+ */
+function formatWorldTimeForMinimap(worldHoursWrapped) {
+  const h = wrapHours(worldHoursWrapped);
+  const totalMin = ((Math.round(h * 60) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  const locale = getLocale();
+
+  try {
+    if (!minimapLocaleTimeFormatter || minimapLocaleTimeFormatterLocale !== locale) {
+      const formatterOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'UTC'
+      };
+      if (locale === 'pt-BR') {
+        formatterOptions.hour = '2-digit';
+        formatterOptions.hour12 = false;
+        formatterOptions.hourCycle = 'h23';
+      }
+      minimapLocaleTimeFormatter = new Intl.DateTimeFormat(locale, formatterOptions);
+      minimapLocaleTimeFormatterLocale = locale;
+    }
+    const dt = new Date(Date.UTC(2000, 0, 1, hh, mm, 0));
+    return minimapLocaleTimeFormatter.format(dt);
+  } catch {
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+}
+
 /** First frame of faint (or idle) PMD sheet for Strength HUD. */
 function faintedWildHudSpriteHtml(dexId, displayW) {
   const dex = Math.max(1, Math.floor(Number(dexId) || 1));
@@ -1044,14 +1254,19 @@ function strengthHudObjectPreviewHtmlImmersive(ctx) {
  * @param {number} px
  * @param {number} py
  * @param {number} pz
+ * @param {number} worldHoursWrapped
  */
-function syncMinimapPlayFooter(bio, px, py, pz) {
+function syncMinimapPlayFooter(bio, px, py, pz, worldHoursWrapped) {
   const root = minimapPanel || document.getElementById('minimap-panel');
   if (!root) return;
   const nameEl = root.querySelector('#minimap-biome-readout');
   const swatchEl = root.querySelector('#minimap-biome-swatch');
   const coordsEl = root.querySelector('#minimap-coords-readout');
-  const biomeLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
+  const biomeBaseLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
+  const biomeLabel = t('play.minimapBiomeWithTime', {
+    biome: biomeBaseLabel,
+    time: formatWorldTimeForMinimap(worldHoursWrapped)
+  });
   if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
   if (swatchEl) {
     const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
@@ -1088,7 +1303,7 @@ function refreshPlayModeInfoBar(force = false) {
   const px = Number(player.x) || 0;
   const py = Number(player.y) || 0;
   const pz = Number(player.z) || 0;
-  syncMinimapPlayFooter(bio, px, py, pz);
+  syncMinimapPlayFooter(bio, px, py, pz, worldHours);
 
   const rx = Math.round(px * 10);
   const ry = Math.round(py * 10);
@@ -1149,6 +1364,22 @@ function readWorldHoursPerRealSec() {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/**
+ * Formats wrapped world hours ([0,24)) as a digital clock `HH:MM`.
+ * @param {number} worldHoursWrapped
+ */
+function formatWorldHourClock(worldHoursWrapped) {
+  const h = wrapHours(worldHoursWrapped);
+  const totalMin = ((Math.round(h * 60) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = Math.floor(totalMin / 60)
+    .toString()
+    .padStart(2, '0');
+  const mm = Math.floor(totalMin % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
 function syncPlayWorldTimePanel() {
   if (appMode !== 'play') return;
   if (!playWorldTimePhaseEl || !playWorldTimeHourEl) return;
@@ -1159,7 +1390,7 @@ function syncPlayWorldTimePanel() {
     playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   }
   playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
-    hours: formatNumber(wh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    time: formatWorldHourClock(wh)
   });
   if (playWorldTimeSlider) {
     const stepped = Math.round(wh / 0.05) * 0.05;
@@ -1195,13 +1426,14 @@ function buildPlaySessionPersistExtra() {
     weatherPrecipIntensity01: wt.precipIntensity01,
     weatherIntensity01: wt.precipIntensity01,
     earthquakeIntensity01: getEarthquakeActiveIntensity01(),
-    sunLightRaysIntensity01: getSunLightRaysTargetIntensity01()
+    sunLightRaysIntensity01: getSunLightRaysTargetIntensity01(),
+    moonlightEnabled
   };
 }
 
 /**
  * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
- * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} env
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number, moonlightEnabled?: boolean }} env
  */
 function applyRestoredPlayEnvironmentFromSave(env) {
   if (!env) return;
@@ -1213,7 +1445,7 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   if (playWorldTimeHourEl) {
     playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
-      hours: formatNumber(worldHours, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      time: formatWorldHourClock(worldHours)
     });
   }
   snapDayCycleTintSmoothToHours(worldHours);
@@ -1240,6 +1472,8 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playSunLightRaysIntensityEl) {
     playSunLightRaysIntensityEl.value = String(Math.round(sun01 * 100));
   }
+  moonlightEnabled = env.moonlightEnabled !== false;
+  if (playMoonlightEnabledEl) playMoonlightEnabledEl.checked = moonlightEnabled;
 }
 
 function syncPlayBgmNowPlayingPanel() {
@@ -1464,6 +1698,7 @@ function getSettings() {
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
     weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(hoursWrapped),
+    weatherMoonLightRaysIntensity: moonlightEnabled ? getMoonLightRaysActiveIntensity01(hoursWrapped) : 0,
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
@@ -1564,6 +1799,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
     minimapAudioUi.syncMinimapAudioPopover();
+    minimapEventLogUi.syncPlayEventLogHud();
   },
   getPlaySessionPersistExtra: () => buildPlaySessionPersistExtra()
 });
@@ -1580,7 +1816,16 @@ registerPlayKeyboard({
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);
     showPlayerSocialEmotion(action);
-    triggerPlayerSocialAction(action, player, currentData);
+    const result = triggerPlayerSocialAction(action, player, currentData);
+    const reactedCount = Math.max(0, Number(result?.reactedCount) || 0);
+    pushPlayEventLog({
+      channel: 'social',
+      text:
+        reactedCount > 0
+          ? `${action.label}: ${reactedCount} reaction(s).`
+          : `${action.label}: no nearby reactions.`,
+      dedupeKey: `social:${action.id}:${reactedCount > 0 ? 'reacted' : 'none'}`
+    });
   },
   player
 });
@@ -1841,6 +2086,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   else minimap?.classList.remove('hidden');
   syncMinimapZoomReadout();
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapEventLogUi.clearPlayEventLogHudEngaged();
   minimapHudPopovers.forceCloseAllPopovers();
   if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
@@ -1856,6 +2102,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   syncPlayBgmNowPlayingPanel();
 
   playSocialOverlay.clearActive();
+  clearPlayEventLog();
 
   playCharacterSelector?.syncPlayPointerModeRadios();
 
@@ -1877,6 +2124,7 @@ btnBackToMap?.addEventListener('click', () => {
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
   stopFireLoopAudio();
+  stopEncounterMeLoop();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
   playInputState.fieldChargeUiActive = null;
@@ -1887,6 +2135,7 @@ btnBackToMap?.addEventListener('click', () => {
   if (minimapPanel) minimapPanel.classList.add('hidden');
   else minimap?.classList.add('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapEventLogUi.clearPlayEventLogHudEngaged();
   minimapHudPopovers.forceCloseAllPopovers();
   minimapSaveModal.forceClose();
   if (infoBar) infoBar.innerHTML = t('play.hudHintMap');
@@ -1894,6 +2143,7 @@ btnBackToMap?.addEventListener('click', () => {
   playDetailColliderHighlight = null;
 
   playSocialOverlay.clearActive();
+  clearPlayEventLog();
 
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);
@@ -2146,6 +2396,9 @@ playSunLightRaysIntensityEl?.addEventListener('input', () => {
   const v = Number(playSunLightRaysIntensityEl.value);
   setSunLightRaysTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
 });
+playMoonlightEnabledEl?.addEventListener('change', () => {
+  moonlightEnabled = !!playMoonlightEnabledEl.checked;
+});
 
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {
   if (appMode !== 'play') return;
@@ -2180,6 +2433,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   } else if (!on) {
     clearPlayColliderOverlayCache();
   }
+  syncMinimapColliderToggleUi();
   updateView();
 });
 document.getElementById('chkWorldReactionsOverlay')?.addEventListener('change', updateView);
