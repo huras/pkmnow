@@ -197,9 +197,36 @@ const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
+const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
+let minimapShowAllSpawnedDebug = false;
+
+function syncMinimapShowSpawnedToggleUi() {
+  btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
+}
+
+function setMinimapShowSpawnedDebug(next) {
+  minimapShowAllSpawnedDebug = !!next;
+  syncMinimapShowSpawnedToggleUi();
+  try {
+    localStorage.setItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG, minimapShowAllSpawnedDebug ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+try {
+  minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
+} catch {
+  minimapShowAllSpawnedDebug = false;
+}
+syncMinimapShowSpawnedToggleUi();
+btnMinimapShowSpawnedToggle?.addEventListener('click', () => {
+  setMinimapShowSpawnedDebug(!minimapShowAllSpawnedDebug);
+});
 
 function syncMinimapZoomReadout() {
   if (!minimap) return;
@@ -1428,7 +1455,8 @@ function getSettings() {
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
-    visionFogEnabled: playVisionFogToggleEl?.checked ?? false
+    visionFogEnabled: playVisionFogToggleEl?.checked ?? false,
+    minimapShowAllSpawnedDebug
   };
 }
 

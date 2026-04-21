@@ -777,14 +777,15 @@ function drawRecentPlayerTrailOnMinimap(ctx, tf, recentTrailMicro) {
  * @param {{ scale: number, ox: number, oy: number }} tf
  * @param {{ x: number, y: number }} playerMacro
  * @param {{ w: number, h: number }} canvasSize
+ * @param {boolean} showAllSpawnedDebug
  */
-function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
+function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllSpawnedDebug = false) {
   const markers = [];
   for (const ent of entitiesByKey.values()) {
     if (!ent || ent.isDespawning || ent.deadState) continue;
     if (!Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(ent.dexId)) continue;
     // Unknown species: no minimap marker until Far Cry “introduces” them (reduces ? spam).
-    if (!ent.minimapSpeciesKnown && !ent.minimapFarCryIntroduced) continue;
+    if (!showAllSpawnedDebug && !ent.minimapSpeciesKnown && !ent.minimapFarCryIntroduced) continue;
     const mx = ent.x / MACRO_TILE_STRIDE;
     const my = ent.y / MACRO_TILE_STRIDE;
     const distSq = (mx - playerMacro.x) ** 2 + (my - playerMacro.y) ** 2;
@@ -929,7 +930,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize) {
  * @param {HTMLCanvasElement} canvas
  * @param {object} data  world data (biomes, width, height, paths, graph, …)
  * @param {object} player  {x, y} in micro-tile coordinates
- * @param {{ recentTrailMicro?: Array<{ x: number, y: number }> }} [options]
+ * @param {{ recentTrailMicro?: Array<{ x: number, y: number }>, debugShowAllSpawned?: boolean }} [options]
  */
 export function renderMinimap(canvas, data, player, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -1034,7 +1035,8 @@ export function renderMinimap(canvas, data, player, options = {}) {
     ctx,
     { scale: tfScale, ox: tfOx, oy: tfOy },
     { x: playerMacroX, y: playerMacroY },
-    { w, h }
+    { w, h },
+    !!options.debugShowAllSpawned
   );
   drawFarCryMinimapEchoes(
     ctx,

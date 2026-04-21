@@ -1931,7 +1931,11 @@ export function render(canvas, data, options = {}) {
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) {
-      renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro, playVision });
+      renderMinimap(minimapCanvas, data, player, {
+        recentTrailMicro: globalMapPlayerTrailRecentMicro,
+        playVision,
+        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug
+      });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }

@@ -1074,6 +1074,66 @@ button.btn-secondary:hover {
   image-rendering: crisp-edges;
 }
 
+.minimap-panel__map-wrap {
+  position: relative;
+  width: 230px;
+  height: 192px;
+}
+
+.minimap-panel__show-spawned-btn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(4, 8, 14, 0.76);
+  color: rgba(215, 232, 255, 0.88);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.minimap-panel__show-spawned-btn:hover {
+  background: rgba(154, 216, 255, 0.16);
+  border-color: rgba(154, 216, 255, 0.42);
+  color: #fff;
+}
+
+.minimap-panel__show-spawned-btn[aria-pressed="true"] {
+  background: rgba(255, 222, 120, 0.2);
+  border-color: rgba(255, 222, 120, 0.62);
+  color: rgba(255, 245, 206, 0.98);
+}
+
+.minimap-panel__show-spawned-btn:focus-visible {
+  outline: 2px solid rgba(154, 216, 255, 0.9);
+  outline-offset: 1px;
+}
+
+.minimap-panel__show-spawned-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.minimap-panel__show-spawned-icon--on {
+  display: none;
+}
+
+.minimap-panel__show-spawned-btn[aria-pressed="true"] .minimap-panel__show-spawned-icon--off {
+  display: none;
+}
+
+.minimap-panel__show-spawned-btn[aria-pressed="true"] .minimap-panel__show-spawned-icon--on {
+  display: block;
+}
+
 /* Zoom in/out + help + save — same shape as music buttons */
 .minimap-panel__zoom-in-btn,
 .minimap-panel__zoom-out-btn,
