@@ -1145,6 +1145,7 @@ button.btn-secondary:hover {
 .minimap-panel__weather-btn,
 .minimap-panel__berries-btn,
 .minimap-panel__social-btn,
+.minimap-panel__screen-grid-cam-btn,
 .minimap-panel__adaptive-perf-btn {
   display: inline-flex;
   align-items: center;
@@ -1172,6 +1173,7 @@ button.btn-secondary:hover {
 .minimap-panel__weather-btn:hover,
 .minimap-panel__berries-btn:hover,
 .minimap-panel__social-btn:hover,
+.minimap-panel__screen-grid-cam-btn:hover,
 .minimap-panel__adaptive-perf-btn:hover {
   background: rgba(154, 216, 255, 0.14);
   border-color: rgba(154, 216, 255, 0.3);
@@ -1184,6 +1186,7 @@ button.btn-secondary:hover {
 .minimap-panel__language-btn[aria-pressed="true"],
 .minimap-panel__berries-btn[aria-pressed="true"],
 .minimap-panel__groups-btn[aria-pressed="true"],
+.minimap-panel__screen-grid-cam-btn[aria-pressed="true"],
 .minimap-panel__adaptive-perf-btn[aria-pressed="true"] {
   background: rgba(154, 216, 255, 0.18);
   border-color: rgba(154, 216, 255, 0.4);
@@ -1200,6 +1203,7 @@ button.btn-secondary:hover {
 .minimap-panel__weather-btn:focus-visible,
 .minimap-panel__berries-btn:focus-visible,
 .minimap-panel__social-btn:focus-visible,
+.minimap-panel__screen-grid-cam-btn:focus-visible,
 .minimap-panel__adaptive-perf-btn:focus-visible {
   outline: 2px solid rgba(154, 216, 255, 0.85);
   outline-offset: 1px;
@@ -1215,6 +1219,7 @@ button.btn-secondary:hover {
 .minimap-panel__weather-icon,
 .minimap-panel__berries-icon,
 .minimap-panel__social-icon,
+.minimap-panel__screen-grid-cam-icon,
 .minimap-panel__adaptive-perf-icon {
   width: 14px;
   height: 14px;

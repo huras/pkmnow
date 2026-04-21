@@ -317,6 +317,7 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
+const playSessionTimeEl = document.getElementById('play-session-time');
 const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
 const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
@@ -352,6 +353,8 @@ let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
+/** Accumulated elapsed seconds while in play mode. */
+let playSessionSeconds = 0;
 let worldTimeRunning = true;
 /** After play on this map in the page session; map overview can show live player if there is no save yet. */
 let sessionEnteredPlayOnCurrentMap = false;
@@ -1165,12 +1168,28 @@ function syncPlayWorldTimePanel() {
       playWorldTimeSlider.value = String(stepped);
     }
   }
+  if (playSessionTimeEl) {
+    const totalSec = Math.max(0, Math.floor(playSessionSeconds));
+    const hh = Math.floor(totalSec / 3600)
+      .toString()
+      .padStart(2, '0');
+    const mm = Math.floor((totalSec % 3600) / 60)
+      .toString()
+      .padStart(2, '0');
+    const ss = Math.floor(totalSec % 60)
+      .toString()
+      .padStart(2, '0');
+    playSessionTimeEl.textContent = t('play.playSessionTime', {
+      time: `${hh}:${mm}:${ss}`
+    });
+  }
 }
 
 function buildPlaySessionPersistExtra() {
   const wt = getWeatherTarget();
   return {
     worldHours: wrapHours(worldHours),
+    playSessionSeconds,
     weatherPreset: wt.preset,
     weatherCloudIntensity01: wt.cloudIntensity01,
     weatherPrecipIntensity01: wt.precipIntensity01,
@@ -1527,6 +1546,12 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     tickEarthquakeLayer(dt, gameTime);
     tickSunLightRaysLayer(dt, { data: currentData, player });
   },
+  advancePlaySessionSeconds: (dt) => {
+    if (appMode !== 'play') return;
+    const d = Number(dt);
+    if (!Number.isFinite(d) || d <= 0) return;
+    playSessionSeconds = Math.max(0, Math.min(31_536_000, playSessionSeconds + d));
+  },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
     const nowMs = performance.now();
@@ -1604,6 +1629,7 @@ function run() {
     /* ignore */
   }
   currentData = generate(seedInput.value, currentConfig);
+  playSessionSeconds = 0;
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
   resetWildPokemonManager();
@@ -1782,6 +1808,7 @@ window.addEventListener('pkmn-map-overview-noise-progress', () => {
  */
 function enterPlayMode(gx, gy, opts = {}) {
   const resumePosition = opts.resumePosition === true;
+  playSessionSeconds = 0;
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
@@ -1792,7 +1819,11 @@ function enterPlayMode(gx, gy, opts = {}) {
       position: resumePosition,
       inventory: true,
       applyEnvironmentFromSave: resumePosition,
-      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave
+      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave,
+      applyPlaySessionSecondsFromSave: true,
+      onRestorePlaySessionSeconds: (seconds) => {
+        playSessionSeconds = Math.max(0, Number(seconds) || 0);
+      }
     })
   ) {
     playCharacterSelector?.invalidatePlayItemsHudSignature?.();

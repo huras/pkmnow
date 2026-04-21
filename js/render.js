@@ -117,6 +117,7 @@ import {
   drawVolumetricEnvironmentalLayer,
   drawDigChargeBar,
   drawFieldCombatChargeBar,
+  drawPlayerFieldChargeShineOverlay,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
 import { drawFarCryScreenWaves } from './render/render-far-cry.js';
@@ -1513,15 +1514,31 @@ export function render(canvas, data, options = {}) {
         }
         
         if (item.type === 'wild' && item.hitFlashTimer > 0) ctx.filter = 'brightness(5) contrast(2) sepia(1) hue-rotate(-50deg)';
+        let shineClipTop = pxT0;
+        let shineClipH = pxH;
         if (bury > 0.004) {
           const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
           const pxT = snapPx(pxT0 + (pxH - visH));
+          shineClipTop = pxT;
+          shineClipH = visH;
           ctx.save();
           ctx.beginPath(); ctx.rect(pxL, pxT, pxW, visH); ctx.clip();
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
           ctx.restore();
         } else {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
+        }
+
+        if (item.type === 'player') {
+          drawPlayerFieldChargeShineOverlay(ctx, {
+            pxL,
+            pxT: shineClipTop,
+            pxW,
+            pxH: shineClipH,
+            shineStartMs: item._fieldChargeShineStartMs,
+            shineDurMs: item._fieldChargeShineDurMs,
+            alphaMul: alpha
+          });
         }
 
         ctx.filter = 'none';

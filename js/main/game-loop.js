@@ -1,5 +1,6 @@
 import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { getPlayLodDetail } from '../render/play-view-camera.js';
+import { toggleDeadzoneCamera } from '../render/play-deadzone-camera.js';
 import { getPlayChunkFrameStats } from '../render.js';
 import { playInputState } from './play-input-state.js';
 import {
@@ -335,6 +336,7 @@ function isPlayMovementKeyEvent(e) {
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
  *   advanceWorldTime?: (dt: number) => void,
+ *   advancePlaySessionSeconds?: (dt: number) => void,
  *   getGameTimeSec?: () => number,
  *   onEscapePlay?: () => void,
  *   getPlaySessionPersistExtra?: () => object | null
@@ -352,6 +354,7 @@ export function createGameLoop(api) {
     player,
     onPlayHudFrame,
     advanceWorldTime,
+    advancePlaySessionSeconds,
     getGameTimeSec,
     onEscapePlay,
     getPlaySessionPersistExtra
@@ -400,6 +403,7 @@ export function createGameLoop(api) {
     PluginRegistry.executeHooks('preUpdate', simDt);
 
     if (getAppMode() === 'play') advanceWorldTime?.(simDt);
+    if (getAppMode() === 'play') advancePlaySessionSeconds?.(simDt);
 
     let inX = 0;
     let inY = 0;
@@ -835,6 +839,12 @@ export function registerPlayKeyboard(api) {
         e.preventDefault();
         togglePlayerCreativeFlight();
         if (getCurrentData()) refreshPlayModeInfoBar(true);
+      }
+
+      if (e.code === 'KeyG' && !e.repeat) {
+        e.preventDefault();
+        const on = toggleDeadzoneCamera();
+        console.log(`[camera] deadzone ${on ? 'ON' : 'OFF'}`);
       }
 
       if (e.code === 'ShiftLeft') {

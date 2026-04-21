@@ -29,6 +29,7 @@ const STORAGE_KEY = 'pkmn_play_session_save_v1';
  * @property {{ x: number, y: number, z?: number }} player
  * @property {{ rows: PlaySessionInventoryRow[] }} inventory
  * @property {number} [worldHours] — [0,24) day clock
+ * @property {number} [playSessionSeconds] — accumulated in-play elapsed time (seconds)
  * @property {import('./weather-presets.js').WeatherPresetId} [weatherPreset]
  * @property {number} [weatherIntensity01]
  * @property {number} [weatherCloudIntensity01]
@@ -266,7 +267,7 @@ function readSavedWeatherPreset(saved) {
 /**
  * Weather + clock block for cold resume (v2+).
  * @param {PlaySessionSaveV2 | null | undefined} saved
- * @returns {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number, sunLightRaysIntensity01: number } | null}
+ * @returns {{ worldHours: number, playSessionSeconds: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01: number, weatherCloudIntensity01: number, weatherPrecipIntensity01: number, earthquakeIntensity01: number, sunLightRaysIntensity01: number } | null}
  */
 export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!saved || saved.version < 2) return null;
@@ -274,6 +275,8 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
   if (!preset) return null;
   const whRaw = Number(saved.worldHours);
   const worldHours = Number.isFinite(whRaw) ? wrapHours(whRaw) : 12;
+  const psRaw = Number(saved.playSessionSeconds);
+  const playSessionSeconds = Number.isFinite(psRaw) ? Math.max(0, Math.min(31_536_000, psRaw)) : 0;
   const legacyRaw = Number(saved.weatherIntensity01);
   const legacy = Number.isFinite(legacyRaw) ? Math.max(0, Math.min(1, legacyRaw)) : 1;
   const wcRaw = Number(saved.weatherCloudIntensity01);
@@ -286,6 +289,7 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
   const sunLightRaysIntensity01 = Number.isFinite(sr) ? Math.max(0, Math.min(1, sr)) : 0;
   return {
     worldHours,
+    playSessionSeconds,
     weatherPreset: preset,
     weatherIntensity01: legacy,
     weatherCloudIntensity01,
@@ -303,7 +307,9 @@ export function extractPlaySessionEnvironmentForRestore(saved) {
  *   position?: boolean,
  *   inventory?: boolean,
  *   applyEnvironmentFromSave?: boolean,
- *   onRestoreEnvironment?: (env: ReturnType<typeof extractPlaySessionEnvironmentForRestore>) => void
+ *   onRestoreEnvironment?: (env: ReturnType<typeof extractPlaySessionEnvironmentForRestore>) => void,
+ *   applyPlaySessionSecondsFromSave?: boolean,
+ *   onRestorePlaySessionSeconds?: (seconds: number) => void
  * }} [opts] — map click should use `{ position: false, inventory: true }`; cold resume `{ position: true, inventory: true, applyEnvironmentFromSave: true, onRestoreEnvironment }`.
  * @returns {boolean} true if anything was applied (HUD may need refresh).
  */
@@ -311,8 +317,11 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
   const applyInventory = opts.inventory !== false;
   const applyPosition = opts.position === true;
   const applyEnv = opts.applyEnvironmentFromSave === true && typeof opts.onRestoreEnvironment === 'function';
+  const applyPlaySessionSeconds =
+    opts.applyPlaySessionSecondsFromSave === true &&
+    typeof opts.onRestorePlaySessionSeconds === 'function';
   if (!data || !playerRef) return false;
-  if (!applyInventory && !applyPosition && !applyEnv) return false;
+  if (!applyInventory && !applyPosition && !applyEnv && !applyPlaySessionSeconds) return false;
 
   const saved = peekPlaySessionSaveForMap(data);
   if (!saved) return false;
@@ -344,11 +353,17 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
       did = true;
     }
   }
+  if (applyPlaySessionSeconds) {
+    const secRaw = Number(saved.playSessionSeconds);
+    const sec = Number.isFinite(secRaw) ? Math.max(0, Math.min(31_536_000, secRaw)) : 0;
+    opts.onRestorePlaySessionSeconds(sec);
+    did = true;
+  }
   return did;
 }
 
 /**
- * @typedef {{ worldHours: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} PlaySessionPersistExtra
+ * @typedef {{ worldHours: number, playSessionSeconds?: number, weatherPreset: import('./weather-presets.js').WeatherPresetId, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number }} PlaySessionPersistExtra
  */
 
 /**
@@ -376,6 +391,10 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   const whSrc = persistExtra != null ? Number(persistExtra.worldHours) : NaN;
   if (Number.isFinite(whSrc)) {
     out.worldHours = wrapHours(whSrc);
+  }
+  const psSrc = persistExtra != null ? Number(persistExtra.playSessionSeconds) : NaN;
+  if (Number.isFinite(psSrc)) {
+    out.playSessionSeconds = Math.max(0, Math.min(31_536_000, psSrc));
   }
   const presetCandidate = persistExtra?.weatherPreset ?? wt.preset;
   if (isWeatherPreset(presetCandidate)) {

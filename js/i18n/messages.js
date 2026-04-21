@@ -89,7 +89,7 @@ export const MESSAGES = {
       music: 'Música',
       nextTrack: 'Próxima música',
       saveModalTitle: 'Progresso no mapa',
-      saveModalDesc: 'Salva posição, inventário, tempo e clima desta região (mesma seed e tamanho) no navegador ou em arquivo JSON. Ao voltar, o jogo pode restaurar. Limpar remove só o slot do navegador.',
+      saveModalDesc: 'Salva posição, inventário, hora do mundo, tempo em jogo e clima desta região (mesma seed e tamanho) no navegador ou em arquivo JSON. Ao voltar, o jogo pode restaurar. Limpar remove só o slot do navegador.',
       saveNow: 'Salvar agora',
       saveToBrowser: 'Salvar no navegador',
       saveToFile: 'Salvar em arquivo',
@@ -101,7 +101,7 @@ export const MESSAGES = {
       saveImportReadError: 'Falha ao ler o arquivo.',
       saveStatusNeedMap: 'Gere um mapa e entre no modo jogo para usar o salvamento.',
       saveStatusHasData: 'Há dados salvos para esta região (mesma seed e tamanho). Você pode sobrescrever ou limpar.',
-      saveStatusNoData: 'Nenhum dado salvo ainda — Salvar agora grava posição, inventário, hora do mundo e clima.',
+      saveStatusNoData: 'Nenhum dado salvo ainda — Salvar agora grava posição, inventário, hora do mundo, tempo em jogo e clima.',
       helpTitle: 'Ajuda',
       helpIndex: 'Índice',
       helpClose: 'Fechar ajuda',
@@ -124,7 +124,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokémon sem groupId (avulsos ou debug)',
       leaderSuffix: ' (líder)',
       weatherLightningTitle: 'Disparar um raio próximo ao jogador',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{hours} h',
+      playSessionTime: 'Tempo em jogo: {time}'
     },
     zoom: {
       farTitle: 'Mapa todo',
@@ -246,7 +247,7 @@ export const MESSAGES = {
       music: 'Music',
       nextTrack: 'Next track',
       saveModalTitle: 'Map progress',
-      saveModalDesc: 'Stores position, inventory, world time, and weather for this region (same seed and size) in the browser or as a JSON file. Re-entering can restore. Clear removes the browser slot only.',
+      saveModalDesc: 'Stores position, inventory, world time, in-game time, and weather for this region (same seed and size) in the browser or as a JSON file. Re-entering can restore. Clear removes the browser slot only.',
       saveNow: 'Save now',
       saveToBrowser: 'Save to browser',
       saveToFile: 'Save to file',
@@ -258,7 +259,7 @@ export const MESSAGES = {
       saveImportReadError: 'Failed to read the file.',
       saveStatusNeedMap: 'Generate a map and enter play mode to use save.',
       saveStatusHasData: 'Saved data exists for this region (same seed and size). You can overwrite or clear it.',
-      saveStatusNoData: 'No save data yet — Save now stores position, inventory, world time, and weather.',
+      saveStatusNoData: 'No save data yet — Save now stores position, inventory, world time, in-game time, and weather.',
       helpTitle: 'Help',
       helpIndex: 'Index',
       helpClose: 'Close help',
@@ -281,7 +282,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokemon without groupId (solo or debug)',
       leaderSuffix: ' (leader)',
       weatherLightningTitle: 'Trigger a lightning strike near the player',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{hours} h',
+      playSessionTime: 'In-game time: {time}'
     },
     zoom: {
       farTitle: 'Full map',
@@ -403,7 +405,7 @@ export const MESSAGES = {
       music: '音楽',
       nextTrack: '次の曲',
       saveModalTitle: 'マップ進行',
-      saveModalDesc: '同じシードとサイズのリージョンについて、位置・インベントリ・時間・天候をブラウザまたは JSON ファイルに保存します。再入場時に復元できます。削除はブラウザのスロットのみ消去します。',
+      saveModalDesc: '同じシードとサイズのリージョンについて、位置・インベントリ・ワールド時間・プレイ時間・天候をブラウザまたは JSON ファイルに保存します。再入場時に復元できます。削除はブラウザのスロットのみ消去します。',
       saveNow: '今すぐ保存',
       saveToBrowser: 'ブラウザに保存',
       saveToFile: 'ファイルに保存',
@@ -415,7 +417,7 @@ export const MESSAGES = {
       saveImportReadError: 'ファイルの読み込みに失敗しました。',
       saveStatusNeedMap: '保存機能を使うには、マップ生成後にプレイモードへ入ってください。',
       saveStatusHasData: 'このリージョンには保存データがあります (同じシード / サイズ)。上書きまたは削除できます。',
-      saveStatusNoData: 'まだ保存データはありません。今すぐ保存で位置、インベントリ、時間、天候を保存します。',
+      saveStatusNoData: 'まだ保存データはありません。今すぐ保存で位置、インベントリ、ワールド時間、プレイ時間、天候を保存します。',
       helpTitle: 'ヘルプ',
       helpIndex: '目次',
       helpClose: 'ヘルプを閉じる',
@@ -438,7 +440,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'groupIdなしのポケモン (単独 / デバッグ)',
       leaderSuffix: ' (リーダー)',
       weatherLightningTitle: 'プレイヤー付近に落雷を発生',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{hours} h',
+      playSessionTime: 'プレイ時間: {time}'
     },
     zoom: {
       farTitle: '全体マップ',

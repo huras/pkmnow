@@ -13,6 +13,11 @@ import { clearHoveredWildGroupEntityKey } from './wild-groups-hover-state.js';
 import { player } from '../player.js';
 import { triggerNextFarCryNow } from './far-cry-system.js';
 import { onLocaleChanged, t } from '../i18n/index.js';
+import {
+  isScreenGridCameraOn,
+  toggleScreenGridCamera,
+  onScreenGridCameraChange
+} from '../render/play-deadzone-camera.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -248,6 +253,18 @@ export function installMinimapHudPopovers(options = {}) {
     }
   });
 
+  /* ── Screen-grid camera toggle (no popover, just a state toggle) ──── */
+  const screenGridToggle = document.getElementById('minimap-screen-grid-cam-toggle');
+  function syncScreenGridToggleUi(on) {
+    screenGridToggle?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  syncScreenGridToggleUi(isScreenGridCameraOn());
+  const unlistenScreenGrid = onScreenGridCameraChange(syncScreenGridToggleUi);
+  screenGridToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleScreenGridCamera();
+  });
+
   return {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
@@ -259,6 +276,7 @@ export function installMinimapHudPopovers(options = {}) {
       clearHoveredWildGroupEntityKey();
       stopInspectorRefresh();
       unlistenLocale();
+      unlistenScreenGrid();
     }
   };
 }

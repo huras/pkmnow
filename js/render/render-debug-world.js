@@ -1736,3 +1736,55 @@ export function drawFieldCombatChargeBar(ctx, options) {
   ctx.fillText(label, cw * 0.5, py0 + barH + 5);
   ctx.restore();
 }
+
+/**
+ * One-shot diagonal “shine” sweep on the player sprite when a field-charge HUD segment completes.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{
+ *   pxL: number,
+ *   pxT: number,
+ *   pxW: number,
+ *   pxH: number,
+ *   shineStartMs?: number,
+ *   shineDurMs?: number,
+ *   alphaMul?: number
+ * }} opts
+ */
+export function drawPlayerFieldChargeShineOverlay(ctx, opts) {
+  const pxL = Number(opts.pxL);
+  const pxT = Number(opts.pxT);
+  const pxW = Number(opts.pxW);
+  const pxH = Number(opts.pxH);
+  const start = Number(opts.shineStartMs);
+  if (!Number.isFinite(pxL) || !Number.isFinite(pxT) || !Number.isFinite(pxW) || !Number.isFinite(pxH)) return;
+  if (!Number.isFinite(start)) return;
+  const dur = Math.max(80, Number(opts.shineDurMs) || 340);
+  const u = (performance.now() - start) / dur;
+  if (u < 0 || u > 1) return;
+  const alphaM = Math.max(0, Math.min(1, Number(opts.alphaMul) || 1));
+  const envelope = (1 - u) * (1 - u);
+  const peak = 0.9 * envelope * alphaM;
+  if (peak <= 0.002) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(pxL, pxT, pxW, pxH);
+  ctx.clip();
+
+  const sweep = u;
+  const x0 = pxL - pxW * 0.55 + pxW * 1.35 * sweep;
+  const y0 = pxT - pxH * 0.08;
+  const x1 = x0 + pxW * 0.9;
+  const y1 = pxT + pxH * 1.08;
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.46, 'rgba(255,255,255,0)');
+  g.addColorStop(0.5, `rgba(255,252,230,${peak})`);
+  g.addColorStop(0.54, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 1;
+  ctx.fillRect(pxL - 4, pxT - 4, pxW + 8, pxH + 8);
+  ctx.restore();
+}
