@@ -23,6 +23,8 @@ import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { rollNature } from './wild-natures.js';
 import {
   GRASS_WALK_HOSTILE_AGGRO_SEC,
+  WILD_ENCOUNTER_PICK_SCOPE,
+  WILD_ENCOUNTER_WINDOW_MACRO_R,
   WILD_MACRO_SUBDIVISION,
   WILD_MAX_SIMULTANEOUS_SLOTS,
   WILD_MIN_INTER_GROUP_CENTER_DIST
@@ -563,12 +565,21 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     }
   }
 
+  const encounterPickNearPlayer =
+    String(WILD_ENCOUNTER_PICK_SCOPE || '').toLowerCase() === 'near_player';
+  const encounterWindowR = Math.max(0, Math.floor(Number(WILD_ENCOUNTER_WINDOW_MACRO_R) || 0));
+  const wildMacroInPlayerWindow = (mx, my) =>
+    Math.abs(mx - pmx) <= encounterWindowR && Math.abs(my - pmy) <= encounterWindowR;
+
   const usedPickIndexesByMacroBiome = new Map();
   for (const ent of entitiesByKey.values()) {
     if (typeof ent.biomeId !== 'number' || typeof ent.pickIndex !== 'number') continue;
     if (ent.pickIndex < 0) continue;
     if (typeof ent.macroX !== 'number' || typeof ent.macroY !== 'number') continue;
-    const scopeKey = `${ent.biomeId}|${ent.macroX}|${ent.macroY}`;
+    if (encounterPickNearPlayer && !wildMacroInPlayerWindow(ent.macroX, ent.macroY)) continue;
+    const scopeKey = encounterPickNearPlayer
+      ? `${ent.biomeId}|near:${pmx}:${pmy}`
+      : `${ent.biomeId}|${ent.macroX}|${ent.macroY}`;
     let set = usedPickIndexesByMacroBiome.get(scopeKey);
     if (!set) {
       set = new Set();
@@ -838,7 +849,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const biomeId = data.biomes[slot.my * w + slot.mx];
     const pool = getEncounters(biomeId);
     if (!Array.isArray(pool) || pool.length === 0) continue;
-    const pickScopeKey = `${biomeId}|${slot.mx}|${slot.my}`;
+    const pickScopeKey = encounterPickNearPlayer
+      ? `${biomeId}|near:${pmx}:${pmy}`
+      : `${biomeId}|${slot.mx}|${slot.my}`;
     const basePick =
       seededHashInt(
         slot.mx * 4733 + slot.sx * 997,
