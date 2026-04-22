@@ -3,6 +3,7 @@ My ideias organizadas por tópico
 
 1) Visão do jogo e direção criativa
 -----------------------------------
+- Meta (north star): a game to make friends with pokemon where they live.
 - Cada tile no mapa é uma "graminha" no caminho do jogador.
 - Em vez de batalha randômica por turnos, cada interação deve gerar descoberta (social, ambiental, etc).
 - Cada pedaço de bioma deve ser um "parquinho" novo para o player.
@@ -49,6 +50,7 @@ My ideias organizadas por tópico
 - Tratar matinhos como poços de mini-eventos aleatórios envolvendo pokémons.
 - Pokémon pode spawnar e te atacar ao quebrar árvores ou rochas.
 - Shiny pokémon pode fugir.
+- Pokémon derrotado pode reviver após algum tempo (respawn/recover natural do ecossistema).
 - Wild battling:
   - quando atacado, pokémon vira aggro;
   - range de visão atual dos selvagens parece curto.
@@ -215,6 +217,9 @@ My ideias organizadas por tópico
   - Lança = lança-chamas
   - Claymore = Fire Spin?
   - Sword = Ember?
+- Metáfora de design (não visual): pokémons funcionam como "cartas" no combate.
+- Limite duro de moveset: cada pokémon tem no máximo 2 ataques equipados ao mesmo tempo.
+- Implicação: escolha de moves vira deckbuilding leve (curto vs longo, controle vs burst, etc).
 
 
 12) Progressão, controle e utilidades
@@ -290,6 +295,9 @@ My ideias organizadas por tópico
 - Também mostrar ondas na própria tela de jogo vindas da direção do "far cry" (centro do círculo na borda da tela, animação simples).
 - Implementação visual simples sugerida: círculos/aneis expandindo com fade, orientados pelo lado de origem do som.
 - Ideia boba de naming/marketing: chamar esse tipo de evento de Pokémon "Far Cry" (o "Open Wild" seria 2.5D com 3D de verdade).
+- Limitar no minimapa a no máximo 3 pokémons "não descobertos" simultâneos.
+- Se o player não explorar um desses em até 2 minutos, esconder esse alvo novamente.
+- Ao reciclar/substituir alvo, preferir outra espécie próxima (se possível) para aumentar variedade de descoberta no Far Cry system.
 
 
 18) Construções por Pokémon e automação de base
@@ -318,3 +326,48 @@ My ideias organizadas por tópico
 - Foco em afeto, confiança e "meaningfulness" na relação humano–pokémon (não só barra cheia = capturou).
 - Sistema social robusto na mesma direção de Harvest Moon / Back to Nature (cotidiano, cuidado, rotina, consequência).
 - Implicação de design: crafting de comida/medicina e eventos sociais viram progressão de party tão importantes quanto combate.
+
+
+21) Menu de gerações ativas no ambiente
+---------------------------------------
+- Menu para configurar quais gerações de Pokémon estarão ativas no seu mundo de jogo.
+- Exemplo de presets: só Gen 1, Gen 1-2, Gen 1-3, National completo, ou combinações customizadas.
+- Impacta spawn/ecossistema/eventos para manter coerência com as gerações escolhidas.
+- Útil para challenge runs, nostalgia runs e testes de balanceamento por faixa de dex.
+
+
+22) Modo experimental de combate (Zelda camera + Smash-style %)
+--------------------------------------------------------------
+- Usar a câmera estilo "Zelda mode" como base para alguns encontros estilo Smash Bros (sandbox de experimentação de combate).
+- Mostrar porcentagem em cima de cada Pokémon nesse modo (HUD dedicado).
+- Dano aumenta a porcentagem em vez de "gastar HP" como métrica principal de pressão (HP pode existir como secundário ou só fora desse modo).
+- Porcentagem alta amplifica knockback/KO potential (curva de scaling configurável por espécie/peso).
+- Assistência de combo: se o jogo detectar uma linha de ricochete limpa (ex.: 1-2 árvores) para o alvo voltar ao attacker, executar automaticamente o ricochete para facilitar combos longos.
+
+
+23) Grab / Strength como ferramenta central (não só puzzle)
+-------------------------------------------------------------
+- Hoje o grab parece "underused" fora de puzzles; combinar com mais sistemas para virar identidade do gameplay.
+- Combate: arremessar objetos/pokémon, quebrar guarda, reposicionar inimigos, criar knockback assistido, abrir janelas de combo.
+- Exploração: puxar/empurrar obstáculos, ancorar em pontos, criar rampas temporárias, ativar alavancas físicas.
+- Social / Harvest: carregar recursos, entregar itens para NPC/pokémon, ajudar pokémon preso, montar pequenas rotinas de trabalho cooperativo.
+- Crafting / base: transportar ingredientes para processos, alimentar máquinas/construções, organizar stock com física leve.
+- Ecologia: mover detalhes do mapa (como já existe em ideias anteriores) para liberar memória / reorganizar habitat.
+
+
+24) Move de edição de terreno (quebrar + construir)
+----------------------------------------------------
+- Criar um move de Pokémon para alterar terreno de forma sistêmica.
+- Fluxo: primeiro quebrar o terreno e recalcular/autotesselar corretamente.
+- Depois permitir colocar blocos em qualquer lugar, inclusive empilhando blocos (stacking).
+- Bom caminho para validar e amadurecer a lógica de múltiplos níveis de altura (multi-height steps).
+- Candidato de espécie para fantasy/gameplay: Machamp (força para escavar, carregar e construir).
+
+
+25) Entidades como cards (modo experimental de representação)
+--------------------------------------------------------------
+- Em vez de renderizar pokémons/NPCs clássicos no mapa, experimentar entidades como "cards".
+- O mapa continua natural (terrain + natureza), mas as entidades aparecem como cartas no mundo.
+- Pode facilitar leitura estratégica (stats/estado/função) e acelerar prototipagem de sistemas sociais/combate.
+- Bom para testes de UX/clareza sem depender 100% de animação sprite em todas as interações.
+- Nota: isso é separado da ideia de "pokémon como carta" na mecânica de moves (ver tópico 11: limite de 2 ataques).

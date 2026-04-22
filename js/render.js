@@ -1228,7 +1228,7 @@ export function render(canvas, data, options = {}) {
     const grassEligibleSet = new Set();
     /** Pre-computed grass layers keyed by _tileKeyInt, avoids redundant getRoleForCell in drawGrass5aForCell. */
     const grassLayersMap = new Map();
-    {
+    if (lodDetail < 2) {
       const _mH = height * MACRO_TILE_STRIDE;
       const _mW = width * MACRO_TILE_STRIDE;
       for (let my = startY; my < endY; my++) {
