@@ -10,6 +10,7 @@ import { setEmotion } from './wild-motion-ai.js';
 import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 import { entitiesByKey } from './wild-core-state.js';
 import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
+import { markWildPokemonFainted } from './wild-pokemon-persistence.js';
 
 export function bindStandardWildTakeDamage(entity) {
   entity.takeDamage = function (amount) {
@@ -29,7 +30,9 @@ export function bindStandardWildTakeDamage(entity) {
       this.vx = 0;
       this.vy = 0;
       setEmotion(this, 9, true, 'Pain');
-      this.isDespawning = true;
+      // Persist faint: entity stays in the world (despawns naturally when out-of-window).
+      // The sync window will re-create it in fainted state on next visit.
+      markWildPokemonFainted(this.key);
       releaseWildGroupFollowersFromLeader(this, entitiesByKey);
     }
     this.hitFlashTimer = 0.2;

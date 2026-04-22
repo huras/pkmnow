@@ -15,6 +15,10 @@ import { getSunLightRaysTargetIntensity01 } from './sun-light-rays-layer.js';
 import { isWeatherPreset } from './weather-presets.js';
 import { wrapHours } from './world-time-of-day.js';
 import { getFogDiscoveredSnapshot, restoreFogDiscoveredFromSnapshot } from './play-vision-fog.js';
+import {
+  getFaintedPokemonSnapshot,
+  restoreFaintedPokemonFromSnapshot
+} from '../wild-pokemon/wild-pokemon-persistence.js';
 
 export const PLAY_SESSION_SAVE_VERSION = 2;
 const STORAGE_KEY = 'pkmn_play_session_save_v1';
@@ -343,6 +347,10 @@ export function tryApplyPlaySessionResumeOnEnter(data, playerRef, opts = {}) {
     restoreFogDiscoveredFromSnapshot(saved.fogDiscovered, data);
     did = true;
   }
+  if (saved.faintedWildPokemon) {
+    restoreFaintedPokemonFromSnapshot(saved.faintedWildPokemon);
+    did = true;
+  }
   if (applyPosition) {
     const px = Number(saved.player?.x);
     const py = Number(saved.player?.y);
@@ -437,6 +445,8 @@ export function buildPlaySessionSavePayload(data, playerRef, persistExtra = null
   out.moonlightEnabled = persistExtra?.moonlightEnabled !== false;
   const fogSnap = getFogDiscoveredSnapshot();
   if (fogSnap) out.fogDiscovered = fogSnap;
+  const faintedSnap = getFaintedPokemonSnapshot();
+  if (faintedSnap.length > 0) out.faintedWildPokemon = faintedSnap;
   return out;
 }
 

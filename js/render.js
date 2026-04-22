@@ -135,6 +135,8 @@ import { BIOME_TO_TERRAIN, TREE_TILES } from './biome-tiles.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { scatterItemKeyIsTree } from './scatter-pass2-debug.js';
 import { getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
+import { NORTH_CLIFF_EDGE_ROLES } from './walkability.js';
 import {
   speciesHasFlyingType,
   speciesHasSmoothLevitationFlight
@@ -1472,6 +1474,34 @@ export function render(canvas, data, options = {}) {
       };
     };
 
+    // Precompute NORTH-facing cliff edge tiles for per-entity depth overlay.
+    // These tiles (EDGE_N, OUT_NW, OUT_NE) must appear IN FRONT of entities at a lower heightStep
+    // but BEHIND entities at the same/higher heightStep.
+    const _cliffEdgeMap = new Map();
+    {
+      const _microW = data.width * MACRO_TILE_STRIDE;
+      const _microH = data.height * MACRO_TILE_STRIDE;
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          const tile = getCached(mx, my);
+          if (!tile || tile.heightStep < 1) continue;
+          const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+          const biomeSet = TERRAIN_SETS[biomeSetName];
+          if (!biomeSet) continue;
+          const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+          const role = getRoleForCell(my, mx, _microH, _microW, isAtOrAbove, biomeSet.type);
+          if (!NORTH_CLIFF_EDGE_ROLES.has(role)) continue;
+          const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
+          const imgPath = TessellationEngine.getImagePath(biomeSet.file);
+          const img = imageCache.get(imgPath);
+          if (!img) continue;
+          const spec = getConcConvATerrainTileSpec(biomeSet, role);
+          if (spec.tileId == null) continue;
+          _cliffEdgeMap.set(_tileKeyInt(mx, my), { mx, my, heightStep: tile.heightStep, img, cols, spec });
+        }
+      }
+    }
+
     // When the player stands on a tree canopy, split tree/scatter drawing:
     // trunks are drawn in sorted order, canopies of trees BEHIND the player are deferred
     // and flushed right before the player draws, so the player renders on top of them.
@@ -1701,6 +1731,30 @@ export function render(canvas, data, options = {}) {
         }
 
         ctx.restore();
+
+        // Per-entity cliff edge overlay: redraw north-facing cliff tiles that are at a
+        // HIGHER heightStep on top of this entity so it appears behind the cliff face.
+        if (_cliffEdgeMap.size > 0) {
+          const _entMx = Math.floor(item.x ?? 0);
+          const _entMy = Math.floor(item.y ?? 0);
+          const _entTile = getCached(_entMx, _entMy);
+          const _entH = _entTile?.heightStep ?? 0;
+          const _eLeft = item.cx - item.pivotX;
+          const _eTop = item.cy - item.pivotY;
+          const _tmxS = Math.max(startX, Math.floor(_eLeft / tileW));
+          const _tmyS = Math.max(startY, Math.floor(_eTop / tileH));
+          const _tmxE = Math.min(endX - 1, Math.floor((_eLeft + item.dw) / tileW));
+          const _tmyE = Math.min(endY - 1, Math.floor((_eTop + item.dh) / tileH));
+          for (let _ty = _tmyS; _ty <= _tmyE; _ty++) {
+            for (let _tx = _tmxS; _tx <= _tmxE; _tx++) {
+              const _ce = _cliffEdgeMap.get(_tileKeyInt(_tx, _ty));
+              if (!_ce || _ce.heightStep <= _entH) continue;
+              const _cpx = snapPx(_tx * tileW);
+              const _cpy = snapPx(_ty * tileH);
+              drawTerrainCellFromSheet(ctx, _ce.img, _ce.cols, 16, _ce.spec.tileId, _cpx, _cpy, tileW, tileH, _ce.spec.flipX);
+            }
+          }
+        }
       } else if (item.type === 'wildSpeechBubble' || item.type === 'playerSpeechBubble') {
         ctx.save();
         const spawnYOffset =

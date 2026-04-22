@@ -34,6 +34,8 @@ import {
 } from './wild-core-state.js';
 import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
 import { pushPlayEventLog } from '../main/play-event-log-state.js';
+import { getEvolutionFamily, getStageIndex, rollGroupMemberDex } from './wild-evolution-chains.js';
+import { isWildPokemonFainted } from './wild-pokemon-persistence.js';
 
 export const SKY_SPECIES = new Set([
   6, // Charizard
@@ -748,10 +750,25 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       _lodOffset: seededHashInt(slot.mx * 211 + slot.sx * 37, slot.my * 223 + slot.sy * 41, data.seed ^ 0x6c6f64) % 4
     };
     bindStandardWildTakeDamage(entity);
+
+    // ── Persistence: restore fainted state from prior session ──
+    const wasFainted = isWildPokemonFainted(entityKey);
+    if (wasFainted) {
+      entity.hp = 0;
+      entity.deadState = entity.animMeta?.faint ? 'faint' : 'sleep';
+      entity.deadTimer = 0;
+      entity.deadAnimTimer = 9999; // freeze at last frame of faint anim
+      entity.aiState = 'sleep';
+      entity.animMoving = false;
+      entity.emotionType = null;
+      entity.emotionPersist = false;
+      entity.spawnPhase = 1; // fully visible immediately
+    }
+
     entitiesByKey.set(entityKey, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
     probeSpriteCollabPortraitPrefix(dex).catch(() => {});
-    if (spawnSleep) ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
+    if (spawnSleep || wasFainted) ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
     void preloadPokemonCry(dex);
     return { spawnX: placed.spawnX, spawnY: placed.spawnY };
   }
@@ -777,8 +794,21 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const leaderPick = reserveEncounterPick(pickScopeKey, pool, basePick);
     const baseDex = encounterNameToDex(pool[leaderPick]);
     if (baseDex == null || !getPokemonConfig(baseDex)) continue;
+
+    // ── Evolution family: all group members belong to the same evolutionary line ──
+    const family = getEvolutionFamily(baseDex);
+    const encounterStageIdx = getStageIndex(baseDex, family);
+
     const bossRoll = rollBossPromotedDex(baseDex, slot.mx, slot.my, slot.sx, slot.sy, data.seed);
-    const leaderDex = bossRoll.dex;
+    let leaderDex;
+    if (bossRoll.isBoss) {
+      // Boss: keep the fully-evolved boss form
+      leaderDex = bossRoll.dex;
+    } else {
+      // Non-boss leader: roll evolution stage with leader weights (biased toward higher stages)
+      leaderDex = rollGroupMemberDex(family, encounterStageIdx, data.seed, slot.mx, slot.my, slot.sx, slot.sy, 0, true);
+      if (!getPokemonConfig(leaderDex)) leaderDex = baseDex; // fallback
+    }
     const pattern = rollGroupPattern(slot.mx, slot.my, slot.sx, slot.sy, data.seed);
     const leaderConfig = getPokemonConfig(leaderDex);
     const leaderBeh = getSpeciesBehavior(leaderDex);
@@ -855,18 +885,13 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       const companionEntityKey = buildGroupCompanionKey(slot.key, i + 1);
       if (entitiesByKey.has(companionEntityKey)) continue;
       let companionDex = leaderDex;
-      let companionPick = -1;
-      if (pattern.mixed && i === 0 && pool.length > 1) {
-        const mixedBasePick =
-          seededHashInt(cslot.mx * 451 + cslot.sx * 73, cslot.my * 463 + cslot.sy * 97, data.seed ^ SALT_GROUP) %
-          pool.length;
-        const mixedPick = reserveEncounterPick(pickScopeKey, pool, mixedBasePick, leaderPick);
-        const mixedDex = encounterNameToDex(pool[mixedPick]);
-        if (mixedDex != null && getPokemonConfig(mixedDex)) {
-          companionDex = mixedDex;
-          companionPick = mixedPick;
-        }
-      }
+      // ── Same evolutionary family, different stage ──
+      const rolledDex = rollGroupMemberDex(
+        family, encounterStageIdx, data.seed,
+        cslot.mx, cslot.my, cslot.sx, cslot.sy, i + 1, false
+      );
+      if (getPokemonConfig(rolledDex)) companionDex = rolledDex;
+      const companionPick = -1;
       const nextGroupPortraitDexIds = groupPortraitDexIds.concat([companionDex]);
       const ok = spawnEntityForSlot(cslot, biomeId, companionDex, {
         entityKey: companionEntityKey,
