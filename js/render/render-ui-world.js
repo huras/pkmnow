@@ -11,6 +11,114 @@ import { ENTITY_STAMINA_MAX } from '../entity-stamina.js';
 
 /**
  * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @param {number} r
+ */
+function roundRectPath(ctx, x, y, w, h, r) {
+  let rad = r;
+  if (w < 2 * rad) rad = w / 2;
+  if (h < 2 * rad) rad = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rad);
+  ctx.arcTo(x + w, y + h, x, y + h, rad);
+  ctx.arcTo(x, y + h, x, y, rad);
+  ctx.arcTo(x, y, x + w, y, rad);
+  ctx.closePath();
+}
+
+/**
+ * League-of-Legends–style meter: rounded shell, inset fill, vertical chunk ticks, soft gloss.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @param {number} hp01
+ * @param {{ hi: string, mid: string, lo: string }} fill
+ * @param {{ boss?: boolean }} [opts]
+ */
+function drawPokemonHpMeterBar(ctx, x, y, w, h, hp01, fill, opts = {}) {
+  const boss = !!opts.boss;
+  const r = Math.max(3, Math.floor(Math.min(h, w) * 0.42));
+  const inset = Math.max(2, Math.floor(h * 0.18));
+  const iw = Math.max(1, w - inset * 2);
+  const ih = Math.max(1, h - inset * 2);
+  const ix = x + inset;
+  const iy = y + inset;
+  const ir = Math.max(1.5, r - inset * 0.65);
+  const fillW = Math.max(0, Math.floor(iw * hp01));
+
+  if (boss) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 210, 120, 0.92)';
+    ctx.lineWidth = 2.5;
+    roundRectPath(ctx, x - 2, y - 2, w + 4, h + 4, r + 1.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(12, 14, 22, 0.92)';
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.fill();
+
+  ctx.save();
+  roundRectPath(ctx, ix, iy, iw, ih, ir);
+  ctx.clip();
+  const g = ctx.createLinearGradient(ix, iy, ix + iw, iy + ih);
+  g.addColorStop(0, fill.hi);
+  g.addColorStop(0.45, fill.mid);
+  g.addColorStop(1, fill.lo);
+  ctx.fillStyle = g;
+  ctx.fillRect(ix, iy, fillW, ih);
+  const gloss = ctx.createLinearGradient(ix, iy, ix, iy + ih);
+  gloss.addColorStop(0, 'rgba(255,255,255,0.22)');
+  gloss.addColorStop(0.5, 'rgba(255,255,255,0)');
+  gloss.addColorStop(1, 'rgba(0,0,0,0.12)');
+  ctx.fillStyle = gloss;
+  ctx.fillRect(ix, iy, fillW, ih);
+  ctx.restore();
+
+  const segments = Math.min(22, Math.max(5, Math.floor(iw / 9)));
+  ctx.save();
+  roundRectPath(ctx, ix, iy, iw, ih, ir);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(0,0,0,0.38)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < segments; i++) {
+    const sx = ix + (iw * i) / segments;
+    const px = Math.floor(sx) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(px, iy);
+    ctx.lineTo(px, iy + ih);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = boss ? 'rgba(255, 248, 220, 0.5)' : 'rgba(210, 218, 235, 0.55)';
+  ctx.lineWidth = boss ? 1.75 : 1.35;
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.stroke();
+}
+
+function wildPokemonHpBarMetrics(tileW, tileH, boss) {
+  const barW = Math.max(18, Math.floor(tileW * (boss ? 0.98 : 0.84)));
+  const barH = Math.max(9, Math.floor(tileH * (boss ? 0.16 : 0.145)));
+  const hpPad = boss ? 10 : 7;
+  return { barW, barH, hpPad };
+}
+
+function playerPokemonHpBarMetrics(tileW, tileH) {
+  const barW = Math.max(18, Math.floor(tileW * 0.9));
+  const barH = Math.max(9, Math.floor(tileH * 0.145));
+  return { barW, barH };
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
  */
 export function drawDetailHitHpBar(ctx, bar, tileW, tileH, snapPx) {
   const maxHp = Math.max(1, Number(bar.hpMax) || 1);
@@ -43,6 +151,92 @@ export function drawDetailHitPulse(ctx, pulse, tileW, tileH, snapPx) {
   ctx.beginPath();
   ctx.arc(px, py, r, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+/**
+ * Cheap “flashlight on grass” under the player on level-up: two screen-blended radials (no per-tile loop).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{
+ *   cx: number,
+ *   feetYPx: number,
+ *   levelUpGlowSec: number,
+ *   glowDurationSec: number,
+ *   tileW: number,
+ *   alphaMul?: number
+ * }} p
+ */
+export function drawPlayerLevelUpTerrainGlow(ctx, p) {
+  const dur = Math.max(0.001, Number(p.glowDurationSec) || 0.7);
+  const t = Math.max(0, Number(p.levelUpGlowSec) || 0);
+  const glow01 = Math.max(0, Math.min(1, t / dur));
+  if (glow01 <= 0.004) return;
+  const cx = p.cx;
+  const fy = p.feetYPx;
+  const tileW = Math.max(1, Number(p.tileW) || 32);
+  const alphaMul = Math.max(0, Math.min(1, Number(p.alphaMul) ?? 1));
+  // Slight overshoot at the very start, then decay (feels like a burst + lingering spill).
+  const pulse = glow01 * (1 + 0.22 * (1 - glow01));
+  const a0 = 0.26 * pulse * alphaMul;
+  const a1 = 0.1 * pulse * alphaMul;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  const drawPool = (scaleY, rMul, innerA, midA) => {
+    ctx.save();
+    ctx.translate(cx, fy);
+    ctx.scale(1, scaleY);
+    const r = tileW * rMul * (0.92 + 0.14 * glow01);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, `rgba(255,255,252,${innerA})`);
+    g.addColorStop(0.38, `rgba(255,248,228,${midA})`);
+    g.addColorStop(1, 'rgba(255,236,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  drawPool(0.36, 2.15, a0 * 1.05, a0 * 0.42);
+  drawPool(0.5, 3.25, a1 * 0.75, a1 * 0.35);
+
+  ctx.restore();
+}
+
+/**
+ * Additive white pass over the player sprite (clipped when partially buried).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {CanvasImageSource} sheet
+ * @param {{
+ *   sx: number, sy: number, sw: number, sh: number,
+ *   dx: number, dy: number, dw: number, dh: number,
+ *   levelUpGlowSec: number, glowDurationSec: number, alphaMul?: number,
+ *   clip?: { x: number, y: number, w: number, h: number } | null
+ * }} o
+ */
+export function drawPlayerLevelUpSpriteGlow(ctx, sheet, o) {
+  const dur = Math.max(0.001, Number(o.glowDurationSec) || 0.7);
+  const t = Math.max(0, Number(o.levelUpGlowSec) || 0);
+  const glow01 = Math.max(0, Math.min(1, t / dur));
+  if (glow01 <= 0.004) return;
+  const alphaMul = Math.max(0, Math.min(1, Number(o.alphaMul) ?? 1));
+  const a = alphaMul * (0.38 + 0.52 * glow01);
+
+  ctx.save();
+  if (o.clip && o.clip.w > 1 && o.clip.h > 1) {
+    ctx.beginPath();
+    ctx.rect(o.clip.x, o.clip.y, o.clip.w, o.clip.h);
+    ctx.clip();
+  }
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = a;
+  ctx.filter = 'brightness(2.35) saturate(0) contrast(1.05)';
+  ctx.drawImage(sheet, o.sx, o.sy, o.sw, o.sh, o.dx, o.dy, o.dw, o.dh);
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
 }
 
 /**
@@ -194,39 +388,47 @@ export function drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH) {
   if (!Number.isFinite(item.hp) || !Number.isFinite(item.maxHp) || item.maxHp <= 0) return;
   const hp01 = Math.max(0, Math.min(1, item.hp / item.maxHp));
   const boss = !!item.isBoss;
-  const barW = Math.max(16, Math.floor(tileW * (boss ? 0.98 : 0.82)));
-  const barH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
+  const { barW, barH, hpPad } = wildPokemonHpBarMetrics(tileW, tileH, boss);
   const x = Math.floor(item.cx - barW * 0.5);
-  const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - (boss ? 8 : 6));
+  const y = Math.floor(item.cy - item.pivotY + spawnYOffset - barH - hpPad);
+  const wildLv = Math.max(1, Math.floor(Number(item.level) || 1));
+  const lvText = `Lv.${wildLv}`;
+  const lvBaselineY = y + barH - Math.max(2, Math.floor(barH * 0.2));
+  const fill =
+    boss && hp01 > 0.5
+      ? { hi: '#b8f6ff', mid: '#62d9f0', lo: '#2aa8c4' }
+      : hp01 > 0.5
+        ? { hi: '#a6ffba', mid: '#52e070', lo: '#2a9c45' }
+        : hp01 > 0.22
+          ? { hi: '#ffe9a0', mid: '#f0c23a', lo: '#c48a12' }
+          : { hi: '#ffb3b3', mid: '#f05555', lo: '#b02028' };
+  drawPokemonHpMeterBar(ctx, x, y, barW, barH, hp01, fill, { boss });
+  {
+    const lvFont = Math.max(12, Math.floor(tileH * 0.172));
+    ctx.save();
+    ctx.font = `${lvFont}px 'JetBrains Mono',ui-monospace,monospace`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = Math.max(1.5, Math.ceil(lvFont * 0.11));
+    ctx.strokeStyle = 'rgba(0,0,0,0.58)';
+    ctx.strokeText(lvText, x - 3, lvBaselineY);
+    ctx.fillStyle = boss ? 'rgba(255,232,160,0.95)' : 'rgba(240,248,255,0.92)';
+    ctx.fillText(lvText, x - 3, lvBaselineY);
+    ctx.restore();
+  }
   if (item.sexHud) {
-    const fontPx = Math.max(9, Math.floor(tileH * 0.14));
+    const fontPx = Math.max(13, Math.floor(tileH * 0.2));
     ctx.save();
     ctx.font = `${fontPx}px 'JetBrains Mono',ui-monospace,monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = Math.max(2, Math.ceil(fontPx * 0.12));
     ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.strokeText(item.sexHud, item.cx, y - 1);
+    ctx.strokeText(item.sexHud, item.cx, y - 2);
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(item.sexHud, item.cx, y - 1);
+    ctx.fillText(item.sexHud, item.cx, y - 2);
     ctx.restore();
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
-  if (boss) {
-    ctx.strokeStyle = 'rgba(255, 210, 120, 0.95)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x - 2, y - 2, barW + 4, barH + 4);
-  }
-  ctx.fillStyle =
-    boss && hp01 > 0.5
-      ? '#7ee8ff'
-      : hp01 > 0.5
-        ? '#63e86f'
-        : hp01 > 0.22
-          ? '#ffd54a'
-          : '#ff6363';
-  ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
 }
 
 /**
@@ -240,18 +442,46 @@ export function drawPlayerHpBar(ctx, item, spawnYOffset, tileW, tileH) {
   if (!Number.isFinite(hpRaw)) return;
   const hp = Math.max(0, Math.min(maxHp, hpRaw));
   const hp01 = hp / maxHp;
-  const barW = Math.max(16, Math.floor(tileW * 0.9));
-  const barH = Math.max(4, Math.floor(tileH * 0.1));
+  const { barW, barH } = playerPokemonHpBarMetrics(tileW, tileH);
   const x = Math.floor(item.cx - barW * 0.5);
   const baseTop = item.cy - item.pivotY + spawnYOffset;
   const staminaH = Math.max(3, Math.floor(tileH * 0.085));
+  const expH = Math.max(3, Math.floor(tileH * 0.07));
   const gap = 2;
-  const y = Math.floor(baseTop - 6 - staminaH - gap - barH);
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  const y = Math.floor(baseTop - 6 - staminaH - gap - expH - gap - barH);
+  const fill =
+    hp01 > 0.5
+      ? { hi: '#a6ffba', mid: '#52e070', lo: '#2a9c45' }
+      : hp01 > 0.22
+        ? { hi: '#ffe9a0', mid: '#f0c23a', lo: '#c48a12' }
+        : { hi: '#ffb3b3', mid: '#f05555', lo: '#b02028' };
+  drawPokemonHpMeterBar(ctx, x, y, barW, barH, hp01, fill, { boss: false });
+}
+
+/**
+ * Player world EXP strip. Drawn between HP and stamina bars.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ cx: number, cy: number, pivotY: number, exp?: number, expToNext?: number }} item
+ */
+export function drawPlayerExpBar(ctx, item, spawnYOffset, tileW, tileH) {
+  const need = Math.max(1, Math.floor(Number(item.expToNext) || 100));
+  const expRaw = Number(item.exp);
+  if (!Number.isFinite(expRaw)) return;
+  const exp = Math.max(0, Math.min(need, expRaw));
+  const exp01 = exp / need;
+  const barW = Math.max(14, Math.floor(tileW * 0.86));
+  const barH = Math.max(3, Math.floor(tileH * 0.07));
+  const x = Math.floor(item.cx - barW * 0.5);
+  const baseTop = item.cy - item.pivotY + spawnYOffset;
+  const staminaH = Math.max(3, Math.floor(tileH * 0.085));
+  const { barH: hpH } = playerPokemonHpBarMetrics(tileW, tileH);
+  const gap = 2;
+  const y = Math.floor(baseTop - 6 - staminaH - gap - barH - gap - hpH);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
-  ctx.fillStyle = hp01 > 0.5 ? '#63e86f' : hp01 > 0.22 ? '#ffd54a' : '#ff6363';
-  ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
-  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillStyle = '#6ca1ff';
+  ctx.fillRect(x, y, Math.max(0, Math.floor(barW * exp01)), barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x, y, barW, barH);
 }
@@ -272,8 +502,8 @@ export function drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH) {
   const barH = Math.max(3, Math.floor(tileH * (item.type === 'player' ? 0.085 : 0.06)));
   const x = Math.floor(item.cx - barW * 0.5);
   const baseTop = item.cy - item.pivotY + spawnYOffset;
-  const hpBarH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
-  const hpPad = boss ? 8 : 6;
+  const { barH: hpBarH, hpPad } =
+    item.type === 'wild' ? wildPokemonHpBarMetrics(tileW, tileH, boss) : { barH: 0, hpPad: 0 };
   const gap = 2;
   const y =
     item.type === 'wild'

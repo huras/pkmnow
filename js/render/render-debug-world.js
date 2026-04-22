@@ -2088,12 +2088,17 @@ export function drawFieldCombatChargeBar(ctx, options) {
   const slotLab = snap.slot === 'l' ? 'LMB' : snap.slot === 'r' ? 'RMB' : 'MMB';
   const moveLab =
     snap.moveId === 'cut' ? 'Cut' : snap.moveId === 'tackle' ? 'Tackle' : getBindableMoveLabel(snap.moveId);
-  const barW = Math.min(isEarthquake ? 380 : 340, cw * 0.52);
-  const barH = 14;
-  const gap = 3;
-  const pad = 2;
+  const scale = Math.min(1.9, Math.max(1.12, ch / 450, cw / 1280));
+  const barW = Math.min(
+    Math.round((isEarthquake ? 400 : 360) * Math.min(scale, 1.32)),
+    cw * 0.6
+  );
+  const barH = Math.max(20, Math.round(16 * scale));
+  const gap = Math.max(2, Math.round(3 * scale));
+  const pad = Math.max(2, Math.round(2 * scale));
+  const labelPx = Math.min(28, Math.max(18, Math.round(14 * scale)));
   const px0 = (cw - barW) * 0.5;
-  const py0 = ch - 108;
+  const py0 = ch - Math.round(132 + barH * 0.55 + labelPx);
   const label = `${slotLab} · ${moveLab}  L${lvl}  ${Math.round(p * 100)}%`;
   const nSeg = isEarthquake ? 5 : 4;
   const segW = (barW - pad * 2 - gap * (nSeg - 1)) / nSeg;
@@ -2104,9 +2109,9 @@ export function drawFieldCombatChargeBar(ctx, options) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.strokeStyle = 'rgba(255,255,255,0.88)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = Math.max(2, Math.round(2 * scale));
   ctx.beginPath();
-  const outerR = 8;
+  const outerR = Math.min(11, Math.max(6, Math.round(barH * 0.48)));
   ctx.moveTo(px0 + outerR, py0);
   ctx.arcTo(px0 + barW, py0, px0 + barW, py0 + barH, outerR);
   ctx.arcTo(px0 + barW, py0 + barH, px0, py0 + barH, outerR);
@@ -2122,7 +2127,7 @@ export function drawFieldCombatChargeBar(ctx, options) {
     const pn = progresses[i];
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.beginPath();
-    const ir = Math.min(5, sh / 2);
+    const ir = Math.min(6, sh / 2);
     ctx.moveTo(sx + ir, sy);
     ctx.arcTo(sx + segW, sy, sx + segW, sy + sh, ir);
     ctx.arcTo(sx + segW, sy + sh, sx, sy + sh, ir);
@@ -2162,12 +2167,13 @@ export function drawFieldCombatChargeBar(ctx, options) {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = '600 11px system-ui,Segoe UI,sans-serif';
+  ctx.font = `600 ${labelPx}px system-ui,Segoe UI,sans-serif`;
   ctx.fillStyle = 'rgba(225,240,255,0.92)';
   ctx.strokeStyle = 'rgba(0,20,40,0.55)';
-  ctx.lineWidth = 3;
-  ctx.strokeText(label, cw * 0.5, py0 + barH + 5);
-  ctx.fillText(label, cw * 0.5, py0 + barH + 5);
+  ctx.lineWidth = Math.max(3, Math.round(labelPx * 0.24));
+  const labelY = py0 + barH + Math.round(6 * scale);
+  ctx.strokeText(label, cw * 0.5, labelY);
+  ctx.fillText(label, cw * 0.5, labelY);
   ctx.restore();
 }
 

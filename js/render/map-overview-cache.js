@@ -270,7 +270,7 @@ export function drawCachedMapOverview(ctx, params) {
 
     if (overlayGraph && graph?.nodes) {
       const nodeR = Math.max(4, Math.min(11, scale * 0.55));
-      const labelPx = Math.max(10, Math.min(20, scale * 0.9));
+      const labelPx = Math.max(12, Math.min(26, scale * 1.08));
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';

@@ -50,6 +50,7 @@ import { advancePlayerSpeechBubble, setPlayerSpeechBubble } from './social/speec
 import { playJumpSfx } from './audio/jump-sfx.js';
 import { advanceFootFloorStepsForDistance } from './audio/foot-floor-sfx.js';
 import { playFloorHit2Sfx } from './audio/floor-hit-2-sfx.js';
+import { playPlayerLevelUpFanfareSfx } from './audio/player-level-up-fanfare-sfx.js';
 import { advanceRainFootstepFxForDistance } from './weather/rain-footstep-fx.js';
 import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
 import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.js';
@@ -120,6 +121,9 @@ const TACKLE_VISUAL_DEPTH_Y_SCALE = 0.72;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
 const PLAYER_INFINITE_LIFE_KEY = 'pkmn_player_infinite_life';
+const PLAYER_BASE_EXP_TO_NEXT = 100;
+/** World + sprite white glow duration after leveling up (seconds). */
+export const PLAYER_LEVEL_UP_GLOW_SEC = 0.7;
 /** Default species when nothing valid is stored (Charmander). */
 const DEFAULT_PLAYER_DEX_ID = 4;
 const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
@@ -170,6 +174,12 @@ export const player = {
   /** Play mode: HP when hit by wild projectiles. */
   hp: 100,
   maxHp: 100,
+  /** Progression: player starts at Lv.1 and levels as EXP reaches threshold. */
+  level: 1,
+  exp: 0,
+  expToNext: PLAYER_BASE_EXP_TO_NEXT,
+  /** Seconds remaining: cheap white glow + terrain light on level-up. */
+  levelUpGlowSec: 0,
   /** Default enabled: keep HP intact while still applying hit feedback/knockback. */
   infiniteLife: initialInfiniteLife,
   /** Sprint / wild sprint-speed drain; regens when not draining. */
@@ -490,6 +500,42 @@ export function setPlayerInfiniteLifeEnabled(enabled) {
   }
 }
 
+function sanitizePlayerExpToNext(value) {
+  const n = Math.floor(Number(value) || 0);
+  return Math.max(1, n || PLAYER_BASE_EXP_TO_NEXT);
+}
+
+function sanitizePlayerLevel(value) {
+  const n = Math.floor(Number(value) || 1);
+  return Math.max(1, n);
+}
+
+export function getPlayerExpProgress01() {
+  const need = sanitizePlayerExpToNext(player.expToNext);
+  const cur = Math.max(0, Number(player.exp) || 0);
+  return Math.max(0, Math.min(1, cur / need));
+}
+
+export function gainPlayerExp(amount) {
+  const add = Math.max(0, Number(amount) || 0);
+  if (add <= 0) return { gained: 0, levelsGained: 0, leveledUp: false };
+  player.level = sanitizePlayerLevel(player.level);
+  player.expToNext = sanitizePlayerExpToNext(player.expToNext);
+  player.exp = Math.max(0, Number(player.exp) || 0) + add;
+  let levelsGained = 0;
+  while (player.exp >= player.expToNext) {
+    player.exp -= player.expToNext;
+    player.level += 1;
+    levelsGained += 1;
+  }
+  if (levelsGained > 0) {
+    playPlayerLevelUpFanfareSfx(player);
+    const prev = Math.max(0, Number(player.levelUpGlowSec) || 0);
+    player.levelUpGlowSec = Math.max(prev, PLAYER_LEVEL_UP_GLOW_SEC);
+  }
+  return { gained: add, levelsGained, leveledUp: levelsGained > 0 };
+}
+
 /** @param {number} dt */
 export function updatePlayerCombatTimers(dt) {
   if (player.projIFrameSec > 0) player.projIFrameSec = Math.max(0, player.projIFrameSec - dt);
@@ -500,6 +546,8 @@ export function updatePlayerCombatTimers(dt) {
   if (player.cutThirdHitLockoutSec > 0) {
     player.cutThirdHitLockoutSec = Math.max(0, player.cutThirdHitLockoutSec - dt);
   }
+  const lu = Number(player.levelUpGlowSec) || 0;
+  if (lu > 0) player.levelUpGlowSec = Math.max(0, lu - dt);
 }
 
 /** Toggle creative flight (Flying-type species only). Called from play keyboard (e.g. KeyF). */

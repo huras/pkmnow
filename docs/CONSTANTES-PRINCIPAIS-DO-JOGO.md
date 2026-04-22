@@ -105,7 +105,7 @@ Fonte: `js/render/render-constants.js`.
 
 Fonte: `js/wild-pokemon/wild-pokemon-constants.js`.
 
-- `WILD_MACRO_SUBDIVISION = 1.1`
+- `WILD_MACRO_SUBDIVISION = 0.25`
   - Subdivisao das celulas macro para slots de spawn.
   - Impacta densidade espacial de pontos de spawn dentro de cada macro-celula.
 

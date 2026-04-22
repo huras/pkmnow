@@ -362,15 +362,25 @@ export class CharacterSelector {
     const fillEl = this.container?.querySelector('#player-hp-hud-fill');
     const valueEl = this.container?.querySelector('#player-hp-hud-value');
     const hudEl = this.container?.querySelector('#player-hp-hud');
-    if (!fillEl || !valueEl || !hudEl) return;
+    const expFillEl = this.container?.querySelector('#player-exp-hud-fill');
+    const expValueEl = this.container?.querySelector('#player-exp-hud-value');
+    const expLevelEl = this.container?.querySelector('#player-exp-hud-level');
+    if (!fillEl || !valueEl || !hudEl || !expFillEl || !expValueEl || !expLevelEl) return;
     const maxHp = Math.max(1, Number(player.maxHp) || 100);
     const hpRaw = Number(player.hp);
     const hp = Math.max(0, Math.min(maxHp, Number.isFinite(hpRaw) ? hpRaw : maxHp));
     const hp01 = hp / maxHp;
+    const level = Math.max(1, Math.floor(Number(player.level) || 1));
+    const expToNext = Math.max(1, Math.floor(Number(player.expToNext) || 100));
+    const exp = Math.max(0, Math.min(expToNext, Number(player.exp) || 0));
+    const exp01 = exp / expToNext;
     valueEl.textContent = `${Math.round(hp)}/${Math.round(maxHp)}`;
     fillEl.style.width = `${(hp01 * 100).toFixed(1)}%`;
     hudEl.classList.toggle('player-hp-hud--warn', hp01 <= 0.52 && hp01 > 0.24);
     hudEl.classList.toggle('player-hp-hud--danger', hp01 <= 0.24);
+    expLevelEl.textContent = `Lv.${level}`;
+    expValueEl.textContent = `${Math.round(exp)}/${Math.round(expToNext)}`;
+    expFillEl.style.width = `${(exp01 * 100).toFixed(1)}%`;
   }
 
   /** Clears move cooldown UI (e.g. when leaving play mode). */
@@ -561,6 +571,15 @@ export class CharacterSelector {
               </div>
               <div class="player-hp-hud__bar">
                 <div class="player-hp-hud__fill" id="player-hp-hud-fill"></div>
+              </div>
+            </div>
+            <div class="player-exp-hud" id="player-exp-hud" aria-label="Player EXP">
+              <div class="player-exp-hud__row">
+                <span class="player-exp-hud__label" id="player-exp-hud-level">Lv.1</span>
+                <span class="player-exp-hud__value" id="player-exp-hud-value">0/100</span>
+              </div>
+              <div class="player-exp-hud__bar">
+                <div class="player-exp-hud__fill" id="player-exp-hud-fill"></div>
               </div>
             </div>
           </div>

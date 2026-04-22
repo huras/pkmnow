@@ -518,6 +518,53 @@
   background: linear-gradient(180deg, #ff9a80, #dc4a4a);
 }
 
+.player-exp-hud {
+  margin-top: 4px;
+  width: 100%;
+  padding: 4px 6px 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(138, 176, 255, 0.22);
+  background: linear-gradient(180deg, rgba(14, 20, 40, 0.62), rgba(9, 12, 24, 0.78));
+}
+
+.player-exp-hud__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.player-exp-hud__label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(182, 216, 255, 0.94);
+}
+
+.player-exp-hud__value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: rgba(236, 246, 255, 0.95);
+}
+
+.player-exp-hud__bar {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(18, 27, 41, 0.95);
+  background: rgba(8, 13, 24, 0.96);
+  overflow: hidden;
+}
+
+.player-exp-hud__fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(180deg, #88b8ff, #4f7fe3);
+  transition: width 110ms linear;
+}
+
 .result-types {
   display: flex;
   gap: 4px;
@@ -623,7 +670,7 @@
 }
 
 .player-moves-title {
-  font-size: 0.72rem;
+  font-size: 0.84rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -641,7 +688,7 @@
   border: 1px solid rgba(127, 187, 255, 0.36);
   background: rgba(24, 44, 68, 0.42);
   color: rgba(221, 238, 255, 0.9);
-  font-size: 0.66rem;
+  font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -660,7 +707,7 @@
 
 .player-field-charge__bar {
   width: 100%;
-  height: 8px;
+  height: 11px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
@@ -806,7 +853,7 @@
 }
 
 .player-field-charge__label {
-  font-size: 0.58rem;
+  font-size: 0.78rem;
   color: rgba(225, 240, 255, 0.92);
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -914,7 +961,7 @@
   align-items: center;
   justify-content: center;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #f5f8ff;
@@ -925,7 +972,7 @@
 
 .move-slot__key {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.52rem;
+  font-size: 0.64rem;
   font-weight: 800;
   color: #9fd4ff;
   text-align: center;
@@ -936,7 +983,7 @@
 
 .move-slot__name {
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 0.56rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: rgba(235, 244, 255, 0.92);
   text-align: center;

@@ -24,7 +24,8 @@ import { rollNature } from './wild-natures.js';
 import {
   GRASS_WALK_HOSTILE_AGGRO_SEC,
   WILD_MACRO_SUBDIVISION,
-  WILD_MAX_SIMULTANEOUS_SLOTS
+  WILD_MAX_SIMULTANEOUS_SLOTS,
+  WILD_MIN_INTER_GROUP_CENTER_DIST
 } from './wild-pokemon-constants.js';
 import { bindStandardWildTakeDamage } from './wild-entity-factory.js';
 import {
@@ -111,7 +112,7 @@ const GROUP_COHESION_SEC_MIN = 10.0;
 const GROUP_COHESION_SEC_EXTRA = 8.0;
 const GROUP_SLOT_MAX_DIST_MIN = 24.0;
 const GROUP_SLOT_MAX_DIST_MAX = 72.0;
-const GROUP_MEMBER_MAX_DIST_MACRO_TILES = 0.9;
+const GROUP_MEMBER_MAX_DIST_MACRO_TILES = 0.5;
 const GROUP_MEMBER_MAX_SPAWN_DIST = GROUP_MEMBER_MAX_DIST_MACRO_TILES * MACRO_TILE_STRIDE;
 
 /**
@@ -120,7 +121,7 @@ const GROUP_MEMBER_MAX_SPAWN_DIST = GROUP_MEMBER_MAX_DIST_MACRO_TILES * MACRO_TI
  * Set `MIN = 2` to disallow solo spawns from the roller (singles from weights become pairs).
  */
 export const WILD_GROUP_SIZE_MIN = 3;
-export const WILD_GROUP_SIZE_MAX = 5;
+export const WILD_GROUP_SIZE_MAX = 9;
 
 const GROUP_SIZE_CLAMP_LO = Math.max(1, Math.min(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
 const GROUP_SIZE_CLAMP_HI = Math.max(GROUP_SIZE_CLAMP_LO, Math.max(WILD_GROUP_SIZE_MIN, WILD_GROUP_SIZE_MAX));
@@ -218,6 +219,37 @@ function resolveSpawnTypeAt(data, dex, spawnX, spawnY) {
   return 'land';
 }
 
+/**
+ * Solo wild or pack leader (one anchor per group for inter-pack spacing).
+ * @param {object | null | undefined} ent
+ */
+function isWildSlotAnchorForInterGroupSpacing(ent) {
+  if (!ent || ent.isDespawning) return false;
+  if (isDebugSummonKey(ent.key)) return false;
+  if (ent.groupId) return String(ent.groupLeaderKey || '') === String(ent.key || '');
+  return true;
+}
+
+/**
+ * @param {number} cx
+ * @param {number} cy
+ * @param {Map<string, object>} entitiesMap
+ * @param {number} minDistSq
+ */
+function interGroupSlotCenterClear(cx, cy, entitiesMap, minDistSq) {
+  if (!(minDistSq > 0)) return true;
+  for (const ent of entitiesMap.values()) {
+    if (!isWildSlotAnchorForInterGroupSpacing(ent)) continue;
+    const ox = Number(ent.centerX);
+    const oy = Number(ent.centerY);
+    if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue;
+    const dx = ox - cx;
+    const dy = oy - cy;
+    if (dx * dx + dy * dy < minDistSq) return false;
+  }
+  return true;
+}
+
 function findCompanionSlotCandidates(leaderSlot, neededSlots, claimedKeys, entitiesMap, maxDistSq) {
   const out = [];
   for (const s of neededSlots) {
@@ -272,6 +304,18 @@ export function findWalkableWildSpawnNear(data, dex, ox, oy) {
 }
 
 const SALT_GRASS_HOSTILE_BOSS = 0x67826173;
+const WILD_DEFAULT_LEVEL = 1;
+const WILD_BOSS_LEVEL = 3;
+
+function sanitizeWildLevel(value, fallback = WILD_DEFAULT_LEVEL) {
+  const n = Math.floor(Number(value) || 0);
+  if (n > 0) return n;
+  return Math.max(1, Math.floor(Number(fallback) || WILD_DEFAULT_LEVEL));
+}
+
+function resolveWildLevelForCombat(combat) {
+  return sanitizeWildLevel(combat?.level, combat?.isBoss ? WILD_BOSS_LEVEL : WILD_DEFAULT_LEVEL);
+}
 
 /**
  * @param {object} data
@@ -280,7 +324,7 @@ const SALT_GRASS_HOSTILE_BOSS = 0x67826173;
  * @param {number} dex
  * @param {string} key
  * @param {number} sexSalt
- * @param {{ wildTempAggressiveSec: number, hp: number, maxHp: number, isBoss: boolean, wildGrassHostileDeathBattle?: boolean }} combat
+ * @param {{ wildTempAggressiveSec: number, hp: number, maxHp: number, isBoss: boolean, level?: number, wildGrassHostileDeathBattle?: boolean }} combat
  */
 function registerDebugStyleWildAtPosition(data, spawnX, spawnY, dex, key, sexSalt, combat) {
   const w = data.width;
@@ -323,6 +367,7 @@ function registerDebugStyleWildAtPosition(data, spawnX, spawnY, dex, key, sexSal
     vx: 0,
     vy: 0,
     dexId: dex,
+    level: resolveWildLevelForCombat(combat),
     nature: rollNature(key, data.seed),
     sex,
     provoked01: 0,
@@ -644,7 +689,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
    * @param {{ key: string, mx: number, my: number, sx: number, sy: number, centerX: number, centerY: number }} slot
    * @param {number} biomeId
    * @param {number} dex
-   * @param {{ entityKey?: string, pickIndex: number, hp: number, maxHp: number, isBoss: boolean, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null, groupAnchorX?: number | null, groupAnchorY?: number | null, groupMaxSpawnDist?: number | null, groupExistingPoints?: Array<{ x: number, y: number }> | null }} meta
+   * @param {{ entityKey?: string, pickIndex: number, hp: number, maxHp: number, isBoss: boolean, level?: number, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null, groupAnchorX?: number | null, groupAnchorY?: number | null, groupMaxSpawnDist?: number | null, groupExistingPoints?: Array<{ x: number, y: number }> | null }} meta
    */
   function spawnEntityForSlot(slot, biomeId, dex, meta) {
     const placed = maybeFindWalkableSpawn(
@@ -687,6 +732,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       vx: 0,
       vy: 0,
       dexId: dex,
+      level: sanitizeWildLevel(meta.level, meta.isBoss ? WILD_BOSS_LEVEL : WILD_DEFAULT_LEVEL),
       nature: rollNature(slot.key, data.seed),
       sex,
       provoked01: 0,
@@ -781,6 +827,14 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       claimedKeys.add(slot.key);
       continue;
     }
+    const interMin = Math.max(0, Number(WILD_MIN_INTER_GROUP_CENTER_DIST) || 0);
+    const interMinSq = interMin > 0 ? interMin * interMin : 0;
+    if (
+      interMinSq > 0 &&
+      !interGroupSlotCenterClear(Number(slot.centerX) || 0, Number(slot.centerY) || 0, entitiesByKey, interMinSq)
+    ) {
+      continue;
+    }
     const biomeId = data.biomes[slot.my * w + slot.mx];
     const pool = getEncounters(biomeId);
     if (!Array.isArray(pool) || pool.length === 0) continue;
@@ -859,6 +913,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       hp: bossRoll.hp,
       maxHp: bossRoll.maxHp,
       isBoss: !!bossRoll.isBoss,
+      level: bossRoll.isBoss ? WILD_BOSS_LEVEL : WILD_DEFAULT_LEVEL,
       groupId,
       groupLeaderKey: groupId ? slot.key : null,
       groupMemberIndex: 0,
@@ -899,6 +954,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         hp: 50,
         maxHp: 50,
         isBoss: false,
+        level: WILD_DEFAULT_LEVEL,
         groupId,
         groupLeaderKey: groupId ? slot.key : null,
         groupMemberIndex: i + 1,

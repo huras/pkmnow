@@ -63,8 +63,11 @@ import {
   drawWildEmotionOverlay,
   drawWildHpBar,
   drawPlayerHpBar,
+  drawPlayerExpBar,
   drawEntityStaminaBar,
-  drawInventoryGroundDropPreview
+  drawInventoryGroundDropPreview,
+  drawPlayerLevelUpTerrainGlow,
+  drawPlayerLevelUpSpriteGlow
 } from './render/render-ui-world.js';
 import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
@@ -160,7 +163,7 @@ import {
 import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
 import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
-import { PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
+import { PLAYER_FLIGHT_MAX_Z_TILES, PLAYER_LEVEL_UP_GLOW_SEC } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { getHoveredWildGroupEntityKey } from './main/wild-groups-hover-state.js';
@@ -1559,6 +1562,17 @@ export function render(canvas, data, options = {}) {
         ctx.ellipse(item.cx, _shadowBaseY, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
+        if (item.type === 'player' && (item.levelUpGlowSec ?? 0) > 0.001) {
+          drawPlayerLevelUpTerrainGlow(ctx, {
+            cx: item.cx,
+            feetYPx: _shadowBaseY,
+            levelUpGlowSec: item.levelUpGlowSec,
+            glowDurationSec: PLAYER_LEVEL_UP_GLOW_SEC,
+            tileW,
+            alphaMul: alpha
+          });
+        }
+
         const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
         const tackleOx = item.type === 'player' ? (item.tackleOffPx || 0) : 0;
         const tackleOy = item.type === 'player' ? (item.tackleOffPy || 0) : 0;
@@ -1580,17 +1594,37 @@ export function render(canvas, data, options = {}) {
         if (item.type === 'wild' && item.hitFlashTimer > 0) ctx.filter = 'brightness(5) contrast(2) sepia(1) hue-rotate(-50deg)';
         let shineClipTop = pxT0;
         let shineClipH = pxH;
+        /** @type {{ x: number, y: number, w: number, h: number } | null} */
+        let levelUpSpriteClip = null;
         if (bury > 0.004) {
           const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
           const pxT = snapPx(pxT0 + (pxH - visH));
           shineClipTop = pxT;
           shineClipH = visH;
+          levelUpSpriteClip = { x: pxL, y: pxT, w: pxW, h: visH };
           ctx.save();
           ctx.beginPath(); ctx.rect(pxL, pxT, pxW, visH); ctx.clip();
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
           ctx.restore();
         } else {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
+        }
+
+        if (item.type === 'player' && (item.levelUpGlowSec ?? 0) > 0.001) {
+          drawPlayerLevelUpSpriteGlow(ctx, item.sheet, {
+            sx: item.sx,
+            sy: item.sy,
+            sw: item.sw,
+            sh: item.sh,
+            dx: pxL,
+            dy: pxT0,
+            dw: pxW,
+            dh: pxH,
+            levelUpGlowSec: item.levelUpGlowSec,
+            glowDurationSec: PLAYER_LEVEL_UP_GLOW_SEC,
+            alphaMul: alpha,
+            clip: levelUpSpriteClip
+          });
         }
 
         if (item.type === 'player') {
@@ -1637,6 +1671,7 @@ export function render(canvas, data, options = {}) {
         }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
         if (item.type === 'player') drawPlayerHpBar(ctx, item, spawnYOffset, tileW, tileH);
+        if (item.type === 'player') drawPlayerExpBar(ctx, item, spawnYOffset, tileW, tileH);
         drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);
 
 

@@ -534,11 +534,13 @@ export function analyzeScatterPass2Base(mx, my, data) {
 export function scatterItemKeyIsSolid(itemKey) {
   if (!itemKey) return false;
   const k = itemKey.toLowerCase();
+  if (k.includes('jungly tall grass')) return false;
   return (
     k.includes('tree') ||
     k.includes('rock') ||
     k.includes('crystal') ||
     k.includes('cactus') ||
+    k.includes('vine') ||
     k.includes('broadleaf') ||
     k.includes('palm')
   );

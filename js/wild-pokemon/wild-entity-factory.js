@@ -9,11 +9,19 @@ import {
 import { setEmotion } from './wild-motion-ai.js';
 import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 import { entitiesByKey } from './wild-core-state.js';
-import { releaseWildGroupFollowersFromLeader, startWildGroupWarFromHit } from './wild-group-behavior.js';
+import {
+  releaseWildGroupFollowersFromLeader,
+  beginGroupCombatBreakFromHit,
+  promoteWildGroupLeaderIfNeeded
+} from './wild-group-behavior.js';
 import { markWildPokemonFainted } from './wild-pokemon-persistence.js';
+import { player, gainPlayerExp } from '../player.js';
+
+const PLAYER_WILD_DEFEAT_EXP = 20;
 
 export function bindStandardWildTakeDamage(entity) {
   entity.takeDamage = function (amount, attacker = null) {
+    const wasAlive = !this.deadState && (Number(this.hp) || 0) > 0;
     const memory = ensureSocialMemory(this);
     if (Number(amount) > 0) markWildMinimapSpeciesKnown(this);
     this.hp -= amount;
@@ -33,7 +41,12 @@ export function bindStandardWildTakeDamage(entity) {
       // Persist faint: entity stays in the world (despawns naturally when out-of-window).
       // The sync window will re-create it in fainted state on next visit.
       markWildPokemonFainted(this.key);
-      releaseWildGroupFollowersFromLeader(this, entitiesByKey);
+      if (!promoteWildGroupLeaderIfNeeded(this, entitiesByKey)) {
+        releaseWildGroupFollowersFromLeader(this, entitiesByKey);
+      }
+      if (wasAlive && attacker === player) {
+        gainPlayerExp(PLAYER_WILD_DEFEAT_EXP);
+      }
     }
     this.hitFlashTimer = 0.2;
 
@@ -51,7 +64,7 @@ export function bindStandardWildTakeDamage(entity) {
     broadcastNearbySpeciesAllyHurt(this.x, this.y, this.dexId ?? 1, 1.05, this);
     this.provoked01 = clamp((this.provoked01 || 0) + 0.66, 0, 3);
     this.wildTempAggressiveSec = Math.min(22, Math.max(this.wildTempAggressiveSec || 0, 10.0));
-    startWildGroupWarFromHit(this, attacker, entitiesByKey);
+    beginGroupCombatBreakFromHit(this, attacker, entitiesByKey);
 
     if (amount > 0) playWildDamageHurtCry(this);
   };
