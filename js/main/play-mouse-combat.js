@@ -64,7 +64,9 @@ import {
   getChargeDamage01,
   isChargeStrongAttackEligible,
   getWeakPartialChargeT,
-  CHARGE_FIELD_RELEASE_MIN_01
+  CHARGE_FIELD_RELEASE_MIN_01,
+  getChargeBarProgresses,
+  getEarthquakeChargeBarProgresses
 } from './play-charge-levels.js';
 import { playLinkSuperSwordSfx } from '../audio/link-super-sword-sfx.js';
 import {
@@ -106,6 +108,58 @@ const FIELD_SKILL_LABEL = {
   psychoCut: 'Psycho Cut',
   vineWhip: 'Vine Whip'
 };
+
+/** Same threshold as `drawFieldCombatChargeBar` “full” segment highlight. */
+const FIELD_CHARGE_SEG_FULL = 0.994;
+let _fieldChargeSegTrackKey = '';
+/** @type {number[] | null} */
+let _fieldChargeSegPrev = null;
+
+function resetFieldChargeSegmentTracker() {
+  _fieldChargeSegTrackKey = '';
+  _fieldChargeSegPrev = null;
+}
+
+function bumpPlayerFieldChargeShine(pl) {
+  if (!pl) return;
+  pl._fieldChargeShineStartMs = performance.now();
+  pl._fieldChargeShineDurMs = 340;
+}
+
+/**
+ * When a HUD charge segment completes, trigger a short shine on the player sprite.
+ * @param {import('../player.js').player} pl
+ * @param {{ moveId: string, charge01: number, slot: 'l' | 'r' | 'm' } | null} active
+ */
+function tickFieldChargeSegmentCompletionShine(pl, active) {
+  if (!pl || !active) {
+    resetFieldChargeSegmentTracker();
+    return;
+  }
+  const moveId = active.moveId;
+  const slot = active.slot;
+  const charge01 = Math.max(0, Math.min(1, Number(active.charge01) || 0));
+  if (!fieldMoveUsesChargeMeter(moveId) || charge01 <= 0.005) {
+    resetFieldChargeSegmentTracker();
+    return;
+  }
+  const isEq = moveId === 'earthquake';
+  const progresses = isEq ? getEarthquakeChargeBarProgresses(charge01) : getChargeBarProgresses(charge01);
+  const key = `${moveId}|${slot}`;
+  if (key !== _fieldChargeSegTrackKey) {
+    _fieldChargeSegTrackKey = key;
+    _fieldChargeSegPrev = progresses.map(() => 0);
+  }
+  const prev = _fieldChargeSegPrev;
+  if (prev && prev.length === progresses.length) {
+    for (let i = 0; i < progresses.length; i++) {
+      if (prev[i] < FIELD_CHARGE_SEG_FULL && progresses[i] >= FIELD_CHARGE_SEG_FULL - 1e-8) {
+        bumpPlayerFieldChargeShine(pl);
+      }
+    }
+  }
+  _fieldChargeSegPrev = progresses.slice();
+}
 
 /** Hold digit 1–5 briefly to open the bind wheel for LMB / RMB / MMB / wheel↑ / wheel↓. */
 /** @typedef {import('../moves/pokemon-moveset-config.js').MoveId} MoveId */
@@ -178,8 +232,8 @@ function getMoveTypeClass(moveId) {
       return 'type-normal';
     case 'tackle':
     case 'scratch':
-      return 'type-normal';
     case 'cut':
+      return 'type-normal';
     case 'vineWhip':
       return 'type-grass';
     case 'psychoCut':
@@ -1538,6 +1592,7 @@ export function updatePlayPointerCombat(dt, player, data) {
     }
   }
   playInputState.fieldChargeUiActive = fieldChargeUiActive;
+  tickFieldChargeSegmentCompletionShine(player, fieldChargeUiActive);
 
   // Thunder charge preview: while a held button is bound to Thunder and the charge has
   // passed the first bar, broadcast a "charging storm cell" + ground-shadow at the live

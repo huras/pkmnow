@@ -1,5 +1,5 @@
 import { isPlayShell } from './main/app-shell.js';
-import { setPlayPointerMode } from './main/play-pointer-mode.js';
+import { getPlayPointerMode, setPlayPointerMode } from './main/play-pointer-mode.js';
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import {
@@ -12,9 +12,14 @@ import { resolvePmdFrameSpecForSlice } from './pokemon/pmd-layout-metrics.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
-import { BiomesModal } from './biomes-modal.js';
 import { BIOMES } from './biomes.js';
-import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
+import {
+  player,
+  setPlayerPos,
+  showPlayerSocialEmotion,
+  isPlayerInfiniteLifeEnabled,
+  setPlayerInfiniteLifeEnabled
+} from './player.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
@@ -40,7 +45,8 @@ import {
   resetPlayAutosaveSchedule,
   flushPlaySessionSave,
   peekPlaySessionSaveForMap,
-  getPlayResumeMacroTileFromSave
+  getPlayResumeMacroTileFromSave,
+  parseMapFingerprint
 } from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
 import { getWeatherPresetLabel } from './main/weather-presets.js';
@@ -59,11 +65,22 @@ import {
   setEarthquakeTargetIntensity01,
   getEarthquakeActiveIntensity01
 } from './main/earthquake-layer.js';
+import {
+  initSunLightRaysLayer,
+  tickSunLightRaysLayer,
+  getMoonLightRaysActiveIntensity01,
+  setSunLightRaysTargetIntensity01,
+  getSunLightRaysActiveIntensity01,
+  getSunLightRaysTargetIntensity01
+} from './main/sun-light-rays-layer.js';
 import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
   clearPlayCrystalTackleState,
+  getInventoryScatterItemFootprint,
   placeInventoryItemAsScatterDetailNear,
+  resolveGroundDropItemKeyForToken,
+  resolveInventoryScatterPlacementNear,
   refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './main/play-crystal-tackle.js';
@@ -91,10 +108,13 @@ import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
 import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
 import { stopFireLoopAudio } from './audio/fire-loop-sfx.js';
+import { stopEncounterMeLoop } from './audio/encounter-me.js';
 import { isBgmTrackChangeToastSuppressed } from './audio/play-audio-mix-settings.js';
 import { installMinimapAudioUi } from './main/minimap-audio-ui.js';
+import { installMinimapEventLogUi } from './main/minimap-event-log-ui.js';
 import { installPlayHelpWikiModal } from './main/play-help-wiki-modal.js';
 import { installMinimapSaveModal } from './main/minimap-save-modal.js';
+import { clearPlayEventLog, pushPlayEventLog } from './main/play-event-log-state.js';
 import { renderMapOverlaySvg } from './render/render-map-overlay-svg.js';
 import { stepMinimapZoom, getMinimapZoomUiLines } from './render/render-minimap.js';
 import {
@@ -186,13 +206,225 @@ if (canvas) {
 
 const minimap = document.getElementById('minimap');
 const minimapPanel = document.getElementById('minimap-panel');
+const minimapToolbarHeader = minimapPanel instanceof HTMLElement ? minimapPanel.querySelector('.minimap-panel__header') : null;
+const minimapToolbarDragHandle = document.getElementById('minimap-toolbar-drag-handle');
 const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
+const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
+const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
+const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
+const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
+const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
+const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
+const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
+let minimapShowAllSpawnedDebug = false;
+let minimapEventLogVisibleDebug = false;
+let minimapEventLogUi = null;
+let minimapToolbarDragPointerId = null;
+let minimapToolbarDragStartClientX = 0;
+let minimapToolbarDragStartClientY = 0;
+let minimapToolbarDragStartLeft = 0;
+let minimapToolbarDragStartTop = 0;
+
+function clampMinimapToolbarPosition(left, top) {
+  const fallbackWidth = 84;
+  const fallbackHeight = 160;
+  const width = Math.max(1, minimapToolbarHeader?.offsetWidth || fallbackWidth);
+  const height = Math.max(1, minimapToolbarHeader?.offsetHeight || fallbackHeight);
+  const margin = 8;
+  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+  const maxTop = Math.max(margin, window.innerHeight - height - margin);
+  return {
+    left: Math.max(margin, Math.min(maxLeft, Math.round(Number(left) || 0))),
+    top: Math.max(margin, Math.min(maxTop, Math.round(Number(top) || 0)))
+  };
+}
+
+function setMinimapToolbarPosition(left, top, persist = true) {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  const pos = clampMinimapToolbarPosition(left, top);
+  minimapToolbarHeader.style.left = `${pos.left}px`;
+  minimapToolbarHeader.style.top = `${pos.top}px`;
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_MINIMAP_TOOLBAR_LEFT, String(pos.left));
+    localStorage.setItem(LS_MINIMAP_TOOLBAR_TOP, String(pos.top));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function restoreMinimapToolbarPosition() {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  let leftRaw = null;
+  let topRaw = null;
+  try {
+    leftRaw = localStorage.getItem(LS_MINIMAP_TOOLBAR_LEFT);
+    topRaw = localStorage.getItem(LS_MINIMAP_TOOLBAR_TOP);
+  } catch {
+    leftRaw = null;
+    topRaw = null;
+  }
+  const left = Number(leftRaw);
+  const top = Number(topRaw);
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+  if (minimapToolbarHeader.offsetWidth <= 1 || minimapToolbarHeader.offsetHeight <= 1) {
+    requestAnimationFrame(() => setMinimapToolbarPosition(left, top, true));
+    return;
+  }
+  setMinimapToolbarPosition(left, top, true);
+}
+
+function onMinimapToolbarPointerMove(ev) {
+  if (minimapToolbarDragPointerId == null) return;
+  if (ev.pointerId !== minimapToolbarDragPointerId) return;
+  const dx = ev.clientX - minimapToolbarDragStartClientX;
+  const dy = ev.clientY - minimapToolbarDragStartClientY;
+  setMinimapToolbarPosition(minimapToolbarDragStartLeft + dx, minimapToolbarDragStartTop + dy, false);
+}
+
+function stopMinimapToolbarDrag(pointerId, persist = true) {
+  if (minimapToolbarDragPointerId == null) return;
+  if (pointerId != null && pointerId !== minimapToolbarDragPointerId) return;
+  minimapToolbarDragPointerId = null;
+  window.removeEventListener('pointermove', onMinimapToolbarPointerMove);
+  window.removeEventListener('pointerup', onMinimapToolbarPointerUp);
+  window.removeEventListener('pointercancel', onMinimapToolbarPointerCancel);
+  if (!persist || !(minimapToolbarHeader instanceof HTMLElement)) return;
+  const left = Number.parseFloat(minimapToolbarHeader.style.left || '');
+  const top = Number.parseFloat(minimapToolbarHeader.style.top || '');
+  if (Number.isFinite(left) && Number.isFinite(top)) {
+    setMinimapToolbarPosition(left, top, true);
+  }
+}
+
+function onMinimapToolbarPointerUp(ev) {
+  stopMinimapToolbarDrag(ev.pointerId, true);
+}
+
+function onMinimapToolbarPointerCancel(ev) {
+  stopMinimapToolbarDrag(ev.pointerId, false);
+}
+
+function syncMinimapShowSpawnedToggleUi() {
+  btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
+}
+
+function setMinimapShowSpawnedDebug(next) {
+  minimapShowAllSpawnedDebug = !!next;
+  syncMinimapShowSpawnedToggleUi();
+  try {
+    localStorage.setItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG, minimapShowAllSpawnedDebug ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function syncMinimapEventLogToggleUi() {
+  btnMinimapEventLogToggle?.setAttribute('aria-pressed', minimapEventLogVisibleDebug ? 'true' : 'false');
+}
+
+function isColliderDebugEnabled() {
+  const showPlayColliders = document.getElementById('chkPlayColliders')?.checked ?? false;
+  return !!showPlayColliders || !!window.debugColliders;
+}
+
+function syncMinimapColliderToggleUi() {
+  btnMinimapColliderToggle?.setAttribute('aria-pressed', isColliderDebugEnabled() ? 'true' : 'false');
+}
+
+function syncMinimapRmbPointerModeUi() {
+  const btn = btnMinimapRmbModeToggle;
+  if (!(btn instanceof HTMLButtonElement)) return;
+  const mode = getPlayPointerMode() === 'debug' ? 'debug' : 'game';
+  btn.dataset.mode = mode;
+  const isDebug = mode === 'debug';
+  btn.setAttribute('aria-pressed', isDebug ? 'true' : 'false');
+  const title = isDebug
+    ? 'Right-click: debug menu. Click for field move on tile.'
+    : 'Right-click: field move on tile. Click for debug menu.';
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+}
+
+function toggleColliderDebugFromMinimapToolbar() {
+  const chk = document.getElementById('chkPlayColliders');
+  if (chk instanceof HTMLInputElement) {
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
+  window.debugColliders = !window.debugColliders;
+  updateView();
+  syncMinimapColliderToggleUi();
+}
+
+function setMinimapEventLogVisibleDebug(next, persist = true) {
+  minimapEventLogVisibleDebug = !!next;
+  syncMinimapEventLogToggleUi();
+  minimapEventLogUi?.setPlayEventLogVisible(minimapEventLogVisibleDebug);
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE, minimapEventLogVisibleDebug ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+try {
+  minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
+} catch {
+  minimapShowAllSpawnedDebug = false;
+}
+syncMinimapShowSpawnedToggleUi();
+btnMinimapShowSpawnedToggle?.addEventListener('click', () => {
+  setMinimapShowSpawnedDebug(!minimapShowAllSpawnedDebug);
+});
+restoreMinimapToolbarPosition();
+minimapToolbarDragHandle?.addEventListener('pointerdown', (ev) => {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  minimapToolbarDragPointerId = ev.pointerId;
+  minimapToolbarDragStartClientX = ev.clientX;
+  minimapToolbarDragStartClientY = ev.clientY;
+  minimapToolbarDragStartLeft = Number.parseFloat(minimapToolbarHeader.style.left || String(minimapToolbarHeader.offsetLeft || 18));
+  minimapToolbarDragStartTop = Number.parseFloat(minimapToolbarHeader.style.top || String(minimapToolbarHeader.offsetTop || 86));
+  minimapToolbarDragHandle.setPointerCapture(ev.pointerId);
+  window.addEventListener('pointermove', onMinimapToolbarPointerMove);
+  window.addEventListener('pointerup', onMinimapToolbarPointerUp);
+  window.addEventListener('pointercancel', onMinimapToolbarPointerCancel);
+  ev.preventDefault();
+});
+window.addEventListener('resize', () => {
+  if (!(minimapToolbarHeader instanceof HTMLElement)) return;
+  const left = Number.parseFloat(minimapToolbarHeader.style.left || '');
+  const top = Number.parseFloat(minimapToolbarHeader.style.top || '');
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+  setMinimapToolbarPosition(left, top, true);
+});
+syncMinimapColliderToggleUi();
+btnMinimapColliderToggle?.addEventListener('click', () => {
+  toggleColliderDebugFromMinimapToolbar();
+});
+try {
+  minimapEventLogVisibleDebug = localStorage.getItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE) === '1';
+} catch {
+  minimapEventLogVisibleDebug = false;
+}
+syncMinimapEventLogToggleUi();
+btnMinimapEventLogToggle?.addEventListener('click', () => {
+  setMinimapEventLogVisibleDebug(!minimapEventLogVisibleDebug);
+});
+syncMinimapRmbPointerModeUi();
+btnMinimapRmbModeToggle?.addEventListener('click', () => {
+  setPlayPointerMode(getPlayPointerMode() === 'game' ? 'debug' : 'game');
+  syncMinimapRmbPointerModeUi();
+});
 
 function syncMinimapZoomReadout() {
   if (!minimap) return;
@@ -249,6 +481,7 @@ wireMinimapLanguageSelect();
 syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
+const btnInfiniteLifeToggle = document.getElementById('btnInfiniteLifeToggle');
 const infoBar = document.getElementById('hud-info');
 const btnExport = document.getElementById('exportBtn');
 const btnImport = document.getElementById('importBtn');
@@ -258,6 +491,7 @@ const settingsModal = document.getElementById('settingsModal');
 const btnApplySettings = document.getElementById('btnApplySettings');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
 const btnExportWorldSettings = document.getElementById('btnExportWorldSettings');
+const btnContinuePlay = document.getElementById('btnContinuePlay');
 const btnBackToMap = document.getElementById('btnBackToMap');
 const playFpsEl = document.getElementById('play-fps');
 const playContextMenu = document.getElementById('play-context-menu');
@@ -282,9 +516,12 @@ const playWorldTimeSlider = document.getElementById('play-world-time-slider');
 const playWorldTimeRun = document.getElementById('play-world-time-run');
 const playWorldTimePhaseEl = document.getElementById('play-world-time-phase');
 const playWorldTimeHourEl = document.getElementById('play-world-time-hour');
+const playSessionTimeEl = document.getElementById('play-session-time');
 const playWeatherCloudIntensityEl = document.getElementById('play-weather-cloud-intensity');
 const playWeatherRainIntensityEl = document.getElementById('play-weather-rain-intensity');
 const playEarthquakeIntensityEl = document.getElementById('play-earthquake-intensity');
+const playSunLightRaysIntensityEl = document.getElementById('play-sun-light-rays-intensity');
+const playMoonlightEnabledEl = document.getElementById('play-moonlight-enabled');
 const playVisionFogToggleEl = document.getElementById('play-vision-fog-toggle');
 const playWeatherCurrentEl = document.getElementById('play-weather-current');
 const playWeatherPresetBtns = Array.from(document.querySelectorAll('.play-weather-preset'));
@@ -296,6 +533,15 @@ if (playBgmNowPlayingEl) {
   playBgmNowPlayingEl.hidden = true;
   playBgmNowPlayingEl.style.display = 'none';
 }
+if (btnInfiniteLifeToggle instanceof HTMLButtonElement) {
+  btnInfiniteLifeToggle.addEventListener('click', () => {
+    setPlayerInfiniteLifeEnabled(!isPlayerInfiniteLifeEnabled());
+    syncInfiniteLifeToggleUi();
+    playCharacterSelector?.updatePlayVitalsHud();
+    focusGameCanvas();
+  });
+}
+syncInfiniteLifeToggleUi();
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -307,7 +553,7 @@ let playSocialOverlay = {
 };
 
 let currentData = null;
-/** One-shot: auto-enter play at saved position after first map load (page session). */
+/** One-shot: after first region load, auto-enter play (save resume or random city). */
 let didAutoResumePlayOnInitialLoad = false;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
 let playCharacterSelector = null;
@@ -316,6 +562,8 @@ let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
 let worldHours = 12;
+/** Accumulated elapsed seconds while in play mode. */
+let playSessionSeconds = 0;
 let worldTimeRunning = true;
 /** After play on this map in the page session; map overview can show live player if there is no save yet. */
 let sessionEnteredPlayOnCurrentMap = false;
@@ -324,6 +572,9 @@ let sessionEnteredPlayOnCurrentMap = false;
 // read (during `getSettings()` before the first tick) returns the correct shape.
 initWeatherSystem({ preset: 'cloudy', intensity01: 0.75 });
 initEarthquakeLayer({ intensity01: 0 });
+initSunLightRaysLayer({ intensity01: 0 });
+let moonlightEnabled = true;
+if (playMoonlightEnabledEl) playMoonlightEnabledEl.checked = moonlightEnabled;
 /** @type {string | null} */
 let lastWorldTimePanelPhase = null;
 let lastBgmUiSignature = '';
@@ -334,6 +585,7 @@ let playBgmToastHideTimer = 0;
 /** @type {object | null} */
 let playDetailColliderHighlight = null;
 let worldMapCameraRaf = 0;
+let worldMapRenderLoopRaf = 0;
 let mapDragPointerId = -1;
 let mapDragMovedPx = 0;
 let mapDragLastClientX = 0;
@@ -349,8 +601,8 @@ function isPlayImmersiveMinimalUi() {
 function installAdaptivePerfDebugPanel() {
   const host = document.body;
   if (!host) return;
-  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v1';
-  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v1';
+  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v2';
+  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v2';
   const panel = document.createElement('details');
   panel.id = 'play-adaptive-perf-debug-panel';
   panel.style.position = 'fixed';
@@ -572,7 +824,7 @@ function installAdaptivePerfDebugPanel() {
     }
   };
   /** @type {'low'|'medium'|'high'|'ultra'|'custom'} */
-  let activePreset = 'medium';
+  let activePreset = 'ultra';
 
   function loadPersistedAdaptivePerfState() {
     const rawCfg = localStorage.getItem(LS_ADAPTIVE_CFG);
@@ -817,7 +1069,7 @@ function installAdaptivePerfDebugPanel() {
   btnRefresh.addEventListener('click', refreshFromRuntime);
   btnReset.addEventListener('click', () => {
     const cfg = resetPlayAdaptivePerfConfig();
-    activePreset = 'medium';
+    activePreset = 'ultra';
     text.value = JSON.stringify(toEditableConfig(cfg), null, 2);
     persistAdaptivePerfState();
     refreshFromRuntime();
@@ -921,11 +1173,17 @@ configureTileDebugModal({
 });
 
 const minimapAudioUi = installMinimapAudioUi();
+minimapEventLogUi = installMinimapEventLogUi();
+setMinimapEventLogVisibleDebug(minimapEventLogVisibleDebug, false);
 const minimapHudPopovers = installMinimapHudPopovers({ imageCache, getCurrentData: () => currentData });
 const minimapSaveModal = installMinimapSaveModal({
   getCurrentData: () => currentData,
   getPlayer: () => player,
-  getPersistExtra: () => buildPlaySessionPersistExtra()
+  getPersistExtra: () => buildPlaySessionPersistExtra(),
+  onImportedSaveNeedRegenerate: (mapFingerprint) => {
+    const meta = parseMapFingerprint(mapFingerprint);
+    if (meta && seedInput) seedInput.value = String(meta.seed >>> 0);
+  }
 });
 installPlayHelpWikiModal({
   forceCloseMinimapAudioPopover: () => {
@@ -966,6 +1224,42 @@ function detailPreviewHtmlForImmersiveHint(itemKey) {
   );
 }
 
+let minimapLocaleTimeFormatter = null;
+let minimapLocaleTimeFormatterLocale = '';
+
+/**
+ * Formats world hours ([0,24)) using the active UI locale conventions.
+ * @param {number} worldHoursWrapped
+ */
+function formatWorldTimeForMinimap(worldHoursWrapped) {
+  const h = wrapHours(worldHoursWrapped);
+  const totalMin = ((Math.round(h * 60) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  const locale = getLocale();
+
+  try {
+    if (!minimapLocaleTimeFormatter || minimapLocaleTimeFormatterLocale !== locale) {
+      const formatterOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'UTC'
+      };
+      if (locale === 'pt-BR') {
+        formatterOptions.hour = '2-digit';
+        formatterOptions.hour12 = false;
+        formatterOptions.hourCycle = 'h23';
+      }
+      minimapLocaleTimeFormatter = new Intl.DateTimeFormat(locale, formatterOptions);
+      minimapLocaleTimeFormatterLocale = locale;
+    }
+    const dt = new Date(Date.UTC(2000, 0, 1, hh, mm, 0));
+    return minimapLocaleTimeFormatter.format(dt);
+  } catch {
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+}
+
 /** First frame of faint (or idle) PMD sheet for Strength HUD. */
 function faintedWildHudSpriteHtml(dexId, displayW) {
   const dex = Math.max(1, Math.floor(Number(dexId) || 1));
@@ -999,14 +1293,19 @@ function strengthHudObjectPreviewHtmlImmersive(ctx) {
  * @param {number} px
  * @param {number} py
  * @param {number} pz
+ * @param {number} worldHoursWrapped
  */
-function syncMinimapPlayFooter(bio, px, py, pz) {
+function syncMinimapPlayFooter(bio, px, py, pz, worldHoursWrapped) {
   const root = minimapPanel || document.getElementById('minimap-panel');
   if (!root) return;
   const nameEl = root.querySelector('#minimap-biome-readout');
   const swatchEl = root.querySelector('#minimap-biome-swatch');
   const coordsEl = root.querySelector('#minimap-coords-readout');
-  const biomeLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
+  const biomeBaseLabel = bio?.id != null ? getBiomeNameById(bio.id) : '—';
+  const biomeLabel = t('play.minimapBiomeWithTime', {
+    biome: biomeBaseLabel,
+    time: formatWorldTimeForMinimap(worldHoursWrapped)
+  });
   if (nameEl && nameEl.textContent !== biomeLabel) nameEl.textContent = biomeLabel;
   if (swatchEl) {
     const sw = bio?.color && typeof bio.color === 'string' ? bio.color.trim() : '';
@@ -1032,6 +1331,17 @@ function resetMinimapPlayFooter() {
   if (coordsEl) coordsEl.textContent = t('play.minimapCoordsEmpty');
 }
 
+function syncInfiniteLifeToggleUi() {
+  if (!(btnInfiniteLifeToggle instanceof HTMLButtonElement)) return;
+  const on = isPlayerInfiniteLifeEnabled();
+  btnInfiniteLifeToggle.textContent = on ? 'Infinite Life: ON' : 'Infinite Life: OFF';
+  btnInfiniteLifeToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btnInfiniteLifeToggle.classList.toggle('is-active', on);
+  btnInfiniteLifeToggle.title = on
+    ? 'Infinite life enabled. Click to allow HP loss.'
+    : 'Infinite life disabled. Click to become immortal.';
+}
+
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
 function refreshPlayModeInfoBar(force = false) {
   if (!currentData || appMode !== 'play') return;
@@ -1043,7 +1353,7 @@ function refreshPlayModeInfoBar(force = false) {
   const px = Number(player.x) || 0;
   const py = Number(player.y) || 0;
   const pz = Number(player.z) || 0;
-  syncMinimapPlayFooter(bio, px, py, pz);
+  syncMinimapPlayFooter(bio, px, py, pz, worldHours);
 
   const rx = Math.round(px * 10);
   const ry = Math.round(py * 10);
@@ -1104,6 +1414,22 @@ function readWorldHoursPerRealSec() {
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/**
+ * Formats wrapped world hours ([0,24)) as a digital clock `HH:MM`.
+ * @param {number} worldHoursWrapped
+ */
+function formatWorldHourClock(worldHoursWrapped) {
+  const h = wrapHours(worldHoursWrapped);
+  const totalMin = ((Math.round(h * 60) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = Math.floor(totalMin / 60)
+    .toString()
+    .padStart(2, '0');
+  const mm = Math.floor(totalMin % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
 function syncPlayWorldTimePanel() {
   if (appMode !== 'play') return;
   if (!playWorldTimePhaseEl || !playWorldTimeHourEl) return;
@@ -1114,7 +1440,7 @@ function syncPlayWorldTimePanel() {
     playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   }
   playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
-    hours: formatNumber(wh, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    time: formatWorldHourClock(wh)
   });
   if (playWorldTimeSlider) {
     const stepped = Math.round(wh / 0.05) * 0.05;
@@ -1123,23 +1449,41 @@ function syncPlayWorldTimePanel() {
       playWorldTimeSlider.value = String(stepped);
     }
   }
+  if (playSessionTimeEl) {
+    const totalSec = Math.max(0, Math.floor(playSessionSeconds));
+    const hh = Math.floor(totalSec / 3600)
+      .toString()
+      .padStart(2, '0');
+    const mm = Math.floor((totalSec % 3600) / 60)
+      .toString()
+      .padStart(2, '0');
+    const ss = Math.floor(totalSec % 60)
+      .toString()
+      .padStart(2, '0');
+    playSessionTimeEl.textContent = t('play.playSessionTime', {
+      time: `${hh}:${mm}:${ss}`
+    });
+  }
 }
 
 function buildPlaySessionPersistExtra() {
   const wt = getWeatherTarget();
   return {
     worldHours: wrapHours(worldHours),
+    playSessionSeconds,
     weatherPreset: wt.preset,
     weatherCloudIntensity01: wt.cloudIntensity01,
     weatherPrecipIntensity01: wt.precipIntensity01,
     weatherIntensity01: wt.precipIntensity01,
-    earthquakeIntensity01: getEarthquakeActiveIntensity01()
+    earthquakeIntensity01: getEarthquakeActiveIntensity01(),
+    sunLightRaysIntensity01: getSunLightRaysTargetIntensity01(),
+    moonlightEnabled
   };
 }
 
 /**
  * Restores clock + sky + earthquake slider from a v2+ session snapshot (cold resume).
- * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number }} env
+ * @param {{ worldHours: number, weatherPreset: string, weatherIntensity01?: number, weatherCloudIntensity01?: number, weatherPrecipIntensity01?: number, earthquakeIntensity01: number, sunLightRaysIntensity01?: number, moonlightEnabled?: boolean }} env
  */
 function applyRestoredPlayEnvironmentFromSave(env) {
   if (!env) return;
@@ -1151,7 +1495,7 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playWorldTimePhaseEl) playWorldTimePhaseEl.textContent = dayPhaseLabelEn(phase);
   if (playWorldTimeHourEl) {
     playWorldTimeHourEl.textContent = t('play.worldTimeHour', {
-      hours: formatNumber(worldHours, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      time: formatWorldHourClock(worldHours)
     });
   }
   snapDayCycleTintSmoothToHours(worldHours);
@@ -1172,6 +1516,14 @@ function applyRestoredPlayEnvironmentFromSave(env) {
   if (playEarthquakeIntensityEl) {
     playEarthquakeIntensityEl.value = String(Math.round(env.earthquakeIntensity01 * 100));
   }
+  const sunR = Number(env.sunLightRaysIntensity01);
+  const sun01 = Number.isFinite(sunR) ? Math.max(0, Math.min(1, sunR)) : 0;
+  setSunLightRaysTargetIntensity01(sun01);
+  if (playSunLightRaysIntensityEl) {
+    playSunLightRaysIntensityEl.value = String(Math.round(sun01 * 100));
+  }
+  moonlightEnabled = env.moonlightEnabled !== false;
+  if (playMoonlightEnabledEl) playMoonlightEnabledEl.checked = moonlightEnabled;
 }
 
 function syncPlayBgmNowPlayingPanel() {
@@ -1203,6 +1555,67 @@ function syncPlayBgmNowPlayingPanel() {
   }
 }
 
+function syncRegionViewShell() {
+  const appEl = document.querySelector('.app');
+  if (!appEl) return;
+  if (appMode === 'play') {
+    document.body.classList.add('play-mode-active');
+    document.body.classList.remove('region-atlas-active');
+    appEl.classList.add('play-mode-active');
+    appEl.classList.remove('region-atlas-active');
+  } else if (appMode === 'map' && currentData) {
+    document.body.classList.remove('play-mode-active');
+    document.body.classList.add('region-atlas-active');
+    appEl.classList.remove('play-mode-active');
+    appEl.classList.add('region-atlas-active');
+  } else {
+    document.body.classList.remove('play-mode-active', 'region-atlas-active');
+    appEl.classList.remove('play-mode-active', 'region-atlas-active');
+  }
+}
+
+function hasMapContinuePosition() {
+  if (appMode !== 'map' || !currentData || !sessionEnteredPlayOnCurrentMap) return false;
+  const px = Number(player.visualX ?? player.x);
+  const py = Number(player.visualY ?? player.y);
+  return Number.isFinite(px) && Number.isFinite(py);
+}
+
+function syncMapContinueButtonVisibility() {
+  if (!btnContinuePlay) return;
+  btnContinuePlay.classList.toggle('hidden', !hasMapContinuePosition());
+}
+
+function continueFromMapToPlay() {
+  if (!currentData || appMode !== 'map') return;
+  const px = Number(player.visualX ?? player.x);
+  const py = Number(player.visualY ?? player.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+  const mapMicroW = Math.max(1, Number(currentData.width) * MACRO_TILE_STRIDE);
+  const mapMicroH = Math.max(1, Number(currentData.height) * MACRO_TILE_STRIDE);
+  const clampedX = Math.max(0, Math.min(mapMicroW - 1, px));
+  const clampedY = Math.max(0, Math.min(mapMicroH - 1, py));
+  const gx = Math.floor(clampedX / MACRO_TILE_STRIDE);
+  const gy = Math.floor(clampedY / MACRO_TILE_STRIDE);
+  enterPlayMode(gx, gy, { resumePosition: false });
+}
+
+/**
+ * @param {object} data
+ * @returns {{ gx: number, gy: number }}
+ */
+function pickRandomCityMacroForPlayStart(data) {
+  const nodes = data?.graph?.nodes;
+  if (nodes?.length) {
+    const u = (Number(data.seed) >>> 0) ^ 0x243f6a88;
+    const n = nodes[u % nodes.length];
+    return { gx: n.x, gy: n.y };
+  }
+  const w = Math.max(1, data.width | 0);
+  const h = Math.max(1, data.height | 0);
+  return { gx: Math.floor(w / 2), gy: Math.floor(h / 2) };
+}
+
 function updateWorldMapCameraBounds() {
   if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || !currentData || !canvas || appMode !== 'map') return;
   configureWorldMapCamera(currentData.width, currentData.height, canvas.width, canvas.height);
@@ -1210,6 +1623,7 @@ function updateWorldMapCameraBounds() {
 
 function requestWorldMapCameraFrame() {
   if (!WORLD_MAP_CONTINUOUS_ZOOM_ENABLED || appMode !== 'map') return;
+  if (worldMapRenderLoopRaf) return;
   if (worldMapCameraRaf) return;
   worldMapCameraRaf = requestAnimationFrame(() => {
     worldMapCameraRaf = 0;
@@ -1217,6 +1631,28 @@ function requestWorldMapCameraFrame() {
     updateView();
     if (moving) requestWorldMapCameraFrame();
   });
+}
+
+function worldMapRenderLoop() {
+  worldMapRenderLoopRaf = 0;
+  if (appMode !== 'map' || !currentData) return;
+  if (WORLD_MAP_CONTINUOUS_ZOOM_ENABLED) {
+    tickWorldMapCamera(performance.now());
+  }
+  updateView();
+  worldMapRenderLoopRaf = requestAnimationFrame(worldMapRenderLoop);
+}
+
+function startWorldMapRenderLoop() {
+  if (appMode !== 'map' || !currentData) return;
+  if (worldMapRenderLoopRaf) return;
+  worldMapRenderLoopRaf = requestAnimationFrame(worldMapRenderLoop);
+}
+
+function stopWorldMapRenderLoop() {
+  if (!worldMapRenderLoopRaf) return;
+  cancelAnimationFrame(worldMapRenderLoopRaf);
+  worldMapRenderLoopRaf = 0;
 }
 
 function mapClientToCanvasPx(clientX, clientY) {
@@ -1311,6 +1747,8 @@ function getSettings() {
     weatherWindIntensity: getWindFeltIntensity(),
     weatherWindDirRad: getWindDirectionRad(),
     weatherEarthquakeIntensity: getEarthquakeActiveIntensity01(),
+    weatherSunLightRaysIntensity: getSunLightRaysActiveIntensity01(hoursWrapped),
+    weatherMoonLightRaysIntensity: moonlightEnabled ? getMoonLightRaysActiveIntensity01(hoursWrapped) : 0,
     weatherVolumetricMode: weather.weatherMode,
     weatherVolumetricParticleDensity: weather.volumetricParticleDensity,
     weatherVolumetricVolumeDepth: weather.volumetricVolumeDepth,
@@ -1321,7 +1759,8 @@ function getSettings() {
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
-    visionFogEnabled: playVisionFogToggleEl?.checked ?? false
+    visionFogEnabled: playVisionFogToggleEl?.checked ?? false,
+    minimapShowAllSpawnedDebug
   };
 }
 
@@ -1353,10 +1792,11 @@ addWeatherTargetChangeListener(syncWeatherUi);
 
 function updateView() {
   const hover = appMode === 'play' ? getPlayHoverMicroTile() : lastHoverTile;
+  syncMapContinueButtonVisibility();
   if (appMode === 'map') updateWorldMapCameraBounds();
   const settings = getSettings();
   if (currentData) {
-    render(canvas, currentData, { settings, hover });
+    render(canvas, currentData, { settings, hover, inventoryDropPreview: playInventoryDropPreview });
     renderMapOverlaySvg(mapOverlaySvg, currentData, {
       canvas,
       appMode,
@@ -1389,12 +1829,20 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     tickDayCycleTintSmooth(dt, wrapHours(worldHours));
     tickWeather(dt, gameTime);
     tickEarthquakeLayer(dt, gameTime);
+    tickSunLightRaysLayer(dt, { data: currentData, player });
+  },
+  advancePlaySessionSeconds: (dt) => {
+    if (appMode !== 'play') return;
+    const d = Number(dt);
+    if (!Number.isFinite(d) || d <= 0) return;
+    playSessionSeconds = Math.max(0, Math.min(31_536_000, playSessionSeconds + d));
   },
   getGameTimeSec: () => gameTime,
   onPlayHudFrame: (data) => {
     const nowMs = performance.now();
     if (nowMs - lastPlayAuxHudSyncAtMs < PLAY_AUX_HUD_SYNC_CADENCE_MS) return;
     lastPlayAuxHudSyncAtMs = nowMs;
+    playCharacterSelector?.updatePlayVitalsHud();
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
     playCharacterSelector?.updatePlayFieldMoveChargeHud();
@@ -1402,6 +1850,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     syncPlayWorldTimePanel();
     syncPlayBgmNowPlayingPanel();
     minimapAudioUi.syncMinimapAudioPopover();
+    minimapEventLogUi.syncPlayEventLogHud();
   },
   getPlaySessionPersistExtra: () => buildPlaySessionPersistExtra()
 });
@@ -1418,7 +1867,16 @@ registerPlayKeyboard({
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);
     showPlayerSocialEmotion(action);
-    triggerPlayerSocialAction(action, player, currentData);
+    const result = triggerPlayerSocialAction(action, player, currentData);
+    const reactedCount = Math.max(0, Number(result?.reactedCount) || 0);
+    pushPlayEventLog({
+      channel: 'social',
+      text:
+        reactedCount > 0
+          ? `${action.label}: ${reactedCount} reaction(s).`
+          : `${action.label}: no nearby reactions.`,
+      dedupeKey: `social:${action.id}:${reactedCount > 0 ? 'reacted' : 'none'}`
+    });
   },
   player
 });
@@ -1454,17 +1912,31 @@ installPlayContextMenu({
 });
 
 function run() {
-  resizeCanvas();
   resetWorldMapCamera();
   sessionEnteredPlayOnCurrentMap = false;
   resetFarCrySystem();
+  try {
+    const hint = sessionStorage.getItem('pkmn_resume_seed_hint');
+    if (hint != null && hint !== '') {
+      sessionStorage.removeItem('pkmn_resume_seed_hint');
+      if (seedInput) seedInput.value = hint;
+    }
+  } catch {
+    /* ignore */
+  }
   currentData = generate(seedInput.value, currentConfig);
+  playSessionSeconds = 0;
   clearScatterSolidBlockCache();
   clearPlayColliderOverlayCache();
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   playDetailColliderHighlight = null;
+  stopWorldMapRenderLoop();
+  syncMapContinueButtonVisibility();
+  syncRegionViewShell();
+  resizeCanvas();
   updateView();
+  startWorldMapRenderLoop();
 }
 
 function downloadJsonFile(filename, payload) {
@@ -1574,22 +2046,73 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 const PLAY_INVENTORY_DROP_PREFIX = 'pkmn-inventory-drop:';
+/** @type {{ worldX: number, worldY: number, ox: number, oy: number, cols: number, rows: number, itemKey?: string, canDrop: boolean } | null} */
+let playInventoryDropPreview = null;
+/** @type {string | null} */
+let activeInventoryHudDragToken = null;
+
+function clearPlayInventoryDropPreview() {
+  playInventoryDropPreview = null;
+}
+
+/**
+ * @param {DragEvent} e
+ * @returns {string | null}
+ */
+function getInventoryDropTokenFromDragEvent(e) {
+  const raw = e.dataTransfer?.getData('text/plain') || '';
+  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return null;
+  return raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+}
 
 canvas.addEventListener('dragover', (e) => {
   if (!currentData || appMode !== 'play') return;
   const types = e.dataTransfer?.types;
   if (!types || ![...types].includes('text/plain')) return;
+  // Allow drop even when browsers hide getData() during dragover.
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
+  const token = getInventoryDropTokenFromDragEvent(e) || activeInventoryHudDragToken;
+  if (!token) {
+    clearPlayInventoryDropPreview();
+    return;
+  }
+  const itemKey = resolveGroundDropItemKeyForToken(token);
+  const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
+  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+    canvas.width,
+    canvas.height,
+    mousePxX,
+    mousePxY,
+    player
+  );
+  const candidate =
+    itemKey && currentData
+      ? resolveInventoryScatterPlacementNear(worldX, worldY, itemKey, currentData, 12)
+      : null;
+  const blockedFootprint = getInventoryScatterItemFootprint(itemKey || '');
+  playInventoryDropPreview = candidate
+    ? { worldX, worldY, ...candidate, canDrop: true }
+    : {
+        worldX,
+        worldY,
+        ox: Math.floor(worldX),
+        oy: Math.floor(worldY),
+        cols: Math.max(1, blockedFootprint?.cols || 1),
+        rows: Math.max(1, blockedFootprint?.rows || 1),
+        ...(itemKey ? { itemKey } : {}),
+        canDrop: false
+      };
 });
 
 canvas.addEventListener('drop', (e) => {
   if (!currentData || appMode !== 'play' || !canvas) return;
-  const raw = e.dataTransfer?.getData('text/plain') || '';
-  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return;
+  const token = getInventoryDropTokenFromDragEvent(e) || activeInventoryHudDragToken;
+  if (!token) return;
   e.preventDefault();
   e.stopPropagation();
-  const token = raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
   const spent = trySpendOneInventoryUnitForGroundDrop(token);
   if (!spent?.itemKey) return;
   const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
@@ -1609,10 +2132,30 @@ canvas.addEventListener('drop', (e) => {
   focusGameCanvas();
 });
 
+canvas.addEventListener('dragleave', () => {
+  clearPlayInventoryDropPreview();
+});
+
+window.addEventListener('dragend', () => {
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
+});
+
+window.addEventListener('play-item-hud-drag-token', (ev) => {
+  const tokenRaw = String((/** @type {CustomEvent<{ token?: string }>} */ (ev)).detail?.token || '').trim();
+  activeInventoryHudDragToken = tokenRaw.length ? tokenRaw : null;
+});
+
+window.addEventListener('play-item-hud-drag-end', () => {
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
+});
+
 canvas.addEventListener('mouseleave', () => {
   if (appMode === 'play') {
     playInputState.mouseValid = false;
     invalidatePlayPointerHover();
+    clearPlayInventoryDropPreview();
   }
   if (currentData && appMode === 'map') updateView();
 });
@@ -1632,6 +2175,7 @@ window.addEventListener('pkmn-map-overview-noise-progress', () => {
  */
 function enterPlayMode(gx, gy, opts = {}) {
   const resumePosition = opts.resumePosition === true;
+  playSessionSeconds = 0;
   resetWildPokemonManager();
   resetThrownMapDetailEntities();
   clearPlayCrystalTackleState();
@@ -1642,7 +2186,11 @@ function enterPlayMode(gx, gy, opts = {}) {
       position: resumePosition,
       inventory: true,
       applyEnvironmentFromSave: resumePosition,
-      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave
+      onRestoreEnvironment: applyRestoredPlayEnvironmentFromSave,
+      applyPlaySessionSecondsFromSave: true,
+      onRestorePlaySessionSeconds: (seconds) => {
+        playSessionSeconds = Math.max(0, Number(seconds) || 0);
+      }
     })
   ) {
     playCharacterSelector?.invalidatePlayItemsHudSignature?.();
@@ -1652,17 +2200,22 @@ function enterPlayMode(gx, gy, opts = {}) {
   sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
   invalidatePlayPointerHover();
+  clearPlayInventoryDropPreview();
   appMode = 'play';
+  syncMapContinueButtonVisibility();
   btnExport?.classList.add('hidden');
   btnBackToMap?.classList.remove('hidden');
   if (minimapPanel) minimapPanel.classList.remove('hidden');
   else minimap?.classList.remove('hidden');
   syncMinimapZoomReadout();
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapEventLogUi.clearPlayEventLogHudEngaged();
   minimapHudPopovers.forceCloseAllPopovers();
   if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = t('play.fpsPlaceholder');
+  syncInfiniteLifeToggleUi();
+  playCharacterSelector?.updatePlayVitalsHud();
 
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
@@ -1673,13 +2226,14 @@ function enterPlayMode(gx, gy, opts = {}) {
   dismissPlayBgmToast();
   syncPlayBgmNowPlayingPanel();
 
-  document.body.classList.add('play-mode-active');
-  document.querySelector('.app').classList.add('play-mode-active');
   playSocialOverlay.clearActive();
+  clearPlayEventLog();
 
-  playCharacterSelector?.syncPlayPointerModeRadios();
+  syncMinimapRmbPointerModeUi();
 
+  syncRegionViewShell();
   resizeCanvas();
+  stopWorldMapRenderLoop();
   startGameLoop();
   refreshPlayModeInfoBar(true);
 }
@@ -1695,24 +2249,27 @@ btnBackToMap?.addEventListener('click', () => {
   stopWeatherAmbientAudio();
   stopEarthquakeAmbientAudio();
   stopFireLoopAudio();
+  stopEncounterMeLoop();
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
   playInputState.fieldChargeUiActive = null;
+  clearPlayInventoryDropPreview();
   appMode = 'map';
+  syncMapContinueButtonVisibility();
   btnExport?.classList.remove('hidden');
   btnBackToMap?.classList.add('hidden');
   if (minimapPanel) minimapPanel.classList.add('hidden');
   else minimap?.classList.add('hidden');
   minimapAudioUi.forceCloseMinimapAudioPopover();
+  minimapEventLogUi.clearPlayEventLogHudEngaged();
   minimapHudPopovers.forceCloseAllPopovers();
   minimapSaveModal.forceClose();
   if (infoBar) infoBar.innerHTML = t('play.hudHintMap');
   resetMinimapPlayFooter();
   playDetailColliderHighlight = null;
 
-  document.body.classList.remove('play-mode-active');
-  document.querySelector('.app').classList.remove('play-mode-active');
   playSocialOverlay.clearActive();
+  clearPlayEventLog();
 
   stopGameLoop();
   playCharacterSelector?.updatePlayAltitudeHud(null);
@@ -1723,29 +2280,26 @@ btnBackToMap?.addEventListener('click', () => {
   dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
   if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = t('play.idle');
+  syncInfiniteLifeToggleUi();
+  syncRegionViewShell();
   resizeCanvas();
   updateView();
+  startWorldMapRenderLoop();
+});
+
+btnContinuePlay?.addEventListener('click', () => {
+  continueFromMapToPlay();
 });
 
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  if (appMode === 'play') {
-    const wrap = document.querySelector('.map-wrap');
-    const w = Math.max(1, Math.floor(wrap.clientWidth || window.innerWidth));
-    const h = Math.max(1, Math.floor(wrap.clientHeight || window.innerHeight));
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.width = Math.max(1, Math.floor(w * dpr));
-    canvas.height = Math.max(1, Math.floor(h * dpr));
-  } else {
-    const wrap = document.querySelector('.map-wrap');
-    const cssW = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
-    const cssH = cssW;
-    canvas.style.width = `${cssW}px`;
-    canvas.style.height = `${cssH}px`;
-    canvas.width = Math.max(1, Math.floor(cssW * dpr));
-    canvas.height = Math.max(1, Math.floor(cssH * dpr));
-  }
+  const wrap = document.querySelector('.map-wrap');
+  const w = Math.max(1, Math.floor(wrap?.clientWidth || window.innerWidth));
+  const h = Math.max(1, Math.floor(wrap?.clientHeight || window.innerHeight));
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  canvas.width = Math.max(1, Math.floor(w * dpr));
+  canvas.height = Math.max(1, Math.floor(h * dpr));
 }
 
 window.addEventListener('resize', () => {
@@ -1965,6 +2519,14 @@ playEarthquakeIntensityEl?.addEventListener('input', () => {
   setEarthquakeTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
 });
 
+playSunLightRaysIntensityEl?.addEventListener('input', () => {
+  const v = Number(playSunLightRaysIntensityEl.value);
+  setSunLightRaysTargetIntensity01((Number.isFinite(v) ? v : 0) / 100);
+});
+playMoonlightEnabledEl?.addEventListener('change', () => {
+  moonlightEnabled = !!playMoonlightEnabledEl.checked;
+});
+
 document.getElementById('play-weather-lightning')?.addEventListener('click', () => {
   if (appMode !== 'play') return;
   const pvx = player.visualX ?? player.x;
@@ -1998,6 +2560,7 @@ document.getElementById('chkPlayColliders')?.addEventListener('change', () => {
   } else if (!on) {
     clearPlayColliderOverlayCache();
   }
+  syncMinimapColliderToggleUi();
   updateView();
 });
 document.getElementById('chkWorldReactionsOverlay')?.addEventListener('change', updateView);
@@ -2014,9 +2577,6 @@ syncForceLod0FromUi();
 void initMods();
 
 loadTilesetImages().then(async () => {
-  if (document.getElementById('biomesModal') && document.getElementById('biomesGrid')) {
-    new BiomesModal();
-  }
   playCharacterSelector = new CharacterSelector('character-selector-container', {
     getCurrentData: () => currentData,
     getAppMode: () => appMode,
@@ -2026,6 +2586,7 @@ loadTilesetImages().then(async () => {
   void playSocialOverlay.refreshPortraits(player.dexId);
   window.addEventListener('pkmn-player-species-changed', () => {
     void playSocialOverlay.refreshPortraits(player.dexId);
+    playCharacterSelector?.updatePlayVitalsHud();
   });
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
@@ -2043,9 +2604,15 @@ function tryAutoResumePlayFromSave() {
   if (didAutoResumePlayOnInitialLoad) return;
   if (appMode !== 'map' || !currentData) return;
   const saved = peekPlaySessionSaveForMap(currentData);
-  if (!saved) return;
-  const tile = getPlayResumeMacroTileFromSave(saved, currentData);
-  if (!tile) return;
+  if (saved) {
+    const tile = getPlayResumeMacroTileFromSave(saved, currentData);
+    if (tile) {
+      didAutoResumePlayOnInitialLoad = true;
+      enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+      return;
+    }
+  }
+  const city = pickRandomCityMacroForPlayStart(currentData);
   didAutoResumePlayOnInitialLoad = true;
-  enterPlayMode(tile.gx, tile.gy, { resumePosition: true });
+  enterPlayMode(city.gx, city.gy, { resumePosition: false });
 }

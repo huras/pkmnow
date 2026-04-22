@@ -10,6 +10,12 @@ export const TRUNK_STRIP_WIDTH_FRAC = 0.25;
 /** Formal broadleaf trunk span on X (micro tiles) × {@link TRUNK_STRIP_WIDTH_FRAC}. */
 export const FORMAL_TRUNK_BASE_WIDTH_TILES = 2;
 
+/** Formal tree: horizontal radius at canopy height (`topZ`) = base radius × this (1 = cylinder). */
+export const FORMAL_TREE_TRUNK_TOP_RADIUS_MULT = 1.15;
+
+/** Scatter tree: radius at trunk top = stem `radius` × this (1 = cylinder). */
+export const SCATTER_TREE_TRUNK_TOP_RADIUS_MULT = 1.15;
+
 /**
  * Move-detection hitbox multiplier for trees. Moves (Thunder splash, Flamethrower, Cut sweep,
  * lightning tree-ignition, etc.) test against a **bigger circle** than the physical trunk

@@ -108,7 +108,7 @@ export function spawnFireSpinReleaseBurst(pushProjectile, sourceEntity, cx, cy, 
   const spdHi = spdLo + 2.4 + (tier - 1) * 0.8;
   for (let i = 0; i < n; i++) {
     const spread = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.14;
-    const a = baseA + spread * 0.55 + (Math.random() - 0.5) * 0.2;
+    const a = baseA + spread + (Math.random() - 0.5) * 0.2;
     const speed = spdLo + Math.random() * (spdHi - spdLo);
     pushProjectile({
       type: 'fireSpinBurst',

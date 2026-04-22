@@ -16,13 +16,20 @@ export const MESSAGES = {
       disclaimerRow: 'Não licenciado por Nintendo · Não licenciado por Game Freak · Não licenciado por The Pokemon Company',
       freeDistribution: 'Distribuído gratuitamente · Venda proibida',
       biomeUnknown: 'Região desconhecida',
-      languageLabel: 'Idioma'
+      languageLabel: 'Idioma',
+      skipLogoHint: 'Clique ou Espaço para acelerar o fade das logos',
+      continueGame: 'Continuar',
+      loadSaveFile: 'Carregar save (arquivo)',
+      loadingProgress: 'Carregando {done}/{total}',
+      loadFileError: 'Arquivo de save inválido.',
+      loadFileReadError: 'Não foi possível ler o arquivo.'
     },
     play: {
       docTitle: 'Jogar — região procedural',
       shellTitle: 'Explorar região',
       seedLabel: 'Seed',
       generate: 'Gerar',
+      continuePlay: 'Continuar',
       backToMap: 'Voltar ao mapa',
       toolsDebug: 'Ferramentas / debug',
       home: 'Início',
@@ -35,7 +42,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'Tempo do mundo',
       minimapWeatherToggle: 'Clima',
       minimapSocialToggle: 'Ações sociais (numpad)',
-      minimapAudioToggle: 'Volume de BGM e cries',
+      minimapAudioToggle: 'Volume de BGM, ME, ambiente e SFX',
       mapCanvasLabel: 'Mapa e jogo',
       minimapCanvasLabel: 'Minimapa da região',
       minimapBiomeStatus: 'Bioma atual e posição (X, Y, Z)',
@@ -43,6 +50,7 @@ export const MESSAGES = {
       minimapZoomOut: 'Afastar o minimapa',
       minimapZoomIn: 'Aproximar o minimapa',
       minimapBack: 'Voltar ao mapa global',
+      minimapBiomeWithTime: '{biome} · {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: 'Tocando agora',
@@ -67,26 +75,37 @@ export const MESSAGES = {
       cloudIntensity: 'Intensidade das nuvens',
       rainIntensity: 'Intensidade da precipitação',
       earthquakeLayer: 'Camada de terremoto',
+      sunLightRaysLayer: 'Raios de sol (camada)',
+      moonPresence: 'Lua presente (raios noturnos)',
       strikeNow: 'Raio agora',
       groupsSimulated: 'Grupos simulados',
       nextFarCry: 'Próximo Far Cry',
       farCryNow: 'Far Cry!',
       noTarget: 'Sem alvo',
       leaderTarget: 'Alvo do líder',
-      volumeMusic: 'Volume e música',
+      volumeMusic: 'Volume e áudio',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: 'Ambiente',
       sfx: 'SFX',
       mute: 'Mutar',
       suppressBgmToast: 'Não mostrar aviso ao trocar de música',
       music: 'Música',
       nextTrack: 'Próxima música',
       saveModalTitle: 'Progresso no mapa',
-      saveModalDesc: 'Grava no navegador a posição e inventário desta região (mesma seed e tamanho). Ao voltar, o jogo pode restaurar este estado. Limpar remove apenas o armazenamento.',
+      saveModalDesc: 'Salva posição, inventário, hora do mundo, tempo em jogo e clima desta região (mesma seed e tamanho) no navegador ou em arquivo JSON. Ao voltar, o jogo pode restaurar. Limpar remove só o slot do navegador.',
       saveNow: 'Salvar agora',
+      saveToBrowser: 'Salvar no navegador',
+      saveToFile: 'Salvar em arquivo',
+      loadFromFile: 'Carregar de arquivo',
       clearSave: 'Limpar salvamento',
+      saveImportInvalid: 'JSON inválido ou save incompatível.',
+      saveImportOkSameMap: 'Save importado — combina com o mapa atual.',
+      saveImportOkNeedGenerate: 'Save importado — a seed foi ajustada; clique em Gerar para carregar o mapa correspondente.',
+      saveImportReadError: 'Falha ao ler o arquivo.',
       saveStatusNeedMap: 'Gere um mapa e entre no modo jogo para usar o salvamento.',
       saveStatusHasData: 'Há dados salvos para esta região (mesma seed e tamanho). Você pode sobrescrever ou limpar.',
-      saveStatusNoData: 'Nenhum dado salvo ainda — Salvar agora grava posição, inventário, hora do mundo e clima.',
+      saveStatusNoData: 'Nenhum dado salvo ainda — Salvar agora grava posição, inventário, hora do mundo, tempo em jogo e clima.',
       helpTitle: 'Ajuda',
       helpIndex: 'Índice',
       helpClose: 'Fechar ajuda',
@@ -109,7 +128,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokémon sem groupId (avulsos ou debug)',
       leaderSuffix: ' (líder)',
       weatherLightningTitle: 'Disparar um raio próximo ao jogador',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{time}',
+      playSessionTime: 'Tempo em jogo: {time}'
     },
     zoom: {
       farTitle: 'Mapa todo',
@@ -141,7 +161,8 @@ export const MESSAGES = {
       17: 'Rua de Cidade',
       18: 'Vila Rural',
       19: 'Rua de Vila',
-      20: 'Campos Floridos'
+      20: 'Campos Floridos',
+      99: 'Terras corrompidas'
     }
   },
   'en-US': {
@@ -157,13 +178,20 @@ export const MESSAGES = {
       disclaimerRow: 'Not licensed by Nintendo · Not licensed by Game Freak · Not licensed by The Pokemon Company',
       freeDistribution: 'Distributed freely · Selling is not allowed',
       biomeUnknown: 'Unknown region',
-      languageLabel: 'Language'
+      languageLabel: 'Language',
+      skipLogoHint: 'Click or Space to speed up the logo fade',
+      continueGame: 'Continue',
+      loadSaveFile: 'Load save (file)',
+      loadingProgress: 'Loading {done}/{total}',
+      loadFileError: 'Invalid save file.',
+      loadFileReadError: 'Could not read the file.'
     },
     play: {
       docTitle: 'Play — procedural region',
       shellTitle: 'Explore region',
       seedLabel: 'Seed',
       generate: 'Generate',
+      continuePlay: 'Continue',
       backToMap: 'Back to map',
       toolsDebug: 'Tools / debug',
       home: 'Home',
@@ -176,7 +204,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'World time',
       minimapWeatherToggle: 'Weather',
       minimapSocialToggle: 'Social actions (numpad)',
-      minimapAudioToggle: 'BGM and cries volume',
+      minimapAudioToggle: 'BGM, ME, ambience, and SFX volume',
       mapCanvasLabel: 'Map and game',
       minimapCanvasLabel: 'Region minimap',
       minimapBiomeStatus: 'Current biome and position (X, Y, Z)',
@@ -184,6 +212,7 @@ export const MESSAGES = {
       minimapZoomOut: 'Zoom out minimap',
       minimapZoomIn: 'Zoom in minimap',
       minimapBack: 'Return to world map',
+      minimapBiomeWithTime: '{biome} · {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: 'Now playing',
@@ -208,26 +237,37 @@ export const MESSAGES = {
       cloudIntensity: 'Cloud intensity',
       rainIntensity: 'Precipitation intensity',
       earthquakeLayer: 'Earthquake layer',
+      sunLightRaysLayer: 'Sun light rays',
+      moonPresence: 'Moon present (night rays)',
       strikeNow: 'Strike now',
       groupsSimulated: 'Simulated groups',
       nextFarCry: 'Next Far Cry',
       farCryNow: 'Far Cry!',
       noTarget: 'No target',
       leaderTarget: 'Leader target',
-      volumeMusic: 'Volume and music',
+      volumeMusic: 'Volume and audio',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: 'Ambience',
       sfx: 'SFX',
       mute: 'Mute',
       suppressBgmToast: 'Do not show track change toast',
       music: 'Music',
       nextTrack: 'Next track',
       saveModalTitle: 'Map progress',
-      saveModalDesc: 'Stores this region position and inventory in your browser (same seed and size). Re-entering can restore this state. Clear removes storage only.',
+      saveModalDesc: 'Stores position, inventory, world time, in-game time, and weather for this region (same seed and size) in the browser or as a JSON file. Re-entering can restore. Clear removes the browser slot only.',
       saveNow: 'Save now',
+      saveToBrowser: 'Save to browser',
+      saveToFile: 'Save to file',
+      loadFromFile: 'Load from file',
       clearSave: 'Clear save',
+      saveImportInvalid: 'Invalid JSON or incompatible save.',
+      saveImportOkSameMap: 'Save imported — matches the current map.',
+      saveImportOkNeedGenerate: 'Save imported — seed was updated; click Generate to load the matching region.',
+      saveImportReadError: 'Failed to read the file.',
       saveStatusNeedMap: 'Generate a map and enter play mode to use save.',
       saveStatusHasData: 'Saved data exists for this region (same seed and size). You can overwrite or clear it.',
-      saveStatusNoData: 'No save data yet — Save now stores position, inventory, world time, and weather.',
+      saveStatusNoData: 'No save data yet — Save now stores position, inventory, world time, in-game time, and weather.',
       helpTitle: 'Help',
       helpIndex: 'Index',
       helpClose: 'Close help',
@@ -250,7 +290,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'Pokemon without groupId (solo or debug)',
       leaderSuffix: ' (leader)',
       weatherLightningTitle: 'Trigger a lightning strike near the player',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{time}',
+      playSessionTime: 'In-game time: {time}'
     },
     zoom: {
       farTitle: 'Full map',
@@ -282,7 +323,8 @@ export const MESSAGES = {
       17: 'City Street',
       18: 'Rural Town',
       19: 'Town Street',
-      20: 'Flower Fields'
+      20: 'Flower Fields',
+      99: 'Corrupted lands'
     }
   },
   'ja-JP': {
@@ -298,13 +340,20 @@ export const MESSAGES = {
       disclaimerRow: 'Nintendo / Game Freak / The Pokemon Company 非公式ファンプロジェクト',
       freeDistribution: '無料配布のみ · 販売禁止',
       biomeUnknown: '未知のリージョン',
-      languageLabel: '言語'
+      languageLabel: '言語',
+      skipLogoHint: 'クリックまたはスペースでロゴのフェードを早送り',
+      continueGame: '続きから',
+      loadSaveFile: 'セーブを読み込む（ファイル）',
+      loadingProgress: '読み込み {done}/{total}',
+      loadFileError: 'セーブファイルが無効です。',
+      loadFileReadError: 'ファイルを読み込めませんでした。'
     },
     play: {
       docTitle: 'プレイ — プロシージャルリージョン',
       shellTitle: 'リージョン探索',
       seedLabel: 'シード',
       generate: '生成',
+      continuePlay: '続ける',
       backToMap: 'マップへ戻る',
       toolsDebug: 'ツール / デバッグ',
       home: 'ホーム',
@@ -317,7 +366,7 @@ export const MESSAGES = {
       minimapTimeToggle: 'ワールド時間',
       minimapWeatherToggle: '天候',
       minimapSocialToggle: 'ソーシャルアクション (テンキー)',
-      minimapAudioToggle: 'BGMと鳴き声の音量',
+      minimapAudioToggle: 'BGM・ME・環境音・SFXの音量',
       mapCanvasLabel: 'マップとゲーム',
       minimapCanvasLabel: 'リージョンミニマップ',
       minimapBiomeStatus: '現在のバイオームと座標 (X, Y, Z)',
@@ -325,6 +374,7 @@ export const MESSAGES = {
       minimapZoomOut: 'ミニマップを縮小',
       minimapZoomIn: 'ミニマップを拡大',
       minimapBack: 'ワールドマップへ戻る',
+      minimapBiomeWithTime: '{biome} ・ {time}',
       minimapCoords: 'X {x} · Y {y} · Z {z}',
       minimapCoordsEmpty: 'X — · Y — · Z —',
       nowPlaying: '再生中',
@@ -349,26 +399,37 @@ export const MESSAGES = {
       cloudIntensity: '雲の強さ',
       rainIntensity: '降水強度',
       earthquakeLayer: '地震レイヤー',
+      sunLightRaysLayer: '日光の筋',
+      moonPresence: '月あり (夜の光線)',
       strikeNow: '今すぐ落雷',
       groupsSimulated: 'シミュレート中のグループ',
       nextFarCry: '次のFar Cry',
       farCryNow: 'Far Cry!',
       noTarget: '対象なし',
       leaderTarget: 'リーダー目標',
-      volumeMusic: '音量と音楽',
+      volumeMusic: '音量とオーディオ',
       bgm: 'BGM',
+      me: 'ME',
+      ambience: '環境音',
       sfx: 'SFX',
       mute: 'ミュート',
       suppressBgmToast: '曲変更トーストを表示しない',
       music: '音楽',
       nextTrack: '次の曲',
       saveModalTitle: 'マップ進行',
-      saveModalDesc: '同じシードとサイズのリージョンに対して、位置とインベントリをブラウザへ保存します。再入場時に復元できます。削除は保存データのみを消去します。',
+      saveModalDesc: '同じシードとサイズのリージョンについて、位置・インベントリ・ワールド時間・プレイ時間・天候をブラウザまたは JSON ファイルに保存します。再入場時に復元できます。削除はブラウザのスロットのみ消去します。',
       saveNow: '今すぐ保存',
+      saveToBrowser: 'ブラウザに保存',
+      saveToFile: 'ファイルに保存',
+      loadFromFile: 'ファイルから読み込む',
       clearSave: '保存を削除',
+      saveImportInvalid: 'JSON が無効か、セーブと互換性がありません。',
+      saveImportOkSameMap: 'セーブを読み込みました — 現在のマップと一致します。',
+      saveImportOkNeedGenerate: 'セーブを読み込みました — シードを合わせました。「生成」でマップを読み込んでください。',
+      saveImportReadError: 'ファイルの読み込みに失敗しました。',
       saveStatusNeedMap: '保存機能を使うには、マップ生成後にプレイモードへ入ってください。',
       saveStatusHasData: 'このリージョンには保存データがあります (同じシード / サイズ)。上書きまたは削除できます。',
-      saveStatusNoData: 'まだ保存データはありません。今すぐ保存で位置、インベントリ、時間、天候を保存します。',
+      saveStatusNoData: 'まだ保存データはありません。今すぐ保存で位置、インベントリ、ワールド時間、プレイ時間、天候を保存します。',
       helpTitle: 'ヘルプ',
       helpIndex: '目次',
       helpClose: 'ヘルプを閉じる',
@@ -391,7 +452,8 @@ export const MESSAGES = {
       groupsNoGroupTitle: 'groupIdなしのポケモン (単独 / デバッグ)',
       leaderSuffix: ' (リーダー)',
       weatherLightningTitle: 'プレイヤー付近に落雷を発生',
-      worldTimeHour: '{hours} h'
+      worldTimeHour: '{time}',
+      playSessionTime: 'プレイ時間: {time}'
     },
     zoom: {
       farTitle: '全体マップ',
@@ -423,7 +485,8 @@ export const MESSAGES = {
       17: '都市道路',
       18: '村',
       19: '村道',
-      20: '花畑'
+      20: '花畑',
+      99: '堕落の大地'
     }
   }
 };
@@ -453,7 +516,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'Áudio',
-      html: '<h2 class="play-help-wiki__h2">Áudio</h2><p class="play-help-wiki__p">No ícone de música você ajusta BGM, SFX, mute e o aviso de troca de trilha.</p>'
+      html: '<h2 class="play-help-wiki__h2">Áudio</h2><p class="play-help-wiki__p">No ícone de música você ajusta BGM, ME, ambiente, SFX, mute e o aviso de troca de trilha.</p>'
     }
   ],
   'en-US': [
@@ -480,7 +543,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'Audio',
-      html: '<h2 class="play-help-wiki__h2">Audio</h2><p class="play-help-wiki__p">Open the music icon to manage BGM, SFX, mute, and track-change toast behavior.</p>'
+      html: '<h2 class="play-help-wiki__h2">Audio</h2><p class="play-help-wiki__p">Open the music icon to manage BGM, ME, ambience, SFX, mute, and track-change toast behavior.</p>'
     }
   ],
   'ja-JP': [
@@ -507,7 +570,7 @@ export const HELP_ARTICLES = {
     {
       id: 'audio',
       title: 'オーディオ',
-      html: '<h2 class="play-help-wiki__h2">オーディオ</h2><p class="play-help-wiki__p">音楽アイコンからBGM、SFX、ミュート、曲変更通知を設定できます。</p>'
+      html: '<h2 class="play-help-wiki__h2">オーディオ</h2><p class="play-help-wiki__p">音楽アイコンからBGM、ME、環境音、SFX、ミュート、曲変更通知を設定できます。</p>'
     }
   ]
 };

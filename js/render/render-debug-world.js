@@ -7,7 +7,10 @@ import {
   scatterPhysicsCircleAtOrigin,
   EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
   beginWildWalkProbeCache,
-  endWildWalkProbeCache
+  endWildWalkProbeCache,
+  TREE_CANOPY_WALK_RADIUS_MULT,
+  FORMAL_TREE_CANOPY_Z,
+  SCATTER_TREE_CANOPY_Z
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from '../main/play-collider-overlay-cache.js';
@@ -90,6 +93,70 @@ let ghostMistCache = null;
 // Sized to the viewport on demand. Re-used across frames.
 let entityMaskCanvas = null;
 let shiftedShadowCanvas = null;
+
+/** Attack particles that carry a gameplay radius in `radiusTiles`. */
+const ATTACK_RADIUS_PARTICLE_TYPES = new Set([
+  'fieldCutVineArc',
+  'fieldCutPsychicArc',
+  'fieldCutSlashArc',
+  'fieldCutScratchArc',
+  'fieldSpinAttack',
+  'waterGunWaveRing',
+  'prismaticWindArc',
+  'steelWindArc'
+]);
+
+function drawProjectileAttackCollider(ctx, proj, tileW, tileH, snapPx) {
+  if (!proj) return;
+  const zLift = Math.max(0, Number(proj.z) || 0);
+  const px = snapPx((Number(proj.x) || 0) * tileW);
+  const py = snapPx((Number(proj.y) || 0) * tileH - zLift * tileH);
+  const hitR = Math.max(0, Number(proj.radius) || 0);
+  const splashR = Math.max(0, Number(proj.splashRadius) || 0);
+
+  if (hitR > 0) {
+    ctx.strokeStyle = 'rgba(255, 76, 76, 0.96)';
+    ctx.fillStyle = 'rgba(255, 64, 64, 0.13)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.ellipse(px, py, Math.max(1, hitR * tileW), Math.max(1, hitR * tileH), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (splashR > 0) {
+    ctx.strokeStyle = 'rgba(255, 188, 76, 0.94)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.ellipse(px, py, Math.max(1, splashR * tileW), Math.max(1, splashR * tileH), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.fillStyle = 'rgba(255, 248, 220, 0.95)';
+  ctx.fillRect(px - 2, py - 2, 4, 4);
+}
+
+function drawParticleAttackCollider(ctx, part, tileW, tileH, snapPx) {
+  if (!part || !ATTACK_RADIUS_PARTICLE_TYPES.has(String(part.type || ''))) return;
+  const radiusTiles = Math.max(0, Number(part.radiusTiles) || 0);
+  if (radiusTiles <= 0) return;
+  const zLift = Math.max(0, Number(part.z) || 0);
+  const px = snapPx((Number(part.x) || 0) * tileW);
+  const py = snapPx((Number(part.y) || 0) * tileH - zLift * tileH);
+
+  ctx.strokeStyle = 'rgba(150, 205, 255, 0.9)';
+  ctx.fillStyle = 'rgba(110, 190, 255, 0.08)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.ellipse(px, py, Math.max(1, radiusTiles * tileW), Math.max(1, radiusTiles * tileH), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
 
 function ensureEntityShadowBuffers(cw, ch) {
   if (!entityMaskCanvas || entityMaskCanvas.width !== cw || entityMaskCanvas.height !== ch) {
@@ -289,6 +356,66 @@ function sampleCloudSizeField01(worldX, worldY, seed) {
   return a + v * (b - a);
 }
 
+/**
+ * Time-of-day response for cloud-ground shadow projection.
+ * @param {number} worldHoursWrapped hour in [0, 24)
+ * @param {number} baseOffsetXPx
+ * @param {number} baseOffsetYPx
+ * @returns {{ offsetX: number, offsetY: number, shadowAlphaMul: number }}
+ */
+function getCloudShadowProjectionByDay(worldHoursWrapped, baseOffsetXPx, baseOffsetYPx) {
+  const h = Number(worldHoursWrapped);
+  if (!Number.isFinite(h)) {
+    return { offsetX: Math.round(baseOffsetXPx), offsetY: Math.round(baseOffsetYPx), shadowAlphaMul: 1 };
+  }
+
+  let x = h % 24;
+  if (x < 0) x += 24;
+
+  // Light probes:
+  // - Sun:  peak at 12h, horizon at 6h/18h.
+  // - Moon: peak at 00h, horizon at 18h/6h (complementary to sun).
+  const sunElev01 = smoothstep01(Math.max(0, Math.cos((x - 12) * (Math.PI / 12))));
+  const moonElev01 = smoothstep01(Math.max(0, Math.cos(x * (Math.PI / 12))));
+  // Moonlit cloud shadows must exist, but remain much softer than daytime.
+  const sunLightW = sunElev01;
+  const moonLightW = moonElev01 * 0.34;
+  // Keep a tiny always-on ambient contribution so shadows never fully disappear
+  // during exact sun/moon horizon crossover (e.g. around 6:00 and 18:00).
+  const ambientLightW = 0.14;
+  const lightSum = sunLightW + moonLightW + ambientLightW;
+
+  const baseLen = Math.hypot(baseOffsetXPx, baseOffsetYPx);
+  const baseAng = Math.atan2(baseOffsetYPx, baseOffsetXPx);
+  // Blend sun+moon azimuth so dusk/night transitions stay continuous.
+  const sunSwing = Math.sin((x - 12) * (Math.PI / 12));
+  const moonSwing = Math.sin(x * (Math.PI / 12));
+  const ambientSwing = Math.sin((x - 9) * (Math.PI / 12));
+  const ang =
+    baseAng +
+    ((sunSwing * 0.55 * sunLightW + moonSwing * 0.42 * moonLightW + ambientSwing * 0.14 * ambientLightW) /
+      Math.max(1e-6, lightSum));
+
+  // Day: short at noon, long at low sun.
+  const sunLenMul = 0.68 + (1 - sunElev01) * 1.42;
+  // Night: generally longer and softer than daytime.
+  const moonLenMul = 1.15 + (1 - moonElev01) * 1.1;
+  const ambientLenMul = 1.22;
+  const lenMul =
+    (sunLenMul * sunLightW + moonLenMul * moonLightW + ambientLenMul * ambientLightW) / Math.max(1e-6, lightSum);
+  const len = baseLen * lenMul;
+
+  // Keep moon shadows visible without overpowering scene tinting.
+  const alpha =
+    Math.max(0.12, Math.min(1, 0.12 + sunLightW + moonLightW * 0.82));
+
+  return {
+    offsetX: Math.round(Math.cos(ang) * len),
+    offsetY: Math.round(Math.sin(ang) * len),
+    shadowAlphaMul: alpha
+  };
+}
+
 function drawSnesCloudParallax(ctx, options) {
   const {
     ch,
@@ -309,6 +436,7 @@ function drawSnesCloudParallax(ctx, options) {
     windDirRad = 0,
     windIntensity = 0,
     cw = 0,
+    worldHours,
     entityShadowSprites = null,
     /** 0..1 scales white cloud pass (shadows ignore this). Default 1 = editor / non-play. */
     whiteLayerAlphaMul = 1
@@ -330,8 +458,12 @@ function drawSnesCloudParallax(ctx, options) {
   const alphaMul = pickNum(dbg?.alphaMul, cloudAlphaMulOpt, 1);
   const time = Number.isFinite(timeSec) ? timeSec : 0;
   const baseScale = Math.max(0.7, Math.min(1.25, ch / 900));
-  const shadowOffsetX = Math.round(tileW * CLOUD_SHADOW_OFFSET_BASE_X_TILES * CLOUD_SHADOW_OFFSET_MULT);
-  const shadowOffsetY = Math.round(tileH * CLOUD_SHADOW_OFFSET_BASE_Y_TILES * CLOUD_SHADOW_OFFSET_MULT);
+  const baseShadowOffsetX = tileW * CLOUD_SHADOW_OFFSET_BASE_X_TILES * CLOUD_SHADOW_OFFSET_MULT;
+  const baseShadowOffsetY = tileH * CLOUD_SHADOW_OFFSET_BASE_Y_TILES * CLOUD_SHADOW_OFFSET_MULT;
+  const shadowProjection = getCloudShadowProjectionByDay(worldHours, baseShadowOffsetX, baseShadowOffsetY);
+  const shadowOffsetX = shadowProjection.offsetX;
+  const shadowOffsetY = shadowProjection.offsetY;
+  const shadowAlphaMul = shadowProjection.shadowAlphaMul;
   const paddedStartX = startX - 30;
   const paddedEndX = endX + 30;
   const paddedStartY = startY - 24;
@@ -416,7 +548,12 @@ function drawSnesCloudParallax(ctx, options) {
       }
 
       const alpha =
-        c.alpha * CLOUD_ALPHA_GAIN * cloudPresence * alphaMul * (isShadow ? CLOUD_SHADOW_ALPHA_RATIO : 1) * wMul;
+        c.alpha *
+        CLOUD_ALPHA_GAIN *
+        cloudPresence *
+        alphaMul *
+        (isShadow ? CLOUD_SHADOW_ALPHA_RATIO * shadowAlphaMul : 1) *
+        wMul;
       const clampedAlpha = Math.max(0, Math.min(1, alpha));
       targetCtx.globalAlpha = clampedAlpha;
       targetCtx.drawImage(sprite, x, y, w, h);
@@ -619,26 +756,102 @@ export function drawWorldColliderOverlay(ctx, options) {
         }
       }
 
-      ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
+      // Draw tree trunk frusta: base ellipse, top ellipse, four side rulings (matches linear r(z) physics).
       ctx.lineWidth = 2;
       for (const span of colliderCache.formalEllipses) {
-        if (!circleAabbIntersectsRect(span.cx, span.cy, span.radius, startX, startY, endX, endY)) continue;
+        const rTopF = span.radiusTop != null ? span.radiusTop : span.radius;
+        const rCull = Math.max(span.radius, rTopF);
+        if (!circleAabbIntersectsRect(span.cx, span.cy, rCull, startX, startY, endX, endY)) continue;
         const pxCx = snapPx(span.cx * tileW);
         const pxCy = snapPx(span.cy * tileH);
+        const rwB = Math.max(1, span.radius * tileW);
+        const rhB = Math.max(1, span.radius * tileH);
+        const rwT = Math.max(1, rTopF * tileW);
+        const rhT = Math.max(1, rTopF * tileH);
+        const topOff = (span.topZ || 0) * tileH;
+        const pxCyTop = pxCy - topOff;
+        // Base ellipse
+        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
         ctx.beginPath();
-        ctx.ellipse(pxCx, pxCy, Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
+        ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
         ctx.stroke();
+        if (topOff > 0) {
+          // Top ellipse
+          ctx.strokeStyle = 'rgba(120, 255, 255, 0.5)';
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(120, 255, 255, 0.35)';
+          ctx.beginPath();
+          ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+          ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+          ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+          ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+          ctx.stroke();
+        }
       }
 
       for (const p of colliderCache.scatterEllipses) {
-        if (!circleAabbIntersectsRect(p.cx, p.cy, p.radius, startX, startY, endX, endY)) continue;
+        const rTopS = p.radiusTop != null ? p.radiusTop : p.radius;
+        const rCullS = Math.max(p.radius, rTopS);
+        if (!circleAabbIntersectsRect(p.cx, p.cy, rCullS, startX, startY, endX, endY)) continue;
+        const pxCx = snapPx(p.cx * tileW);
+        const pxCy = snapPx(p.cy * tileH);
+        const rwB = Math.max(1, p.radius * tileW);
+        const rhB = Math.max(1, p.radius * tileH);
+        const rwT = Math.max(1, rTopS * tileW);
+        const rhT = Math.max(1, rTopS * tileH);
+        const topOff = (p.topZ || 0) * tileH;
+        const pxCyTop = pxCy - topOff;
+        // Base ellipse
         ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (topOff > 0) {
+          // Top ellipse
+          ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.5)' : 'rgba(100, 200, 255, 0.45)';
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.3)' : 'rgba(100, 200, 255, 0.3)';
+          ctx.beginPath();
+          ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+          ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+          ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+          ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+          ctx.stroke();
+        }
+      }
+
+      // Treetop walk / groundZ: larger dashed discs (getTreeCanopyZAtPoint), not trunk hit.
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(72, 235, 150, 0.78)';
+      for (const span of colliderCache.formalEllipses) {
+        const rTopWalk = span.radiusTop != null ? span.radiusTop : span.radius;
+        const cr = rTopWalk * TREE_CANOPY_WALK_RADIUS_MULT;
+        if (!circleAabbIntersectsRect(span.cx, span.cy, cr, startX, startY, endX, endY)) continue;
+        const pxCx = snapPx(span.cx * tileW);
+        const pxCy = snapPx(span.cy * tileH);
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(235, 255, 92, 0.74)';
+      for (const p of colliderCache.scatterEllipses) {
+        if (!p.isTree) continue;
+        const rTopWalkS = p.radiusTop != null ? p.radiusTop : p.radius;
+        const cr = rTopWalkS * TREE_CANOPY_WALK_RADIUS_MULT;
+        if (!circleAabbIntersectsRect(p.cx, p.cy, cr, startX, startY, endX, endY)) continue;
         const pxCx = snapPx(p.cx * tileW);
         const pxCy = snapPx(p.cy * tileH);
         ctx.beginPath();
-        ctx.ellipse(pxCx, pxCy, Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
+        ctx.ellipse(pxCx, pxCy, Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
         ctx.stroke();
       }
+      ctx.restore();
     } else {
       // Direct (no cache) fallback
       const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
@@ -668,14 +881,34 @@ export function drawWorldColliderOverlay(ctx, options) {
           }
         }
 
-        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
         ctx.lineWidth = 2;
         for (let my = oy0; my < oy1; my++) {
           for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
             const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
             if (!span) continue;
+            const pxCx = snapPx(span.cx * tileW);
+            const pxCy = snapPx(span.cy * tileH);
+            const rTopF = span.radiusTop != null ? span.radiusTop : span.radius;
+            const rwB = Math.max(1, span.radius * tileW);
+            const rhB = Math.max(1, span.radius * tileH);
+            const rwT = Math.max(1, rTopF * tileW);
+            const rhT = Math.max(1, rTopF * tileH);
+            const topOff = FORMAL_TREE_CANOPY_Z * tileH;
+            const pxCyTop = pxCy - topOff;
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
             ctx.beginPath();
-            ctx.ellipse(snapPx(span.cx * tileW), snapPx(span.cy * tileH), Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.35)';
+            ctx.beginPath();
+            ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+            ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+            ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+            ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
             ctx.stroke();
           }
         }
@@ -685,13 +918,76 @@ export function drawWorldColliderOverlay(ctx, options) {
           for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
             const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, null, getCached);
             if (!p) continue;
-            if (p.cx + p.radius <= ox0 || p.cx - p.radius >= ox1 || p.cy + p.radius <= oy0 || p.cy - p.radius >= oy1) continue;
-            ctx.strokeStyle = scatterItemKeyIsTree(p.itemKey) ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
+            const rMax = Math.max(p.radius, p.radiusTop);
+            if (p.cx + rMax <= ox0 || p.cx - rMax >= ox1 || p.cy + rMax <= oy0 || p.cy - rMax >= oy1) continue;
+            const pxCx = snapPx(p.cx * tileW);
+            const pxCy = snapPx(p.cy * tileH);
+            const rwB = Math.max(1, p.radius * tileW);
+            const rhB = Math.max(1, p.radius * tileH);
+            const rwT = Math.max(1, p.radiusTop * tileW);
+            const rhT = Math.max(1, p.radiusTop * tileH);
+            const isTree = scatterItemKeyIsTree(p.itemKey);
+            const topOff = isTree ? SCATTER_TREE_CANOPY_Z * tileH : 0;
+            const pxCyTop = pxCy - topOff;
+            ctx.strokeStyle = isTree ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
             ctx.beginPath();
-            ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            if (topOff > 0) {
+              ctx.strokeStyle = 'rgba(200, 140, 255, 0.5)';
+              ctx.beginPath();
+              ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.strokeStyle = 'rgba(200, 140, 255, 0.3)';
+              ctx.beginPath();
+              ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+              ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+              ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+              ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(72, 235, 150, 0.78)';
+        for (let my = oy0; my < oy1; my++) {
+          for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
+            const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+            if (!span) continue;
+            const rTopWalk = span.radiusTop != null ? span.radiusTop : span.radius;
+            const cr = rTopWalk * TREE_CANOPY_WALK_RADIUS_MULT;
+            if (!circleAabbIntersectsRect(span.cx, span.cy, cr, startX, startY, endX, endY)) continue;
+            ctx.beginPath();
+            ctx.ellipse(
+              snapPx(span.cx * tileW),
+              snapPx(span.cy * tileH),
+              Math.max(1, cr * tileW),
+              Math.max(1, cr * tileH),
+              0,
+              0,
+              Math.PI * 2
+            );
             ctx.stroke();
           }
         }
+        ctx.strokeStyle = 'rgba(235, 255, 92, 0.74)';
+        for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
+          if (oxS < 0 || oxS >= data.width * MACRO_TILE_STRIDE) continue;
+          for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
+            const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, null, getCached);
+            if (!p || !scatterItemKeyIsTree(p.itemKey)) continue;
+            const rTopWalkS = p.radiusTop != null ? p.radiusTop : p.radius;
+            const cr = rTopWalkS * TREE_CANOPY_WALK_RADIUS_MULT;
+            if (!circleAabbIntersectsRect(p.cx, p.cy, cr, startX, startY, endX, endY)) continue;
+            ctx.beginPath();
+            ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
       } finally {
         endWildWalkProbeCache();
       }
@@ -701,6 +997,10 @@ export function drawWorldColliderOverlay(ctx, options) {
       if (item.type === 'player' || item.type === 'wild') {
         drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
         drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx);
+      } else if (item.type === 'projectile') {
+        drawProjectileAttackCollider(ctx, item.proj, tileW, tileH, snapPx);
+      } else if (item.type === 'particle') {
+        drawParticleAttackCollider(ctx, item.part, tileW, tileH, snapPx);
       } else if (item.type === 'crystalDrop') {
         const d = item.drop;
         const r = Math.max(0.05, Number(d.pickRadius) || 0.5);
@@ -717,6 +1017,10 @@ export function drawWorldColliderOverlay(ctx, options) {
       if (item.type === 'player' || item.type === 'wild') {
         drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx, imageCache);
         drawPlayEntityCombatHurtbox(ctx, item, tileW, tileH, snapPx);
+      } else if (item.type === 'projectile') {
+        drawProjectileAttackCollider(ctx, item.proj, tileW, tileH, snapPx);
+      } else if (item.type === 'particle') {
+        drawParticleAttackCollider(ctx, item.part, tileW, tileH, snapPx);
       }
     }
     ctx.restore();
@@ -816,7 +1120,10 @@ export function drawWorldReactionsOverlay(ctx, options) {
  * @param {Array<{x:number,yTop:number,w:number,h:number}>} [options.splashTargets]
  *        Entity world-pixel anchors (same space ctx uses for entities) to spawn rain splashes on.
  * @param {number} [options.earthquakeVisual01=0] — smoothed 0..1 ground-shake layer (independent of sky weather).
+ * @param {number} [options.sunLightRaysIntensity01=0] — smoothed 0..1 additive sunlight shafts + halo/lens flare.
+ * @param {number} [options.moonLightRaysIntensity01=0] — smoothed 0..1 additive moonlight shafts from the opposite side.
  * @param {number} [options.cloudWhiteLayerAlphaMul=1] — 0..1 scales procedural *white* clouds (shadows unchanged). Play passes altitude ramp from `render.js`.
+ * @param {number} [options.worldHours] — wrapped world hour in [0,24); used to evolve cloud-shadow projection through the day.
  */
 export function drawEnvironmentalEffects(ctx, options) {
   const {
@@ -847,7 +1154,10 @@ export function drawEnvironmentalEffects(ctx, options) {
     splashTargets,
     entityShadowSprites,
     earthquakeVisual01 = 0,
-    cloudWhiteLayerAlphaMul = 1
+    sunLightRaysIntensity01 = 0,
+    moonLightRaysIntensity01 = 0,
+    cloudWhiteLayerAlphaMul = 1,
+    worldHours
   } = options;
   // Clouds go gray with rain. Scales 0..~0.55 so even light rain starts feeling overcast.
   const rainI01 = Math.max(0, Math.min(1, Number(rainIntensity) || 0));
@@ -886,6 +1196,7 @@ export function drawEnvironmentalEffects(ctx, options) {
     windIntensity: windI01,
     cw,
     ch,
+    worldHours,
     entityShadowSprites,
     whiteLayerAlphaMul: cloudWhiteLayerAlphaMul
   });
@@ -942,6 +1253,17 @@ export function drawEnvironmentalEffects(ctx, options) {
     ctx.fillStyle = `rgb(${screenTint.r | 0},${screenTint.g | 0},${screenTint.b | 0})`;
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();
+  }
+
+  const sunRayI = Math.max(0, Math.min(1, Number(sunLightRaysIntensity01) || 0));
+  if (sunRayI > 0.004) {
+    const cloudP = Math.max(0, Math.min(1, Number(cloudPresence) || 0));
+    drawSunLightRaysScreenFx(ctx, cw, ch, time, sunRayI, cloudP, lodDetail);
+  }
+  const moonRayI = Math.max(0, Math.min(1, Number(moonLightRaysIntensity01) || 0));
+  if (moonRayI > 0.004) {
+    const cloudP = Math.max(0, Math.min(1, Number(cloudPresence) || 0));
+    drawMoonLightRaysScreenFx(ctx, cw, ch, time, moonRayI, cloudP, lodDetail);
   }
 
   const eqVis = Math.max(0, Math.min(1, Number(earthquakeVisual01) || 0));
@@ -1058,6 +1380,202 @@ export function drawVolumetricEnvironmentalLayer(ctx, options) {
       weatherMode: weatherVolumetricMode
     });
   });
+}
+
+/**
+ * Additive sunlight shafts with warm halo + lens flare circles.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {number} timeSec
+ * @param {number} intensity01
+ * @param {number} [cloudPresence01=0]
+ * @param {number} [lodDetail=0]
+ */
+function drawSunLightRaysScreenFx(ctx, cw, ch, timeSec, intensity01, cloudPresence01 = 0, lodDetail = 0) {
+  const inten = Math.max(0, Math.min(1, Number(intensity01) || 0));
+  if (inten < 0.003) return;
+  const clouds = Math.max(0, Math.min(1, Number(cloudPresence01) || 0));
+  const cloudDamp = 1 - clouds * 0.42;
+  const lod = Number(lodDetail) || 0;
+  const nRays = lod >= 2 ? 6 : lod >= 1 ? 8 : 10;
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const tick = Math.floor(time * 8);
+  const swayRaw = Math.sin(time * 0.38) * 10 + Math.sin(time * 0.73 + 1.1) * 5;
+  const sway = Math.round(swayRaw / 4) * 4;
+  const reach = Math.hypot(cw, ch) * 1.6;
+  const sx = -cw * 0.14 + sway * 0.35;
+  const sy = -ch * 0.1 + Math.round(Math.sin(time * 0.21) * 3);
+
+  const baseAlpha = (0.1 + inten * 0.23) * inten * cloudDamp;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'screen';
+
+  // Main shafts.
+  for (let i = 0; i < nRays; i++) {
+    const u = nRays <= 1 ? 0.5 : i / (nRays - 1);
+    const j = hash01Cell(i, tick, 0x71e4);
+    const ang0 = 0.46 + u * 0.64 + (j - 0.5) * 0.055;
+    const wedge = (0.038 + inten * 0.05) * (0.85 + 0.15 * hash01Cell(i * 5, tick, 0x88c1));
+    const ang1 = ang0 + wedge;
+    const c0 = Math.cos(ang0);
+    const s0 = Math.sin(ang0);
+    const c1 = Math.cos(ang1);
+    const s1 = Math.sin(ang1);
+    const x0 = sx + c0 * reach;
+    const y0 = sy + s0 * reach;
+    const x1 = sx + c1 * reach;
+    const y1 = sy + s1 * reach;
+    const mx = (x0 + x1) * 0.5;
+    const my = (y0 + y1) * 0.5;
+    const g = ctx.createLinearGradient(sx, sy, mx, my);
+    const peak = baseAlpha * (0.52 + 0.48 * hash01Cell(i * 13, tick + 3, 0x4a39));
+    g.addColorStop(0, 'rgba(255,252,240,0)');
+    g.addColorStop(0.2, `rgba(255,244,210,${peak * 0.32})`);
+    g.addColorStop(0.45, `rgba(255,236,175,${peak})`);
+    g.addColorStop(0.74, `rgba(255,228,160,${peak * 0.55})`);
+    g.addColorStop(1, 'rgba(255,215,140,0)');
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  // Sun core + broad halo.
+  const haloR0 = Math.max(cw, ch) * (0.05 + 0.02 * inten);
+  const haloR1 = Math.max(cw, ch) * (0.36 + 0.08 * inten);
+  const halo = ctx.createRadialGradient(sx, sy, haloR0, sx, sy, haloR1);
+  halo.addColorStop(0, `rgba(255,250,228,${Math.min(0.8, baseAlpha * 2.8)})`);
+  halo.addColorStop(0.28, `rgba(255,236,185,${Math.min(0.62, baseAlpha * 1.9)})`);
+  halo.addColorStop(0.62, `rgba(255,220,150,${Math.min(0.35, baseAlpha * 1.2)})`);
+  halo.addColorStop(1, 'rgba(255,205,130,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Lens flare circles on optical axis (sun only).
+  const cx = cw * 0.5;
+  const cy = ch * 0.5;
+  const ax = cx - sx;
+  const ay = cy - sy;
+  const axisLen = Math.hypot(ax, ay) || 1;
+  const ux = ax / axisLen;
+  const uy = ay / axisLen;
+  const flareCount = lod >= 2 ? 2 : 3;
+  for (let i = 0; i < flareCount; i++) {
+    const t = 0.34 + i * 0.28;
+    const fx = sx + ux * axisLen * t;
+    const fy = sy + uy * axisLen * t;
+    const fr = Math.max(8, Math.min(cw, ch) * (0.024 + (flareCount - i) * 0.009));
+    const fg = ctx.createRadialGradient(fx, fy, fr * 0.08, fx, fy, fr);
+    const a = baseAlpha * (0.2 + (flareCount - i) * 0.1);
+    fg.addColorStop(0, `rgba(255,244,210,${Math.min(0.28, a)})`);
+    fg.addColorStop(0.45, `rgba(255,232,176,${Math.min(0.16, a * 0.7)})`);
+    fg.addColorStop(1, 'rgba(255,220,150,0)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(fx - fr, fy - fr, fr * 2, fr * 2);
+  }
+
+  ctx.globalAlpha = Math.min(1, baseAlpha * 0.85);
+  const wx0 = Math.round(sway * 0.5 / 8) * 8;
+  const wash = ctx.createLinearGradient(wx0, 0, cw * 0.62 + wx0, ch);
+  wash.addColorStop(0, 'rgba(255,248,220,0.42)');
+  wash.addColorStop(0.28, 'rgba(255,238,190,0.14)');
+  wash.addColorStop(0.55, 'rgba(255,230,170,0.05)');
+  wash.addColorStop(1, 'rgba(255,220,150,0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.restore();
+}
+
+/**
+ * Additive moonlight shafts (cool tint), emitted from the opposite side of sunlight.
+ * Intentionally avoids lens-flare circles to keep a softer nocturnal look.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {number} timeSec
+ * @param {number} intensity01
+ * @param {number} [cloudPresence01=0]
+ * @param {number} [lodDetail=0]
+ */
+function drawMoonLightRaysScreenFx(ctx, cw, ch, timeSec, intensity01, cloudPresence01 = 0, lodDetail = 0) {
+  const inten = Math.max(0, Math.min(1, Number(intensity01) || 0));
+  if (inten < 0.003) return;
+  const clouds = Math.max(0, Math.min(1, Number(cloudPresence01) || 0));
+  const cloudDamp = 1 - clouds * 0.35;
+  const lod = Number(lodDetail) || 0;
+  const nRays = lod >= 2 ? 4 : lod >= 1 ? 5 : 6;
+  const time = Number.isFinite(timeSec) ? timeSec : 0;
+  const tick = Math.floor(time * 6.4);
+  const swayRaw = Math.sin(time * 0.21 + 0.9) * 8 + Math.sin(time * 0.43 + 1.8) * 4;
+  const sway = Math.round(swayRaw / 4) * 4;
+  const reach = Math.hypot(cw, ch) * 1.5;
+  const sx = cw * 1.14 + sway * 0.28;
+  const sy = -ch * 0.08 + Math.round(Math.sin(time * 0.14) * 2);
+  const baseAlpha = (0.06 + inten * 0.14) * inten * cloudDamp;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'screen';
+
+  for (let i = 0; i < nRays; i++) {
+    const u = nRays <= 1 ? 0.5 : i / (nRays - 1);
+    const j = hash01Cell(i, tick, 0x7f31);
+    const ang0 = 2.03 + u * 0.56 + (j - 0.5) * 0.05;
+    const wedge = (0.032 + inten * 0.035) * (0.86 + 0.14 * hash01Cell(i * 7, tick, 0x31d9));
+    const ang1 = ang0 + wedge;
+    const c0 = Math.cos(ang0);
+    const s0 = Math.sin(ang0);
+    const c1 = Math.cos(ang1);
+    const s1 = Math.sin(ang1);
+    const x0 = sx + c0 * reach;
+    const y0 = sy + s0 * reach;
+    const x1 = sx + c1 * reach;
+    const y1 = sy + s1 * reach;
+    const mx = (x0 + x1) * 0.5;
+    const my = (y0 + y1) * 0.5;
+    const g = ctx.createLinearGradient(sx, sy, mx, my);
+    const peak = baseAlpha * (0.54 + 0.46 * hash01Cell(i * 11, tick + 2, 0x58cb));
+    g.addColorStop(0, 'rgba(232,242,255,0)');
+    g.addColorStop(0.24, `rgba(198,220,255,${peak * 0.32})`);
+    g.addColorStop(0.5, `rgba(176,206,255,${peak})`);
+    g.addColorStop(0.76, `rgba(160,188,244,${peak * 0.55})`);
+    g.addColorStop(1, 'rgba(150,176,234,0)');
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  const haloR0 = Math.max(cw, ch) * (0.045 + 0.015 * inten);
+  const haloR1 = Math.max(cw, ch) * (0.28 + 0.06 * inten);
+  const halo = ctx.createRadialGradient(sx, sy, haloR0, sx, sy, haloR1);
+  halo.addColorStop(0, `rgba(224,236,255,${Math.min(0.42, baseAlpha * 2.0)})`);
+  halo.addColorStop(0.44, `rgba(170,196,238,${Math.min(0.2, baseAlpha * 0.95)})`);
+  halo.addColorStop(1, 'rgba(148,174,224,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.globalAlpha = Math.min(1, baseAlpha * 0.9);
+  const wx0 = Math.round(sway * 0.42 / 8) * 8;
+  const wash = ctx.createLinearGradient(cw - wx0, 0, cw * 0.36 - wx0, ch);
+  wash.addColorStop(0, 'rgba(190,214,255,0.26)');
+  wash.addColorStop(0.3, 'rgba(168,196,240,0.12)');
+  wash.addColorStop(0.62, 'rgba(146,174,220,0.04)');
+  wash.addColorStop(1, 'rgba(132,162,208,0)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.restore();
 }
 
 /**
@@ -1650,5 +2168,57 @@ export function drawFieldCombatChargeBar(ctx, options) {
   ctx.lineWidth = 3;
   ctx.strokeText(label, cw * 0.5, py0 + barH + 5);
   ctx.fillText(label, cw * 0.5, py0 + barH + 5);
+  ctx.restore();
+}
+
+/**
+ * One-shot diagonal “shine” sweep on the player sprite when a field-charge HUD segment completes.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{
+ *   pxL: number,
+ *   pxT: number,
+ *   pxW: number,
+ *   pxH: number,
+ *   shineStartMs?: number,
+ *   shineDurMs?: number,
+ *   alphaMul?: number
+ * }} opts
+ */
+export function drawPlayerFieldChargeShineOverlay(ctx, opts) {
+  const pxL = Number(opts.pxL);
+  const pxT = Number(opts.pxT);
+  const pxW = Number(opts.pxW);
+  const pxH = Number(opts.pxH);
+  const start = Number(opts.shineStartMs);
+  if (!Number.isFinite(pxL) || !Number.isFinite(pxT) || !Number.isFinite(pxW) || !Number.isFinite(pxH)) return;
+  if (!Number.isFinite(start)) return;
+  const dur = Math.max(80, Number(opts.shineDurMs) || 340);
+  const u = (performance.now() - start) / dur;
+  if (u < 0 || u > 1) return;
+  const alphaM = Math.max(0, Math.min(1, Number(opts.alphaMul) || 1));
+  const envelope = (1 - u) * (1 - u);
+  const peak = 0.9 * envelope * alphaM;
+  if (peak <= 0.002) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(pxL, pxT, pxW, pxH);
+  ctx.clip();
+
+  const sweep = u;
+  const x0 = pxL - pxW * 0.55 + pxW * 1.35 * sweep;
+  const y0 = pxT - pxH * 0.08;
+  const x1 = x0 + pxW * 0.9;
+  const y1 = pxT + pxH * 1.08;
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.46, 'rgba(255,255,255,0)');
+  g.addColorStop(0.5, `rgba(255,252,230,${peak})`);
+  g.addColorStop(0.54, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 1;
+  ctx.fillRect(pxL - 4, pxT - 4, pxW + 8, pxH + 8);
   ctx.restore();
 }

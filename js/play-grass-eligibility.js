@@ -42,9 +42,10 @@ export function playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile) {
  * @param {Map<string, { canvas: HTMLCanvasElement, suppressedSet: Set<number> }>} playChunkMap
  * @returns {{ base: boolean, top: boolean }}
  */
-export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) {
+export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap, opts) {
   const out = { base: false, top: false };
-  if (!playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile)) return out;
+  const gateVerified = !!opts?.gateVerified;
+  if (!gateVerified && !playGrassPassesAboveTileSurfaceGate(mx, my, data, getTile)) return out;
 
   const tile = getTile(mx, my);
   if (!tile) return out;
@@ -60,10 +61,14 @@ export function getPlayAnimatedGrassLayers(mx, my, data, getTile, playChunkMap) 
     let isFlat = true;
     const lakeInterior = lakeLotusGrassInteriorAllowed(mx, my, tile, microRows, microCols, getTile);
     if (lakeInterior === null) {
-      const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
-      if (setForRole) {
-        const checkAtOrAbove = (r, c) => (getTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
-        if (getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+      if (gateVerified) {
+        isFlat = true;
+      } else {
+        const setForRole = TERRAIN_SETS[BIOME_TO_TERRAIN[tile.biomeId] || 'grass'];
+        if (setForRole) {
+          const checkAtOrAbove = (r, c) => (getTile(c, r)?.heightStep ?? -99) >= tile.heightStep;
+          if (getRoleForCell(my, mx, microRows, microCols, checkAtOrAbove, setForRole.type) !== 'CENTER') isFlat = false;
+        }
       }
     } else {
       isFlat = lakeInterior;

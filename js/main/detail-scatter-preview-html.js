@@ -32,7 +32,12 @@ function getScatterPreviewGrid(itemKey, cellPx, previewOpts = null) {
   if (!imgPath) return null;
   const atlasCols = imgPath.includes('caves') ? 50 : 57;
   const gridCols = Math.max(1, cols | 0);
-  const gridRows = Math.max(1, rows | 0);
+  // Compute actual visual rows: top rows (from top part ids) + base rows (from base part ids).
+  // The shape rows may not always reflect the full visual height (e.g. small-cactus [1x1]
+  // has shape rows=1 but top+base = 2 visual rows).
+  const topRows = top?.ids?.length ? Math.ceil(top.ids.length / gridCols) : 0;
+  const baseRows = base?.ids?.length ? Math.ceil(base.ids.length / gridCols) : Math.max(1, rows | 0);
+  const gridRows = topRows + baseRows;
   const seamless = !!(previewOpts && previewOpts.seamless);
   const gapPxRaw = previewOpts && Number(previewOpts.gapPx);
   const gapPx = Number.isFinite(gapPxRaw) ? Math.max(0, Math.floor(gapPxRaw)) : 2;
@@ -48,12 +53,12 @@ function getScatterPreviewGrid(itemKey, cellPx, previewOpts = null) {
 
   const pickId = (row, col) => {
     const idx = row * gridCols + col;
-    const topRows = Math.max(0, gridRows - 1);
     if (row < topRows && top?.ids?.length) {
-      return top.ids[idx];
+      return top.ids[idx] ?? null;
     }
-    if (row === gridRows - 1 && base?.ids?.length) {
-      return base.ids[col];
+    if (row >= topRows && base?.ids?.length) {
+      const baseIdx = (row - topRows) * gridCols + col;
+      return base.ids[baseIdx] ?? null;
     }
     return null;
   };

@@ -143,7 +143,7 @@ export function tryPlayerTackleHitWild(player, data, opts = {}) {
 
   const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
-  if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  if (typeof best.takeDamage === 'function') best.takeDamage(damage, player);
   rumblePlayerGamepadPokemonHitDealt();
   applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
@@ -187,7 +187,7 @@ export function tryPlayerFlameChargeHitWildAlongSegment(player, data, ax, ay, bx
 
   const damage = Math.max(1, Number(opts.damage) || PLAYER_TACKLE_WILD_DAMAGE);
   const knockback = Math.max(0.2, Number(opts.knockback) || PLAYER_TACKLE_WILD_KNOCKBACK);
-  if (typeof best.takeDamage === 'function') best.takeDamage(damage);
+  if (typeof best.takeDamage === 'function') best.takeDamage(damage, player);
   rumblePlayerGamepadPokemonHitDealt();
   applyMeleeHitStop(best);
   setEmotion(best, 5, false, 'Pain');
@@ -206,6 +206,7 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
   const px = Number(fromX);
   const py = Number(fromY);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+  // Thrown-object hit path has no local `player` object; default attacker resolution treats this as player aggression.
   if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
   rumblePlayerGamepadPokemonHitDealt();
   setEmotion(entity, 5, false, 'Pain');
@@ -247,7 +248,7 @@ export function tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius
     if (dx * dx + dy * dy > rr * rr) continue;
     hitCount++;
     if (playCutHitSfx) playModerateSwordHitSfx({ x: hx, y: hy, z: e.z ?? 0 });
-    if (typeof e.takeDamage === 'function') e.takeDamage(damage);
+    if (typeof e.takeDamage === 'function') e.takeDamage(damage, player);
     applyMeleeHitStop(e);
     setEmotion(e, 5, false, 'Pain');
     applyWildKnockbackFromPoint(e, player.x ?? cx, player.y ?? cy, knockback);

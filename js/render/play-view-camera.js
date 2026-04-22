@@ -1,4 +1,6 @@
 import { PLAY_BAKE_TILE_PX, PLAY_CAMERA_Z_REF } from './render-constants.js';
+import { isScreenGridCameraOn, applyScreenGridCamera, getScreenGridBlend } from './play-deadzone-camera.js';
+import { getEncounterZoomMul } from '../encounter/encounter-cinematic.js';
 
 /** Hard floor on zoom (world units shrink below this scale). */
 const VIEW_SCALE_MIN = 0.48;
@@ -142,6 +144,8 @@ export function computePlayViewState(p) {
   const dt = lastPerfMs ? Math.min(0.085, (now - lastPerfMs) / 1000) : 1 / 60;
   lastPerfMs = now;
 
+  const screenGrid = isScreenGridCameraOn();
+  const gridBlend = getScreenGridBlend();
   const z = Math.max(0, Number(playerZ) || 0);
   const zNorm = Math.min(1, z / PLAY_CAMERA_Z_REF);
   const t = zNorm * zNorm * (3 - 2 * zNorm);
@@ -172,16 +176,19 @@ export function computePlayViewState(p) {
   const zoomVerticalFrac = zoomVerticalFracGround * (1 - b) + zoomVerticalFracFlight * b;
 
   const scaleFit = (ch * zoomVerticalFrac) / (PLAY_BAKE_TILE_PX * K);
-  const targetScale = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeel, scaleFit));
+  const freeScale = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeel, scaleFit));
+  const targetScale = freeScale + (1 - freeScale) * gridBlend;
 
   const scaleFitLod = (ch * FRAMED_VERTICAL_FRAC) / (PLAY_BAKE_TILE_PX * kGround);
-  const targetScaleLod = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeelLod, scaleFitLod));
+  const freeScaleLod = Math.max(VIEW_SCALE_MIN, Math.min(1, scaleFeelLod, scaleFitLod));
+  const targetScaleLod = freeScaleLod + (1 - freeScaleLod) * gridBlend;
 
   const smoothK = 1 - Math.exp(-VIEW_SCALE_LAMBDA * dt);
   smoothedViewScale += (targetScale - smoothedViewScale) * smoothK;
   smoothedViewScaleLod += (targetScaleLod - smoothedViewScaleLod) * smoothK;
 
-  const effTileW = PLAY_BAKE_TILE_PX * smoothedViewScale;
+  const encounterZoom = getEncounterZoomMul();
+  const effTileW = PLAY_BAKE_TILE_PX * smoothedViewScale * encounterZoom;
   const effTileH = effTileW;
 
   const sLod = smoothedViewScaleLod;
@@ -219,18 +226,21 @@ export function computePlayViewState(p) {
   const currentTransY = Math.round(transYGround * (1 - b) + transYFlight * b);
   const currentTransX = Math.round(cw / 2 - (vx + 0.5) * effTileW);
 
+  /* ── Screen-grid camera (SNES ALTTP-style, toggle: G / minimap icon) ── */
+  const _dz = applyScreenGridCamera(currentTransX, currentTransY, vx, vy, effTileW, effTileH, cw, ch);
+
   return {
     bakeTilePx: PLAY_BAKE_TILE_PX,
     effTileW,
     effTileH,
     viewScale: smoothedViewScale,
     lodDetail,
-    startXTiles,
-    startYTiles,
-    endXTiles,
-    endYTiles,
-    currentTransX,
-    currentTransY,
+    startXTiles: _dz ? Math.floor(_dz.ax - viewW / 2) - margin : startXTiles,
+    startYTiles: _dz ? Math.floor(_dz.ay - viewH / 2) - margin : startYTiles,
+    endXTiles:   _dz ? Math.ceil(_dz.ax + viewW / 2) + margin  : endXTiles,
+    endYTiles:   _dz ? Math.ceil(_dz.ay + viewH / 2) + margin  : endYTiles,
+    currentTransX: _dz ? _dz.tx : currentTransX,
+    currentTransY: _dz ? _dz.ty : currentTransY,
     chunkPad
   };
 }

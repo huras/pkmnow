@@ -230,6 +230,33 @@ export function drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH) {
 }
 
 /**
+ * Player world HP strip. Drawn above the stamina bar.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ cx: number, cy: number, pivotY: number, hp?: number, maxHp?: number }} item
+ */
+export function drawPlayerHpBar(ctx, item, spawnYOffset, tileW, tileH) {
+  const maxHp = Math.max(1, Number(item.maxHp) || 100);
+  const hpRaw = Number(item.hp);
+  if (!Number.isFinite(hpRaw)) return;
+  const hp = Math.max(0, Math.min(maxHp, hpRaw));
+  const hp01 = hp / maxHp;
+  const barW = Math.max(16, Math.floor(tileW * 0.9));
+  const barH = Math.max(4, Math.floor(tileH * 0.1));
+  const x = Math.floor(item.cx - barW * 0.5);
+  const baseTop = item.cy - item.pivotY + spawnYOffset;
+  const staminaH = Math.max(3, Math.floor(tileH * 0.085));
+  const gap = 2;
+  const y = Math.floor(baseTop - 6 - staminaH - gap - barH);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x - 1, y - 1, barW + 2, barH + 2);
+  ctx.fillStyle = hp01 > 0.5 ? '#63e86f' : hp01 > 0.22 ? '#ffd54a' : '#ff6363';
+  ctx.fillRect(x, y, Math.max(0, Math.floor(barW * hp01)), barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, barW, barH);
+}
+
+/**
  * Stamina strip above wild HP (wild) or above the player sprite (player).
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ type: string, cx: number, cy: number, pivotY: number, stamina?: number, maxStamina?: number, isBoss?: boolean }} item
@@ -242,7 +269,7 @@ export function drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH) {
   const s01 = st / maxS;
   const boss = !!item.isBoss;
   const barW = Math.max(14, Math.floor(tileW * (boss ? 0.98 : 0.82)));
-  const barH = Math.max(2, Math.floor(tileH * 0.055));
+  const barH = Math.max(3, Math.floor(tileH * (item.type === 'player' ? 0.085 : 0.06)));
   const x = Math.floor(item.cx - barW * 0.5);
   const baseTop = item.cy - item.pivotY + spawnYOffset;
   const hpBarH = Math.max(3, Math.floor(tileH * (boss ? 0.1 : 0.08)));
@@ -412,5 +439,39 @@ export function drawStrengthGrabTargetOutline(ctx, prompt, tileW, tileH, snapPx,
   ctx.save();
   ctx.globalAlpha *= pulse;
   strokeStrengthGrabTargetRings(ctx, cx, cy, rx, ry, tileW, timeSec);
+  ctx.restore();
+}
+
+/**
+ * World-space drop target indicator shown while dragging an item from the inventory HUD.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{ ox?: number, oy?: number, cols?: number, rows?: number, canDrop?: boolean } | null | undefined} preview
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ * @param {number} timeSec
+ */
+export function drawInventoryGroundDropPreview(ctx, preview, tileW, tileH, snapPx, timeSec = 0) {
+  if (!preview) return;
+  const ox = Math.floor(Number(preview.ox) || 0);
+  const oy = Math.floor(Number(preview.oy) || 0);
+  const cols = Math.max(1, Math.floor(Number(preview.cols) || 1));
+  const rows = Math.max(1, Math.floor(Number(preview.rows) || 1));
+  const canDrop = !!preview.canDrop;
+  const px = snapPx(ox * tileW);
+  const py = snapPx(oy * tileH);
+  const pw = Math.max(1, Math.ceil(cols * tileW));
+  const ph = Math.max(1, Math.ceil(rows * tileH));
+  const pulse = 0.74 + 0.26 * Math.sin((Number(timeSec) || 0) * 10.5);
+
+  ctx.save();
+  ctx.globalAlpha *= canDrop ? pulse : 0.95;
+  ctx.fillStyle = canDrop ? 'rgba(120, 255, 190, 0.14)' : 'rgba(255, 110, 110, 0.14)';
+  ctx.fillRect(px, py, pw, ph);
+  ctx.setLineDash([Math.max(4, tileW * 0.18), Math.max(3, tileW * 0.14)]);
+  ctx.lineDashOffset = -((Number(timeSec) || 0) * 28) % 1000;
+  ctx.lineWidth = Math.max(1.5, tileW * 0.055);
+  ctx.strokeStyle = canDrop ? 'rgba(150, 255, 210, 0.98)' : 'rgba(255, 130, 130, 0.98)';
+  ctx.strokeRect(px + 0.5, py + 0.5, Math.max(1, pw - 1), Math.max(1, ph - 1));
   ctx.restore();
 }

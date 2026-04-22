@@ -156,6 +156,9 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
 
       wildUpdatePerfLast.postMs += performance.now() - mark;
     }
+    // Do not push play-event-log rows here: each despawning wild mon would trigger a
+    // full log snapshot + HUD rebuild (and portrait fetches), which stutters badly when
+    // many entities expire in one frame. Map deletion alone is cheap.
     for (const k of toDelete) entitiesByKey.delete(k);
   } finally {
     endWildWalkProbeCache();

@@ -41,7 +41,9 @@ PluginRegistry.registerBiome('CORRUPTED_LANDS', {
   encounters: ['Gastly', 'Haunter', 'Zubat', 'Misdreavus', 'mod_shadow_pikachu'],
   bgm: [
     'audio/suno-original-bgm/arcane/3-01. Anistar City.mp3',
-    'audio/suno-original-bgm/ghost-woods/120. Old Chateau.mp3'
+    'audio/suno-original-bgm/ghost-woods/120. Old Chateau.mp3',
+    // MD Explorers of Sky — track 003 (also shipped as "v003 - Welcome…" in some rips)
+    'audio/bgm/Sacanamon Mystery Dungeon Explorers of Sky (DS) (gamerip) (2009)/003 - Welcome to the World of Pokémon!.mp3'
   ],
   anomalyCheck: (e, t, m, a, isLand) => {
     // Aparece quando a anomalia é muito alta e a temperatura é fria

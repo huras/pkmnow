@@ -21,7 +21,11 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { rollNature } from './wild-natures.js';
-import { WILD_MACRO_SUBDIVISION, WILD_MAX_SIMULTANEOUS_SLOTS } from './wild-pokemon-constants.js';
+import {
+  GRASS_WALK_HOSTILE_AGGRO_SEC,
+  WILD_MACRO_SUBDIVISION,
+  WILD_MAX_SIMULTANEOUS_SLOTS
+} from './wild-pokemon-constants.js';
 import { bindStandardWildTakeDamage } from './wild-entity-factory.js';
 import {
   buildWildNeededSlotKeys,
@@ -29,6 +33,9 @@ import {
   wildSubdivN
 } from './wild-core-state.js';
 import { releaseWildGroupFollowersFromLeader } from './wild-group-behavior.js';
+import { pushPlayEventLog } from '../main/play-event-log-state.js';
+import { getEvolutionFamily, getStageIndex, rollGroupMemberDex } from './wild-evolution-chains.js';
+import { isWildPokemonFainted } from './wild-pokemon-persistence.js';
 
 export const SKY_SPECIES = new Set([
   6, // Charizard
@@ -184,6 +191,23 @@ function resolveGroupId(mx, my, sx, sy, seed) {
   return `grp:${mx},${my},${sx},${sy}:${h.toString(36)}`;
 }
 
+function buildGroupCompanionKey(leaderKey, memberIndex) {
+  const idx = Math.max(1, Math.floor(Number(memberIndex)) || 1);
+  return `${String(leaderKey || '')}#g${idx}`;
+}
+
+function buildGroupSpawnLogEventKey(groupKey) {
+  return `group-spawn:${String(groupKey || '')}`;
+}
+
+function buildGroupSpawnLogText(channel, spawnedCount, totalCount, pending) {
+  const total = Math.max(1, Math.floor(Number(totalCount)) || 1);
+  const spawned = Math.max(0, Math.min(total, Math.floor(Number(spawnedCount)) || 0));
+  const where = channel === 'local' ? 'nearby' : 'in the region';
+  if (pending) return `Group spawning ${where} (${spawned}/${total}).`;
+  return `Group spawned ${where} (${spawned}/${total}).`;
+}
+
 function resolveSpawnTypeAt(data, dex, spawnX, spawnY) {
   if (SKY_SPECIES.has(dex)) return 'sky';
   const overlayId = getFoliageOverlayTileId(Math.floor(spawnX), Math.floor(spawnY), data);
@@ -247,24 +271,18 @@ export function findWalkableWildSpawnNear(data, dex, ox, oy) {
   return null;
 }
 
+const SALT_GRASS_HOSTILE_BOSS = 0x67826173;
+
 /**
- * Play mode: spawn a wild Pokémon by dex at a free tile near the player.
- * Persists across wild slot sync.
+ * @param {object} data
+ * @param {number} spawnX
+ * @param {number} spawnY
+ * @param {number} dex
+ * @param {string} key
+ * @param {number} sexSalt
+ * @param {{ wildTempAggressiveSec: number, hp: number, maxHp: number, isBoss: boolean, wildGrassHostileDeathBattle?: boolean }} combat
  */
-export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
-  if (!data) return false;
-  const dex = Math.floor(Number(dexId)) || 0;
-  if (!getPokemonConfig(dex)) return false;
-
-  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
-  if (!pos) return false;
-
-  void preloadPokemonCry(dex);
-
-  pruneDebugSummonsIfNeeded();
-  const key = allocateDebugSummonKey();
-  const spawnX = pos.spawnX;
-  const spawnY = pos.spawnY;
+function registerDebugStyleWildAtPosition(data, spawnX, spawnY, dex, key, sexSalt, combat) {
   const w = data.width;
   const h = data.height;
   const macroX = Math.floor(spawnX / MACRO_TILE_STRIDE);
@@ -277,7 +295,6 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
   const subY = Math.max(0, Math.min(subN - 1, Math.floor(ly / cellW)));
   const biomeId =
     macroX >= 0 && macroY >= 0 && macroX < w && macroY < h ? data.biomes[macroY * w + macroX] : 0;
-  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
   const sex = rollWildSex(dex, sexSalt >>> 0);
 
   let spawnType = 'land';
@@ -309,7 +326,8 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     nature: rollNature(key, data.seed),
     sex,
     provoked01: 0,
-    wildTempAggressiveSec: 0,
+    wildTempAggressiveSec: combat.wildTempAggressiveSec,
+    wildGrassHostileDeathBattle: !!combat.wildGrassHostileDeathBattle,
     animMeta: getDexAnimMeta(dex),
     facing: 'down',
     animRow: 0,
@@ -338,15 +356,15 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
     jumping: false,
     jumpCooldown: 0,
     _blockedMoveFrames: 0,
-    hp: 50,
-    maxHp: 50,
+    hp: combat.hp,
+    maxHp: combat.maxHp,
     deadState: null,
     deadTimer: 0,
     deadAnimTimer: 0,
     hurtTimer: 0,
     hurtAnimTimer: 0,
     hitFlashTimer: 0,
-    isBoss: false,
+    isBoss: combat.isBoss,
     socialMemory: {
       affinity: 0,
       threat: 0,
@@ -370,9 +388,80 @@ export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
   };
   bindStandardWildTakeDamage(entity);
   entitiesByKey.set(key, entity);
+  pushPlayEventLog({
+    channel: 'local',
+    text: 'Debug spawn created.',
+    dedupeKey: `spawn:debug:${key}`,
+    portraitDexId: dex,
+    hoverEntityKey: key
+  });
   void ensurePokemonSheetsLoaded(imageCache, dex);
   void probeSpriteCollabPortraitPrefix(dex).catch(() => {});
+}
+
+/**
+ * Play mode: spawn a wild Pokémon by dex at a free tile near the player.
+ * Persists across wild slot sync.
+ */
+export function summonDebugWildPokemon(dexId, data, nearWorldX, nearWorldY) {
+  if (!data) return false;
+  const dex = Math.floor(Number(dexId)) || 0;
+  if (!getPokemonConfig(dex)) return false;
+
+  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
+  if (!pos) return false;
+
+  void preloadPokemonCry(dex);
+
+  pruneDebugSummonsIfNeeded();
+  const key = allocateDebugSummonKey();
+  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
+  registerDebugStyleWildAtPosition(data, pos.spawnX, pos.spawnY, dex, key, sexSalt, {
+    wildTempAggressiveSec: 0,
+    hp: 50,
+    maxHp: 50,
+    isBoss: false
+  });
   return true;
+}
+
+/**
+ * Spawns one persistent wild (debug-slot style) from a base encounter dex, with permanent death-battle aggro.
+ * Boss promotion uses the player's macro cell for the roll (area-consistent).
+ */
+export function summonGrassHostileWildNearPlayer(data, nearWorldX, nearWorldY, baseDex) {
+  if (!data) return null;
+  const d0 = Math.floor(Number(baseDex)) || 0;
+  if (!getPokemonConfig(d0)) return null;
+
+  const w = data.width;
+  const h = data.height;
+  let pmx = Math.floor(Number(nearWorldX) / MACRO_TILE_STRIDE);
+  let pmy = Math.floor(Number(nearWorldY) / MACRO_TILE_STRIDE);
+  if (pmx < 0 || pmy < 0 || pmx >= w || pmy >= h) {
+    pmx = Math.max(0, Math.min(w - 1, pmx));
+    pmy = Math.max(0, Math.min(h - 1, pmy));
+  }
+
+  const bossRoll = rollBossPromotedDex(d0, pmx, pmy, 0, 0, data.seed ^ SALT_GRASS_HOSTILE_BOSS);
+  const dex = bossRoll.dex;
+  if (!getPokemonConfig(dex)) return null;
+
+  const pos = findWalkableWildSpawnNear(data, dex, nearWorldX, nearWorldY);
+  if (!pos) return null;
+
+  void preloadPokemonCry(dex);
+  pruneDebugSummonsIfNeeded();
+  const key = allocateDebugSummonKey('grassHostile');
+  const sexSalt = (data.seed ^ SALT_SPAWN ^ dex * 1_009 ^ nextDebugSummonSeq * 97) | 0;
+  registerDebugStyleWildAtPosition(data, pos.spawnX, pos.spawnY, dex, key, sexSalt, {
+    wildTempAggressiveSec: GRASS_WALK_HOSTILE_AGGRO_SEC,
+    hp: bossRoll.hp,
+    maxHp: bossRoll.maxHp,
+    isBoss: !!bossRoll.isBoss,
+    wildGrassHostileDeathBattle: true
+  });
+  return key;
 }
 
 /**
@@ -412,6 +501,20 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     if (!needed.has(k)) {
       ent.isDespawning = true;
       releaseWildGroupFollowersFromLeader(ent, entitiesByKey);
+    }
+  }
+
+  // Keep whole groups alive: if any member's slot is still needed, un-despawn
+  // every member of that group so individual followers don't vanish mid-pack.
+  const aliveGroupIds = new Set();
+  for (const [k, ent] of entitiesByKey.entries()) {
+    if (!ent.isDespawning && ent.groupId) aliveGroupIds.add(ent.groupId);
+  }
+  if (aliveGroupIds.size > 0) {
+    for (const ent of entitiesByKey.values()) {
+      if (ent.isDespawning && ent.groupId && aliveGroupIds.has(ent.groupId)) {
+        ent.isDespawning = false;
+      }
     }
   }
 
@@ -541,7 +644,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
    * @param {{ key: string, mx: number, my: number, sx: number, sy: number, centerX: number, centerY: number }} slot
    * @param {number} biomeId
    * @param {number} dex
-   * @param {{ pickIndex: number, hp: number, maxHp: number, isBoss: boolean, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null }} meta
+   * @param {{ entityKey?: string, pickIndex: number, hp: number, maxHp: number, isBoss: boolean, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null, groupAnchorX?: number | null, groupAnchorY?: number | null, groupMaxSpawnDist?: number | null, groupExistingPoints?: Array<{ x: number, y: number }> | null }} meta
    */
   function spawnEntityForSlot(slot, biomeId, dex, meta) {
     const placed = maybeFindWalkableSpawn(
@@ -568,8 +671,9 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       0;
     const sex = rollWildSex(dex, sexSalt >>> 0);
     const spawnType = resolveSpawnTypeAt(data, dex, placed.spawnX, placed.spawnY);
+    const entityKey = String(meta.entityKey || slot.key);
     const entity = {
-      key: slot.key,
+      key: entityKey,
       macroX: slot.mx,
       macroY: slot.my,
       subX: slot.sx,
@@ -646,10 +750,25 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       _lodOffset: seededHashInt(slot.mx * 211 + slot.sx * 37, slot.my * 223 + slot.sy * 41, data.seed ^ 0x6c6f64) % 4
     };
     bindStandardWildTakeDamage(entity);
-    entitiesByKey.set(slot.key, entity);
+
+    // ── Persistence: restore fainted state from prior session ──
+    const wasFainted = isWildPokemonFainted(entityKey);
+    if (wasFainted) {
+      entity.hp = 0;
+      entity.deadState = entity.animMeta?.faint ? 'faint' : 'sleep';
+      entity.deadTimer = 0;
+      entity.deadAnimTimer = 9999; // freeze at last frame of faint anim
+      entity.aiState = 'sleep';
+      entity.animMoving = false;
+      entity.emotionType = null;
+      entity.emotionPersist = false;
+      entity.spawnPhase = 1; // fully visible immediately
+    }
+
+    entitiesByKey.set(entityKey, entity);
     ensurePokemonSheetsLoaded(imageCache, dex);
     probeSpriteCollabPortraitPrefix(dex).catch(() => {});
-    if (spawnSleep) ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
+    if (spawnSleep || wasFainted) ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
     void preloadPokemonCry(dex);
     return { spawnX: placed.spawnX, spawnY: placed.spawnY };
   }
@@ -675,8 +794,21 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const leaderPick = reserveEncounterPick(pickScopeKey, pool, basePick);
     const baseDex = encounterNameToDex(pool[leaderPick]);
     if (baseDex == null || !getPokemonConfig(baseDex)) continue;
+
+    // ── Evolution family: all group members belong to the same evolutionary line ──
+    const family = getEvolutionFamily(baseDex);
+    const encounterStageIdx = getStageIndex(baseDex, family);
+
     const bossRoll = rollBossPromotedDex(baseDex, slot.mx, slot.my, slot.sx, slot.sy, data.seed);
-    const leaderDex = bossRoll.dex;
+    let leaderDex;
+    if (bossRoll.isBoss) {
+      // Boss: keep the fully-evolved boss form
+      leaderDex = bossRoll.dex;
+    } else {
+      // Non-boss leader: roll evolution stage with leader weights (biased toward higher stages)
+      leaderDex = rollGroupMemberDex(family, encounterStageIdx, data.seed, slot.mx, slot.my, slot.sx, slot.sy, 0, true);
+      if (!getPokemonConfig(leaderDex)) leaderDex = baseDex; // fallback
+    }
     const pattern = rollGroupPattern(slot.mx, slot.my, slot.sx, slot.sy, data.seed);
     const leaderConfig = getPokemonConfig(leaderDex);
     const leaderBeh = getSpeciesBehavior(leaderDex);
@@ -713,10 +845,16 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const actualCompanions = Math.min(desiredCompanions, companionSlots.length);
     const groupSize = 1 + actualCompanions;
     if (groupSize < GROUP_SIZE_CLAMP_LO) continue;
+    const groupLogRoot = String(groupId || slot.key);
+    const groupLogEventKey = buildGroupSpawnLogEventKey(groupLogRoot);
+    const slotDistFromPlayer = Math.hypot(slot.centerX - (Number(playerMicroX) || 0), slot.centerY - (Number(playerMicroY) || 0));
+    const groupLogChannel = slotDistFromPlayer <= 18 ? 'local' : 'global';
+    let groupPortraitDexIds = [leaderDex];
     /** @type {Array<{ x: number, y: number }>} */
     const groupSpawnPoints = [];
 
     const leaderSpawn = spawnEntityForSlot(slot, biomeId, leaderDex, {
+      entityKey: slot.key,
       pickIndex: leaderPick,
       hp: bossRoll.hp,
       maxHp: bossRoll.maxHp,
@@ -737,25 +875,26 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     claimedKeys.add(slot.key);
     const leaderAnchorX = leaderSpawn.spawnX;
     const leaderAnchorY = leaderSpawn.spawnY;
+    let groupSpawnedCount = 1;
+    groupPortraitDexIds = [leaderDex];
     groupSpawnPoints.push({ x: leaderAnchorX, y: leaderAnchorY });
 
     for (let i = 0; i < actualCompanions; i++) {
       const cslot = companionSlots[i];
-      if (!cslot || claimedKeys.has(cslot.key) || entitiesByKey.has(cslot.key)) continue;
+      if (!cslot || entitiesByKey.has(cslot.key)) continue;
+      const companionEntityKey = buildGroupCompanionKey(slot.key, i + 1);
+      if (entitiesByKey.has(companionEntityKey)) continue;
       let companionDex = leaderDex;
-      let companionPick = -1;
-      if (pattern.mixed && i === 0 && pool.length > 1) {
-        const mixedBasePick =
-          seededHashInt(cslot.mx * 451 + cslot.sx * 73, cslot.my * 463 + cslot.sy * 97, data.seed ^ SALT_GROUP) %
-          pool.length;
-        const mixedPick = reserveEncounterPick(pickScopeKey, pool, mixedBasePick, leaderPick);
-        const mixedDex = encounterNameToDex(pool[mixedPick]);
-        if (mixedDex != null && getPokemonConfig(mixedDex)) {
-          companionDex = mixedDex;
-          companionPick = mixedPick;
-        }
-      }
+      // ── Same evolutionary family, different stage ──
+      const rolledDex = rollGroupMemberDex(
+        family, encounterStageIdx, data.seed,
+        cslot.mx, cslot.my, cslot.sx, cslot.sy, i + 1, false
+      );
+      if (getPokemonConfig(rolledDex)) companionDex = rolledDex;
+      const companionPick = -1;
+      const nextGroupPortraitDexIds = groupPortraitDexIds.concat([companionDex]);
       const ok = spawnEntityForSlot(cslot, biomeId, companionDex, {
+        entityKey: companionEntityKey,
         pickIndex: companionPick,
         hp: 50,
         maxHp: 50,
@@ -773,10 +912,23 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         groupHomeY: slot.centerY
       });
       if (ok) {
-        claimedKeys.add(cslot.key);
+        groupSpawnedCount++;
+        groupPortraitDexIds = nextGroupPortraitDexIds;
         groupSpawnPoints.push({ x: ok.spawnX, y: ok.spawnY });
       }
     }
+
+    const groupStillPending = groupSpawnedCount < groupSize;
+    pushPlayEventLog({
+      channel: groupLogChannel,
+      text: buildGroupSpawnLogText(groupLogChannel, groupSpawnedCount, groupSize, groupStillPending),
+      eventKey: groupLogEventKey,
+      upsertByEventKey: true,
+      pending: groupStillPending,
+      ...(groupPortraitDexIds.length > 1 ? { portraitDexIds: groupPortraitDexIds.slice() } : {}),
+      portraitDexId: leaderDex,
+      hoverEntityKey: slot.key
+    });
   }
 }
 

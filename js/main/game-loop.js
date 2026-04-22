@@ -1,5 +1,7 @@
 import { updatePlayer, tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { getPlayLodDetail } from '../render/play-view-camera.js';
+import { toggleDeadzoneCamera } from '../render/play-deadzone-camera.js';
+import { updateEncounterCinematic, isEncounterCinematicActive, isEncounterCinematicBlocking } from '../encounter/encounter-cinematic.js';
 import { getPlayChunkFrameStats } from '../render.js';
 import { playInputState } from './play-input-state.js';
 import {
@@ -74,34 +76,35 @@ const PLAY_SUBSYSTEM_BASE_CADENCE_SEC = {
 };
 let playSubsystemCadenceSec = { ...PLAY_SUBSYSTEM_BASE_CADENCE_SEC };
 
+/** Built-in default = adaptive perf "Ultra" preset (main.js ADAPTIVE_PRESETS.ultra) merged onto full cadence shape. */
 const PLAY_ADAPTIVE_DEFAULT = {
-  enabled: true,
-  relaxAfterMs: 4200,
+  enabled: false,
+  relaxAfterMs: 2400,
   thresholds: {
-    updateModerateMs: 6.8,
-    updateHeavyMs: 8.0,
-    updateVeryHeavyMs: 10.5,
-    renderModerateMs: 7.2,
-    renderHeavyMs: 9.0,
-    wildModerateMs: 2.5,
-    wildHeavyMs: 4.0,
-    hudHeavyMs: 1.2,
-    bgmHeavyMs: 0.8
+    updateModerateMs: 9.5,
+    updateHeavyMs: 11.4,
+    updateVeryHeavyMs: 13.5,
+    renderModerateMs: 9.8,
+    renderHeavyMs: 11.5,
+    wildModerateMs: 4.0,
+    wildHeavyMs: 6.0,
+    hudHeavyMs: 1.9,
+    bgmHeavyMs: 1.35
   },
   moderate: {
     subsystemCadenceSec: {
       wildWindow: 0.05,
-      wildUpdate: 0.05,
+      wildUpdate: 0.02,
       breakableRegen: 0.08,
       berryTrees: 0.12,
       thrownDetails: 0.05,
-      hud: 0.1,
-      farCry: 0.1,
-      autosave: 0.5
+      hud: 0.05,
+      farCry: 0.05,
+      autosave: 0.25
     },
     audioCadenceMs: {
-      biomeBgm: 170,
-      weatherAmbient: 140,
+      biomeBgm: 110,
+      weatherAmbient: 95,
       earthquakeAmbient: 120,
       fireLoop: 140
     }
@@ -109,17 +112,17 @@ const PLAY_ADAPTIVE_DEFAULT = {
   heavy: {
     subsystemCadenceSec: {
       wildWindow: 0.1,
-      wildUpdate: 0.1,
+      wildUpdate: 0.05,
       breakableRegen: 0.16,
       berryTrees: 0.2,
       thrownDetails: 0.1,
-      hud: 0.16,
-      farCry: 0.2,
-      autosave: 1.0
+      hud: 0.08,
+      farCry: 0.1,
+      autosave: 0.5
     },
     audioCadenceMs: {
-      biomeBgm: 260,
-      weatherAmbient: 220,
+      biomeBgm: 150,
+      weatherAmbient: 130,
       earthquakeAmbient: 180,
       fireLoop: 220
     }
@@ -334,6 +337,7 @@ function isPlayMovementKeyEvent(e) {
  *   player: import('../player.js').player,
  *   onPlayHudFrame?: (data: object | null) => void,
  *   advanceWorldTime?: (dt: number) => void,
+ *   advancePlaySessionSeconds?: (dt: number) => void,
  *   getGameTimeSec?: () => number,
  *   onEscapePlay?: () => void,
  *   getPlaySessionPersistExtra?: () => object | null
@@ -351,6 +355,7 @@ export function createGameLoop(api) {
     player,
     onPlayHudFrame,
     advanceWorldTime,
+    advancePlaySessionSeconds,
     getGameTimeSec,
     onEscapePlay,
     getPlaySessionPersistExtra
@@ -399,6 +404,7 @@ export function createGameLoop(api) {
     PluginRegistry.executeHooks('preUpdate', simDt);
 
     if (getAppMode() === 'play') advanceWorldTime?.(simDt);
+    if (getAppMode() === 'play') advancePlaySessionSeconds?.(simDt);
 
     let inX = 0;
     let inY = 0;
@@ -443,6 +449,12 @@ export function createGameLoop(api) {
       player.inputY = 0;
     }
 
+    // Encounter cinematic blocks player input (only during tension/reveal bars)
+    if (isEncounterCinematicBlocking()) {
+      player.inputX = 0;
+      player.inputY = 0;
+    }
+
     const updateBreakdown = {
       updPlayerMs: 0,
       updWildWindowMs: 0,
@@ -466,6 +478,7 @@ export function createGameLoop(api) {
     const tUpdPlayer0 = performance.now();
     updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+    updateEncounterCinematic(player, simDt);
     updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
 
     if (getAppMode() === 'play') {
@@ -693,6 +706,18 @@ export function createGameLoop(api) {
           .slice(0, 3)
           .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
           .join(' | ');
+        const vegHeavy = [
+          ['vgb', perf.renderP95Stable.rndVegGrassBaseMs ?? 0],
+          ['vgt', perf.renderP95Stable.rndVegGrassTopMs ?? 0],
+          ['vgf', perf.renderP95Stable.rndVegGrassFireMs ?? 0],
+          ['vsc', perf.renderP95Stable.rndVegScatterMs ?? 0],
+          ['vtr', perf.renderP95Stable.rndVegTreeMs ?? 0]
+        ]
+          .sort((a, b) => b[1] - a[1]);
+        const top3VegRender = vegHeavy
+          .slice(0, 3)
+          .map(([k, ms]) => `${k} ${ms.toFixed(1)}`)
+          .join(' | ');
         const chunkStats = getPlayChunkFrameStats();
         const chunkBoostTag = chunkStats.bakeBoost > 0 ? ` · boost +${chunkStats.bakeBoost}` : '';
         const chunkInfo =
@@ -707,6 +732,7 @@ export function createGameLoop(api) {
           `${fps} FPS · LOD ${lod} · ${frameMs.toFixed(1)} ms · p50 ${perf.p50Fps.toFixed(1)}fps`,
           `p95 ${perf.p95FrameMsStable.toFixed(1)}ms (stable) · upd p95 ${perf.p95UpdateMsStable.toFixed(1)}ms · rnd p95 ${perf.p95RenderMsStable.toFixed(1)}ms`,
           `rnd top ${top3HeavyRender}`,
+          `veg top ${top3VegRender}`,
           `upd top ${top3HeavyUpdate}${wildSubTag}`,
           `stable ${stablePct.toFixed(0)}%${chunkInfo ? ` · ${chunkInfo}` : ''}${playAdaptivePressure ? ` · cap p${playAdaptivePressure}` : ''}`
         ];
@@ -774,6 +800,15 @@ export function registerPlayKeyboard(api) {
   const RUN_DOUBLE_TAP_MS = 320;
   let runTapDir = /** @type {'up'|'down'|'left'|'right'|null} */ (null);
   let runTapAt = 0;
+  const clearHeldPlayKeys = () => {
+    heldKeys.clear();
+    runTapDir = null;
+    runTapAt = 0;
+    playInputState.spaceHeld = false;
+    playInputState.shiftLeftHeld = false;
+    playInputState.shiftRightHeld = false;
+    playInputState.ctrlLeftHeld = false;
+  };
 
   /** Capture phase: run before browser default actions (e.g. Ctrl+W close tab). */
   window.addEventListener(
@@ -823,6 +858,12 @@ export function registerPlayKeyboard(api) {
         if (getCurrentData()) refreshPlayModeInfoBar(true);
       }
 
+      if (e.code === 'KeyG' && !e.repeat) {
+        e.preventDefault();
+        const on = toggleDeadzoneCamera();
+        console.log(`[camera] deadzone ${on ? 'ON' : 'OFF'}`);
+      }
+
       if (e.code === 'ShiftLeft') {
         e.preventDefault();
         playInputState.shiftLeftHeld = true;
@@ -859,7 +900,7 @@ export function registerPlayKeyboard(api) {
       }
 
       if (e.key === ' ' && !e.repeat) {
-        tryJumpPlayer(getCurrentData());
+        if (!isEncounterCinematicBlocking()) tryJumpPlayer(getCurrentData());
       }
 
       if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {
@@ -914,4 +955,15 @@ export function registerPlayKeyboard(api) {
     },
     true
   );
+
+  window.addEventListener('blur', () => {
+    if (getAppMode() !== 'play') return;
+    clearHeldPlayKeys();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (getAppMode() !== 'play') return;
+    clearHeldPlayKeys();
+  });
 }

@@ -2,7 +2,7 @@
 export const VEG_MULTITILE_OVERLAP_PX = 1;
 
 /** Máx. linhas (altura) de um objecto scatter em células micro — 2C/2A varrem origens (ox, oy) acima do tile. */
-export const MAX_SCATTER_ROWS_PASS2 = 8;
+export const MAX_SCATTER_ROWS_PASS2 = 6;
 
 /** Faixa vertical 16×(16×N) em tilesets/water-tile.png — animação de ondas no oceano (modo play). */
 export const WATER_ANIM_SRC_W = 16;
@@ -16,13 +16,13 @@ export const WATER_ANIM_SRC_H = 16;
 export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
 
 /** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles. */
-export const PLAY_CHUNK_SIZE = 8;
+export const PLAY_CHUNK_SIZE = 4;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
-export const PLAY_BAKE_TILE_PX = 40;
+export const PLAY_BAKE_TILE_PX = 42;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
-export const PLAY_CAMERA_Z_REF = 28;
+export const PLAY_CAMERA_Z_REF = 58;
 
 /**
  * E / W / S / SE / SW from player tile (+y = south). S / SE / SW: full grass only after the sprite.
@@ -47,3 +47,12 @@ export const PLAYER_TILE_GRASS_OVERLAY_TOP_FRAC = PLAYER_TILE_GRASS_OVERLAY_BOTT
 
 /** Simple “marked” look for that slice (1 = same opacity as normal PASS 5a grass). */
 export const PLAYER_TILE_GRASS_OVERLAY_ALPHA = 0.92;
+/* ── Sun Light Rays ─────────────────────────────────────────────────────── */
+/** Intensity (0..1) applied when standing under a formal broadleaf tree canopy. */
+export const FORMAL_TREES_SUN_RAYS_BOOST_INTENSITY = 0.45;
+/** Seconds for the biome boost to fade in/out (~99 % exponential). */
+export const FORMAL_TREES_SUN_RAYS_FADE_SEC = 1.8;
+/** Hours of fade-in ramp near dawn. */
+export const SUN_LIGHT_RAYS_DAWN_EDGE_FADE_HOURS = 1.0;
+/** Hours of fade-out ramp near nightfall. */
+export const SUN_LIGHT_RAYS_NIGHT_EDGE_FADE_HOURS = 1.5;

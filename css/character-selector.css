@@ -343,7 +343,6 @@
 }
 
 .app--play-immersive #character-selector-container .character-selector .player-alt-compact,
-.app--play-immersive #character-selector-container .character-selector .play-pointer-mode-bar,
 .app--play-immersive #character-selector-container .character-selector #character-social-numpad,
 .app--play-immersive #character-selector-container .character-selector .search-container,
 .app--play-immersive #character-selector-container .character-selector .character-selector__layout-toggle {
@@ -464,6 +463,61 @@
   margin-top: 2px;
 }
 
+.player-hp-hud {
+  margin-top: 5px;
+  width: 100%;
+  padding: 4px 6px 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(180deg, rgba(20, 24, 38, 0.6), rgba(8, 10, 18, 0.72));
+}
+
+.player-hp-hud__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.player-hp-hud__label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: rgba(205, 226, 255, 0.88);
+}
+
+.player-hp-hud__value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: rgba(245, 250, 255, 0.95);
+}
+
+.player-hp-hud__bar {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 22, 31, 0.92);
+  background: rgba(9, 12, 18, 0.95);
+  overflow: hidden;
+}
+
+.player-hp-hud__fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(180deg, #7df382, #2fa84a);
+  transition: width 110ms linear, background 110ms linear;
+}
+
+.player-hp-hud.player-hp-hud--warn .player-hp-hud__fill {
+  background: linear-gradient(180deg, #ffdd79, #e9a53c);
+}
+
+.player-hp-hud.player-hp-hud--danger .player-hp-hud__fill {
+  background: linear-gradient(180deg, #ff9a80, #dc4a4a);
+}
+
 .result-types {
   display: flex;
   gap: 4px;
@@ -555,60 +609,9 @@
   flex-shrink: 0;
 }
 
-/* Right-click: field move vs debug */
-.play-pointer-mode-bar {
-  display: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-body.play-mode-active .character-selector .play-pointer-mode-bar {
-  display: flex;
-}
-
-body.play-mode-active .character-selector.character-selector--minimal .play-pointer-mode-bar {
-  display: none;
-}
-
-/* Minimal layout: hide species search and right-click mode bar */
+/* Minimal layout: hide species search */
 .character-selector--minimal .search-container {
   display: none;
-}
-
-.play-pointer-mode-bar__label {
-  opacity: 0.6;
-  margin-right: 2px;
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  letter-spacing: 0.05em;
-}
-
-.play-pointer-mode-bar__opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  transition: background 0.15s ease;
-}
-
-.play-pointer-mode-bar__opt:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.play-pointer-mode-bar__opt input {
-  accent-color: #E60012; /* Nintendo Red */
-  transform: scale(1.1);
 }
 
 .player-moves-box {

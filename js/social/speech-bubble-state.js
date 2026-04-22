@@ -4,7 +4,22 @@ import { imageCache } from '../image-cache.js';
 import { ensureInventoryStyleItemIconOnSpeechSegment } from './play-item-inventory-icon.js';
 import { normalizeSpeechBubbleSegments } from './speech-bubble-types.js';
 
+/** Base duration when callers omit `durationSec` (scaled by {@link SOCIAL_SPEECH_BUBBLE_DURATION_MULT}). */
 const DEFAULT_DURATION_SEC = 4.25;
+
+/** Wild + player social bubbles: keep on screen longer for readability (pickups opt out via `skipDurationMult`). */
+const SOCIAL_SPEECH_BUBBLE_DURATION_MULT = 7;
+
+/**
+ * @param {{ durationSec?: number, skipDurationMult?: boolean }} [opts]
+ */
+function resolveBubbleDurationSec(opts) {
+  if (opts?.skipDurationMult) {
+    return Math.max(0.6, Number(opts.durationSec) || DEFAULT_DURATION_SEC);
+  }
+  const base = Math.max(0.6, Number(opts?.durationSec) || DEFAULT_DURATION_SEC);
+  return base * SOCIAL_SPEECH_BUBBLE_DURATION_MULT;
+}
 
 /**
  * @param {import('./speech-bubble-types.js').SpeechBubbleSegment[]} segments
@@ -34,7 +49,7 @@ async function preloadSpeechBubbleAssets(entity, segments) {
  *
  * @param {object} entity wild entity
  * @param {import('./speech-bubble-types.js').SpeechBubbleSegment[]} segments
- * @param {{ durationSec?: number, kind?: import('./speech-bubble-types.js').SpeechBubbleKind }} [opts]
+ * @param {{ durationSec?: number, kind?: import('./speech-bubble-types.js').SpeechBubbleKind, skipDurationMult?: boolean }} [opts]
  */
 export function setWildSpeechBubble(entity, segments, opts = {}) {
   if (!entity) return;
@@ -43,7 +58,7 @@ export function setWildSpeechBubble(entity, segments, opts = {}) {
     entity.speechBubble = null;
     return;
   }
-  const durationSec = Math.max(0.6, Number(opts.durationSec) || DEFAULT_DURATION_SEC);
+  const durationSec = resolveBubbleDurationSec(opts);
   const kind = opts.kind === 'think' ? 'think' : 'say';
   entity.speechBubble = {
     segments: norm,
@@ -62,7 +77,7 @@ export function clearWildSpeechBubble(entity) {
 /**
  * @param {{ speechBubble?: object | null } | null | undefined} player
  * @param {import('./speech-bubble-types.js').SpeechBubbleSegment[]} segments
- * @param {{ durationSec?: number, kind?: import('./speech-bubble-types.js').SpeechBubbleKind }} [opts]
+ * @param {{ durationSec?: number, kind?: import('./speech-bubble-types.js').SpeechBubbleKind, skipDurationMult?: boolean }} [opts]
  */
 export function setPlayerSpeechBubble(player, segments, opts = {}) {
   if (!player) return;
@@ -71,7 +86,7 @@ export function setPlayerSpeechBubble(player, segments, opts = {}) {
     player.speechBubble = null;
     return;
   }
-  const durationSec = Math.max(0.6, Number(opts.durationSec) || DEFAULT_DURATION_SEC);
+  const durationSec = resolveBubbleDurationSec(opts);
   const kind = opts.kind === 'think' ? 'think' : 'say';
   player.speechBubble = {
     segments: norm,
@@ -126,7 +141,7 @@ export function setPlayerSpeechBubbleForDetailPickup(player, itemKey, stack = 1)
   if (iconSlug) segs.push({ kind: 'item', slug: iconSlug, itemKey: k });
   else if (label) segs.push({ kind: 'text', text: label });
   segs.push({ kind: 'text', text: n > 1 ? `×${n}` : 'Got it!' });
-  setPlayerSpeechBubble(player, segs, { durationSec: 1.85, kind: 'say' });
+  setPlayerSpeechBubble(player, segs, { durationSec: 1.85, kind: 'say', skipDurationMult: true });
 }
 
 /** @param {object} entity */

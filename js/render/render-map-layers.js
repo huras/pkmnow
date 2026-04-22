@@ -19,6 +19,7 @@ import {
 } from '../play-grass-fire.js';
 import { getGrassCutFadeoutAlpha01 } from '../play-grass-cut.js';
 import { TCOLS_NATURE } from './render-utils-internal.js';
+import { addRenderFramePhaseMs } from './render-frame-phases.js';
 
 /**
  * PASS 0: Ocean rendering.
@@ -185,13 +186,14 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
     needAlphaRestore = true;
   }
 
-  const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
+  const layers = options.precomputedLayers || getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap);
 
   const firePhase = grassFireVisualPhaseAt(mx, my);
   const charredRegrowU = firePhase === 'charred' ? (grassFireCharredRegrowth01(mx, my) ?? 0) : 0;
   const showFireOverlay = firePhase && (layers.base || layers.top) && !(firePhase === 'charred' && charredRegrowU >= 1);
 
   if (showFireOverlay) {
+    const tVegFire0 = performance.now();
     const burning = firePhase === 'burning';
     const blitGrassFramesForFire = () => {
       if (layers.base) {
@@ -277,11 +279,13 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       }
       ctx.restore();
     }
+    addRenderFramePhaseMs('rndVegGrassFireMs', performance.now() - tVegFire0);
     if (needAlphaRestore) ctx.restore();
     return;
   }
 
   if (layers.base) {
+    const tVegBase0 = performance.now();
     const gv = getGrassVariant(tile.biomeId);
     const gTiles = GRASS_TILES[gv];
     let baseId = gTiles.original;
@@ -294,9 +298,11 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       const frame = AnimationRenderer.getWindFrame(natureImg, baseId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH, tileH * 2);
     }
+    addRenderFramePhaseMs('rndVegGrassBaseMs', performance.now() - tVegBase0);
   }
 
   if (layers.top) {
+    const tVegTop0 = performance.now();
     const vt = getGrassVariant(tile.biomeId);
     const vTiles = GRASS_TILES[vt];
     const topId = vTiles.originalTop;
@@ -305,6 +311,7 @@ export function drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, options) {
       const frame = AnimationRenderer.getWindFrame(natureImg, topId, fIdx, TCOLS_NATURE);
       blitGrassQuad(frame, ty - tileH * 2 + VEG_MULTITILE_OVERLAP_PX, tileH * 2);
     }
+    addRenderFramePhaseMs('rndVegGrassTopMs', performance.now() - tVegTop0);
   }
 
   if (needAlphaRestore) ctx.restore();

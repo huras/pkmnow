@@ -37,3 +37,4 @@ tilesets/spritecollab-portraits/
 docs/video-making/
 unity-export/
 *.tiled-session
+/dist

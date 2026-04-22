@@ -9,7 +9,7 @@
  * All three files are seamless oggs, so we rely on `HTMLAudioElement.loop = true` for the
  * loop and only handle gain fades here.
  *
- * Gain pipeline per layer:  MediaElementSource → layerGain (fade) → userGain (BGM mix) → destination
+ * Gain pipeline per layer:  MediaElementSource → layerGain (fade) → userGain (ambience mix) → destination
  *
  * `syncWeatherAmbientAudio()` is called from the play game loop (every frame) and reads
  * the smoothed rain / wind state from `main/weather-state.js`. It schedules short gain
@@ -18,7 +18,7 @@
  */
 
 import { getSpatialAudioContext, resumeSpatialAudioContext } from './spatial-audio.js';
-import { getEffectiveBgmMix01 } from './play-audio-mix-settings.js';
+import { getEffectiveAmbienceMix01 } from './play-audio-mix-settings.js';
 import { getWeatherRainIntensity, getWeatherSandstormBlend01 } from '../main/weather-state.js';
 import { getWindBaseIntensity, getWindGust } from '../main/wind-state.js';
 
@@ -92,7 +92,7 @@ function createLayer(url) {
   const gain = ctx.createGain();
   gain.gain.value = 0;
   const userGain = ctx.createGain();
-  userGain.gain.value = getEffectiveBgmMix01();
+  userGain.gain.value = getEffectiveAmbienceMix01();
   source.connect(gain);
   gain.connect(userGain);
   userGain.connect(ctx.destination);
@@ -118,7 +118,7 @@ function ensureLayers() {
  * Apply persisted BGM mix slider to the ambient layers (post-fade trim). Safe anytime.
  */
 export function applyWeatherAmbientUserMixFromStorage() {
-  const v = getEffectiveBgmMix01();
+  const v = getEffectiveAmbienceMix01();
   for (const layer of [rainLayer, stormLayer, windLayer]) {
     if (!layer) continue;
     try {

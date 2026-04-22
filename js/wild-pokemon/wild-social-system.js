@@ -161,10 +161,12 @@ export function decaySocialMemory(entity, dt) {
   }
 
   entity.provoked01 = Math.max(0, (entity.provoked01 || 0) - smoothStep * 0.3);
-  entity.wildTempAggressiveSec = Math.max(0, (entity.wildTempAggressiveSec || 0) - smoothStep);
-  const allyStrain = getAllySpeciesHurtIntensity(entity);
-  if (allyStrain >= 0.85) {
-    entity.wildTempAggressiveSec = Math.min(22, Math.max(entity.wildTempAggressiveSec || 0, 6.5));
+  if (!entity.wildGrassHostileDeathBattle) {
+    entity.wildTempAggressiveSec = Math.max(0, (entity.wildTempAggressiveSec || 0) - smoothStep);
+    const allyStrain = getAllySpeciesHurtIntensity(entity);
+    if (allyStrain >= 0.85) {
+      entity.wildTempAggressiveSec = Math.min(22, Math.max(entity.wildTempAggressiveSec || 0, 6.5));
+    }
   }
 }
 
@@ -331,10 +333,16 @@ function applySocialReactionToWild(entity, action, player, influence) {
 
   let outcome = 'neutral';
   if (moodScore >= 0.95) {
-    entity.aiState = 'wander';
-    entity.vx = 0;
-    entity.vy = 0;
-    outcome = 'deescalate';
+    if (!entity.wildGrassHostileDeathBattle) {
+      entity.aiState = 'wander';
+      entity.vx = 0;
+      entity.vy = 0;
+      outcome = 'deescalate';
+    } else {
+      entity.aiState = 'alert';
+      entity.alertTimer = Math.max(entity.alertTimer || 0, 0.8);
+      outcome = 'neutral';
+    }
   } else if (moodScore <= -0.65) {
     if (eff.archetype === 'aggressive' && (action.intent === 'assertive' || action.intent === 'scary')) {
       entity.aiState = 'approach';
@@ -423,7 +431,7 @@ export function triggerPlayerSocialAction(actionInput, player, data) {
   }
 
   if (isTackleSocialAction(action) && primaryDist <= PLAYER_SOCIAL_TACKLE_HIT_RADIUS) {
-    if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE);
+    if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE, player);
     setEmotion(primary, 5, false, 'Pain');
     setWildSpeechBubble(
       primary,

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IA Lab - treino de comportamento</title>
+    <link rel="icon" href="data:,">
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1120;
+        --panel: #171c31;
+        --line: #2c355e;
+        --text: #eef3ff;
+        --muted: #a8b2d8;
+        --accent: #67bbff;
+        --ok: #73f2a5;
+        --warn: #ffcc69;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: radial-gradient(circle at top, #1c2752 0%, var(--bg) 52%);
+        color: var(--text);
+      }
+
+      .page {
+        width: min(1240px, 94vw);
+        margin: 0 auto;
+        padding: 28px 0 40px;
+      }
+
+      .top {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      .btn,
+      button,
+      select {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--text);
+        background: #222b4f;
+        font: inherit;
+      }
+
+      .btn {
+        display: inline-block;
+        text-decoration: none;
+        padding: 8px 14px;
+        font-weight: 600;
+      }
+
+      button,
+      select {
+        padding: 8px 10px;
+      }
+
+      .btn--ok,
+      button[data-kind="ok"] {
+        border-color: #34885d;
+        background: linear-gradient(180deg, #2d9f61, #25794c);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+      }
+
+      .lead {
+        margin: 10px 0 18px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .layout {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: minmax(640px, 1fr) 360px;
+        align-items: start;
+      }
+
+      .panel {
+        background: color-mix(in srgb, var(--panel) 86%, #090d1e 14%);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      canvas {
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #131934;
+      }
+
+      .controls {
+        display: grid;
+        gap: 10px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .hint {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .stats {
+        margin: 10px 0 0;
+        font-family: Consolas, monospace;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+        color: #c7d3ff;
+      }
+
+      #log {
+        margin: 0;
+        padding-left: 18px;
+        max-height: 220px;
+        overflow: auto;
+        color: #d5ddff;
+      }
+
+      #log li {
+        margin-bottom: 6px;
+        line-height: 1.35;
+      }
+
+      @media (max-width: 1080px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="top">
+        <a class="btn btn--ok" href="../index.html">Voltar para a home</a>
+        <a class="btn" href="../social-simulation.html">Abrir social simulation atual</a>
+      </div>
+
+      <h1>IA Lab - múltiplas políticas e troca dinâmica de controlador</h1>
+      <p class="lead">
+        Playground para validar arquitetura com políticas especializadas (<strong>Explore</strong>, <strong>War</strong>, <strong>DefendKids</strong>), árbitro de contexto e treino inicial por behavioral cloning.
+      </p>
+
+      <section class="layout">
+        <article class="panel">
+          <canvas id="lab-canvas" width="760" height="460"></canvas>
+          <p class="hint">
+            Verde = recursos, vermelho = ameaça inimiga, amarelo = risco para os kids.
+          </p>
+          <pre id="stats" class="stats"></pre>
+        </article>
+
+        <aside class="panel controls">
+          <div class="field">
+            <label for="controller-mode">Controlador ativo</label>
+            <select id="controller-mode">
+              <option value="rules">Rules baseline</option>
+              <option value="neural">Neural policy</option>
+              <option value="hybrid" selected>Hybrid (auto + guardrails)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="forced-behavior">Comportamento forçado</label>
+            <select id="forced-behavior">
+              <option value="auto" selected>Auto (árbitro escolhe)</option>
+              <option value="EXPLORE">Explore</option>
+              <option value="WAR">War</option>
+              <option value="DEFEND_KIDS">Defend kids</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Eventos rápidos</label>
+            <div class="row">
+              <button id="event-enemy">Enemy spike</button>
+              <button id="event-kids">Kids in danger</button>
+              <button id="event-normalize">Normalize</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Treino não amador (início)</label>
+            <div class="row">
+              <button id="build-dataset">Build Dataset</button>
+              <button id="train-model" data-kind="ok">Train Neural</button>
+              <button id="eval-model">Evaluate</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Log do experimento</label>
+            <ol id="log"></ol>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="../js/neural-behavior-lab.js"></script>
+  </body>
+</html>

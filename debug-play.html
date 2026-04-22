@@ -9,7 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css" />
-    <link rel="stylesheet" href="css/biomes-modal.css" />
     <link rel="stylesheet" href="css/pokemon-db.css" />
     <link rel="stylesheet" href="css/character-selector.css" />
     <link rel="stylesheet" href="css/attack-wheel.css" />
@@ -28,7 +27,7 @@
         </div>
         <button type="button" id="generate">Gerar</button>
         <button type="button" id="btnSettings" title="Configurações de Ruído" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">⚙️</button>
-        <button type="button" id="btnBiomes" title="Explorador de Biomas" style="background:#2a2a32; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer;">📊</button>
+        <a href="biomes.html" title="Explorador de Biomas" style="background:#2a2a32; width:44px; height:44px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; border:1px solid #444; cursor:pointer; text-decoration:none;">📊</a>
         <a href="play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Modo jogar</a>
         <a href="pokemon-anim-lab.html" style="display:inline-flex; align-items:center; padding:0.45rem 0.8rem; text-decoration:none; border-radius:6px; border:1px solid #4a4a52; background:transparent; color:var(--text); font-size:0.8rem; font-weight:600;">PMD lab</a>
         <a href="index.html" style="display:inline-flex; align-items:center; padding:0.45rem 0.8rem; text-decoration:none; border-radius:6px; border:1px solid #4a4a52; background:transparent; color:var(--text); font-size:0.8rem; font-weight:600;">Início</a>
@@ -171,6 +170,20 @@
                   <rect x="14" y="3" width="7" height="7"/>
                   <rect x="14" y="14" width="7" height="7"/>
                   <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                id="minimap-social-inspector-toggle"
+                class="minimap-panel__social-inspector-btn"
+                title="Social Inspector"
+                aria-label="Social Inspector"
+                aria-pressed="false"
+              >
+                <svg class="minimap-panel__social-inspector-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+                  <circle cx="18" cy="18" r="4" fill="rgba(14,16,24,0.85)" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M18 16.5v3M16.5 18h3" stroke="currentColor" stroke-width="1.5"/>
                 </svg>
               </button>
               <button
@@ -378,6 +391,20 @@
             </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
           </div>
+
+          <!-- Social Inspector panel -->
+          <div id="minimap-social-inspector-popover" class="minimap-social-inspector-popover hidden" role="dialog" aria-label="Social Inspector">
+            <div class="social-inspector__head">
+              <span class="social-inspector__title">Social Inspector</span>
+              <div class="social-inspector__head-actions">
+                <select id="social-inspector-scenario-select" class="social-inspector__scenario-select" title="Trigger scenario on nearest group">
+                  <option value="">Trigger Scenario…</option>
+                </select>
+                <button type="button" id="social-inspector-trigger-btn" class="social-inspector__trigger-btn" title="Run selected scenario">▶ Go</button>
+              </div>
+            </div>
+            <div id="social-inspector-list" class="social-inspector__list"></div>
+          </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
         <div
@@ -481,17 +508,6 @@
             </div>
             <div class="tile-debug-body" id="tile-debug-content"></div>
         </div>
-    </div>
-
-    <div id="biomesModal" class="modal hidden">
-      <div class="modal-content biomes-modal-content">
-        <div class="tile-debug-header">
-          <div class="hud-title">Explorador de Biomas</div>
-          <button type="button" class="btn-hud" id="btnCloseBiomes">Fechar</button>
-        </div>
-        <div class="biomes-grid" id="biomesGrid">
-        </div>
-      </div>
     </div>
 
     <div

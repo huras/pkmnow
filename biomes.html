@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-app-shell="biomes-page">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Explorador de biomas</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/biomes-modal.css" />
+  </head>
+  <body>
+    <div class="app">
+      <h1>Explorador de Biomas</h1>
+      <div class="toolbar">
+        <a href="index.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Início</a>
+        <a href="play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Modo jogar</a>
+        <a href="debug-play.html" class="btn-secondary" style="display:inline-flex;align-items:center;padding:0.45rem 0.8rem;text-decoration:none;border-radius:6px;">Ferramentas e debug</a>
+      </div>
+      <div class="map-wrap" style="padding: 0.8rem;">
+        <div id="biomesPageStatus" class="hud-subtitle">Carregando previews de bioma...</div>
+        <div class="biomes-grid" id="biomesGrid"></div>
+      </div>
+    </div>
+    <script type="module" src="js/biomes-page.js"></script>
+  </body>
+</html>

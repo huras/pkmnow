@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'waterCannon'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'cut'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychoCut'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'tackle'|'waterCannon'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'vineWhip'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
@@ -41,6 +41,9 @@ export const MOVE_LABELS = Object.freeze({
   thunderbolt: 'Thunderbolt',
   triAttack: 'Tri Attack',
   confusion: 'Confusion',
+  cut: 'Cut',
+  psychoCut: 'Psycho Cut',
+  vineWhip: 'Vine Whip',
   bubble: 'Bubble',
   waterBurst: 'Water Burst',
   waterGun: 'Water Gun',

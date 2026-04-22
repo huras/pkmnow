@@ -10,7 +10,9 @@ import {
   pivotCellHeightTraversalOk,
   beginWalkProbeCache,
   endWalkProbeCache,
-  syncEntityZWithTerrain
+  syncEntityZWithTerrain,
+  getTreeCanopyZAtPoint,
+  HEIGHT_STEP_Z
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
 import {
@@ -62,6 +64,8 @@ const PLAYER_BASE_MAX_JUMPS = 2;
 const PLAYER_FLYING_MAX_JUMPS = 6;
 /** Player stamina is intentionally higher than generic entity default. */
 const PLAYER_STAMINA_MAX = ENTITY_STAMINA_MAX * 2;
+const PLAYER_HIT_KNOCKBACK_SPEED = 4.4;
+const PLAYER_HIT_KNOCKBACK_LOCK_SEC = 0.14;
 
 /** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
 /** Creative flight ceiling (world tile units); HUD / UI may import this. */
@@ -115,13 +119,16 @@ const TACKLE_LUNGE_CURVE = 'sin';
 const TACKLE_VISUAL_DEPTH_Y_SCALE = 0.72;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
+const PLAYER_INFINITE_LIFE_KEY = 'pkmn_player_infinite_life';
 /** Default species when nothing valid is stored (Charmander). */
 const DEFAULT_PLAYER_DEX_ID = 4;
 const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
+const _savedInfiniteLife = localStorage.getItem(PLAYER_INFINITE_LIFE_KEY);
 const initialDex =
   Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
     ? _savedDex
     : DEFAULT_PLAYER_DEX_ID;
+const initialInfiniteLife = _savedInfiniteLife == null ? true : _savedInfiniteLife !== '0';
 
 export const player = {
   x: 0,
@@ -132,6 +139,8 @@ export const player = {
   vy: 0,
   vz: 0,
   z: 0,
+  /** Effective ground height at the player's current position (0 for terrain, >0 on tree canopies). */
+  groundZ: 0,
   inputX: 0,
   inputY: 0,
   facing: 'down',
@@ -161,11 +170,15 @@ export const player = {
   /** Play mode: HP when hit by wild projectiles. */
   hp: 100,
   maxHp: 100,
+  /** Default enabled: keep HP intact while still applying hit feedback/knockback. */
+  infiniteLife: initialInfiniteLife,
   /** Sprint / wild sprint-speed drain; regens when not draining. */
   stamina: PLAYER_STAMINA_MAX,
   maxStamina: PLAYER_STAMINA_MAX,
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
+  /** Seconds remaining: movement input lock while hit knockback is active. */
+  hitKnockbackLockSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
   poisonVisualSec: 0,
   /** Seconds remaining: play `shoot` PMD slice after a successful player cast (if asset exists). */
@@ -246,6 +259,7 @@ export function setPlayerSpecies(dexId) {
   ensureEntityStamina(player);
   player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
+  player.hitKnockbackLockSec = 0;
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
   player._chargeAnimTick = 0;
@@ -356,6 +370,7 @@ export function setPlayerPos(x, y) {
   ensureEntityStamina(player);
   player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
+  player.hitKnockbackLockSec = 0;
   player.poisonVisualSec = 0;
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
@@ -407,26 +422,80 @@ export function showPlayerSocialEmotion(action) {
 /**
  * @param {number} amount
  * @param {boolean} [applyPoisonVisual]
- * @returns {boolean} true if damage was applied (not blocked by iframes)
+ * @param {any} [data]
+ * @param {{ x?: number, y?: number, vx?: number, vy?: number, sourceEntity?: { x?: number, y?: number } } | null} [hitSource]
+ * @returns {boolean} true if hit was applied (not blocked by iframes)
  */
-export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null) {
+export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null, hitSource = null) {
   if (player.projIFrameSec > 0) return false;
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
-  player.hp = Math.max(0, cur - amount);
+  if (player.infiniteLife) player.hp = maxH;
+  else player.hp = Math.max(0, cur - amount);
   rumblePlayerGamepadPokemonHitTaken();
   player.projIFrameSec = 0.55;
+  applyPlayerHitKnockback(hitSource);
   if (applyPoisonVisual) player.poisonVisualSec = 3;
   const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
-  if (extraCarryDropDamage > 0) {
+  if (extraCarryDropDamage > 0 && !player.infiniteLife) {
     player.hp = Math.max(0, (player.hp ?? maxH) - extraCarryDropDamage);
   }
+  if (player.infiniteLife) player.hp = maxH;
   return true;
+}
+
+/**
+ * @param {{ x?: number, y?: number, vx?: number, vy?: number, sourceEntity?: { x?: number, y?: number } } | null} hitSource
+ */
+export function applyPlayerHitKnockback(hitSource) {
+  if (!hitSource) return;
+  const srcEntX = Number(hitSource?.sourceEntity?.x);
+  const srcEntY = Number(hitSource?.sourceEntity?.y);
+  const srcX = Number.isFinite(srcEntX)
+    ? srcEntX
+    : (Number(hitSource.x) || 0) - (Number(hitSource.vx) || 0) * 0.07;
+  const srcY = Number.isFinite(srcEntY)
+    ? srcEntY
+    : (Number(hitSource.y) || 0) - (Number(hitSource.vy) || 0) * 0.07;
+  let dx = (player.x ?? 0) - srcX;
+  let dy = (player.y ?? 0) - srcY;
+  let len = Math.hypot(dx, dy);
+  if (len < 1e-5) {
+    dx = -(Number(hitSource.vx) || 0);
+    dy = -(Number(hitSource.vy) || 0);
+    len = Math.hypot(dx, dy);
+  }
+  if (len < 1e-5) return;
+  const nx = dx / len;
+  const ny = dy / len;
+  const keepVel = 0.18;
+  player.vx = (player.vx || 0) * keepVel + nx * PLAYER_HIT_KNOCKBACK_SPEED;
+  player.vy = (player.vy || 0) * keepVel + ny * PLAYER_HIT_KNOCKBACK_SPEED;
+  player.hitKnockbackLockSec = Math.max(player.hitKnockbackLockSec || 0, PLAYER_HIT_KNOCKBACK_LOCK_SEC);
+}
+
+export function isPlayerInfiniteLifeEnabled() {
+  return !!player.infiniteLife;
+}
+
+export function setPlayerInfiniteLifeEnabled(enabled) {
+  player.infiniteLife = !!enabled;
+  try {
+    localStorage.setItem(PLAYER_INFINITE_LIFE_KEY, player.infiniteLife ? '1' : '0');
+  } catch {
+    /* noop */
+  }
+  if (player.infiniteLife) {
+    player.hp = player.maxHp ?? 100;
+  }
 }
 
 /** @param {number} dt */
 export function updatePlayerCombatTimers(dt) {
   if (player.projIFrameSec > 0) player.projIFrameSec = Math.max(0, player.projIFrameSec - dt);
+  if (player.hitKnockbackLockSec > 0) {
+    player.hitKnockbackLockSec = Math.max(0, player.hitKnockbackLockSec - dt);
+  }
   if (player.poisonVisualSec > 0) player.poisonVisualSec = Math.max(0, player.poisonVisualSec - dt);
   if (player.cutThirdHitLockoutSec > 0) {
     player.cutThirdHitLockoutSec = Math.max(0, player.cutThirdHitLockoutSec - dt);
@@ -495,29 +564,51 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     sfy = s.y;
   }
 
+  /** Treetop: terrain `heightStep` under the canopy disc can mismatch cliffs; logical walk plane is `groundZ`. */
+  const treeCanopyWalkRelax =
+    !isAirborne &&
+    !burrowWalk &&
+    (player.groundZ || 0) > 0.05 &&
+    getTreeCanopyZAtPoint(fx, fy, data) > 0 &&
+    (sfx === undefined || sfy === undefined || getTreeCanopyZAtPoint(sfx, sfy, data) > 0);
+
+  // Detect cliff drop: source height > destination height
+  let isDropMovement = false;
+  if (sfx !== undefined && sfy !== undefined) {
+    const srcTile = getMicroTile(Math.floor(sfx), Math.floor(sfy), data);
+    const dstTile = getMicroTile(Math.floor(fx), Math.floor(fy), data);
+    if (srcTile && dstTile && srcTile.heightStep > dstTile.heightStep) {
+      isDropMovement = true;
+    }
+  }
+
   // 1. LOGICAL TRAVERSAL (The "Feet"):
-  // Se estiver no ar, o centro pode ignorar clifs.
-  // Se estiver no chão, o centro DEVE obedecer às regras de altura (escadas, mesma altura, etc).
-  // Probes usam deslocamento PMD (pivot → pés) alinhado ao render.
   if (!isAirborne) {
-    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks)) {
+    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks, treeCanopyWalkRelax)) {
       return false;
     }
-    // Pivot pode entrar no tile ao norte antes dos pés saírem do platô (offset PMD para sul).
-    if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data)) {
+    if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data, treeCanopyWalkRelax)) {
       return false;
     }
   } else {
-    // No ar, verificamos apenas se o centro não bateu em algo sólido (prop horizontal).
-    // canWalkMicroTile sem srcX/Y pula o check de altura.
+    // Airborne: enforce z-gated height climbing.
+    // The player must have enough z to reach a higher heightStep.
+    if (sfx !== undefined && sfy !== undefined) {
+      const srcTile = getMicroTile(Math.floor(sfx), Math.floor(sfy), data);
+      const dstTile = getMicroTile(Math.floor(fx), Math.floor(fy), data);
+      if (srcTile && dstTile && dstTile.heightStep > srcTile.heightStep) {
+        const heightDiff = (dstTile.heightStep - srcTile.heightStep) * HEIGHT_STEP_Z;
+        if ((player.z || 0) < heightDiff) return false;
+      }
+    }
     if (!canWalkMicroTile(fx, fy, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
       return false;
     }
   }
 
   // 2. PHYSICAL BODY (The "Corners"):
-  // O corpo físico só pára por obstáculos REAIS (paredes, árvores, casas).
-  // Ele NÃO liga para altura do chão (heightStep).
+  // For cliff drops, treat corners as airborne so they pass through cliff-face wall tiles.
+  const cornerAirborne = isAirborne || isDropMovement;
   const points = [
     { x: fx - GROUND_R, y: fy - GROUND_R },
     { x: fx + GROUND_R, y: fy - GROUND_R },
@@ -530,9 +621,9 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     const my = Math.floor(p.y);
     if (mx < 0 || my < 0 || mx >= data.width * MACRO_TILE_STRIDE || my >= data.height * MACRO_TILE_STRIDE) return false;
 
-    // Chamamos canWalkMicroTile SEM srcX/srcY para ignorar o check de "heightStepMismatch".
-    // Isso permite que um ombro do player sobreponha um tile de altura diferente sem travar.
-    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
+    const cornerTreeRelax =
+      treeCanopyWalkRelax && !cornerAirborne && getTreeCanopyZAtPoint(p.x, p.y, data) > 0;
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks, cornerTreeRelax)) {
       return false;
     }
   }
@@ -725,7 +816,8 @@ export function updatePlayer(dt, data, gameTimeSec) {
   const canFlySpecies = speciesHasFlyingType(player.dexId ?? 0);
   const flightMove = canFlySpecies && player.flightActive;
   const smoothLevitationFlight = speciesHasSmoothLevitationFlight(player.dexId ?? 0);
-  const isAirborne = player.jumping || player.z > 0.05 || flightMove;
+  const gZ = player.groundZ || 0;
+  const isAirborne = player.jumping || player.z > gZ + 0.05 || flightMove;
   const gr = speciesHasGroundType(player.dexId ?? 0);
   const gh = isGhostPhaseShiftBurrowEligibleDex(player.dexId ?? 0);
 
@@ -770,9 +862,15 @@ export function updatePlayer(dt, data, gameTimeSec) {
   const carryBlocksWalk = strengthCarryBlocksWalk(player);
   const blockedTurnInputX = carryBlocksWalk ? Number(player.inputX) || 0 : 0;
   const blockedTurnInputY = carryBlocksWalk ? Number(player.inputY) || 0 : 0;
+  const hitKnockbackLocked = (player.hitKnockbackLockSec || 0) > 1e-5;
   if (carryBlocksWalk) {
     player.runMode = false;
     player.flameChargeDashSec = 0;
+  }
+  if (hitKnockbackLocked) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
   }
 
   if ((player.cutThirdHitLockoutSec || 0) > 0) {
@@ -1001,7 +1099,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
-    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
+    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data, player.z || 0);
     
     syncEntityZWithTerrain(player, player.x, player.y, r.x, r.y, data);
 
@@ -1009,6 +1107,16 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player.y = r.y;
     player.vx = r.vx;
     player.vy = r.vy;
+
+    // After height sync: if z rose above groundZ, player stepped off a cliff → become airborne.
+    if (player.z > (player.groundZ || 0) + 0.05) {
+      player.grounded = false;
+    }
+  }
+
+  // Airborne height sync: keep visual height consistent when crossing heightStep boundaries mid-jump.
+  if (!player.grounded && isAirborne && !flightMove && data) {
+    syncEntityZWithTerrain(player, ox, oy, player.x, player.y, data);
   }
 
   const movedWorldTiles = Math.hypot(player.x - ox, player.y - oy);
@@ -1022,6 +1130,47 @@ export function updatePlayer(dt, data, gameTimeSec) {
   advanceRainFootstepFxForDistance(player, movedWorldTiles, wantFootFloorSfx, feetForFx.x, feetForFx.y);
 
   // 3. Vertical — creative flight (Flying) or jump / gravity
+  // Update groundZ: detect tree canopy beneath the player.
+  // Canopy is a one-way platform: passable from below, solid from above.
+  // Hold Shift to drop through.
+  {
+    const feetForGZ = worldFeetFromPivotCell(player.x, player.y, imageCache, player.dexId || 94, true);
+    const canopyZ = data ? getTreeCanopyZAtPoint(feetForGZ.x, feetForGZ.y, data) : 0;
+    const prevGroundZ = player.groundZ || 0;
+
+    // Determine effective canopy floor.
+    let newGroundZ = 0;
+    if (canopyZ > 0) {
+      const playerZ = player.z || 0;
+      const playerVz = player.vz || 0;
+      const shiftHeld = isPlayGroundDigShiftHeld();
+      // Canopy acts as floor only when player is at/above it (or grounded on it).
+      // Pass through from below (rising). Hold Shift on top to drop through.
+      const wasOnCanopy = prevGroundZ >= canopyZ - 0.05;
+      const atOrAboveCanopy = playerZ >= canopyZ - 0.1;
+      const risingThroughCanopy = playerVz > 0 && playerZ < canopyZ;
+      if (risingThroughCanopy) {
+        // Jumping up through — don't block.
+        newGroundZ = 0;
+      } else if (shiftHeld && wasOnCanopy) {
+        // Holding shift on top — drop through.
+        newGroundZ = 0;
+        if (player.grounded && playerZ >= canopyZ - 0.05) {
+          player.grounded = false;
+        }
+      } else if (atOrAboveCanopy || wasOnCanopy) {
+        newGroundZ = canopyZ;
+      }
+    }
+    player.groundZ = newGroundZ;
+
+    // If grounded on an elevated surface and groundZ dropped (walked off edge or shift-drop), become airborne.
+    if (player.grounded && !flightMove && newGroundZ < prevGroundZ && (player.z || 0) > newGroundZ + 0.05) {
+      player.grounded = false;
+    }
+  }
+  const effectiveGroundZ = player.groundZ || 0;
+
   if (flightMove) {
     const zFlightPrev = player.z;
     const vSp = smoothLevitationFlight ? FLIGHT_LEVITATION_VERT_SPEED : FLIGHT_WINGED_VERT_SPEED;
@@ -1029,14 +1178,14 @@ export function updatePlayer(dt, data, gameTimeSec) {
     const up = cutLock ? 0 : isPlaySpaceAscendHeld() ? vSp : 0;
     const down = cutLock ? 0 : isPlayGroundDigShiftHeld() ? vSp : 0;
     const dz = (up - down) * dt;
-    player.z = Math.min(FLIGHT_MAX_Z, Math.max(0, player.z + dz));
+    player.z = Math.min(FLIGHT_MAX_Z, Math.max(effectiveGroundZ, player.z + dz));
     player.vz = 0;
     player.jumping = false;
-    if (player.z <= 1e-4) {
-      player.z = 0;
+    if (player.z <= effectiveGroundZ + 1e-4) {
+      player.z = effectiveGroundZ;
       player.grounded = true;
       player.jumpsUsed = 0;
-      if (zFlightPrev > 0.14) playFloorHit2Sfx(player);
+      if (zFlightPrev > effectiveGroundZ + 0.14) playFloorHit2Sfx(player);
     } else {
       player.grounded = false;
     }
@@ -1047,13 +1196,14 @@ export function updatePlayer(dt, data, gameTimeSec) {
     const vzBeforePositionStep = player.vz;
     player.z += player.vz * dt;
 
-    if (player.z <= 0) {
-      player.z = 0;
+    // Land on ground or tree canopy — whichever is higher.
+    if (player.z <= effectiveGroundZ) {
+      player.z = effectiveGroundZ;
       player.vz = 0;
       player.grounded = true;
       player.jumping = false;
       player.jumpsUsed = 0;
-      if (zJumpPrev > 0.04) playFloorHit2Sfx(player);
+      if (zJumpPrev > effectiveGroundZ + 0.04) playFloorHit2Sfx(player);
       const gt =
         gameTimeSec != null && Number.isFinite(gameTimeSec)
           ? gameTimeSec

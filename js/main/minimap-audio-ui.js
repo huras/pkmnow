@@ -1,6 +1,10 @@
 import {
   getBgmMix01,
   setBgmMix01,
+  getMeMix01,
+  setMeMix01,
+  getAmbienceMix01,
+  setAmbienceMix01,
   getCriesMix01,
   setCriesMix01,
   isAudioMuted,
@@ -13,7 +17,10 @@ import {
   applyBgmUserMixFromStorage,
   forceNextBiomeBgmTrack
 } from '../audio/biome-bgm.js';
+import { applyWeatherAmbientUserMixFromStorage } from '../audio/weather-ambient-audio.js';
+import { applyEarthquakeAmbientUserMixFromStorage } from '../audio/earthquake-ambient-audio.js';
 import { applySpatialAudioMuteFromStorage } from '../audio/spatial-audio.js';
+import { applyEncounterMeUserMixFromStorage } from '../audio/encounter-me.js';
 import { getBiomeNameById, onLocaleChanged, t } from '../i18n/index.js';
 
 /** @param {ReturnType<typeof getBiomeBgmUiState>} st */
@@ -39,6 +46,10 @@ export function installMinimapAudioUi() {
   const pop = document.getElementById('minimap-audio-popover');
   const toggle = document.getElementById('minimap-audio-toggle');
   const bgmRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-bgm'));
+  const meRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-me'));
+  const ambienceRange = /** @type {HTMLInputElement | null} */ (
+    document.getElementById('minimap-mix-ambience')
+  );
   const sfxRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-mix-sfx'));
   const muteChk = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-audio-mute'));
   const toastSuppressChk = /** @type {HTMLInputElement | null} */ (
@@ -50,7 +61,7 @@ export function installMinimapAudioUi() {
   const trackEl = document.getElementById('minimap-audio-track');
   const statusEl = document.getElementById('minimap-audio-status');
 
-  if (!pop || !toggle || !bgmRange || !sfxRange || !trackEl || !statusEl) {
+  if (!pop || !toggle || !bgmRange || !meRange || !ambienceRange || !sfxRange || !trackEl || !statusEl) {
     return { syncMinimapAudioPopover: () => {}, forceCloseMinimapAudioPopover: () => {} };
   }
 
@@ -65,6 +76,8 @@ export function installMinimapAudioUi() {
       syncNowPlayingText();
       mutating = true;
       bgmRange.value = String(Math.round(getBgmMix01() * 100));
+      meRange.value = String(Math.round(getMeMix01() * 100));
+      ambienceRange.value = String(Math.round(getAmbienceMix01() * 100));
       sfxRange.value = String(Math.round(getCriesMix01() * 100));
       if (muteChk) muteChk.checked = isAudioMuted();
       if (toastSuppressChk) toastSuppressChk.checked = isBgmTrackChangeToastSuppressed();
@@ -83,6 +96,19 @@ export function installMinimapAudioUi() {
     applyBgmUserMixFromStorage();
   });
 
+  meRange.addEventListener('input', () => {
+    if (mutating) return;
+    setMeMix01(Number(meRange.value) / 100);
+    applyEncounterMeUserMixFromStorage();
+  });
+
+  ambienceRange.addEventListener('input', () => {
+    if (mutating) return;
+    setAmbienceMix01(Number(ambienceRange.value) / 100);
+    applyWeatherAmbientUserMixFromStorage();
+    applyEarthquakeAmbientUserMixFromStorage();
+  });
+
   sfxRange.addEventListener('input', () => {
     if (mutating) return;
     setCriesMix01(Number(sfxRange.value) / 100);
@@ -93,6 +119,9 @@ export function installMinimapAudioUi() {
     if (mutating) return;
     setAudioMuted(!!muteChk.checked);
     applyBgmUserMixFromStorage();
+    applyEncounterMeUserMixFromStorage();
+    applyWeatherAmbientUserMixFromStorage();
+    applyEarthquakeAmbientUserMixFromStorage();
     applySpatialAudioMuteFromStorage();
   });
 
@@ -123,6 +152,8 @@ export function installMinimapAudioUi() {
 
   mutating = true;
   bgmRange.value = String(Math.round(getBgmMix01() * 100));
+  meRange.value = String(Math.round(getMeMix01() * 100));
+  ambienceRange.value = String(Math.round(getAmbienceMix01() * 100));
   sfxRange.value = String(Math.round(getCriesMix01() * 100));
   if (muteChk) muteChk.checked = isAudioMuted();
   if (toastSuppressChk) toastSuppressChk.checked = isBgmTrackChangeToastSuppressed();

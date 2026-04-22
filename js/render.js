@@ -4,10 +4,7 @@ import {
   WATER_ANIM_SRC_W,
   WATER_ANIM_SRC_H,
   PLAY_SEA_OVERLAY_ALPHA_LOD01,
-  VEG_MULTITILE_OVERLAP_PX,
-  GRASS_DEFER_AROUND_PLAYER_DELTAS,
-  PLAYER_TILE_GRASS_OVERLAY_BOTTOM_FRAC,
-  PLAYER_TILE_GRASS_OVERLAY_ALPHA
+  VEG_MULTITILE_OVERLAP_PX
 } from './render/render-constants.js';
 import { computePlayViewState } from './render/play-view-camera.js';
 import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
@@ -44,6 +41,8 @@ import {
 } from './moves/move-constants.js';
 import { getGroundWetness01 } from './main/weather-state.js';
 
+import { drawEncounterCinematicOverlay } from './encounter/encounter-cinematic.js';
+
 import {
   drawBatchedProjectile,
   drawPrismaticStreamGradientBeam,
@@ -63,7 +62,9 @@ import {
   drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
   drawWildHpBar,
-  drawEntityStaminaBar
+  drawPlayerHpBar,
+  drawEntityStaminaBar,
+  drawInventoryGroundDropPreview
 } from './render/render-ui-world.js';
 import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
@@ -92,7 +93,6 @@ import {
 } from './render/render-utils-internal.js';
 import {
   drawOceanPass,
-  drawAnimatedGrassPass,
   drawGrass5aForCell
 } from './render/render-map-layers.js';
 import { collectRenderItems } from './render/render-item-collector.js';
@@ -121,6 +121,7 @@ import {
   drawVolumetricEnvironmentalLayer,
   drawDigChargeBar,
   drawFieldCombatChargeBar,
+  drawPlayerFieldChargeShineOverlay,
   CLOUD_WHITE_LAYER_FULL_ALTITUDE_TILES
 } from './render/render-debug-world.js';
 import { drawFarCryScreenWaves } from './render/render-far-cry.js';
@@ -136,6 +137,8 @@ import { BIOME_TO_TERRAIN, TREE_TILES } from './biome-tiles.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { scatterItemKeyIsTree } from './scatter-pass2-debug.js';
 import { getRoleForCell } from './tessellation-logic.js';
+import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
+import { NORTH_CLIFF_EDGE_ROLES } from './walkability.js';
 import {
   speciesHasFlyingType,
   speciesHasSmoothLevitationFlight
@@ -157,7 +160,7 @@ import {
 import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from './main/play-input-state.js';
 import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
-import { isPlayerIdleOnWaitingFrame, PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
+import { PLAYER_FLIGHT_MAX_Z_TILES } from './player.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
 import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { getHoveredWildGroupEntityKey } from './main/wild-groups-hover-state.js';
@@ -523,6 +526,9 @@ const GLOBAL_MAP_TRAIL_RECENT_WINDOW_MS = 30_000;
 const GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS = 512;
 const GLOBAL_MAP_TRAIL_STORAGE_KEY = 'pkmn_global_map_player_trail_v1';
 const GLOBAL_MAP_TRAIL_PERSIST_MIN_MS = 1200;
+const WORLD_MAP_PLAYER_WAVE_SPAWN_MS = 520;
+const WORLD_MAP_PLAYER_WAVE_MAX_AGE_MS = 1450;
+const WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE = 10;
 let globalMapTrailFingerprint = '';
 /** @type {Array<{ x: number, y: number }>} */
 let globalMapPlayerTrailMicro = [];
@@ -530,6 +536,11 @@ let globalMapPlayerTrailMicro = [];
 let globalMapPlayerTrailRecentMicro = [];
 let globalMapTrailDirty = false;
 let globalMapTrailLastPersistAtMs = 0;
+/** @type {Array<{ gx: number, gy: number, ageMs: number, maxAgeMs: number }>} */
+let worldMapPlayerWaves = [];
+let worldMapPlayerWaveLastTickMs = 0;
+let worldMapPlayerWaveNextSpawnAtMs = 0;
+let worldMapPlayerWaveFingerprint = '';
 
 function mapFingerprintForTrail(data) {
   if (!data) return '';
@@ -537,6 +548,89 @@ function mapFingerprintForTrail(data) {
   const h = Math.max(0, Math.floor(Number(data.height) || 0));
   const seed = Number.isFinite(Number(data.seed)) ? Number(data.seed) : 0;
   return `${w}x${h}@${seed}`;
+}
+
+function resetWorldMapPlayerWaves(nowMs, mapFp) {
+  worldMapPlayerWaves = [];
+  worldMapPlayerWaveLastTickMs = Number.isFinite(nowMs) ? nowMs : 0;
+  worldMapPlayerWaveNextSpawnAtMs = Number.isFinite(nowMs) ? nowMs : 0;
+  worldMapPlayerWaveFingerprint = String(mapFp || '');
+}
+
+/**
+ * @param {number} nowMs
+ * @param {{ x: number, y: number } | null} mapPlayerMicro
+ * @param {string} mapFp
+ */
+function tickWorldMapPlayerWaves(nowMs, mapPlayerMicro, mapFp) {
+  const now = Number.isFinite(nowMs) ? nowMs : 0;
+  if (worldMapPlayerWaveFingerprint !== mapFp) {
+    resetWorldMapPlayerWaves(now, mapFp);
+  }
+  if (!Number.isFinite(worldMapPlayerWaveLastTickMs) || worldMapPlayerWaveLastTickMs <= 0) {
+    worldMapPlayerWaveLastTickMs = now;
+  }
+  const dtMs = Math.max(0, Math.min(160, now - worldMapPlayerWaveLastTickMs));
+  worldMapPlayerWaveLastTickMs = now;
+  if (dtMs > 0) {
+    for (let i = worldMapPlayerWaves.length - 1; i >= 0; i--) {
+      const fx = worldMapPlayerWaves[i];
+      fx.ageMs += dtMs;
+      if (fx.ageMs >= fx.maxAgeMs) worldMapPlayerWaves.splice(i, 1);
+    }
+  }
+  if (!mapPlayerMicro) return;
+  const mx = Number(mapPlayerMicro.x);
+  const my = Number(mapPlayerMicro.y);
+  if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
+  if (!Number.isFinite(worldMapPlayerWaveNextSpawnAtMs) || worldMapPlayerWaveNextSpawnAtMs <= 0) {
+    worldMapPlayerWaveNextSpawnAtMs = now;
+  }
+  if (now < worldMapPlayerWaveNextSpawnAtMs) return;
+  worldMapPlayerWaves.push({
+    gx: mx / MACRO_TILE_STRIDE,
+    gy: my / MACRO_TILE_STRIDE,
+    ageMs: 0,
+    maxAgeMs: WORLD_MAP_PLAYER_WAVE_MAX_AGE_MS
+  });
+  if (worldMapPlayerWaves.length > WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE) {
+    worldMapPlayerWaves.splice(0, worldMapPlayerWaves.length - WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE);
+  }
+  worldMapPlayerWaveNextSpawnAtMs = now + WORLD_MAP_PLAYER_WAVE_SPAWN_MS;
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} cw
+ * @param {number} ch
+ * @param {object} data
+ * @param {{ scale: number, ox: number, oy: number } | null} worldMapCamera
+ */
+function drawWorldMapPlayerWaves(ctx, cw, ch, data, worldMapCamera) {
+  if (!worldMapPlayerWaves.length) return;
+  const tileW = worldMapCamera?.scale ? worldMapCamera.scale : cw / data.width;
+  const tileH = worldMapCamera?.scale ? worldMapCamera.scale : ch / data.height;
+  const ox = Number(worldMapCamera?.ox) || 0;
+  const oy = Number(worldMapCamera?.oy) || 0;
+  const unit = Math.max(1, Math.min(tileW, tileH));
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const fx of worldMapPlayerWaves) {
+    const maxAge = Math.max(1, Number(fx.maxAgeMs) || 1);
+    const t = Math.max(0, Math.min(1, (Number(fx.ageMs) || 0) / maxAge));
+    const fade = 1 - t;
+    if (fade <= 0.01) continue;
+    const px = (Number(fx.gx) - ox + 0.5) * tileW;
+    const py = (Number(fx.gy) - oy + 0.5) * tileH;
+    if (px < -40 || py < -40 || px > cw + 40 || py > ch + 40) continue;
+    const radius = Math.max(4, unit * (0.55 + t * 3.3));
+    ctx.strokeStyle = `rgba(120, 235, 255, ${(0.82 * fade).toFixed(4)})`;
+    ctx.lineWidth = Math.max(1.2, unit * (0.16 - t * 0.08));
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**
@@ -832,6 +926,9 @@ export function render(canvas, data, options = {}) {
   if (mapFp && globalMapTrailFingerprint !== mapFp) {
     loadPersistedGlobalMapTrail(mapFp);
   }
+  if (worldMapPlayerWaveFingerprint && worldMapPlayerWaveFingerprint !== mapFp) {
+    resetWorldMapPlayerWaves(frameNowMs, mapFp);
+  }
   recordGlobalMapTrailPoint(data, player, appMode);
   persistGlobalMapTrailIfNeeded(false);
   if (appMode !== 'play') {
@@ -909,9 +1006,11 @@ export function render(canvas, data, options = {}) {
       { sessionEnteredPlayOnCurrentMap: !!options.settings?.sessionEnteredPlayOnCurrentMap }
     );
     if (mapPlayerMicro && data.width > 0 && data.height > 0) {
+      tickWorldMapPlayerWaves(frameNowMs, mapPlayerMicro, mapFp);
       if (globalMapTrailFingerprint === mapFp && globalMapPlayerTrailMicro.length > 1) {
         drawGlobalMapPlayerTrail(ctx, globalMapPlayerTrailMicro, data, cw, ch, worldMapCamera);
       }
+      drawWorldMapPlayerWaves(ctx, cw, ch, data, worldMapCamera);
       const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
       const gy = mapPlayerMicro.y / MACRO_TILE_STRIDE;
       const tileW = worldMapCamera?.scale ? worldMapCamera.scale : cw / data.width;
@@ -934,6 +1033,7 @@ export function render(canvas, data, options = {}) {
     persistGlobalMapTrailIfNeeded(false);
     addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
+    worldMapPlayerWaveLastTickMs = 0;
     const tCam0 = performance.now();
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;
@@ -1128,7 +1228,9 @@ export function render(canvas, data, options = {}) {
     // and in the playerTopOverlay path (O(viewport) → O(1) lookup).
     // Only needed at LOD 0/1 — at LOD 2 animated grass is fully skipped.
     const grassEligibleSet = new Set();
-    {
+    /** Pre-computed grass layers keyed by _tileKeyInt, avoids redundant getRoleForCell in drawGrass5aForCell. */
+    const grassLayersMap = new Map();
+    if (lodDetail < 2) {
       const _mH = height * MACRO_TILE_STRIDE;
       const _mW = width * MACRO_TILE_STRIDE;
       for (let my = startY; my < endY; my++) {
@@ -1141,7 +1243,10 @@ export function render(canvas, data, options = {}) {
             const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= _h;
             if (getRoleForCell(my, mx, _mH, _mW, checkAtOrAbove, gateSet.type) !== 'CENTER') continue;
           }
-          grassEligibleSet.add(_tileKeyInt(mx, my));
+          const key = _tileKeyInt(mx, my);
+          grassEligibleSet.add(key);
+          const layers = getPlayAnimatedGrassLayers(mx, my, data, getCached, playChunkMap, { gateVerified: true });
+          if (layers.base || layers.top) grassLayersMap.set(key, layers);
         }
       }
     }
@@ -1175,35 +1280,12 @@ export function render(canvas, data, options = {}) {
     const overlayMx = Math.floor(vx);
     const overlayMy = Math.floor(vy);
     const skipPlayerGrassOverlayDuringFlight = flightHudActive;
-    const playLodGrassSpriteOverlay = lodDetail < 1;
-    const isGrassDeferredAroundPlayer = (mx, my) => {
-      const dx = mx - overlayMx;
-      const dy = my - overlayMy;
-      return (
-        (dx === 1 && dy === 0) ||
-        (dx === -1 && dy === 0) ||
-        (dx === 0 && dy === 1) ||
-        (dx === 1 && dy === 1) ||
-        (dx === -1 && dy === 1)
-      );
-    };
 
-    /** East or west neighbor only (E/W use waiting-frame overlay like the player tile). */
-    const isGrassDeferredEwNeighbor = (mx, my) => {
-      const dx = mx - overlayMx;
-      const dy = my - overlayMy;
-      return (dx === 1 && dy === 0) || (dx === -1 && dy === 0);
-    };
-
-    // PASS 5a: Animated Grass
+    // PASS 5a: Animated Grass — simple uniform pass, no deferred overlays.
     const tGrass0 = performance.now();
-    drawAnimatedGrassPass(ctx, { 
-      lodDetail, forEachAbovePlayerTile, playerTileMx: overlayMx, playerTileMy: overlayMy, 
-      playLodGrassSpriteOverlay, isGrassDeferredAroundPlayer, isGrassDeferredEwNeighbor, skipPlayerGrassOverlayDuringFlight,
-      isTileVisible: (mx, my) => !playVision?.enabled || playVision.isVisible(mx, my),
-      drawGrass5aForCell: (mx, my, tile, tw, th, tx, ty, mode) => {
-        drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
-      }
+    forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
+      if (playVision?.enabled && !playVision.isVisible(mx, my)) return;
+      drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx, precomputedLayers: grassLayersMap.get(_tileKeyInt(mx, my)) });
     });
     addRenderFramePhaseMs('rndGrassMs', performance.now() - tGrass0);
 
@@ -1235,69 +1317,42 @@ export function render(canvas, data, options = {}) {
     addRenderFramePhaseMs('rndCollectMs', performance.now() - tCollect0);
 
     const tEnt0 = performance.now();
-    /** Trunk / scatter footprint / building — skip PASS 5a-deferred cell entirely (no full grass redraw). */
-    const blockedGrassFootprintTiles = new Set();
-    /** Footprint ∪ tree/scatter canopy — blocks only `playerTopOverlay` (strip), not base animated grass. */
+    /** Footprint ∪ tree/scatter canopy — used by canopy shadow detection. */
     const blockedGrassStripOverlayTiles = new Set();
-    // Use integer keys (bitpacked) instead of template-string allocation per tile.
-    const markFootprintTile = (mx, my) => {
-      if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
-      const k = _tileKeyInt(Math.floor(mx), Math.floor(my));
-      blockedGrassFootprintTiles.add(k);
-      blockedGrassStripOverlayTiles.add(k);
-    };
-    const markFootprintRect = (ox, oy, cols, rows) => {
-      const bx = Math.floor(ox);
-      const by = Math.floor(oy);
-      const w = Math.max(1, Math.floor(cols || 1));
-      const h = Math.max(1, Math.floor(rows || 1));
-      for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) markFootprintTile(bx + dx, by + dy);
-      }
-    };
-    const markStripCanopyRect = (ox, oy, cols, rows) => {
-      const bx = Math.floor(ox);
-      const by = Math.floor(oy);
-      const w = Math.max(1, Math.floor(cols || 1));
-      const h = Math.max(1, Math.floor(rows || 1));
-      for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) {
-          const mx = bx + dx;
-          const my = by + dy;
-          if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
-          blockedGrassStripOverlayTiles.add(_tileKeyInt(mx, my));
-        }
-      }
+    const markCanopyTile = (mx, my) => {
+      if (Number.isFinite(mx) && Number.isFinite(my)) blockedGrassStripOverlayTiles.add(_tileKeyInt(Math.floor(mx), Math.floor(my)));
     };
     for (const it of visibleRenderItems) {
       if (it.type === 'tree') {
-        markFootprintRect(it.originX, it.originY, 2, 1);
-        // Strip is drawn after all sortables; canopy tiles north of the trunk are not in the footprint set.
+        markCanopyTile(it.originX, it.originY);
+        markCanopyTile(it.originX + 1, it.originY);
         if (!it.isDestroyed) {
           const tops = TREE_TILES[it.treeType]?.top;
           const canopyRows = tops?.length ? Math.ceil(tops.length / 2) : 2;
-          const padX = 1;
-          markStripCanopyRect(it.originX - padX, it.originY - canopyRows, 2 + padX * 2, canopyRows);
+          for (let dy = 0; dy < canopyRows; dy++)
+            for (let dx = -1; dx <= 2; dx++) markCanopyTile(it.originX + dx, it.originY - canopyRows + dy);
         }
       } else if (it.type === 'scatter') {
-        markFootprintRect(it.originX, it.originY, it.cols || 1, it.rows || 1);
+        const cols = Math.max(1, it.cols || 1);
+        const rows = Math.max(1, it.rows || 1);
+        for (let dy = 0; dy < rows; dy++)
+          for (let dx = 0; dx < cols; dx++) markCanopyTile(it.originX + dx, it.originY + dy);
         if (scatterItemKeyIsTree(it.itemKey) && !it.isCharred) {
           const objSet = OBJECT_SETS[it.itemKey];
           const topPart = objSet?.parts?.find((p) => p.role === 'top' || p.role === 'tops');
-          const cols = Math.max(1, it.cols || 1);
           if (topPart?.ids?.length) {
             const topRows = Math.max(1, Math.ceil(topPart.ids.length / cols));
-            const padX = 1;
-            markStripCanopyRect(it.originX - padX, it.originY - topRows, cols + padX * 2, topRows);
+            for (let dy = 0; dy < topRows; dy++)
+              for (let dx = -1; dx < cols + 1; dx++) markCanopyTile(it.originX + dx, it.originY - topRows + dy);
           }
         }
       } else if (it.type === 'building') {
         const bCols = it.bData?.cols ?? (it.bData?.type === 'pokecenter' ? 5 : 4);
         const bRows = it.bData?.rows ?? (it.bData?.type === 'pokecenter' ? 6 : 5);
-        markFootprintRect(it.originX, it.originY, bCols, bRows);
+        for (let dy = 0; dy < bRows; dy++)
+          for (let dx = 0; dx < bCols; dx++) markCanopyTile(it.originX + dx, it.originY + dy);
       }
     }
-    const isGrassFootprintBlocked = (mx, my) => blockedGrassFootprintTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
     const isGrassStripOverlayBlocked = (mx, my) => blockedGrassStripOverlayTiles.has(_tileKeyInt(Math.floor(mx), Math.floor(my)));
 
     let strengthGrabPrompt = null;
@@ -1336,6 +1391,8 @@ export function render(canvas, data, options = {}) {
     };
 
     const batchedEffects = [];
+    let vegScatterMsAcc = 0;
+    let vegTreeMsAcc = 0;
 
     // Pre-compute canopy shadow for the player (dark silhouette where player ∩ canopy).
     // Stored here so we can draw it BEFORE the player sprite in the entity loop,
@@ -1343,7 +1400,9 @@ export function render(canvas, data, options = {}) {
     let _playerCanopyShadow = null;
     if (lodDetail < 2 && !skipPlayerGrassOverlayDuringFlight) {
       const pItem = visibleRenderItems.find((it) => it.type === 'player');
-      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction) {
+      // Skip the under-canopy shadow silhouette when player is standing ON TOP of trees.
+      const pItemOnCanopy = pItem && (pItem.groundZ || 0) > 0.1;
+      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction && !pItemOnCanopy) {
         let underCanopy = false;
         const probes = [[0, 0], [0, -1], [0, -2], [-1, -1], [1, -1], [-1, 0], [1, 0]];
         for (const [dx, dy] of probes) {
@@ -1416,7 +1475,61 @@ export function render(canvas, data, options = {}) {
         rows: 1
       };
     };
+
+    // Precompute NORTH-facing cliff edge tiles for per-entity depth overlay.
+    // These tiles (EDGE_N, OUT_NW, OUT_NE) must appear IN FRONT of entities at a lower heightStep
+    // but BEHIND entities at the same/higher heightStep.
+    const _cliffEdgeMap = new Map();
+    {
+      const _microW = data.width * MACRO_TILE_STRIDE;
+      const _microH = data.height * MACRO_TILE_STRIDE;
+      for (let my = startY; my < endY; my++) {
+        for (let mx = startX; mx < endX; mx++) {
+          const tile = getCached(mx, my);
+          if (!tile || tile.heightStep < 1) continue;
+          const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+          const biomeSet = TERRAIN_SETS[biomeSetName];
+          if (!biomeSet) continue;
+          const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+          const role = getRoleForCell(my, mx, _microH, _microW, isAtOrAbove, biomeSet.type);
+          if (!NORTH_CLIFF_EDGE_ROLES.has(role)) continue;
+          const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
+          const imgPath = TessellationEngine.getImagePath(biomeSet.file);
+          const img = imageCache.get(imgPath);
+          if (!img) continue;
+          const spec = getConcConvATerrainTileSpec(biomeSet, role);
+          if (spec.tileId == null) continue;
+          _cliffEdgeMap.set(_tileKeyInt(mx, my), { mx, my, heightStep: tile.heightStep, img, cols, spec });
+        }
+      }
+    }
+
+    // When the player stands on a tree canopy, split tree/scatter drawing:
+    // trunks are drawn in sorted order, canopies of trees BEHIND the player are deferred
+    // and flushed right before the player draws, so the player renders on top of them.
+    const _pItemForCanopy = visibleRenderItems.find((it) => it.type === 'player');
+    const _playerOnCanopy = _pItemForCanopy && (_pItemForCanopy.groundZ || 0) > 0.1;
+    const _playerSortY = _playerOnCanopy ? Number(_pItemForCanopy.sortY ?? _pItemForCanopy.y ?? 0) : 0;
+    const _deferredCanopies = _playerOnCanopy ? [] : null;
+    let _deferredCanopiesFlushed = false;
+
     for (const item of visibleRenderItems) {
+      // Flush deferred canopies right before the player is drawn.
+      if (_deferredCanopies && !_deferredCanopiesFlushed && item.type === 'player') {
+        _deferredCanopiesFlushed = true;
+        for (const dc of _deferredCanopies) {
+          ctx.save();
+          ctx.globalAlpha = dc.alpha;
+          if (dc.type === 'tree') {
+            drawTree(ctx, dc.item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data, phase: 'canopy' });
+          } else if (dc.type === 'scatter') {
+            drawScatter(ctx, dc.item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data, phase: 'canopy' });
+          }
+          ctx.restore();
+        }
+        _deferredCanopies.length = 0;
+      }
+
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
         const alpha = item.type === 'wild' ? item.spawnPhase : (item.drawAlpha ?? 1);
@@ -1437,11 +1550,13 @@ export function render(canvas, data, options = {}) {
           drawStrengthGrabTargetOutlineHalf(ctx, hoveredWildGroupPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
-        // Shadow
+        // Shadow — projects onto canopy when player is above a tree.
+        const _shadowGroundZ = (item.type === 'player' ? (item.groundZ || 0) : 0);
+        const _shadowBaseY = snapPx((item.y + 0.5) * tileH - _shadowGroundZ * tileH) + spawnYOffset;
         ctx.fillStyle = 'rgba(0,0,0,0.22)';
         ctx.beginPath();
         const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
-        ctx.ellipse(item.cx, snapPx((item.y + 0.5) * tileH) + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
+        ctx.ellipse(item.cx, _shadowBaseY, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
         const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
@@ -1463,15 +1578,31 @@ export function render(canvas, data, options = {}) {
         }
         
         if (item.type === 'wild' && item.hitFlashTimer > 0) ctx.filter = 'brightness(5) contrast(2) sepia(1) hue-rotate(-50deg)';
+        let shineClipTop = pxT0;
+        let shineClipH = pxH;
         if (bury > 0.004) {
           const visH = Math.min(pxH - 1, Math.max(6, Math.floor(pxH * (1 - bury * 0.39))));
           const pxT = snapPx(pxT0 + (pxH - visH));
+          shineClipTop = pxT;
+          shineClipH = visH;
           ctx.save();
           ctx.beginPath(); ctx.rect(pxL, pxT, pxW, visH); ctx.clip();
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
           ctx.restore();
         } else {
           ctx.drawImage(item.sheet, item.sx, item.sy, item.sw, item.sh, pxL, pxT0, pxW, pxH);
+        }
+
+        if (item.type === 'player') {
+          drawPlayerFieldChargeShineOverlay(ctx, {
+            pxL,
+            pxT: shineClipTop,
+            pxW,
+            pxH: shineClipH,
+            shineStartMs: item._fieldChargeShineStartMs,
+            shineDurMs: item._fieldChargeShineDurMs,
+            alphaMul: alpha
+          });
         }
 
         ctx.filter = 'none';
@@ -1505,21 +1636,10 @@ export function render(canvas, data, options = {}) {
           drawWildLeaderRoamTarget(ctx, item, { snapPx, tileW, tileH, time });
         }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
+        if (item.type === 'player') drawPlayerHpBar(ctx, item, spawnYOffset, tileW, tileH);
         drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);
 
-        // Terrain / grass depth cue (LOD 0)
-        if (playLodGrassSpriteOverlay && (item.type === 'wild' || !skipPlayerGrassOverlayDuringFlight)) {
-          const tx = Math.floor(item.x); const ty = Math.floor(item.y);
-          if (tx >= startX && tx < endX && ty >= startY && ty < endY) {
-            if (!isGrassStripOverlayBlocked(tx, ty)) {
-              // Re-use pre-computed grassEligibleSet — avoids a second getRoleForCell call here.
-              if (grassEligibleSet.has(_tileKeyInt(tx, ty))) {
-                const t = getCached(tx, ty);
-                drawGrass5aForCell(ctx, tx, ty, t, Math.ceil(tileW), Math.ceil(tileH), tx * tileW, ty * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
-              }
-            }
-          }
-        }
+
 
         if (item.type === 'wild' && isStrengthGrabTargetItem(item)) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
@@ -1614,6 +1734,32 @@ export function render(canvas, data, options = {}) {
         }
 
         ctx.restore();
+
+        // Per-entity cliff edge overlay: redraw north-facing cliff tiles that are at a
+        // HIGHER heightStep on top of this entity so it appears behind the cliff face.
+        if (_cliffEdgeMap.size > 0) {
+          const _entMx = Math.floor(item.x ?? 0);
+          const _entMy = Math.floor(item.y ?? 0);
+          const _entTile = getCached(_entMx, _entMy);
+          const _entH = _entTile?.heightStep ?? 0;
+          const _eLeft = item.cx - item.pivotX;
+          const _eTop = item.cy - item.pivotY;
+          const _tmxS = Math.max(startX, Math.floor(_eLeft / tileW));
+          const _tmyS = Math.max(startY, Math.floor(_eTop / tileH));
+          const _tmxE = Math.min(endX - 1, Math.floor((_eLeft + item.dw) / tileW));
+          const _tmyE = Math.min(endY - 1, Math.floor((_eTop + item.dh) / tileH));
+          for (let _ty = _tmyS; _ty <= _tmyE; _ty++) {
+            for (let _tx = _tmxS; _tx <= _tmxE; _tx++) {
+              const _ce = _cliffEdgeMap.get(_tileKeyInt(_tx, _ty));
+              if (!_ce || _ce.heightStep <= _entH) continue;
+              // Only overlay if entity is at or north of the cliff tile's south edge.
+              if ((item.y ?? 0) >= _ty + 1) continue;
+              const _cpx = snapPx(_tx * tileW);
+              const _cpy = snapPx(_ty * tileH);
+              drawTerrainCellFromSheet(ctx, _ce.img, _ce.cols, 16, _ce.spec.tileId, _cpx, _cpy, tileW, tileH, _ce.spec.flipX);
+            }
+          }
+        }
       } else if (item.type === 'wildSpeechBubble' || item.type === 'playerSpeechBubble') {
         ctx.save();
         const spawnYOffset =
@@ -1632,7 +1778,16 @@ export function render(canvas, data, options = {}) {
           drewSplitStrengthGrabOutline = true;
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
         }
-        drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data });
+        const tVegScatter0 = performance.now();
+        const _scatterItemSortY = Number(item.sortY ?? item.y ?? 0);
+        if (_deferredCanopies && _scatterItemSortY <= _playerSortY && scatterItemKeyIsTree(item.itemKey)) {
+          // Player on canopy: draw trunk only now, defer canopy for later.
+          drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data, phase: 'trunk' });
+          _deferredCanopies.push({ type: 'scatter', item, alpha: ctx.globalAlpha });
+        } else {
+          drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data });
+        }
+        vegScatterMsAcc += performance.now() - tVegScatter0;
         if (isStrengthGrabTargetItem(item)) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
         }
@@ -1640,7 +1795,16 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'tree') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
-        drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data });
+        const tVegTree0 = performance.now();
+        const _treeItemSortY = Number(item.sortY ?? item.y ?? 0);
+        if (_deferredCanopies && _treeItemSortY <= _playerSortY) {
+          // Player on canopy: draw trunk only now, defer canopy for later.
+          drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data, phase: 'trunk' });
+          _deferredCanopies.push({ type: 'tree', item, alpha: ctx.globalAlpha });
+        } else {
+          drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data });
+        }
+        vegTreeMsAcc += performance.now() - tVegTree0;
         ctx.restore();
       } else if (item.type === 'building') {
         ctx.save(); drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
@@ -1683,6 +1847,10 @@ export function render(canvas, data, options = {}) {
       }
     }
 
+
+    addRenderFramePhaseMs('rndVegScatterMs', vegScatterMsAcc);
+    addRenderFramePhaseMs('rndVegTreeMs', vegTreeMsAcc);
+
     const mergedPrismaticBeam = getPlayerPrismaticMergedBeamVisual();
     const mergedSteelBeam = getPlayerSteelBeamMergedBeamVisual();
     const mergedWaterCannonBeam = getPlayerWaterCannonMergedBeamVisual();
@@ -1720,48 +1888,65 @@ export function render(canvas, data, options = {}) {
     if (strengthGrabPrompt && !drewSplitStrengthGrabOutline) {
       drawStrengthGrabTargetOutline(ctx, strengthGrabPrompt, tileW, tileH, snapPx, time);
     }
+    if (options.inventoryDropPreview) {
+      drawInventoryGroundDropPreview(ctx, options.inventoryDropPreview, tileW, tileH, snapPx, time);
+      const previewItemKey = String(options.inventoryDropPreview.itemKey || '');
+      const previewObjSet = previewItemKey ? OBJECT_SETS[previewItemKey] : null;
+      if (previewObjSet) {
+        const cols = Math.max(1, Math.floor(Number(options.inventoryDropPreview.cols) || 1));
+        const rows = Math.max(1, Math.floor(Number(options.inventoryDropPreview.rows) || 1));
+        const ox = Math.floor(Number(options.inventoryDropPreview.ox) || 0);
+        const oy = Math.floor(Number(options.inventoryDropPreview.oy) || 0);
+        const originTile = getCached(ox, oy);
+        const baseHeight = Number(originTile?.heightStep);
+        const previewGetCached =
+          Number.isFinite(baseHeight)
+            ? (tx, ty) => {
+                const t = getCached(tx, ty);
+                if (!t) return t;
+                if (tx >= ox && tx < ox + cols && ty >= oy && ty < oy + rows) {
+                  return { ...t, heightStep: baseHeight };
+                }
+                return t;
+              }
+            : getCached;
+        ctx.save();
+        if (!options.inventoryDropPreview.canDrop) ctx.filter = 'grayscale(0.85) saturate(0.4)';
+        ctx.globalAlpha *= options.inventoryDropPreview.canDrop ? 0.8 : 0.46;
+        drawScatter(
+          ctx,
+          {
+            type: 'scatter',
+            objSet: previewObjSet,
+            originX: ox,
+            originY: oy,
+            cols,
+            rows,
+            itemKey: previewItemKey,
+            isSortable: true,
+            isBurning: false,
+            isCharred: false,
+            windSway: false
+          },
+          {
+            tileW,
+            tileH,
+            snapPx,
+            time,
+            lodDetail,
+            canopyAnimTime,
+            imageCache,
+            getCached: previewGetCached
+          }
+        );
+        ctx.restore();
+      }
+    }
 
     addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);
 
-    // PASS 5a-deferred (grass over spirits)
-    const tGrassDef0 = performance.now();
-    if (playLodGrassSpriteOverlay && !skipPlayerGrassOverlayDuringFlight) {
-        const passesPlayerGate = (mx, my, t) => {
-            if (!t || t.heightStep < 1) return false;
-            const gateSet = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
-            const checkAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -1) >= t.heightStep;
-            return !gateSet || getRoleForCell(my, mx, height * MACRO_TILE_STRIDE, width * MACRO_TILE_STRIDE, checkAtOrAbove, gateSet.type) === 'CENTER';
-        };
-        const playerFracY = vy - Math.floor(vy);
-        const shouldDrawPlayerOverlay = isPlayerIdleOnWaitingFrame() || (Math.abs(player.vy ?? 0) < 0.05 && !!player.grounded);
-        const preferSouthBottomOverlay = shouldDrawPlayerOverlay && playerFracY >= 0.68 && passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy)) && passesPlayerGate(overlayMx, overlayMy + 1, getCached(overlayMx, overlayMy + 1));
-        
-        for (const [dx, dy] of GRASS_DEFER_AROUND_PLAYER_DELTAS) {
-            const mx = overlayMx + dx; const my = overlayMy + dy;
-            if (mx < startX || mx >= endX || my < startY || my >= endY) continue;
-            if (isGrassFootprintBlocked(mx, my)) continue;
-            const tile = getCached(mx, my);
-            if (!passesPlayerGate(mx, my, tile)) continue;
-            let mode =
-              (dx === 0 && dy === 1 && preferSouthBottomOverlay) || ((dx === 1 || dx === -1) && dy === 0)
-                ? 'playerTopOverlay'
-                : undefined;
-            if (mode === 'playerTopOverlay' && isGrassStripOverlayBlocked(mx, my)) {
-              if (isGrassDeferredEwNeighbor(mx, my)) continue;
-              mode = undefined;
-            }
-            drawGrass5aForCell(ctx, mx, my, tile, Math.ceil(tileW), Math.ceil(tileH), mx * tileW, my * tileH, { mode, lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
-        }
-        if (
-          shouldDrawPlayerOverlay &&
-          !preferSouthBottomOverlay &&
-          !isGrassStripOverlayBlocked(overlayMx, overlayMy) &&
-          passesPlayerGate(overlayMx, overlayMy, getCached(overlayMx, overlayMy))
-        ) {
-          drawGrass5aForCell(ctx, overlayMx, overlayMy, getCached(overlayMx, overlayMy), Math.ceil(tileW), Math.ceil(tileH), overlayMx * tileW, overlayMy * tileH, { mode: 'playerTopOverlay', lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx });
-        }
-    }
-    addRenderFramePhaseMs('rndGrassDeferMs', performance.now() - tGrassDef0);
+    // PASS 5a-deferred: removed (no grass overlays on entities).
+    addRenderFramePhaseMs('rndGrassDeferMs', 0);
 
     const tDebug0 = performance.now();
     drawWorldColliderOverlay(ctx, { 
@@ -1865,7 +2050,10 @@ export function render(canvas, data, options = {}) {
       splashTargets,
       entityShadowSprites,
       earthquakeVisual01: options.settings?.weatherEarthquakeIntensity ?? 0,
-      cloudWhiteLayerAlphaMul
+      sunLightRaysIntensity01: options.settings?.weatherSunLightRaysIntensity ?? 0,
+      moonLightRaysIntensity01: options.settings?.weatherMoonLightRaysIntensity ?? 0,
+      cloudWhiteLayerAlphaMul,
+      worldHours: options.settings?.worldHours
     });
     addRenderFramePhaseMs('rndWeatherMs', performance.now() - tWeather0);
 
@@ -1918,12 +2106,17 @@ export function render(canvas, data, options = {}) {
     if (options.settings?.appMode === 'play') {
       drawFarCryScreenWaves(ctx, getActiveFarCryScreenWaves(), { w: cw, h: ch });
       applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx);
+      drawEncounterCinematicOverlay(ctx, cw, ch);
     }
 
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) {
-      renderMinimap(minimapCanvas, data, player, { recentTrailMicro: globalMapPlayerTrailRecentMicro });
+      renderMinimap(minimapCanvas, data, player, {
+        recentTrailMicro: globalMapPlayerTrailRecentMicro,
+        playVision,
+        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug
+      });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }

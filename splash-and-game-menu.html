@@ -25,7 +25,15 @@
                 <div class="game-freak-logo">GAME FREAK</div>
             </div>
         </div>
+        <div id="splash-load-dock" class="splash-load-dock" aria-live="polite">
+            <div class="splash-load-dock__bar">
+                <div id="splash-load-bar-inner" class="splash-load-dock__bar-inner"></div>
+            </div>
+            <p id="splash-load-text" class="splash-load-dock__text"></p>
+            <p class="splash-load-dock__hint" data-i18n="splash.skipLogoHint">Click or Space to speed up logo fade</p>
+        </div>
     </div>
+    <input type="file" id="splash-save-file-input" class="splash-file-input-hidden" accept="application/json,.json" aria-hidden="true" />
 
     <canvas id="background-canvas" class="background-canvas"></canvas>
     <div class="menu-overlay"></div>
@@ -42,6 +50,20 @@
         </div>
 
         <div class="menu-options">
+            <button type="button" id="splash-continue-btn" class="menu-button splash-continue-btn hidden">
+                <span id="splash-continue-label">Continue</span>
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            </button>
+            <button type="button" id="splash-load-file-btn" class="menu-button">
+                <span data-i18n="splash.loadSaveFile">Load save (file)</span>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            </button>
             <button id="play-btn" class="menu-button play-button">
                 <span data-i18n="splash.newGame">ニューゲーム</span>
                 <svg class="icon" viewBox="0 0 24 24" fill="currentColor">

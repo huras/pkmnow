@@ -19,6 +19,49 @@ import { TessellationEngine } from './tessellation-engine.js';
 import { imageCache } from './image-cache.js';
 import { parseShape, getRoleForCell } from './tessellation-logic.js';
 import { drawTerrainCellFromSheet, getConcConvATerrainTileSpec } from './render/conc-conv-a-terrain-blit.js';
+import { atlasFromObjectSet } from './render/render-utils-internal.js';
+import { BERRY_TREE_TILES } from './main/berry-tree-system.js';
+
+const BERRY_TYPES_BY_LOWER = Object.freeze(
+  Object.fromEntries(Object.keys(BERRY_TREE_TILES).map((name) => [name.toLowerCase(), name]))
+);
+
+/**
+ * Resolve berry type from OBJECT_SETS key (e.g. "berry-tree-persim [1x1]").
+ * Falls back to null when no known berry token is present.
+ * @param {string} itemKey
+ * @returns {string|null}
+ */
+function resolveBerryTypeForPreview(itemKey) {
+  const raw = String(itemKey || '').toLowerCase();
+  if (!raw.includes('berry-tree-')) return null;
+  const compact = raw.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const token of compact.split(/[^a-z0-9]+/g)) {
+    if (!token) continue;
+    const hit = BERRY_TYPES_BY_LOWER[token];
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Pick one berry animation frame for preview:
+ * - [top,bottom] => [top,bottom] (2x1)
+ * - [single] => [single] (1x1)
+ * Never merges different animation frames.
+ * @param {Array<any>} maturityFrames
+ * @returns {number[]|null}
+ */
+function getBerryPreviewStageIds(maturityFrames) {
+  if (!Array.isArray(maturityFrames) || maturityFrames.length === 0) return null;
+  const frames = maturityFrames
+    .filter((row) => Array.isArray(row))
+    .map((row) => row.filter((id) => Number.isFinite(id)))
+    .filter((row) => row.length > 0)
+    .sort((a, b) => b.length - a.length);
+  if (!frames.length) return null;
+  return frames[0].slice(0, 2);
+}
 
 export class BiomesModal {
   constructor() {
@@ -311,8 +354,22 @@ export class BiomesModal {
       const grid = TessellationEngine.getObjectGrid(itemKey);
       if (!grid || grid.length === 0) return;
 
-      const rows = grid.length;
-      const colsInGrid = grid[0].length;
+      const isBerryTree = String(itemKey || '').toLowerCase().includes('berry-tree-');
+      let berryPreviewStageIds = null;
+      if (isBerryTree) {
+        const berryType = resolveBerryTypeForPreview(itemKey);
+        if (berryType) {
+          const mapping = BERRY_TREE_TILES[berryType];
+          // Prefer mature stage (2), then stage 1, then stage 0.
+          berryPreviewStageIds =
+            getBerryPreviewStageIds(mapping?.[2]) ||
+            getBerryPreviewStageIds(mapping?.[1]) ||
+            getBerryPreviewStageIds(mapping?.[0]);
+        }
+      }
+
+      const rows = berryPreviewStageIds ? berryPreviewStageIds.length : grid.length;
+      const colsInGrid = berryPreviewStageIds ? 1 : grid[0].length;
 
       const canvas = document.createElement('canvas');
       // Escala 2x para clareza (16px -> 24px ou similar, mas manter consistência)
@@ -324,16 +381,15 @@ export class BiomesModal {
       container.appendChild(canvas);
 
       const ctx = canvas.getContext('2d');
-      const imgPath = TessellationEngine.getImagePath(objSet.file);
-      const img = imageCache.get(imgPath);
+      const { img, cols: sheetCols } = atlasFromObjectSet(objSet, imageCache);
       if (!img) return;
-
-      const sheetCols = imgPath.includes('caves') ? 50 : 57;
       ctx.imageSmoothingEnabled = false;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < colsInGrid; c++) {
-          const tileId = grid[r][c];
+          const tileId = berryPreviewStageIds
+            ? berryPreviewStageIds[r]
+            : grid[r][c];
           if (tileId === null) continue;
 
           ctx.drawImage(
