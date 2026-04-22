@@ -841,9 +841,9 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
 }
 
 /** Height (in tile z-units) at which a player can stand on top of a formal tree canopy. */
-export const FORMAL_TREE_CANOPY_Z = 2;
+export const FORMAL_TREE_CANOPY_Z = 1;
 /** Height for scatter-tree canopy (smaller procedural trees). */
-export const SCATTER_TREE_CANOPY_Z = 1.5;
+export const SCATTER_TREE_CANOPY_Z = 1;
 /**
  * Z-units per terrain heightStep. One heightStep of cliff = this many z-units the player must
  * clear in order to land on the higher plateau. Tune this to control how high a jump is needed

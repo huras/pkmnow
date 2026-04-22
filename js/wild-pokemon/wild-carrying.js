@@ -1,6 +1,7 @@
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { entitiesByKey } from './wild-core-state.js';
 import { findWalkableWildSpawnNear, allocateDebugSummonKey } from './wild-spawn-window.js';
+import { clearWildPokemonFainted } from './wild-pokemon-persistence.js';
 
 /**
  * Find nearest fainted/sleep-dead wild near player facing direction (for Strength pick-up).
@@ -44,6 +45,7 @@ export function detachFaintedWildEntityByKey(key) {
   const e = entitiesByKey.get(k);
   if (!e?.deadState) return null;
   e._strengthCarryHidden = true;
+  clearWildPokemonFainted(k); // Remove fainted record so original slot won't re-spawn a duplicate
   e.vx = 0;
   e.vy = 0;
   e.vz = 0;

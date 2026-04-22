@@ -582,8 +582,8 @@ function isPlayImmersiveMinimalUi() {
 function installAdaptivePerfDebugPanel() {
   const host = document.body;
   if (!host) return;
-  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v1';
-  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v1';
+  const LS_ADAPTIVE_CFG = 'pkmn_adaptive_perf_caps_cfg_v2';
+  const LS_ADAPTIVE_PRESET = 'pkmn_adaptive_perf_caps_preset_v2';
   const panel = document.createElement('details');
   panel.id = 'play-adaptive-perf-debug-panel';
   panel.style.position = 'fixed';

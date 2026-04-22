@@ -37,5 +37,6 @@ export function resetWildPokemonManager() {
   resetWildCoreState();
   resetWildUpdateFrameCounter();
   resetWorldReactionState();
+  resetWildPokemonPersistence();
 }
 

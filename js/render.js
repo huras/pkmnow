@@ -1749,6 +1749,8 @@ export function render(canvas, data, options = {}) {
             for (let _tx = _tmxS; _tx <= _tmxE; _tx++) {
               const _ce = _cliffEdgeMap.get(_tileKeyInt(_tx, _ty));
               if (!_ce || _ce.heightStep <= _entH) continue;
+              // Only overlay if entity is at or north of the cliff tile's south edge.
+              if ((item.y ?? 0) >= _ty + 1) continue;
               const _cpx = snapPx(_tx * tileW);
               const _cpy = snapPx(_ty * tileH);
               drawTerrainCellFromSheet(ctx, _ce.img, _ce.cols, 16, _ce.spec.tileId, _cpx, _cpy, tileW, tileH, _ce.spec.flipX);

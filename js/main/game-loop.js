@@ -78,7 +78,7 @@ let playSubsystemCadenceSec = { ...PLAY_SUBSYSTEM_BASE_CADENCE_SEC };
 
 /** Built-in default = adaptive perf "Ultra" preset (main.js ADAPTIVE_PRESETS.ultra) merged onto full cadence shape. */
 const PLAY_ADAPTIVE_DEFAULT = {
-  enabled: true,
+  enabled: false,
   relaxAfterMs: 2400,
   thresholds: {
     updateModerateMs: 9.5,
