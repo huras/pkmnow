@@ -1396,7 +1396,9 @@ export function render(canvas, data, options = {}) {
     let _playerCanopyShadow = null;
     if (lodDetail < 2 && !skipPlayerGrassOverlayDuringFlight) {
       const pItem = visibleRenderItems.find((it) => it.type === 'player');
-      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction) {
+      // Skip the under-canopy shadow silhouette when player is standing ON TOP of trees.
+      const pItemOnCanopy = pItem && (pItem.groundZ || 0) > 0.1;
+      if (pItem?.sheet && !pItem.strengthCarry && !pItem._strengthGrabAction && !pItemOnCanopy) {
         let underCanopy = false;
         const probes = [[0, 0], [0, -1], [0, -2], [-1, -1], [1, -1], [-1, 0], [1, 0]];
         for (const [dx, dy] of probes) {
@@ -1469,7 +1471,33 @@ export function render(canvas, data, options = {}) {
         rows: 1
       };
     };
+
+    // When the player stands on a tree canopy, split tree/scatter drawing:
+    // trunks are drawn in sorted order, canopies of trees BEHIND the player are deferred
+    // and flushed right before the player draws, so the player renders on top of them.
+    const _pItemForCanopy = visibleRenderItems.find((it) => it.type === 'player');
+    const _playerOnCanopy = _pItemForCanopy && (_pItemForCanopy.groundZ || 0) > 0.1;
+    const _playerSortY = _playerOnCanopy ? Number(_pItemForCanopy.sortY ?? _pItemForCanopy.y ?? 0) : 0;
+    const _deferredCanopies = _playerOnCanopy ? [] : null;
+    let _deferredCanopiesFlushed = false;
+
     for (const item of visibleRenderItems) {
+      // Flush deferred canopies right before the player is drawn.
+      if (_deferredCanopies && !_deferredCanopiesFlushed && item.type === 'player') {
+        _deferredCanopiesFlushed = true;
+        for (const dc of _deferredCanopies) {
+          ctx.save();
+          ctx.globalAlpha = dc.alpha;
+          if (dc.type === 'tree') {
+            drawTree(ctx, dc.item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data, phase: 'canopy' });
+          } else if (dc.type === 'scatter') {
+            drawScatter(ctx, dc.item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data, phase: 'canopy' });
+          }
+          ctx.restore();
+        }
+        _deferredCanopies.length = 0;
+      }
+
       if (item.type === 'wild' || item.type === 'player') {
         ctx.save();
         const alpha = item.type === 'wild' ? item.spawnPhase : (item.drawAlpha ?? 1);
@@ -1490,11 +1518,13 @@ export function render(canvas, data, options = {}) {
           drawStrengthGrabTargetOutlineHalf(ctx, hoveredWildGroupPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
-        // Shadow
+        // Shadow — projects onto canopy when player is above a tree.
+        const _shadowGroundZ = (item.type === 'player' ? (item.groundZ || 0) : 0);
+        const _shadowBaseY = snapPx((item.y + 0.5) * tileH - _shadowGroundZ * tileH) + spawnYOffset;
         ctx.fillStyle = 'rgba(0,0,0,0.22)';
         ctx.beginPath();
         const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
-        ctx.ellipse(item.cx, snapPx((item.y + 0.5) * tileH) + spawnYOffset, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
+        ctx.ellipse(item.cx, _shadowBaseY, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
         ctx.fill();
 
         const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
@@ -1690,7 +1720,14 @@ export function render(canvas, data, options = {}) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
         }
         const tVegScatter0 = performance.now();
-        drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data });
+        const _scatterItemSortY = Number(item.sortY ?? item.y ?? 0);
+        if (_deferredCanopies && _scatterItemSortY <= _playerSortY && scatterItemKeyIsTree(item.itemKey)) {
+          // Player on canopy: draw trunk only now, defer canopy for later.
+          drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data, phase: 'trunk' });
+          _deferredCanopies.push({ type: 'scatter', item, alpha: ctx.globalAlpha });
+        } else {
+          drawScatter(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, imageCache, getCached, data });
+        }
         vegScatterMsAcc += performance.now() - tVegScatter0;
         if (isStrengthGrabTargetItem(item)) {
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'south', tileW, tileH, snapPx, time);
@@ -1700,7 +1737,14 @@ export function render(canvas, data, options = {}) {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
         const tVegTree0 = performance.now();
-        drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data });
+        const _treeItemSortY = Number(item.sortY ?? item.y ?? 0);
+        if (_deferredCanopies && _treeItemSortY <= _playerSortY) {
+          // Player on canopy: draw trunk only now, defer canopy for later.
+          drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data, phase: 'trunk' });
+          _deferredCanopies.push({ type: 'tree', item, alpha: ctx.globalAlpha });
+        } else {
+          drawTree(ctx, item, { tileW, tileH, snapPx, time, lodDetail, canopyAnimTime, natureImg, imageCache, data });
+        }
         vegTreeMsAcc += performance.now() - tVegTree0;
         ctx.restore();
       } else if (item.type === 'building') {
@@ -1743,6 +1787,8 @@ export function render(canvas, data, options = {}) {
         ctx.restore();
       }
     }
+
+
     addRenderFramePhaseMs('rndVegScatterMs', vegScatterMsAcc);
     addRenderFramePhaseMs('rndVegTreeMs', vegTreeMsAcc);
 

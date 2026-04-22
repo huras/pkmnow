@@ -6,7 +6,9 @@ import {
   getFormalTreeTrunkWorldXSpan,
   scatterPhysicsCircleAtOrigin,
   beginWildWalkProbeCache,
-  endWildWalkProbeCache
+  endWildWalkProbeCache,
+  FORMAL_TREE_CANOPY_Z,
+  SCATTER_TREE_CANOPY_Z
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
@@ -20,7 +22,7 @@ const CELL_FORMAL = 2;
 const CELL_SCATTER = 3;
 
 /**
- * @typedef {{ seed: number, mxMin: number, mxMax: number, myMin: number, myMax: number, stride: number, cellFlags: Uint8Array, formalEllipses: Array<{ cx: number, cy: number, radius: number }>, scatterEllipses: Array<{ cx: number, cy: number, radius: number, isTree: boolean }> }} PlayColliderOverlayCache
+ * @typedef {{ seed: number, mxMin: number, mxMax: number, myMin: number, myMax: number, stride: number, cellFlags: Uint8Array, formalEllipses: Array<{ cx: number, cy: number, radius: number, radiusTop: number, topZ: number }>, scatterEllipses: Array<{ cx: number, cy: number, radius: number, radiusTop: number, isTree: boolean, topZ: number }> }} PlayColliderOverlayCache
  */
 
 /** @type {PlayColliderOverlayCache | null} */
@@ -77,11 +79,18 @@ export function buildPlayColliderOverlayCache(data, player, imageCache, overlayF
         if (rootX < 0 || rootX + 1 >= microW) continue;
         const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
         if (!span) continue;
-        if (!circleAabbIntersectsRect(span.cx, span.cy, span.radius, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
+        const rCull = Math.max(span.radius, span.radiusTop);
+        if (!circleAabbIntersectsRect(span.cx, span.cy, rCull, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
         const k = `f:${rootX},${my}`;
         if (seenFormal.has(k)) continue;
         seenFormal.add(k);
-        formalEllipses.push({ cx: span.cx, cy: span.cy, radius: span.radius });
+        formalEllipses.push({
+          cx: span.cx,
+          cy: span.cy,
+          radius: span.radius,
+          radiusTop: span.radiusTop,
+          topZ: FORMAL_TREE_CANOPY_Z
+        });
       }
     }
 
@@ -93,7 +102,8 @@ export function buildPlayColliderOverlayCache(data, player, imageCache, overlayF
         if (oyS < 0 || oyS >= microH) continue;
         const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data);
         if (!p) continue;
-        if (!circleAabbIntersectsRect(p.cx, p.cy, p.radius, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
+        const rCullS = Math.max(p.radius, p.radiusTop);
+        if (!circleAabbIntersectsRect(p.cx, p.cy, rCullS, mxMin, myMin, mxMax + 1, myMax + 1)) continue;
         const k = `s:${oxS},${oyS}`;
         if (seenScatter.has(k)) continue;
         seenScatter.add(k);
@@ -101,7 +111,9 @@ export function buildPlayColliderOverlayCache(data, player, imageCache, overlayF
           cx: p.cx,
           cy: p.cy,
           radius: p.radius,
-          isTree: scatterItemKeyIsTree(p.itemKey)
+          radiusTop: p.radiusTop,
+          isTree: scatterItemKeyIsTree(p.itemKey),
+          topZ: scatterItemKeyIsTree(p.itemKey) ? SCATTER_TREE_CANOPY_Z : 0
         });
       }
     }

@@ -11,9 +11,9 @@
 const MAX_EVENTS = 140;
 const DEDUPE_WINDOW_MS = 900;
 
-/** @type {Array<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean }>} */
+/** @type {Array<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean, portraitMemCleanup?: boolean }>} */
 const eventLog = [];
-/** @type {Set<(events: ReadonlyArray<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean }>) => void>} */
+/** @type {Set<(events: ReadonlyArray<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean, portraitMemCleanup?: boolean }>) => void>} */
 const listeners = new Set();
 /** @type {Map<string, number>} dedupe key -> last ts */
 const dedupeLastAt = new Map();
@@ -33,7 +33,7 @@ function emit() {
 }
 
 /**
- * @param {{ channel?: 'local'|'global'|'social'|'system', text?: string, dedupeKey?: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean, upsertByEventKey?: boolean }} ev
+ * @param {{ channel?: 'local'|'global'|'social'|'system', text?: string, dedupeKey?: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean, upsertByEventKey?: boolean, portraitMemCleanup?: boolean }} ev
  */
 export function pushPlayEventLog(ev) {
   const text = String(ev?.text || '').trim();
@@ -72,7 +72,8 @@ export function pushPlayEventLog(ev) {
           prev.portraitSlug === nextRow.portraitSlug &&
           areNumberArraysEqual(prev.portraitDexIds, nextRow.portraitDexIds) &&
           prev.hoverEntityKey === nextRow.hoverEntityKey &&
-          !!prev.pending === !!nextRow.pending
+          !!prev.pending === !!nextRow.pending &&
+          !!prev.portraitMemCleanup === !!nextRow.portraitMemCleanup
         ) {
           return;
         }
@@ -105,7 +106,8 @@ export function pushPlayEventLog(ev) {
     ...(portraitDexIds ? { portraitDexIds } : {}),
     ...(hoverEntityKey ? { hoverEntityKey } : {}),
     ...(eventKey ? { eventKey } : {}),
-    ...(ev?.pending != null ? { pending: !!ev.pending } : {})
+    ...(ev?.pending != null ? { pending: !!ev.pending } : {}),
+    ...(ev?.portraitMemCleanup ? { portraitMemCleanup: true } : {})
   });
   if (eventKey) eventIdByKey.set(eventKey, id);
   if (eventLog.length > MAX_EVENTS) {
@@ -132,7 +134,7 @@ export function clearPlayEventLog() {
 }
 
 /**
- * @param {(events: ReadonlyArray<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean }>) => void} fn
+ * @param {(events: ReadonlyArray<{ id: number, ts: number, channel: 'local'|'global'|'social'|'system', text: string, portraitDexId?: number, portraitSlug?: string, portraitDexIds?: number[], hoverEntityKey?: string, eventKey?: string, pending?: boolean, portraitMemCleanup?: boolean }>) => void} fn
  * @returns {() => void}
  */
 export function onPlayEventLogChanged(fn) {

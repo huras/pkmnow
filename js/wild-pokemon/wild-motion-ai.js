@@ -7,7 +7,14 @@ import { rollWildSex } from '../pokemon/pokemon-sex.js';
 import { getSpeciesBehavior } from './pokemon-behavior.js';
 import { getEffectiveWildBehavior } from './wild-effective-behavior.js';
 import { isUndergroundBurrowerDex } from './underground-burrow.js';
-import { canWildPokemonWalkMicroTile, isCliffDrop, pivotCellHeightTraversalOk, gatherTreeTrunkCirclesNearWorldPoint, syncEntityZWithTerrain } from '../walkability.js';
+import {
+  canWildPokemonWalkMicroTile,
+  isCliffDrop,
+  pivotCellHeightTraversalOk,
+  gatherTreeTrunkCirclesNearWorldPoint,
+  trunkEffectiveRadiusAtZ,
+  syncEntityZWithTerrain
+} from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
 import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
@@ -229,7 +236,17 @@ export function applyWildTreeTrunkResolution(entity, data) {
   if (!entity.grounded || air || !data) return;
   if (isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) return;
   const fd = getPmdFeetDeltaWorldTiles(imageCache, entity.dexId ?? 1, true);
-  const r = resolvePivotWithFeetVsTreeTrunks(entity.x, entity.y, fd.dx, fd.dy, WILD_TREE_BODY_R, entity.vx, entity.vy, data);
+  const r = resolvePivotWithFeetVsTreeTrunks(
+    entity.x,
+    entity.y,
+    fd.dx,
+    fd.dy,
+    WILD_TREE_BODY_R,
+    entity.vx,
+    entity.vy,
+    data,
+    entity.z || 0
+  );
   syncEntityZWithTerrain(entity, entity.x, entity.y, r.x, r.y, data);
   entity.x = r.x;
   entity.y = r.y;
@@ -485,7 +502,7 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
                const projY = ny * dot;
                const perpDistSq = (dxToTree - projX)**2 + (dyToTree - projY)**2;
                
-               const avoidanceRadius = circle.r + 0.65; // padding for entity body
+               const avoidanceRadius = trunkEffectiveRadiusAtZ(circle, entity.z || 0) + 0.65; // padding for entity body
                if (perpDistSq < avoidanceRadius * avoidanceRadius) {
                    // Repulsion penalty based on how close we would pass and how near the tree is
                    penalty += (avoidanceRadius * avoidanceRadius - perpDistSq) * (1.0 / Math.max(0.1, dot)) * 0.8;

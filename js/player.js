@@ -11,7 +11,8 @@ import {
   beginWalkProbeCache,
   endWalkProbeCache,
   syncEntityZWithTerrain,
-  getTreeCanopyZAtPoint
+  getTreeCanopyZAtPoint,
+  HEIGHT_STEP_Z
 } from './walkability.js';
 import { resolveTerrainWalkSpeedCapMultiplier } from './pokemon/player-terrain-walk-modifiers.js';
 import {
@@ -498,6 +499,14 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     sfy = s.y;
   }
 
+  /** Treetop: terrain `heightStep` under the canopy disc can mismatch cliffs; logical walk plane is `groundZ`. */
+  const treeCanopyWalkRelax =
+    !isAirborne &&
+    !burrowWalk &&
+    (player.groundZ || 0) > 0.05 &&
+    getTreeCanopyZAtPoint(fx, fy, data) > 0 &&
+    (sfx === undefined || sfy === undefined || getTreeCanopyZAtPoint(sfx, sfy, data) > 0);
+
   // Detect cliff drop: source height > destination height
   let isDropMovement = false;
   if (sfx !== undefined && sfy !== undefined) {
@@ -510,10 +519,10 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
 
   // 1. LOGICAL TRAVERSAL (The "Feet"):
   if (!isAirborne) {
-    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks)) {
+    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks, treeCanopyWalkRelax)) {
       return false;
     }
-    if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data)) {
+    if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data, treeCanopyWalkRelax)) {
       return false;
     }
   } else {
@@ -523,7 +532,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
       const srcTile = getMicroTile(Math.floor(sfx), Math.floor(sfy), data);
       const dstTile = getMicroTile(Math.floor(fx), Math.floor(fy), data);
       if (srcTile && dstTile && dstTile.heightStep > srcTile.heightStep) {
-        const heightDiff = dstTile.heightStep - srcTile.heightStep;
+        const heightDiff = (dstTile.heightStep - srcTile.heightStep) * HEIGHT_STEP_Z;
         if ((player.z || 0) < heightDiff) return false;
       }
     }
@@ -547,7 +556,9 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
     const my = Math.floor(p.y);
     if (mx < 0 || my < 0 || mx >= data.width * MACRO_TILE_STRIDE || my >= data.height * MACRO_TILE_STRIDE) return false;
 
-    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks)) {
+    const cornerTreeRelax =
+      treeCanopyWalkRelax && !cornerAirborne && getTreeCanopyZAtPoint(p.x, p.y, data) > 0;
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks, cornerTreeRelax)) {
       return false;
     }
   }
@@ -1017,7 +1028,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
-    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data);
+    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data, player.z || 0);
     
     syncEntityZWithTerrain(player, player.x, player.y, r.x, r.y, data);
 
@@ -1049,13 +1060,41 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   // 3. Vertical — creative flight (Flying) or jump / gravity
   // Update groundZ: detect tree canopy beneath the player.
+  // Canopy is a one-way platform: passable from below, solid from above.
+  // Hold Shift to drop through.
   {
     const feetForGZ = worldFeetFromPivotCell(player.x, player.y, imageCache, player.dexId || 94, true);
     const canopyZ = data ? getTreeCanopyZAtPoint(feetForGZ.x, feetForGZ.y, data) : 0;
     const prevGroundZ = player.groundZ || 0;
-    player.groundZ = canopyZ;
-    // If grounded on an elevated surface (tree/cliff) and groundZ dropped (walked off edge), become airborne.
-    if (player.grounded && !flightMove && canopyZ < prevGroundZ && player.z > canopyZ + 0.05) {
+
+    // Determine effective canopy floor.
+    let newGroundZ = 0;
+    if (canopyZ > 0) {
+      const playerZ = player.z || 0;
+      const playerVz = player.vz || 0;
+      const shiftHeld = isPlayGroundDigShiftHeld();
+      // Canopy acts as floor only when player is at/above it (or grounded on it).
+      // Pass through from below (rising). Hold Shift on top to drop through.
+      const wasOnCanopy = prevGroundZ >= canopyZ - 0.05;
+      const atOrAboveCanopy = playerZ >= canopyZ - 0.1;
+      const risingThroughCanopy = playerVz > 0 && playerZ < canopyZ;
+      if (risingThroughCanopy) {
+        // Jumping up through — don't block.
+        newGroundZ = 0;
+      } else if (shiftHeld && wasOnCanopy) {
+        // Holding shift on top — drop through.
+        newGroundZ = 0;
+        if (player.grounded && playerZ >= canopyZ - 0.05) {
+          player.grounded = false;
+        }
+      } else if (atOrAboveCanopy || wasOnCanopy) {
+        newGroundZ = canopyZ;
+      }
+    }
+    player.groundZ = newGroundZ;
+
+    // If grounded on an elevated surface and groundZ dropped (walked off edge or shift-drop), become airborne.
+    if (player.grounded && !flightMove && newGroundZ < prevGroundZ && (player.z || 0) > newGroundZ + 0.05) {
       player.grounded = false;
     }
   }

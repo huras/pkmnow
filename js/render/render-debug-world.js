@@ -7,7 +7,10 @@ import {
   scatterPhysicsCircleAtOrigin,
   EXPERIMENT_SCATTER_SOLID_CIRCLE_COLLIDER,
   beginWildWalkProbeCache,
-  endWildWalkProbeCache
+  endWildWalkProbeCache,
+  TREE_CANOPY_WALK_RADIUS_MULT,
+  FORMAL_TREE_CANOPY_Z,
+  SCATTER_TREE_CANOPY_Z
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from '../main/play-collider-overlay-cache.js';
@@ -753,26 +756,102 @@ export function drawWorldColliderOverlay(ctx, options) {
         }
       }
 
-      ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
+      // Draw tree trunk frusta: base ellipse, top ellipse, four side rulings (matches linear r(z) physics).
       ctx.lineWidth = 2;
       for (const span of colliderCache.formalEllipses) {
-        if (!circleAabbIntersectsRect(span.cx, span.cy, span.radius, startX, startY, endX, endY)) continue;
+        const rTopF = span.radiusTop != null ? span.radiusTop : span.radius;
+        const rCull = Math.max(span.radius, rTopF);
+        if (!circleAabbIntersectsRect(span.cx, span.cy, rCull, startX, startY, endX, endY)) continue;
         const pxCx = snapPx(span.cx * tileW);
         const pxCy = snapPx(span.cy * tileH);
+        const rwB = Math.max(1, span.radius * tileW);
+        const rhB = Math.max(1, span.radius * tileH);
+        const rwT = Math.max(1, rTopF * tileW);
+        const rhT = Math.max(1, rTopF * tileH);
+        const topOff = (span.topZ || 0) * tileH;
+        const pxCyTop = pxCy - topOff;
+        // Base ellipse
+        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
         ctx.beginPath();
-        ctx.ellipse(pxCx, pxCy, Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
+        ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
         ctx.stroke();
+        if (topOff > 0) {
+          // Top ellipse
+          ctx.strokeStyle = 'rgba(120, 255, 255, 0.5)';
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(120, 255, 255, 0.35)';
+          ctx.beginPath();
+          ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+          ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+          ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+          ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+          ctx.stroke();
+        }
       }
 
       for (const p of colliderCache.scatterEllipses) {
-        if (!circleAabbIntersectsRect(p.cx, p.cy, p.radius, startX, startY, endX, endY)) continue;
+        const rTopS = p.radiusTop != null ? p.radiusTop : p.radius;
+        const rCullS = Math.max(p.radius, rTopS);
+        if (!circleAabbIntersectsRect(p.cx, p.cy, rCullS, startX, startY, endX, endY)) continue;
+        const pxCx = snapPx(p.cx * tileW);
+        const pxCy = snapPx(p.cy * tileH);
+        const rwB = Math.max(1, p.radius * tileW);
+        const rhB = Math.max(1, p.radius * tileH);
+        const rwT = Math.max(1, rTopS * tileW);
+        const rhT = Math.max(1, rTopS * tileH);
+        const topOff = (p.topZ || 0) * tileH;
+        const pxCyTop = pxCy - topOff;
+        // Base ellipse
         ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (topOff > 0) {
+          // Top ellipse
+          ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.5)' : 'rgba(100, 200, 255, 0.45)';
+          ctx.beginPath();
+          ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = p.isTree ? 'rgba(200, 140, 255, 0.3)' : 'rgba(100, 200, 255, 0.3)';
+          ctx.beginPath();
+          ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+          ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+          ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+          ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+          ctx.stroke();
+        }
+      }
+
+      // Treetop walk / groundZ: larger dashed discs (getTreeCanopyZAtPoint), not trunk hit.
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(72, 235, 150, 0.78)';
+      for (const span of colliderCache.formalEllipses) {
+        const rTopWalk = span.radiusTop != null ? span.radiusTop : span.radius;
+        const cr = rTopWalk * TREE_CANOPY_WALK_RADIUS_MULT;
+        if (!circleAabbIntersectsRect(span.cx, span.cy, cr, startX, startY, endX, endY)) continue;
+        const pxCx = snapPx(span.cx * tileW);
+        const pxCy = snapPx(span.cy * tileH);
+        ctx.beginPath();
+        ctx.ellipse(pxCx, pxCy, Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(235, 255, 92, 0.74)';
+      for (const p of colliderCache.scatterEllipses) {
+        if (!p.isTree) continue;
+        const rTopWalkS = p.radiusTop != null ? p.radiusTop : p.radius;
+        const cr = rTopWalkS * TREE_CANOPY_WALK_RADIUS_MULT;
+        if (!circleAabbIntersectsRect(p.cx, p.cy, cr, startX, startY, endX, endY)) continue;
         const pxCx = snapPx(p.cx * tileW);
         const pxCy = snapPx(p.cy * tileH);
         ctx.beginPath();
-        ctx.ellipse(pxCx, pxCy, Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
+        ctx.ellipse(pxCx, pxCy, Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
         ctx.stroke();
       }
+      ctx.restore();
     } else {
       // Direct (no cache) fallback
       const cx = pCol ? Math.floor(pCol.x) : startX + Math.floor((endX - startX) / 2);
@@ -802,14 +881,34 @@ export function drawWorldColliderOverlay(ctx, options) {
           }
         }
 
-        ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
         ctx.lineWidth = 2;
         for (let my = oy0; my < oy1; my++) {
           for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
             const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
             if (!span) continue;
+            const pxCx = snapPx(span.cx * tileW);
+            const pxCy = snapPx(span.cy * tileH);
+            const rTopF = span.radiusTop != null ? span.radiusTop : span.radius;
+            const rwB = Math.max(1, span.radius * tileW);
+            const rhB = Math.max(1, span.radius * tileH);
+            const rwT = Math.max(1, rTopF * tileW);
+            const rhT = Math.max(1, rTopF * tileH);
+            const topOff = FORMAL_TREE_CANOPY_Z * tileH;
+            const pxCyTop = pxCy - topOff;
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.85)';
             ctx.beginPath();
-            ctx.ellipse(snapPx(span.cx * tileW), snapPx(span.cy * tileH), Math.max(1, span.radius * tileW), Math.max(1, span.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(120, 255, 255, 0.35)';
+            ctx.beginPath();
+            ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+            ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+            ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+            ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
             ctx.stroke();
           }
         }
@@ -819,13 +918,76 @@ export function drawWorldColliderOverlay(ctx, options) {
           for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
             const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, null, getCached);
             if (!p) continue;
-            if (p.cx + p.radius <= ox0 || p.cx - p.radius >= ox1 || p.cy + p.radius <= oy0 || p.cy - p.radius >= oy1) continue;
-            ctx.strokeStyle = scatterItemKeyIsTree(p.itemKey) ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
+            const rMax = Math.max(p.radius, p.radiusTop);
+            if (p.cx + rMax <= ox0 || p.cx - rMax >= ox1 || p.cy + rMax <= oy0 || p.cy - rMax >= oy1) continue;
+            const pxCx = snapPx(p.cx * tileW);
+            const pxCy = snapPx(p.cy * tileH);
+            const rwB = Math.max(1, p.radius * tileW);
+            const rhB = Math.max(1, p.radius * tileH);
+            const rwT = Math.max(1, p.radiusTop * tileW);
+            const rhT = Math.max(1, p.radiusTop * tileH);
+            const isTree = scatterItemKeyIsTree(p.itemKey);
+            const topOff = isTree ? SCATTER_TREE_CANOPY_Z * tileH : 0;
+            const pxCyTop = pxCy - topOff;
+            ctx.strokeStyle = isTree ? 'rgba(200, 140, 255, 0.9)' : 'rgba(100, 200, 255, 0.88)';
             ctx.beginPath();
-            ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, p.radius * tileW), Math.max(1, p.radius * tileH), 0, 0, Math.PI * 2);
+            ctx.ellipse(pxCx, pxCy, rwB, rhB, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            if (topOff > 0) {
+              ctx.strokeStyle = 'rgba(200, 140, 255, 0.5)';
+              ctx.beginPath();
+              ctx.ellipse(pxCx, pxCyTop, rwT, rhT, 0, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.strokeStyle = 'rgba(200, 140, 255, 0.3)';
+              ctx.beginPath();
+              ctx.moveTo(pxCx - rwB, pxCy); ctx.lineTo(pxCx - rwT, pxCyTop);
+              ctx.moveTo(pxCx + rwB, pxCy); ctx.lineTo(pxCx + rwT, pxCyTop);
+              ctx.moveTo(pxCx, pxCy - rhB); ctx.lineTo(pxCx, pxCyTop - rhT);
+              ctx.moveTo(pxCx, pxCy + rhB); ctx.lineTo(pxCx, pxCyTop + rhT);
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(72, 235, 150, 0.78)';
+        for (let my = oy0; my < oy1; my++) {
+          for (let rootX = ox0 - 1; rootX < ox1; rootX++) {
+            const span = getFormalTreeTrunkWorldXSpan(rootX, my, data);
+            if (!span) continue;
+            const rTopWalk = span.radiusTop != null ? span.radiusTop : span.radius;
+            const cr = rTopWalk * TREE_CANOPY_WALK_RADIUS_MULT;
+            if (!circleAabbIntersectsRect(span.cx, span.cy, cr, startX, startY, endX, endY)) continue;
+            ctx.beginPath();
+            ctx.ellipse(
+              snapPx(span.cx * tileW),
+              snapPx(span.cy * tileH),
+              Math.max(1, cr * tileW),
+              Math.max(1, cr * tileH),
+              0,
+              0,
+              Math.PI * 2
+            );
             ctx.stroke();
           }
         }
+        ctx.strokeStyle = 'rgba(235, 255, 92, 0.74)';
+        for (let oxS = ox0 - 8; oxS < ox1 + 2; oxS++) {
+          if (oxS < 0 || oxS >= data.width * MACRO_TILE_STRIDE) continue;
+          for (let oyS = Math.max(0, oy0 - 10); oyS <= Math.min(data.height * MACRO_TILE_STRIDE - 1, oy1 + 3); oyS++) {
+            const p = scatterPhysicsCircleAtOrigin(oxS, oyS, data, null, getCached);
+            if (!p || !scatterItemKeyIsTree(p.itemKey)) continue;
+            const rTopWalkS = p.radiusTop != null ? p.radiusTop : p.radius;
+            const cr = rTopWalkS * TREE_CANOPY_WALK_RADIUS_MULT;
+            if (!circleAabbIntersectsRect(p.cx, p.cy, cr, startX, startY, endX, endY)) continue;
+            ctx.beginPath();
+            ctx.ellipse(snapPx(p.cx * tileW), snapPx(p.cy * tileH), Math.max(1, cr * tileW), Math.max(1, cr * tileH), 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
       } finally {
         endWildWalkProbeCache();
       }

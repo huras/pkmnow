@@ -95,6 +95,8 @@ function drawDropGlow(ctx, drop, imageCache, px, py, targetW, targetH) {
 
 /**
  * Handles drawing of a scatter object (bushes, rocks, etc.).
+ * @param {object} options
+ * @param {'trunk'|'canopy'|undefined} [options.phase] - Draw only trunk or only canopy. Omit for full draw.
  */
 export function drawScatter(ctx, item, options) {
   const {
@@ -105,7 +107,8 @@ export function drawScatter(ctx, item, options) {
     lodDetail,
     canopyAnimTime: rawCanopyAnimTime,
     imageCache,
-    getCached
+    getCached,
+    phase
   } = options;
 
   const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
@@ -131,9 +134,12 @@ export function drawScatter(ctx, item, options) {
   const topPart = objSet.parts.find(p => p.role === 'top' || p.role === 'tops');
   const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
 
+  const drawBase = phase !== 'canopy';
+  const drawCanopy = phase !== 'trunk';
+
   if (img) {
     // Draw Base
-    if (base?.ids && (item.isSortable || isCharred)) {
+    if (drawBase && base?.ids && (item.isSortable || isCharred)) {
       const prevFilter = ctx.filter;
       const prevAlpha = ctx.globalAlpha;
       if (isCharred) {
@@ -154,7 +160,7 @@ export function drawScatter(ctx, item, options) {
       ctx.globalAlpha = prevAlpha;
     }
     // Draw Top (Canopy)
-    if (topPart && !isCharred) {
+    if (drawCanopy && topPart && !isCharred) {
       const wind = item.windSway; // passed in renderItems or helper
       const { canvas: scCan, ox: scOx, oy: scOy, flipX: scFlip } = getScatterTopCanopyComposite(
         canopyAnimTime,
@@ -174,7 +180,7 @@ export function drawScatter(ctx, item, options) {
       drawCanopyWithWindFlip(ctx, scCan, px, py, scOx, scOy, scFlip, snapPx);
     }
     // Draw Burning
-    if (isBurning) {
+    if (drawBase && isBurning) {
       const fireImg = imageCache.get('tilesets/effects/actual-fire.png');
       if (fireImg && fireImg.naturalWidth) {
         const flick = Math.floor(performance.now() / 72) % BURN_START_FRAMES;

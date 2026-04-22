@@ -529,13 +529,9 @@ button.btn-secondary:hover {
 
 .play-event-log-hud__portrait-wrap {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  display: inline-block;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid rgba(196, 208, 255, 0.55);
-  background: rgba(8, 12, 24, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .play-event-log-hud__portrait-wrap[data-hover-entity-key] {
@@ -545,6 +541,30 @@ button.btn-secondary:hover {
 .play-event-log-hud__portrait-wrap[data-hover-entity-key]:focus-visible {
   outline: 2px solid rgba(154, 216, 255, 0.85);
   outline-offset: 1px;
+}
+
+.play-event-log-hud__portrait-slot--single {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(196, 208, 255, 0.55);
+  background: rgba(8, 12, 24, 0.9);
+}
+
+.play-event-log-hud__portrait-mem-badge {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 2;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.95),
+    0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .play-event-log-hud__portrait {
@@ -557,31 +577,37 @@ button.btn-secondary:hover {
 .play-event-log-hud__portrait-wrap--group {
   display: inline-flex;
   flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 5px;
   width: auto;
-  min-width: 28px;
-  border-radius: 14px;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(196, 208, 255, 0.45);
+  background: rgba(8, 12, 24, 0.78);
+}
+
+.play-event-log-hud__portrait-slot--stack {
+  position: relative;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 28px;
+  border-radius: 5px;
   overflow: hidden;
-  gap: 0;
+  border: 1px solid rgba(148, 164, 220, 0.42);
+  background: rgba(8, 12, 24, 0.92);
 }
 
 .play-event-log-hud__portrait--stacked {
   display: block;
-  width: 20px;
-  height: 28px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  margin-left: -6px;
-  border-right: 1px solid rgba(8, 12, 24, 0.7);
 }
 
-.play-event-log-hud__portrait--stacked:first-child {
-  margin-left: 0;
-}
-
-.play-event-log-hud__row--pending .play-event-log-hud__portrait {
-  filter: grayscale(0.8);
-}
-
-.play-event-log-hud__row--pending .play-event-log-hud__portrait--stacked {
+.play-event-log-hud__row--pending .play-event-log-hud__portrait-slot--single .play-event-log-hud__portrait,
+.play-event-log-hud__row--pending .play-event-log-hud__portrait-slot--stack .play-event-log-hud__portrait {
   filter: grayscale(0.8);
 }
 
@@ -1570,6 +1596,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-btn,
 .minimap-panel__zoom-out-btn,
 .minimap-panel__collider-btn,
+.minimap-panel__rmb-mode-btn,
 .minimap-panel__language-btn,
 .minimap-panel__groups-btn,
 .minimap-panel__help-btn,
@@ -1600,6 +1627,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-btn:hover,
 .minimap-panel__zoom-out-btn:hover,
 .minimap-panel__collider-btn:hover,
+.minimap-panel__rmb-mode-btn:hover,
 .minimap-panel__language-btn:hover,
 .minimap-panel__groups-btn:hover,
 .minimap-panel__help-btn:hover,
@@ -1617,6 +1645,7 @@ button.btn-secondary:hover {
 }
 
 .minimap-panel__collider-btn[aria-pressed="true"],
+.minimap-panel__rmb-mode-btn[aria-pressed="true"],
 .minimap-panel__time-btn[aria-pressed="true"],
 .minimap-panel__weather-btn[aria-pressed="true"],
 .minimap-panel__social-btn[aria-pressed="true"],
@@ -1634,6 +1663,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-btn:focus-visible,
 .minimap-panel__zoom-out-btn:focus-visible,
 .minimap-panel__collider-btn:focus-visible,
+.minimap-panel__rmb-mode-btn:focus-visible,
 .minimap-panel__language-btn:focus-visible,
 .minimap-panel__groups-btn:focus-visible,
 .minimap-panel__help-btn:focus-visible,
@@ -1652,6 +1682,7 @@ button.btn-secondary:hover {
 .minimap-panel__zoom-in-icon,
 .minimap-panel__zoom-out-icon,
 .minimap-panel__collider-icon,
+.minimap-panel__rmb-mode-icon,
 .minimap-panel__language-icon,
 .minimap-panel__groups-icon,
 .minimap-panel__help-icon,
@@ -1666,6 +1697,11 @@ button.btn-secondary:hover {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+.minimap-panel__rmb-mode-btn[data-mode='game'] .minimap-panel__rmb-mode-icon--debug,
+.minimap-panel__rmb-mode-btn[data-mode='debug'] .minimap-panel__rmb-mode-icon--game {
+  display: none;
 }
 
 /* Minimap header — save / clear session (localStorage) */

@@ -4,7 +4,6 @@ import { ensurePokemonSheetsLoaded } from '../pokemon/pokemon-asset-loader.js';
 import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { imageCache } from '../image-cache.js';
 import { getMicroTile } from '../chunking.js';
-import { getPlayPointerMode, setPlayPointerMode } from '../main/play-pointer-mode.js';
 import { getPokemonConfig } from '../pokemon/pokemon-config.js';
 import {
   getPlayerMoveCooldownRemaining,
@@ -243,7 +242,7 @@ export class CharacterSelector {
         'aria-label',
         minimal ? 'Show full character panel' : 'Use minimal character panel'
       );
-      btn.title = minimal ? 'Show right-click mode bar' : 'Hide right-click mode bar';
+      btn.title = minimal ? 'Show full panel (includes search)' : 'Use minimal panel (hides search)';
       btn.textContent = minimal ? 'Full' : 'Min';
     }
   }
@@ -465,7 +464,7 @@ export class CharacterSelector {
               id="character-selector-layout-toggle"
               aria-pressed="false"
               aria-label="Use minimal character panel"
-              title="Hide right-click mode bar"
+              title="Use minimal panel (hides search)"
             >Min</button>
             <button
               type="button"
@@ -476,21 +475,6 @@ export class CharacterSelector {
               title="Minimal UI (portrait + minimap)"
             >·</button>
           </div>
-        </div>
-
-        <div
-          id="play-pointer-mode-bar"
-          class="play-pointer-mode-bar"
-          role="group"
-          aria-label="Right-click: game move vs debug menu"
-        >
-          <span class="play-pointer-mode-bar__label">Right-click</span>
-          <label class="play-pointer-mode-bar__opt"
-            ><input type="radio" name="playPointerMode" value="game" /> Game</label
-          >
-          <label class="play-pointer-mode-bar__opt"
-            ><input type="radio" name="playPointerMode" value="debug" /> Debug</label
-          >
         </div>
 
         <div class="player-moves-box" id="player-moves-box" aria-label="Current species moves">
@@ -554,8 +538,6 @@ export class CharacterSelector {
   }
 
   attachEvents() {
-    const pointerBar = this.container.querySelector('#play-pointer-mode-bar');
-
     // Pokémon Box modal — triggered by clicking the portrait pill
     this._boxModal = installPokemonBoxModal(this);
     const portraitPill = this.container.querySelector('#player-preview-pill');
@@ -570,16 +552,6 @@ export class CharacterSelector {
           this._boxModal.open(player.dexId ?? 1);
         }
       });
-    }
-
-    if (pointerBar) {
-      this.syncPlayPointerModeRadios();
-      for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
-        el.addEventListener('change', () => {
-          if (!(el instanceof HTMLInputElement) || !el.checked) return;
-          if (el.value === 'game' || el.value === 'debug') setPlayPointerMode(el.value);
-        });
-      }
     }
 
     const layoutBtn = this.container.querySelector('#character-selector-layout-toggle');
@@ -658,15 +630,6 @@ export class CharacterSelector {
   updatePlayFieldMoveChargeHud() {
     const wrap = this.container?.querySelector('#player-field-charge');
     if (wrap instanceof HTMLElement) wrap.classList.add('hidden');
-  }
-
-  syncPlayPointerModeRadios() {
-    const pointerBar = this.container?.querySelector('#play-pointer-mode-bar');
-    if (!pointerBar) return;
-    const mode = getPlayPointerMode();
-    for (const el of pointerBar.querySelectorAll('input[name="playPointerMode"]')) {
-      if (el instanceof HTMLInputElement) el.checked = el.value === mode;
-    }
   }
 
   async selectSpecies(id) {

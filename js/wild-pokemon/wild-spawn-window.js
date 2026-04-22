@@ -642,7 +642,7 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
    * @param {{ key: string, mx: number, my: number, sx: number, sy: number, centerX: number, centerY: number }} slot
    * @param {number} biomeId
    * @param {number} dex
-   * @param {{ entityKey?: string, logEventKey?: string | null, groupSpawnedCount?: number, groupSpawnTotal?: number, groupPortraitDexIds?: number[] | null, pickIndex: number, hp: number, maxHp: number, isBoss: boolean, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null }} meta
+   * @param {{ entityKey?: string, pickIndex: number, hp: number, maxHp: number, isBoss: boolean, groupId: string | null, groupLeaderKey: string | null, groupMemberIndex: number, groupSize: number, groupCohesionSec: number, groupHomeX: number | null, groupHomeY: number | null, groupAnchorX?: number | null, groupAnchorY?: number | null, groupMaxSpawnDist?: number | null, groupExistingPoints?: Array<{ x: number, y: number }> | null }} meta
    */
   function spawnEntityForSlot(slot, biomeId, dex, meta) {
     const placed = maybeFindWalkableSpawn(
@@ -749,40 +749,6 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     };
     bindStandardWildTakeDamage(entity);
     entitiesByKey.set(entityKey, entity);
-    {
-      const px = Number(playerMicroX) || 0;
-      const py = Number(playerMicroY) || 0;
-      const dist = Math.hypot((placed.spawnX ?? slot.centerX) - px, (placed.spawnY ?? slot.centerY) - py);
-      const ch = dist <= 18 ? 'local' : 'global';
-      const logEventKey = String(meta.logEventKey || '');
-      if (logEventKey) {
-        const groupSpawnTotal = Math.max(1, Math.floor(Number(meta.groupSpawnTotal)) || 1);
-        const groupSpawnedCount = Math.max(
-          0,
-          Math.min(groupSpawnTotal, Math.floor(Number(meta.groupSpawnedCount)) || 0)
-        );
-        const isPendingGroup = groupSpawnedCount < groupSpawnTotal;
-        const groupPortraitDexIds = Array.isArray(meta.groupPortraitDexIds) ? meta.groupPortraitDexIds.slice() : undefined;
-        pushPlayEventLog({
-          channel: ch,
-          text: buildGroupSpawnLogText(ch, groupSpawnedCount, groupSpawnTotal, isPendingGroup),
-          eventKey: logEventKey,
-          upsertByEventKey: true,
-          pending: isPendingGroup,
-          ...(groupPortraitDexIds?.length ? { portraitDexIds: groupPortraitDexIds } : {}),
-          portraitDexId: dex,
-          hoverEntityKey: entityKey
-        });
-      } else {
-        pushPlayEventLog({
-          channel: ch,
-          text: ch === 'local' ? 'Wild spawn nearby.' : 'Wild spawn in the region.',
-          dedupeKey: `spawn:${entityKey}:${dex}`,
-          portraitDexId: dex,
-          hoverEntityKey: entityKey
-        });
-      }
-    }
     ensurePokemonSheetsLoaded(imageCache, dex);
     probeSpriteCollabPortraitPrefix(dex).catch(() => {});
     if (spawnSleep) ensureSpriteCollabPortraitLoaded(imageCache, dex, 'Normal').catch(() => {});
@@ -854,24 +820,11 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
     const slotDistFromPlayer = Math.hypot(slot.centerX - (Number(playerMicroX) || 0), slot.centerY - (Number(playerMicroY) || 0));
     const groupLogChannel = slotDistFromPlayer <= 18 ? 'local' : 'global';
     let groupPortraitDexIds = [leaderDex];
-    pushPlayEventLog({
-      channel: groupLogChannel,
-      text: buildGroupSpawnLogText(groupLogChannel, 0, groupSize, true),
-      eventKey: groupLogEventKey,
-      upsertByEventKey: true,
-      pending: true,
-      portraitDexIds: groupPortraitDexIds,
-      portraitDexId: leaderDex
-    });
     /** @type {Array<{ x: number, y: number }>} */
     const groupSpawnPoints = [];
 
     const leaderSpawn = spawnEntityForSlot(slot, biomeId, leaderDex, {
       entityKey: slot.key,
-      logEventKey: groupLogEventKey,
-      groupSpawnedCount: 1,
-      groupSpawnTotal: groupSize,
-      groupPortraitDexIds,
       pickIndex: leaderPick,
       hp: bossRoll.hp,
       maxHp: bossRoll.maxHp,
@@ -917,10 +870,6 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
       const nextGroupPortraitDexIds = groupPortraitDexIds.concat([companionDex]);
       const ok = spawnEntityForSlot(cslot, biomeId, companionDex, {
         entityKey: companionEntityKey,
-        logEventKey: groupLogEventKey,
-        groupSpawnedCount: groupSpawnedCount + 1,
-        groupSpawnTotal: groupSize,
-        groupPortraitDexIds: nextGroupPortraitDexIds,
         pickIndex: companionPick,
         hp: 50,
         maxHp: 50,
@@ -943,6 +892,18 @@ export function syncWildPokemonWindow(data, playerMicroX, playerMicroY) {
         groupSpawnPoints.push({ x: ok.spawnX, y: ok.spawnY });
       }
     }
+
+    const groupStillPending = groupSpawnedCount < groupSize;
+    pushPlayEventLog({
+      channel: groupLogChannel,
+      text: buildGroupSpawnLogText(groupLogChannel, groupSpawnedCount, groupSize, groupStillPending),
+      eventKey: groupLogEventKey,
+      upsertByEventKey: true,
+      pending: groupStillPending,
+      ...(groupPortraitDexIds.length > 1 ? { portraitDexIds: groupPortraitDexIds.slice() } : {}),
+      portraitDexId: leaderDex,
+      hoverEntityKey: slot.key
+    });
   }
 }
 

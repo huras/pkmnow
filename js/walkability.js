@@ -29,6 +29,8 @@ import {
 import {
   TRUNK_STRIP_WIDTH_FRAC,
   FORMAL_TRUNK_BASE_WIDTH_TILES,
+  FORMAL_TREE_TRUNK_TOP_RADIUS_MULT,
+  SCATTER_TREE_TRUNK_TOP_RADIUS_MULT,
   scatterSolidStemRadiusMultiplier,
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
@@ -156,7 +158,15 @@ export function okHeightStepTransition(sourceTile, targetTile) {
  * plateau (e.g. EDGE_N at h+1) while the pivot already entered the cell to the north at height h,
  * which would incorrectly allow stepping off a cliff without a ramp/stair.
  */
-export function pivotCellHeightTraversalOk(pivotX, pivotY, srcPivotX, srcPivotY, macroData) {
+export function pivotCellHeightTraversalOk(
+  pivotX,
+  pivotY,
+  srcPivotX,
+  srcPivotY,
+  macroData,
+  relaxWhenOnTreeCanopy = false
+) {
+  if (relaxWhenOnTreeCanopy) return true;
   if (srcPivotX === undefined || srcPivotY === undefined) return true;
   const pmx = Math.floor(pivotX);
   const pmy = Math.floor(pivotY);
@@ -459,14 +469,15 @@ export function didFormalTreeSpawnAtRoot(rootX, rootY, data) {
 }
 
 /**
- * Formal trunk as a **circle** in micro-tile space (same nominal width as the old strip: diameter ≈ 2×0.3).
+ * Formal trunk: base circle at ground (`r`) and top radius at canopy height (`rTop`), linear taper in Z.
  */
 export function getFormalTreeTrunkCircle(rootX, my, data) {
   if (!didFormalTreeSpawnAtRoot(rootX, my, data)) return null;
   const r = (FORMAL_TRUNK_BASE_WIDTH_TILES * TRUNK_STRIP_WIDTH_FRAC) / 2;
+  const rTop = r * FORMAL_TREE_TRUNK_TOP_RADIUS_MULT;
   const cx = rootX + FORMAL_TRUNK_BASE_WIDTH_TILES / 2;
   const cy = my + 0.5;
-  return { cx, cy, r };
+  return { cx, cy, r, rTop };
 }
 
 /** World-space: point inside a formal broadleaf trunk circle. */
@@ -509,14 +520,17 @@ export function formalTreeTrunkOverlapsMicroCell(mx, my, data) {
 }
 
 /**
- * Horizontal span + circle params (for overlays / JSON). `left`/`right` are the circle's x-extent.
+ * Horizontal span + circle params (for overlays / JSON). `left`/`right` are the **base** circle x-extent.
+ * `radiusTop` is the trunk radius at canopy height (cone top).
  */
 export function getFormalTreeTrunkWorldXSpan(rootX, my, data, memo = null) {
   const key = memo ? `${rootX},${my}` : null;
   if (key && memo.has(key)) return memo.get(key);
 
   const c = getFormalTreeTrunkCircle(rootX, my, data);
-  const res = c ? { left: c.cx - c.r, right: c.cx + c.r, cx: c.cx, cy: c.cy, radius: c.r } : null;
+  const res = c
+    ? { left: c.cx - c.r, right: c.cx + c.r, cx: c.cx, cy: c.cy, radius: c.r, radiusTop: c.rTop }
+    : null;
 
   if (key) memo.set(key, res);
   return res;
@@ -572,7 +586,7 @@ export function scatterTreeTrunkBaseRowOxSpan(basePart, cols, trunkOyRel) {
  * One scatter **origin** → at most one physics circle (tree trunk or, when experiment on, non-tree solid “stem”).
  * Deduplicates `validScatterOriginMicro` + itemKey between tree / solid paths (hot: `gatherTreeTrunkCirclesNearWorldPoint`).
  * @param {{ ignoreDestroyed?: boolean }} [opts] — When `ignoreDestroyed`, skip the “origin destroyed” check (charred-stump / harvest helpers still use the same trunk geometry as the living tree).
- * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, itemKey: string }}
+ * @returns {null | { left: number, right: number, trunkMy: number, cx: number, cy: number, radius: number, radiusTop: number, itemKey: string }}
  */
 export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, getTileFn = null, opts = undefined) {
   const microW = data.width * MACRO_TILE_STRIDE;
@@ -633,6 +647,7 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
   const pivot = scatterStemPhysicsPivotOffsetMicroTiles(itemKey);
   cx += pivot.dx;
   cy += pivot.dy;
+  const radiusTop = isTree ? r * SCATTER_TREE_TRUNK_TOP_RADIUS_MULT : r;
   return {
     left: cx - r,
     right: cx + r,
@@ -640,6 +655,7 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
     cx,
     cy,
     radius: r,
+    radiusTop,
     itemKey
   };
 }
@@ -769,8 +785,23 @@ export function scatterPhysicsCircleOverlapsMicroCellAny(mx, my, data) {
 }
 
 /**
+ * Horizontal trunk radius at body height `playerZ` (linear taper from base `r` to `rTop` over `topZ`).
+ * @param {{ r: number, rTop?: number, topZ?: number }} c
+ */
+export function trunkEffectiveRadiusAtZ(c, playerZ) {
+  const rb = c.r;
+  const rt = c.rTop != null && Number.isFinite(c.rTop) ? c.rTop : rb;
+  const topZ = c.topZ || 0;
+  if (topZ < 1e-6) return rb;
+  let t = playerZ / topZ;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  return rb + (rt - rb) * t;
+}
+
+/**
  * Lists formal + scatter trunk circles near (wx, wy) for physics (same scatter window as `scatterTreeTrunkBlocksWorldPoint`, smaller than old full-radius scan).
- * @returns {Array<{ cx: number, cy: number, r: number }>}
+ * @returns {Array<{ cx: number, cy: number, r: number, rTop: number, topZ: number }>}
  */
 export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
   const microW = data.width * MACRO_TILE_STRIDE;
@@ -787,7 +818,7 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
       const k = `f:${rootX},${trunkMy}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push({ cx: c.cx, cy: c.cy, r: c.r });
+      out.push({ cx: c.cx, cy: c.cy, r: c.r, rTop: c.rTop, topZ: FORMAL_TREE_CANOPY_Z });
     }
   }
 
@@ -799,7 +830,7 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
       const k = `s:${ox0},${oy0}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push({ cx: p.cx, cy: p.cy, r: p.radius });
+      out.push({ cx: p.cx, cy: p.cy, r: p.radius, rTop: p.radiusTop, topZ: SCATTER_TREE_CANOPY_Z });
     }
   }
 
@@ -807,11 +838,21 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
 }
 
 /** Height (in tile z-units) at which a player can stand on top of a formal tree canopy. */
-const FORMAL_TREE_CANOPY_Z = 2;
+export const FORMAL_TREE_CANOPY_Z = 2;
 /** Height for scatter-tree canopy (smaller procedural trees). */
-const SCATTER_TREE_CANOPY_Z = 1.5;
-/** Canopy detection uses trunk radius × this multiplier for coverage area. */
-const CANOPY_RADIUS_MULT = 2.5;
+export const SCATTER_TREE_CANOPY_Z = 1.5;
+/**
+ * Z-units per terrain heightStep. One heightStep of cliff = this many z-units the player must
+ * clear in order to land on the higher plateau. Tune this to control how high a jump is needed
+ * to reach the next terrain level.
+ */
+export const HEIGHT_STEP_Z = 0.5;
+/**
+ * Horizontal disc for treetop landing / `groundZ` uses trunk circle radius × this factor
+ * (same as {@link getTreeCanopyZAtPoint}). Debug overlay draws this disc.
+ */
+export const TREE_CANOPY_WALK_RADIUS_MULT = 2.5;
+const CANOPY_RADIUS_MULT = TREE_CANOPY_WALK_RADIUS_MULT;
 
 /**
  * Returns the effective "floor Z" at a world point, accounting for tree canopies.
@@ -831,7 +872,7 @@ export function getTreeCanopyZAtPoint(wx, wy, data) {
     for (let rootX = Math.max(0, ix - 2); rootX <= Math.min(microW - 2, ix + 2); rootX++) {
       const c = getFormalTreeTrunkCircle(rootX, trunkMy, data);
       if (!c) continue;
-      const canopyR = c.r * CANOPY_RADIUS_MULT;
+      const canopyR = c.rTop * CANOPY_RADIUS_MULT;
       const dx = wx - c.cx;
       const dy = wy - c.cy;
       if (dx * dx + dy * dy <= canopyR * canopyR) return FORMAL_TREE_CANOPY_Z;
@@ -844,7 +885,7 @@ export function getTreeCanopyZAtPoint(wx, wy, data) {
     for (let ox0 = Math.max(0, ix - 8); ox0 <= Math.min(microW - 1, ix + 2); ox0++) {
       const p = scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo);
       if (!p || !scatterItemKeyIsTree(p.itemKey)) continue;
-      const canopyR = p.radius * CANOPY_RADIUS_MULT;
+      const canopyR = p.radiusTop * CANOPY_RADIUS_MULT;
       const dx = wx - p.cx;
       const dy = wy - p.cy;
       if (dx * dx + dy * dy <= canopyR * canopyR) return SCATTER_TREE_CANOPY_Z;
@@ -895,8 +936,19 @@ export function isPropBlocking(mx, my, data) {
  * @param {number | null | undefined} cachedFoliageOverlayId - optional
  * @param {boolean} [isAirborne=false]
  * @param {boolean} [ignoreTreeTrunks=false] — when true, trunk circles are skipped here and handled by circle-vs-trunk resolution (player/wild).
+ * @param {boolean} [relaxHeightStepVsSrc=false] — when true (treetop walk: feet on canopy disc, grounded on canopy), do not block illegal upward `heightStep` moves vs src — underlying cliff tiles differ but logical floor is the canopy.
  */
-export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId, isAirborne = false, ignoreTreeTrunks = false) {
+export function canWalkMicroTile(
+  x,
+  y,
+  data,
+  srcX,
+  srcY,
+  cachedFoliageOverlayId,
+  isAirborne = false,
+  ignoreTreeTrunks = false,
+  relaxHeightStepVsSrc = false
+) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
 
@@ -907,8 +959,8 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
       const fol = cachedFoliageOverlayId === undefined ? 'u' : String(cachedFoliageOverlayId);
       cacheKey =
         srcX !== undefined && srcY !== undefined
-          ? `${mx},${my},${Math.floor(srcX)},${Math.floor(srcY)},${isAirborne ? 1 : 0},${fol}`
-          : `${mx},${my},ns,${isAirborne ? 1 : 0},${fol}`;
+          ? `${mx},${my},${Math.floor(srcX)},${Math.floor(srcY)},${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0}`
+          : `${mx},${my},ns,${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0}`;
       const cached = walkProbeCache.get(cacheKey);
       if (cached !== undefined) return cached;
     }
@@ -937,7 +989,7 @@ export function canWalkMicroTile(x, y, data, srcX, srcY, cachedFoliageOverlayId,
       if (targetTile.heightStep < sourceTile.heightStep) {
         // Drop: always allowed — player will fall via gravity.
         _isCliffDrop = true;
-      } else if (!okHeightStepTransition(sourceTile, targetTile)) {
+      } else if (!relaxHeightStepVsSrc && !okHeightStepTransition(sourceTile, targetTile)) {
         return finish(false); // Physical barrier (cliff wall from below)
       }
     }
@@ -1090,7 +1142,7 @@ export function syncEntityZWithTerrain(entity, ox, oy, nx, ny, data) {
   if (ot && nt && Number.isFinite(ot.heightStep) && Number.isFinite(nt.heightStep)) {
     const dh = nt.heightStep - ot.heightStep;
     if (dh !== 0) {
-      entity.z = Math.max(0, (entity.z || 0) - dh);
+      entity.z = Math.max(0, (entity.z || 0) - dh * HEIGHT_STEP_Z);
     }
   }
 }

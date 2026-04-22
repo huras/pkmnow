@@ -288,6 +288,7 @@ export function collectRenderItems(options) {
       pivotX: dw * 0.5,
       pivotY: dh * PMD_MON_SHEET.pivotYFrac,
       targetHeightTiles,
+      groundZ: player.groundZ || 0,
       strengthCarry: player._strengthCarry || null
     });
   } else {

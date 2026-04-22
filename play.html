@@ -109,6 +109,44 @@
               <div class="minimap-panel__header-actions">
                 <button
                   type="button"
+                  id="minimap-rmb-mode-toggle"
+                  class="minimap-panel__rmb-mode-btn"
+                  data-mode="game"
+                  aria-pressed="false"
+                  title="Right-click: field move on tile. Click for debug menu."
+                  aria-label="Right-click: field move on tile. Click for debug menu."
+                >
+                  <svg
+                    class="minimap-panel__rmb-mode-icon minimap-panel__rmb-mode-icon--game"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v3M12 16v3M5 12h3M16 12h3" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="minimap-panel__rmb-mode-icon minimap-panel__rmb-mode-icon--debug"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6h11M9 12h11M9 18h11" />
+                    <circle cx="5" cy="6" r="1.75" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="12" r="1.75" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="18" r="1.75" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   id="minimap-collider-toggle"
                   class="minimap-panel__collider-btn"
                   title="Collider Debug (C)"

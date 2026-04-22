@@ -1,5 +1,5 @@
 import { isPlayShell } from './main/app-shell.js';
-import { setPlayPointerMode } from './main/play-pointer-mode.js';
+import { getPlayPointerMode, setPlayPointerMode } from './main/play-pointer-mode.js';
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
 import {
@@ -206,6 +206,7 @@ const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-p
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
 const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
 const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
+const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
@@ -329,6 +330,20 @@ function syncMinimapColliderToggleUi() {
   btnMinimapColliderToggle?.setAttribute('aria-pressed', isColliderDebugEnabled() ? 'true' : 'false');
 }
 
+function syncMinimapRmbPointerModeUi() {
+  const btn = btnMinimapRmbModeToggle;
+  if (!(btn instanceof HTMLButtonElement)) return;
+  const mode = getPlayPointerMode() === 'debug' ? 'debug' : 'game';
+  btn.dataset.mode = mode;
+  const isDebug = mode === 'debug';
+  btn.setAttribute('aria-pressed', isDebug ? 'true' : 'false');
+  const title = isDebug
+    ? 'Right-click: debug menu. Click for field move on tile.'
+    : 'Right-click: field move on tile. Click for debug menu.';
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+}
+
 function toggleColliderDebugFromMinimapToolbar() {
   const chk = document.getElementById('chkPlayColliders');
   if (chk instanceof HTMLInputElement) {
@@ -395,6 +410,11 @@ try {
 syncMinimapEventLogToggleUi();
 btnMinimapEventLogToggle?.addEventListener('click', () => {
   setMinimapEventLogVisibleDebug(!minimapEventLogVisibleDebug);
+});
+syncMinimapRmbPointerModeUi();
+btnMinimapRmbModeToggle?.addEventListener('click', () => {
+  setPlayPointerMode(getPlayPointerMode() === 'game' ? 'debug' : 'game');
+  syncMinimapRmbPointerModeUi();
 });
 
 function syncMinimapZoomReadout() {
@@ -2104,7 +2124,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   playSocialOverlay.clearActive();
   clearPlayEventLog();
 
-  playCharacterSelector?.syncPlayPointerModeRadios();
+  syncMinimapRmbPointerModeUi();
 
   syncRegionViewShell();
   resizeCanvas();

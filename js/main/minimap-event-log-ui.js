@@ -261,6 +261,31 @@ export function installMinimapEventLogUi() {
     }
   }
 
+  /** Coalesce rapid `pushPlayEventLog` bursts into one DOM rebuild per animation frame. */
+  let eventLogRenderRafId = 0;
+  let eventLogRenderPreserveScroll = false;
+
+  function cancelCoalescedEventLogRender() {
+    if (eventLogRenderRafId) {
+      cancelAnimationFrame(eventLogRenderRafId);
+      eventLogRenderRafId = 0;
+    }
+    eventLogRenderPreserveScroll = false;
+  }
+
+  function flushCoalescedEventLogRender() {
+    eventLogRenderRafId = 0;
+    const preserveScroll = eventLogRenderPreserveScroll;
+    eventLogRenderPreserveScroll = false;
+    renderRows({ preserveScroll });
+  }
+
+  function scheduleCoalescedEventLogRender(preserveScroll) {
+    eventLogRenderPreserveScroll = eventLogRenderPreserveScroll || !!preserveScroll;
+    if (eventLogRenderRafId) return;
+    eventLogRenderRafId = requestAnimationFrame(flushCoalescedEventLogRender);
+  }
+
   /**
    * @param {{ preserveScroll?: boolean }} [opts]
    */
@@ -285,7 +310,9 @@ export function installMinimapEventLogUi() {
         (e) => {
           const stamp = formatEventDateTime(e.ts);
           const stampSafe = escapeHtml(stamp);
-          const portraitHtml = buildEventPortraitHtml(e, portraitRequests, () => renderRows({ preserveScroll: true }));
+          const portraitHtml = buildEventPortraitHtml(e, portraitRequests, () =>
+            scheduleCoalescedEventLogRender(true)
+          );
           const pendingClass = e.pending ? ' play-event-log-hud__row--pending' : '';
           const pendingLabel = e.pending ? '<span class="play-event-log-hud__pending-pill">PENDING</span>' : '';
           return (
@@ -309,7 +336,7 @@ export function installMinimapEventLogUi() {
   const unlisten = onPlayEventLogChanged((events) => {
     currentEvents = events.slice();
     opaqueUntil = performance.now() + OPAQUE_AFTER_EVENT_MS;
-    renderRows({ preserveScroll: true });
+    scheduleCoalescedEventLogRender(true);
     syncOpacity();
   });
 
@@ -325,6 +352,7 @@ export function installMinimapEventLogUi() {
       ) {
         activeFilter = next;
         applyFilterUi();
+        cancelCoalescedEventLogRender();
         renderRows();
       }
     });
@@ -408,12 +436,15 @@ export function installMinimapEventLogUi() {
   restoreFloatingPosition();
   restoreCollapsedState();
   applyFilterUi();
+  cancelCoalescedEventLogRender();
   renderRows();
   syncVisibility();
   syncOpacity();
 
   return {
     syncPlayEventLogHud: () => {
+      currentEvents = getPlayEventLogSnapshot();
+      cancelCoalescedEventLogRender();
       renderRows();
       syncOpacity();
     },
@@ -421,6 +452,8 @@ export function installMinimapEventLogUi() {
       visible = !!next;
       syncVisibility();
       if (visible) {
+        currentEvents = getPlayEventLogSnapshot();
+        cancelCoalescedEventLogRender();
         renderRows();
         syncOpacity();
       }
@@ -434,6 +467,7 @@ export function installMinimapEventLogUi() {
     destroy: () => {
       stopResize();
       stopDrag(null, false);
+      cancelCoalescedEventLogRender();
       window.removeEventListener('resize', onWindowResizeClampFloating);
       setHoveredEntityKey(null);
       unlisten();
@@ -486,7 +520,11 @@ function buildEventPortraitHtml(eventRow, portraitRequests, rerender) {
         });
       }
       const srcAttr = tex?.src ? ` src="${escapeHtml(tex.src)}"` : '';
-      return `<img class="play-event-log-hud__portrait play-event-log-hud__portrait--stacked"${srcAttr} alt="Pokemon #${dex}" loading="lazy" decoding="async">`;
+      return (
+        `<span class="play-event-log-hud__portrait-slot play-event-log-hud__portrait-slot--stack">` +
+        `<img class="play-event-log-hud__portrait play-event-log-hud__portrait--stacked"${srcAttr} alt="Pokemon #${dex}" loading="lazy" decoding="async">` +
+        '</span>'
+      );
     }).filter(Boolean).join('');
     return `<span class="play-event-log-hud__portrait-wrap play-event-log-hud__portrait-wrap--group"${hoverAttr}>${imgs}</span>`;
   }
@@ -508,10 +546,16 @@ function buildEventPortraitHtml(eventRow, portraitRequests, rerender) {
   const hoverEntityKeyRaw = String(eventRow?.hoverEntityKey || '').trim();
   const hoverEntityKey = hoverEntityKeyRaw.length ? hoverEntityKeyRaw : '';
   const hoverAttr = hoverEntityKey ? ` data-hover-entity-key="${escapeHtml(hoverEntityKey)}" tabindex="0"` : '';
+  const memBadge =
+    eventRow?.portraitMemCleanup === true
+      ? '<span class="play-event-log-hud__portrait-mem-badge" aria-hidden="true">⛔</span>'
+      : '';
   return (
     `<span class="play-event-log-hud__portrait-wrap"${hoverAttr}>` +
+    `<span class="play-event-log-hud__portrait-slot play-event-log-hud__portrait-slot--single">` +
     `<img class="play-event-log-hud__portrait"${srcAttr} alt="Pokemon #${dex}" loading="lazy" decoding="async">` +
-    '</span>'
+    memBadge +
+    '</span></span>'
   );
 }
 

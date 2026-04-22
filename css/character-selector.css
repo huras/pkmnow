@@ -343,7 +343,6 @@
 }
 
 .app--play-immersive #character-selector-container .character-selector .player-alt-compact,
-.app--play-immersive #character-selector-container .character-selector .play-pointer-mode-bar,
 .app--play-immersive #character-selector-container .character-selector #character-social-numpad,
 .app--play-immersive #character-selector-container .character-selector .search-container,
 .app--play-immersive #character-selector-container .character-selector .character-selector__layout-toggle {
@@ -555,60 +554,9 @@
   flex-shrink: 0;
 }
 
-/* Right-click: field move vs debug */
-.play-pointer-mode-bar {
-  display: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-body.play-mode-active .character-selector .play-pointer-mode-bar {
-  display: flex;
-}
-
-body.play-mode-active .character-selector.character-selector--minimal .play-pointer-mode-bar {
-  display: none;
-}
-
-/* Minimal layout: hide species search and right-click mode bar */
+/* Minimal layout: hide species search */
 .character-selector--minimal .search-container {
   display: none;
-}
-
-.play-pointer-mode-bar__label {
-  opacity: 0.6;
-  margin-right: 2px;
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  letter-spacing: 0.05em;
-}
-
-.play-pointer-mode-bar__opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  transition: background 0.15s ease;
-}
-
-.play-pointer-mode-bar__opt:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.play-pointer-mode-bar__opt input {
-  accent-color: #E60012; /* Nintendo Red */
-  transform: scale(1.1);
 }
 
 .player-moves-box {
