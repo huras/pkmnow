@@ -20,6 +20,18 @@ export const WILD_MAX_SIMULTANEOUS_SLOTS = 15;
 export const WILD_MIN_INTER_GROUP_CENTER_DIST = 0;
 
 /**
+ * Half-size in macro tiles of the wild slot window around the player (keep in sync with `buildWildNeededSlotKeys` R=2).
+ */
+export const WILD_ENCOUNTER_WINDOW_MACRO_R = 2;
+
+/**
+ * How encounter **pool indices** are deduped while filling wild slots in `syncWildPokemonWindow`.
+ * - `'macro'`: per `(biomeId, macroX, macroY)` — same index can repeat in neighboring cells (original).
+ * - `'near_player'`: one set per `biomeId` for the whole window around the player — fewer duplicate lines on screen.
+ */
+export const WILD_ENCOUNTER_PICK_SCOPE = 'near_player';
+
+/**
  * Max wander distance from each slot's center in micro tiles (tune down when {@link WILD_MACRO_SUBDIVISION} is large).
  */
 export const WILD_WANDER_RADIUS_TILES = 25;
