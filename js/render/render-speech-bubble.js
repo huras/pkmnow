@@ -43,7 +43,7 @@ export function drawWildSpeechBubbleOverlay(ctx, em, spawnYOffset, imageCache, t
   const tipY = snapPx(spriteTopY - tileH * 0.02);
 
   const scaleT = tileW / 32;
-  const fontPx = Math.max(11, Math.round(tileH * 0.13));
+  const fontPx = Math.max(15, Math.round(tileH * 0.19));
   const emojiPx = Math.round(fontPx * 1.22);
   const itemPx = Math.round(fontPx * 2.0);
   const monPx = Math.round(fontPx * 2.35);

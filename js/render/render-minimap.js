@@ -265,7 +265,7 @@ function rebuildBase(w, h, data, zoom) {
   // Cities / Gyms
   if (graph && graph.nodes && graph.nodes.length) {
     const r = Math.max(2.5, tileW * 0.8);
-    const fontSize = Math.max(6, Math.min(10, tileW * 1.1));
+    const fontSize = Math.max(8, Math.min(15, tileW * 1.35));
     ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -900,7 +900,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
     if (speciesHidden && !unknownImg?.naturalWidth) {
       const qx = sx + markerR * 0.55;
       const qy = sy + markerR * 0.55;
-      const qSize = Math.max(7, markerR * 1.05);
+      const qSize = Math.max(10, markerR * 1.22);
       ctx.font = `700 ${qSize}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

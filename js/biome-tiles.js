@@ -74,7 +74,7 @@ const _BIOME_VEGETATION = {
     'large-palm-with-bananas [3x3]',
     'palm-tree [2x2]',
     'vine [2x1]',
-    'fern [1x1]',
+    'jungly tall grass [2x1]',
     'berry-tree-nanab [1x1]',
     'berry-tree-wepear [1x1]',
     'berry-tree-pinap [1x1]',
@@ -119,14 +119,14 @@ const _BIOME_VEGETATION = {
   ],
   [BIOMES.CITY.id]: ['white-daisy [1x1]', 'blue-daisy [1x1]', 'pink-daisy [1x1]', 'small-grass [1x1]'],
   [BIOMES.CITY_STREET.id]: [],
-  [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'fern [1x1]'],
+  [BIOMES.TOWN.id]: ['yellow-lily [1x1]', 'red-daisy [1x1]', 'dirt-rock [1x1]', 'jungly tall grass [2x1]'],
   [BIOMES.TOWN_STREET.id]: [],
   [BIOMES.ARCANE.id]: ['large-purple-crystal [2x2]', 'small-purple-crystal [1x1]', 'large-light-blue-crystal [2x2]', 'small-light-blue-crystal [1x1]'],
   [BIOMES.GHOST_WOODS.id]: [
     'large-red-broadleaf-1 [4x3]', 'large-orange-broadleaf-1 [4x3]', 'large-yellow-broadleaf-1 [4x3]',
     'red-broadleaf-1 [3x2]', 'orange-broadleaf-1 [3x2]', 'yellow-broadleaf-1 [3x2]',
     'red-broadleaf-2 [3x2]', 'orange-broadleaf-2 [3x2]', 'yellow-broadleaf-2 [3x2]',
-    'fern [1x1]', 'mushroom-1 [1x1]'
+    'jungly tall grass [2x1]', 'mushroom-1 [1x1]'
   ],
   [BIOMES.TUNDRA.id]: [
     'blue-lily [1x1]', 'purple-lily [1x1]', 'blue-daisy [1x1]', 
@@ -208,6 +208,7 @@ export function isSortableScatter(itemKey) {
     k.includes('pine') ||
     k.includes('savannah-tree') ||
     k.includes('dry-grass') ||
+    k.includes('jungly tall grass') ||
     k.includes('flower') ||
     k.includes('lily') ||
     k.includes('daisy') ||

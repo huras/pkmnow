@@ -16,6 +16,7 @@ import {
 import { playModerateSwordHitSfx } from '../audio/moderate-sword-hit-sfx.js';
 import { markWildMinimapSpeciesKnown } from './wild-minimap-species-known.js';
 import { rumblePlayerGamepadPokemonHitDealt } from '../main/play-gamepad-rumble.js';
+import { player } from '../player.js';
 
 const PLAYER_FIELD_MOVE_HIT_RADIUS = 1.55;
 const PLAYER_FIELD_MOVE_KNOCKBACK = 2.4;
@@ -207,7 +208,7 @@ export function applyPlayerTackleEffectOnWildFromPoint(entity, fromX, fromY) {
   const py = Number(fromY);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
   // Thrown-object hit path has no local `player` object; default attacker resolution treats this as player aggression.
-  if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE);
+  if (typeof entity.takeDamage === 'function') entity.takeDamage(PLAYER_TACKLE_WILD_DAMAGE, player);
   rumblePlayerGamepadPokemonHitDealt();
   setEmotion(entity, 5, false, 'Pain');
   applyWildKnockbackFromPoint(entity, px, py, PLAYER_TACKLE_WILD_KNOCKBACK);

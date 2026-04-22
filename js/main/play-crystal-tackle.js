@@ -1,5 +1,11 @@
 import { clearScatterSolidBlockCache } from '../scatter-pass2-debug.js';
-import { BIOME_VEGETATION, getTreeType, TREE_TILES, tileSurfaceAllowsScatterVegetation } from '../biome-tiles.js';
+import {
+  BIOME_VEGETATION,
+  BERRY_PATCH_THRESHOLD,
+  getTreeType,
+  TREE_TILES,
+  tileSurfaceAllowsScatterVegetation
+} from '../biome-tiles.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -1236,12 +1242,42 @@ export function strengthDropCarriedAsPickup(liftOx, liftOy, cols, rows, itemKey,
 /** Decorative grass scatter tiles only — skipped by Earthquake radial breaks. */
 function scatterItemKeyIsPureGrassDecoration(itemKey) {
   const k = String(itemKey || '').toLowerCase();
+  // "jungly tall grass" is breakable decoration (same gameplay family as vine/flowers),
+  // not ambient pure-grass filler that Earthquake skips.
+  if (k.includes('jungly tall grass')) return false;
   return (
     k.includes('grass [1x1]') ||
     k.includes('small-grass') ||
     k.includes('sand-grass') ||
     k.includes('snow-grass')
   );
+}
+
+/**
+ * Same procedural scatter pick as `scatterPhysicsCircleAtOrigin` / static-entity-cache:
+ * override (if any) + berry-patch filter + `seed + 222` index into filtered list.
+ * Tackle/Cut must use this — not the raw `BIOME_VEGETATION` list — or hits miss what is drawn.
+ * @param {number} ox
+ * @param {number} oy
+ * @param {object | null | undefined} tile
+ * @param {number} seed
+ * @returns {string | null}
+ */
+function scatterProceduralItemKeyAtOrigin(ox, oy, tile, seed) {
+  if (!tile) return null;
+  if (hasScatterItemKeyOverride(ox, oy)) {
+    const forced = getScatterItemKeyOverride(ox, oy);
+    if (forced && forced !== SCATTER_ITEM_KEY_OVERRIDE_EMPTY) return forced;
+  }
+  const itemsO = BIOME_VEGETATION[tile.biomeId] || [];
+  if (!itemsO.length) return null;
+  const isBerryPatchO = tile.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
+  const filteredO = itemsO.filter((ik) => {
+    const isB = ik.includes('berry-tree-');
+    return isBerryPatchO ? isB : !isB;
+  });
+  if (!filteredO.length) return null;
+  return filteredO[Math.floor(seededHash(ox, oy, seed + 222) * filteredO.length)];
 }
 
 function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
@@ -1794,10 +1830,8 @@ function collectDetailHitsInDisk(px, py, radiusTiles, data, opts) {
       if (!validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)) {
         continue;
       }
-      const items = BIOME_VEGETATION[oTile.biomeId] || [];
-      if (!items.length) continue;
-      const itemKey = items[Math.floor(seededHash(ox, oy, seed + 222) * items.length)];
-      if (scatterItemKeyIsSolid(itemKey)) continue;
+      const itemKey = scatterProceduralItemKeyAtOrigin(ox, oy, oTile, seed);
+      if (!itemKey || scatterItemKeyIsSolid(itemKey)) continue;
       const objSet = OBJECT_SETS[itemKey];
       if (!objSet) continue;
       const shape = parseShape(objSet.shape);
@@ -1975,10 +2009,8 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         ) {
           continue;
         }
-        const items = BIOME_VEGETATION[oTile.biomeId] || [];
-        if (!items.length) continue;
-        const itemKey = items[Math.floor(seededHash(ox, oy, seed + 222) * items.length)];
-        if (scatterItemKeyIsSolid(itemKey)) continue;
+        const itemKey = scatterProceduralItemKeyAtOrigin(ox, oy, oTile, seed);
+        if (!itemKey || scatterItemKeyIsSolid(itemKey)) continue;
         const objSet = OBJECT_SETS[itemKey];
         if (!objSet) continue;
         const shape = parseShape(objSet.shape);
