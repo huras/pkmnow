@@ -16,7 +16,17 @@ import {
   syncEntityZWithTerrain
 } from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
-import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
+import {
+  WILD_WANDER_RADIUS_TILES,
+  WILD_WAR_FLANK_RADIUS_BASE,
+  WILD_WAR_FLANK_RADIUS_ALT,
+  WILD_WAR_FLANK_ANGLE_JITTER_RAD,
+  WILD_WAR_ORBIT_SPEED_RAD_PER_SEC,
+  WILD_WAR_REPATH_MIN_SEC,
+  WILD_WAR_REPATH_MAX_SEC,
+  WILD_WAR_FLANK_REACH_EPS,
+  WILD_WAR_ATTACK_EXTRA_DIST
+} from './wild-pokemon-constants.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
 import {
   defaultPortraitSlugForBalloon,
@@ -61,6 +71,7 @@ const WILD_VISION_RANGE_BASE_MULT = 1.45;
 const WILD_VISION_RANGE_MIN_TILES = 8.5;
 const WILD_STALL_PROGRESS_THRESHOLD = 0.015;
 const WILD_STALL_ABANDON_SEC = 0.9;
+const EXPLORE_PHASE_WALK_SPEED_MULT = 0.5;
 
 export function ensureWildPhysicsState(entity) {
   if (entity.z == null) entity.z = 0;
@@ -138,6 +149,11 @@ function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX
     }
   }
   return false;
+}
+
+function getWildWanderWalkSpeed(entity) {
+  const isExplorePhase = entity?.groupPhase === 'EXPLORE';
+  return WORLD_MAX_WALK_SPEED_TILES_PER_SEC * (isExplorePhase ? EXPLORE_PHASE_WALK_SPEED_MULT : 1);
 }
 
 export function integrateWildPokemonVertical(entity, dt) {
@@ -541,6 +557,47 @@ const FOLLOW_PLAYER_AFFINITY_EXIT  = 1.0;   // drop below this → stop followin
 const FOLLOW_PLAYER_STOP_DIST      = 2.2;   // tiles – stop walking when this close
 const FOLLOW_PLAYER_WALK_SPEED     = 1.6;   // tiles/sec when following
 
+function ensureWarIndividualState(entity) {
+  if (entity._warFlankAngleOffset == null) {
+    entity._warFlankAngleOffset = (Math.random() * 2 - 1) * WILD_WAR_FLANK_ANGLE_JITTER_RAD;
+  }
+  if (entity._warOrbitPhase == null) {
+    entity._warOrbitPhase = Math.random() * Math.PI * 2;
+  }
+  if (entity._warOrbitDir == null) {
+    entity._warOrbitDir = Math.random() < 0.5 ? -1 : 1;
+  }
+  if (entity._warFlankRetargetSec == null) {
+    entity._warFlankRetargetSec = 0;
+  }
+}
+
+function resolveGroupWarFlankTarget(entity, threatX, threatY, stopDist, dt) {
+  ensureWarIndividualState(entity);
+  entity._warOrbitPhase += (Number(dt) || 0) * WILD_WAR_ORBIT_SPEED_RAD_PER_SEC * (entity._warOrbitDir || 1);
+  entity._warFlankRetargetSec = Math.max(0, (Number(entity._warFlankRetargetSec) || 0) - (Number(dt) || 0));
+  if ((entity._warFlankRetargetSec || 0) <= 0) {
+    const drift = (Math.random() * 2 - 1) * WILD_WAR_FLANK_ANGLE_JITTER_RAD;
+    entity._warFlankAngleOffset = Number(entity._warFlankAngleOffset || 0) * 0.68 + drift * 0.32;
+    entity._warFlankRetargetSec =
+      WILD_WAR_REPATH_MIN_SEC + Math.random() * Math.max(0.01, WILD_WAR_REPATH_MAX_SEC - WILD_WAR_REPATH_MIN_SEC);
+  }
+
+  const hasGroup = !!entity?.groupId;
+  const sizeRaw = Number(entity?.groupSize);
+  const groupSize = hasGroup && Number.isFinite(sizeRaw) ? Math.max(1, Math.floor(sizeRaw)) : 1;
+  const slotRaw = Number(entity?.groupMemberIndex);
+  const slotIdx = Number.isFinite(slotRaw) ? Math.max(0, Math.floor(slotRaw)) : 0;
+  const ringRadiusBase = Math.max(stopDist + WILD_WAR_FLANK_RADIUS_BASE, 1.05);
+  const ringRadius = ringRadiusBase + (slotIdx % 2) * WILD_WAR_FLANK_RADIUS_ALT;
+  const baseAng = groupSize <= 1 ? 0 : (slotIdx / groupSize) * Math.PI * 2;
+  const ang = baseAng + (Number(entity._warFlankAngleOffset) || 0) + Number(entity._warOrbitPhase || 0) * 0.52;
+  return {
+    x: threatX + Math.cos(ang) * ringRadius,
+    y: threatY + Math.sin(ang) * ringRadius
+  };
+}
+
 export function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
   scenarioOrchestrator.update(dt);
@@ -590,6 +647,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if ((entity.groupCohesionSec || 0) > 0) {
     entity.groupCohesionSec = Math.max(0, (entity.groupCohesionSec || 0) - dt);
   }
+  groupBehavior.tickWildGroupWarState(entity, entitiesByKey, dt);
   const effectiveAlertRadius = Math.max(
     WILD_VISION_RANGE_MIN_TILES,
     (beh.alertRadius || 0) * WILD_VISION_RANGE_BASE_MULT +
@@ -598,8 +656,16 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   const dxP = entity.x - playerX;
   const dyP = entity.y - playerY;
   const distP = Math.hypot(dxP, dyP);
+  const groupWarTarget = groupBehavior.resolveWildGroupWarTarget(entity, entitiesByKey, playerX, playerY);
+  const hasGroupWarTarget = !!groupWarTarget;
+  const threatX = hasGroupWarTarget ? groupWarTarget.x : playerX;
+  const threatY = hasGroupWarTarget ? groupWarTarget.y : playerY;
+  const dxThreat = entity.x - threatX;
+  const dyThreat = entity.y - threatY;
+  const distThreat = Math.hypot(dxThreat, dyThreat);
+  const stopDist = beh.stopDist ?? 1.2;
   const groupFollowEarly = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
-  const followerTeamMode = !!groupFollowEarly && !groupFollowEarly.isLeader;
+  const followerTeamMode = !hasGroupWarTarget && !!groupFollowEarly && !groupFollowEarly.isLeader;
   const envDanger = sampleWorldDangerScore(entity.x, entity.y, data);
   const envEscapeAng = envDanger > 0.35 ? sampleWorldDangerEscapeAngle(entity.x, entity.y, data) : null;
 
@@ -651,12 +717,42 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   const playerThreatInRange =
-    distP < effectiveAlertRadius || !!entity.wildGrassHostileDeathBattle;
+    hasGroupWarTarget || distP < effectiveAlertRadius || !!entity.wildGrassHostileDeathBattle;
   const environmentalThreatInRange = !followerTeamMode && envDanger > 0.62;
   const isFollowingPlayer = entity.aiState === 'follow_player';
 
   if ((playerThreatInRange || environmentalThreatInRange) && !isFollowingPlayer) {
-    if (followerTeamMode) {
+    if (hasGroupWarTarget) {
+      entity.aiState = 'approach';
+      const flank = resolveGroupWarFlankTarget(entity, threatX, threatY, stopDist, dt);
+      const dxFlank = flank.x - entity.x;
+      const dyFlank = flank.y - entity.y;
+      const distFlank = Math.hypot(dxFlank, dyFlank);
+      const canSwing = distThreat <= stopDist + WILD_WAR_ATTACK_EXTRA_DIST;
+      if (distFlank > WILD_WAR_FLANK_REACH_EPS) {
+        const approachAng = Math.atan2(dyFlank, dxFlank);
+        steerTowardAngle(
+          entity,
+          approachAng,
+          WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+          data,
+          wildIsAirborne(entity),
+          false
+        );
+        if (canSwing) {
+          tryCastWildMove(entity, threatX, threatY, dt, groupWarTarget.entity || null, true);
+        }
+      } else {
+        if (!canSwing) {
+          entity.vx = 0;
+          entity.vy = 0;
+        }
+        tryCastWildMove(entity, threatX, threatY, dt, groupWarTarget.entity || null, true);
+      }
+      entity.wanderTimer = 0;
+      entity.idlePauseTimer = 0;
+      entity.targetX = null;
+    } else if (followerTeamMode) {
       // Followers stay in team-follow mode and do not run independent player reaction states.
       entity.aiState = 'wander';
       entity.alertTimer = 0;
@@ -685,7 +781,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.targetX = null;
     } else if (beh.archetype === 'timid' || beh.archetype === 'skittish') {
       entity.aiState = 'flee';
-      let fleeAng = playerThreatInRange ? Math.atan2(dyP, dxP) : envEscapeAng ?? Math.atan2(dyP, dxP);
+      let fleeAng = playerThreatInRange ? Math.atan2(dyThreat, dxThreat) : envEscapeAng ?? Math.atan2(dyThreat, dxThreat);
       
       const isFlocking = (Number(entity.groupCohesionSec) || 0) > 1000;
       if (isFlocking && entity.groupId) {
@@ -706,8 +802,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.targetX = null;
     } else if (beh.archetype === 'aggressive') {
       entity.aiState = 'approach';
-      if (distP > beh.stopDist) {
-        const approachAng = Math.atan2(-dyP, -dxP);
+      if (distP > stopDist) {
+        const approachAng = Math.atan2(-dyThreat, -dxThreat);
         // Match normal wild wander walk speed (same cap as player-aligned roaming).
         steerTowardAngle(
           entity,
@@ -720,7 +816,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       } else {
         entity.vx = 0;
         entity.vy = 0;
-        tryCastWildMove(entity, playerX, playerY, dt);
+        tryCastWildMove(entity, threatX, threatY, dt, null);
       }
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;
@@ -736,6 +832,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       }
     }
   } else if (
+    !hasGroupWarTarget &&
     distP >= effectiveAlertRadius * 1.5 &&
     envDanger < 0.28 &&
     entity.aiState !== 'sleep' &&
@@ -781,7 +878,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         }
       }
     }
-    const ang = Math.atan2(-dyP, -dxP);
+    const ang = Math.atan2(-dyThreat, -dxThreat);
     entity.facing = getFacingFromAngle(ang);
     entity.animMoving = false;
     return;
@@ -985,19 +1082,20 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
 
     moveAng = Math.atan2(combinedNy, combinedNx);
 
+    const wanderWalkSpeed = getWildWanderWalkSpeed(entity);
     if (followerMode) {
       // Followers always use the simple sweep to stay agile
       steerFollowerSimple(
         entity,
         moveAng,
-        WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+        wanderWalkSpeed,
         data,
         wildIsAirborne(entity),
         entity.targetX,
         entity.targetY
       );
     } else {
-      steerTowardAngle(entity, moveAng, WORLD_MAX_WALK_SPEED_TILES_PER_SEC, data, wildIsAirborne(entity), false);
+      steerTowardAngle(entity, moveAng, wanderWalkSpeed, data, wildIsAirborne(entity), false);
     }
 
     // Leader logic for triggering Scenic Scenarios
@@ -1065,9 +1163,9 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   }
 
   applyWildTreeTrunkResolution(entity, data);
-  enforceFollowerLeaderMaxDistance(entity, data);
+  if (!hasGroupWarTarget) enforceFollowerLeaderMaxDistance(entity, data);
 
-  if (!followerTeamMode && !entity.wildGrassHostileDeathBattle) {
+  if (!hasGroupWarTarget && !followerTeamMode && !entity.wildGrassHostileDeathBattle) {
     const dx = entity.x - entity.centerX;
     const dy = entity.y - entity.centerY;
     const dist = Math.hypot(dx, dy);
@@ -1122,16 +1220,16 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     !!entity.grounded && !wildIsAirborne(entity) && !(isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving);
   advanceFootFloorStepsForDistance(entity, wildMovedTiles, wantWildFootFloor, entity);
 
-  if (entity.aiState === 'approach' && distP <= beh.stopDist) {
-    const ang = Math.atan2(-dyP, -dxP);
+  if (entity.aiState === 'approach' && distThreat <= stopDist) {
+    const ang = Math.atan2(-dyThreat, -dxThreat);
     entity.facing = getFacingFromAngle(ang);
   } else if (spd > 0.06) {
     const ang = Math.atan2(entity.vy, entity.vx);
     entity.facing = getFacingFromAngle(ang);
   } else if (entity.aiState === 'flee') {
-    entity.facing = getFacingFromAngle(Math.atan2(dyP, dxP));
-  } else if (entity.aiState === 'approach' && distP > beh.stopDist) {
-    entity.facing = getFacingFromAngle(Math.atan2(-dyP, -dxP));
+    entity.facing = getFacingFromAngle(Math.atan2(dyThreat, dxThreat));
+  } else if (entity.aiState === 'approach' && distThreat > stopDist) {
+    entity.facing = getFacingFromAngle(Math.atan2(-dyThreat, -dxThreat));
   }
 }
 

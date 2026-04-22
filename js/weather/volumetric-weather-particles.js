@@ -8,6 +8,7 @@ import { getWindVelocityTilesPerSec, WIND_CLOUD_BLEND_BASELINE_DIR_RAD } from '.
 import {
   getWeatherSurfaceMaterialCached,
   WEATHER_SURFACE_HARD,
+  WEATHER_SURFACE_NEUTRAL,
   worldPixelToMicroTile
 } from './weather-surface-material.js';
 import { getLastRenderFrameBreakdown } from '../render/render-frame-phases.js';
@@ -18,7 +19,7 @@ import { imageCache } from '../image-cache.js';
 // --- Constants & Config ---
 const MAX_PART = 2000; // Increased for high-performance demo
 const MAX_SPL = 300;
-const MAX_RING = 250;  // Expanding ground ripples
+const MAX_RING = 640;  // Expanding ground ripples (high-capacity pool for heavy rain)
 const Z_LAYERS = 3;    // Background, Midground, Foreground
 
 /** 
@@ -34,6 +35,10 @@ let rings = [];
 const surfaceFrameCache = new Map();
 let lastSimTimeSec = -1;
 let fogTexture = null;
+
+function snapStrokePx(v) {
+  return Math.round(Number(v) || 0) + 0.5;
+}
 
 // --- Initialization ---
 
@@ -142,16 +147,89 @@ function spawnSplash(px, py, splashBias01, tw) {
   s.alpha = 0.6 + 0.4 * b;
 }
 
-function spawnGroundRing(px, py, tw) {
+function spawnGroundRing(px, py, tw, jitterPx = 0) {
   const r = allocRing();
   if (!r) return;
+  const ang = Math.random() * Math.PI * 2;
+  const jr = Math.random() * Math.max(0, jitterPx);
   r.alive = 1;
-  r.x = px;
-  r.y = py;
-  r.life = 0.4 + Math.random() * 0.3;
-  r.r = 1.5;
-  r.maxR = (6 + 8 * Math.random()) * (tw / 32);
-  r.alpha = 0.4 + 0.3 * Math.random();
+  r.x = snapStrokePx(px + Math.cos(ang) * jr);
+  r.y = snapStrokePx(py + Math.sin(ang) * jr);
+  r.life = 0.22 + Math.random() * 0.26;
+  r.r = 1.1 + Math.random() * 0.7;
+  r.maxR = (4 + 8 * Math.random()) * (tw / 32);
+  r.alpha = 0.4 + 0.5 * Math.random();
+}
+
+function spawnRainGroundRings(px, py, tw, rainCh, splashBias01, qMul) {
+  // Heavy rain should feel denser on the ground, but quality scaling keeps it cheap under load.
+  const rainI = Math.max(0, Math.min(1, Number(rainCh) || 0));
+  const splashI = Math.max(0, Math.min(1, Number(splashBias01) || 0));
+  const qual = Math.max(0.35, Math.min(1, Number(qMul) || 1));
+  const expected =
+    (0.18 + 1.65 * rainI) *
+    (0.55 + 0.45 * splashI) *
+    qual;
+  let count = Math.floor(expected);
+  if (Math.random() < expected - count) count++;
+  if (count < 1) return;
+  if (count > 3) count = 3;
+  const jitterPx = Math.max(1, tw * 0.24);
+  for (let i = 0; i < count; i++) {
+    spawnGroundRing(px, py, tw, jitterPx);
+  }
+}
+
+function spawnAmbientRainGroundRings(
+  wx0,
+  wy0,
+  worldW,
+  worldH,
+  tw,
+  th,
+  dt,
+  rainCh,
+  splashBias01,
+  qMul,
+  macroData,
+  surfaceFrameCache
+) {
+  const rainI = Math.max(0, Math.min(1, Number(rainCh) || 0));
+  if (rainI < 0.02) return;
+  const rainBoost = Math.sqrt(rainI);
+  const splashI = Math.max(0, Math.min(1, Number(splashBias01) || 0));
+  const qual = Math.max(0.35, Math.min(1, Number(qMul) || 1));
+  const dtSec = Math.max(0, Math.min(0.12, Number(dt) || 0));
+  if (dtSec <= 0) return;
+  // Camera-size normalization keeps cadence similar across view scales.
+  const viewAreaNorm = Math.max(0.55, Math.min(1.75, (worldW * worldH) / (1280 * 720)));
+  const ringsPerSec =
+    (220 + 980 * rainBoost) *
+    (0.72 + 0.28 * splashI) *
+    qual *
+    viewAreaNorm;
+  const expected = ringsPerSec * dtSec;
+  let count = Math.floor(expected);
+  if (Math.random() < expected - count) count++;
+  if (count < 1) return;
+  if (count > 160) count = 160;
+  if (!macroData) return;
+  const minMx = Math.floor(wx0 / tw);
+  const maxMx = Math.max(minMx, Math.ceil((wx0 + worldW) / tw) - 1);
+  const minMy = Math.floor(wy0 / th);
+  const maxMy = Math.max(minMy, Math.ceil((wy0 + worldH) / th) - 1);
+  const spanMx = Math.max(1, maxMx - minMx + 1);
+  const spanMy = Math.max(1, maxMy - minMy + 1);
+  const jitterPx = Math.max(1, tw * 0.2);
+  for (let i = 0; i < count; i++) {
+    const mx = minMx + ((Math.random() * spanMx) | 0);
+    const my = minMy + ((Math.random() * spanMy) | 0);
+    // Anchor to the tile's floor line so rings stay glued to the ground plane even during jump camera motion.
+    const px = (mx + 0.14 + Math.random() * 0.72) * tw;
+    const py = (my + 1) * th;
+    // Ambient fake should be visible on any terrain type; precision is intentionally low-cost.
+    spawnGroundRing(px, py, tw, jitterPx);
+  }
 }
 
 // --- Main Loop & Draw ---
@@ -292,10 +370,8 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
            if (Math.random() < 0.4 * volumetricSplashBias) {
              spawnSplash(p.x, groundY, volumetricSplashBias, tw);
            }
-           // Ground rings (pingos) — always spawn some on hard surface when raining
-           if (Math.random() < 0.6) {
-             spawnGroundRing(p.x, groundY, tw);
-           }
+           // Ground rings (pingos) — denser in heavy rain, bounded for performance.
+           spawnRainGroundRings(p.x, groundY, tw, rainCh, volumetricSplashBias, qMul);
         }
       }
       p.alive = 0;
@@ -330,6 +406,22 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
     r.r += (r.maxR - r.r) * 0.15;
     r.alpha *= 0.94;
   }
+
+  // Ambient "rain hitting ground" pass (cheap fake): does not require per-drop collision precision.
+  spawnAmbientRainGroundRings(
+    wx0,
+    wy0,
+    worldW,
+    worldH,
+    tw,
+    th,
+    dt,
+    rainCh,
+    volumetricSplashBias,
+    qMul,
+    macroData,
+    surfaceFrameCache
+  );
 
   // --- RENDERING ---
   ctx.save();
@@ -427,17 +519,28 @@ export function updateAndDrawVolumetricWeatherParticles(ctx, opts) {
   ctx.fillStyle = 'rgba(200, 230, 255, 0.3)';
   ctx.fill();
 
-  // 4. Ground Rings (Pingos)
+  // 4. Ground Rings (Pingos) batched by alpha bands to keep draw calls low.
   ctx.globalCompositeOperation = 'lighter';
+  const ringAlphaBands = [0.16, 0.25, 0.26, 0.48];
+  const ringBandPaths = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
   for (let i = 0; i < MAX_RING; i++) {
     const r = rings[i];
     if (!r.alive) continue;
-    ctx.beginPath();
-    ctx.globalAlpha = r.alpha;
-    ctx.strokeStyle = 'rgba(210, 235, 255, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
-    ctx.stroke();
+    const rx = snapStrokePx(r.x);
+    const ry = snapStrokePx(r.y);
+    const rr = Math.max(0.8, Math.round(r.r * 2) / 2);
+    let band = 0;
+    if (r.alpha >= 0.62) band = 3;
+    else if (r.alpha >= 0.46) band = 2;
+    else if (r.alpha >= 0.3) band = 1;
+    ringBandPaths[band].moveTo(rx + rr, ry);
+    ringBandPaths[band].arc(rx, ry, rr, 0, Math.PI * 2);
+  }
+  ctx.lineWidth = 1;
+  for (let b = 0; b < ringBandPaths.length; b++) {
+    ctx.globalAlpha = ringAlphaBands[b];
+    ctx.strokeStyle = 'rgba(210, 235, 255, 0.95)';
+    ctx.stroke(ringBandPaths[b]);
   }
 
   ctx.restore();

@@ -160,10 +160,20 @@ button.btn-secondary {
   transition: all 0.2s;
 }
 
+#btnInfiniteLifeToggle {
+  margin-left: 0;
+}
+
 button.btn-secondary:hover {
   background: #2a2a32;
   border-color: var(--accent);
   color: var(--accent);
+}
+
+button.btn-secondary.is-active {
+  border-color: #8de38f;
+  color: #c7ffd0;
+  background: rgba(28, 98, 42, 0.34);
 }
 
 #hud-info {
@@ -1887,8 +1897,8 @@ button.btn-secondary:hover {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(920px, 100%);
-  max-height: min(88vh, 720px);
+  width: min(1320px, 96vw);
+  max-height: min(92vh, 860px);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: linear-gradient(165deg, rgba(22, 24, 32, 0.98) 0%, rgba(10, 11, 16, 0.99) 100%);
@@ -1950,7 +1960,7 @@ button.btn-secondary:hover {
 
 .play-help-wiki__body {
   display: grid;
-  grid-template-columns: minmax(140px, 200px) 1fr;
+  grid-template-columns: minmax(180px, 240px) 1fr;
   gap: 0;
   min-height: 0;
   flex: 1 1 auto;
@@ -2024,7 +2034,7 @@ button.btn-secondary:hover {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  max-width: 76ch;
+  max-width: min(150ch, 100%);
   margin: 0 auto;
   font-family: Inter, system-ui, sans-serif;
   font-size: 0.88rem;
@@ -2125,6 +2135,302 @@ button.btn-secondary:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.82em;
   color: #fff8dc;
+}
+
+.play-help-biomes__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.play-help-biomes__card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 110% at 8% -12%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(160deg, rgba(28, 35, 54, 0.9), rgba(20, 25, 40, 0.84));
+  box-shadow:
+    0 12px 24px rgba(4, 8, 14, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 12px 12px 10px;
+  transition: transform 140ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.play-help-biomes__card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow:
+    0 16px 30px rgba(4, 8, 14, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.play-help-biomes__card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.play-help-biomes__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--biome-color, #6b7a99);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+.play-help-biomes__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.play-help-biomes__name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff6d2;
+  letter-spacing: 0.02em;
+}
+
+.play-help-biomes__id {
+  font-size: 0.73rem;
+  color: rgba(229, 236, 255, 0.95);
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.play-help-biomes__category {
+  font-size: 0.7rem;
+  color: rgba(234, 246, 255, 0.95);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(136, 187, 255, 0.45);
+  background: linear-gradient(135deg, rgba(98, 137, 208, 0.36), rgba(93, 126, 179, 0.14));
+}
+
+.play-help-biomes__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.play-help-biomes__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 2px 7px;
+  font-size: 0.71rem;
+  border-radius: 999px;
+  color: rgba(229, 237, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.play-help-biomes__metric strong {
+  color: #fff8dc;
+  font-size: 0.75rem;
+}
+
+.play-help-biomes__terrain-preview-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.play-help-biomes__terrain-preview-box {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px;
+}
+
+.play-help-biomes__terrain-preview-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(199, 214, 255, 0.9);
+  margin-bottom: 5px;
+}
+
+.play-help-biomes__terrain-preview-canvas {
+  width: 100%;
+  height: auto;
+  max-width: 112px;
+  image-rendering: pixelated;
+  display: block;
+  margin: 0 auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 11, 16, 0.7);
+}
+
+.play-help-biomes__terrain-preview-empty {
+  height: 112px;
+  display: grid;
+  place-items: center;
+  font-size: 0.74rem;
+  color: rgba(210, 220, 240, 0.7);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(10, 14, 20, 0.55);
+}
+
+.play-help-biomes__terrain-preview-footer {
+  margin-top: 5px;
+  font-size: 0.68rem;
+  color: rgba(228, 236, 252, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.play-help-biomes__facts {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.play-help-biomes__fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.play-help-biomes__fact-label {
+  font-size: 0.76rem;
+  color: rgba(196, 212, 255, 0.9);
+}
+
+.play-help-biomes__fact-value {
+  font-size: 0.76rem;
+  color: rgba(245, 248, 255, 0.98);
+  text-align: right;
+}
+
+.play-help-biomes__group {
+  margin-top: 8px;
+}
+
+.play-help-biomes__group-title {
+  margin: 0 0 5px;
+  font-size: 0.75rem;
+  color: rgba(199, 214, 255, 0.92);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.play-help-biomes__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.play-help-biomes__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(236, 242, 255, 0.98);
+  font-size: 0.73rem;
+  line-height: 1.15;
+}
+
+.play-help-biomes__chip--object {
+  background: rgba(111, 174, 121, 0.18);
+}
+
+.play-help-biomes__chips--object-sprites {
+  gap: 6px;
+}
+
+.play-help-biomes__chip--object-sprite {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(165deg, rgba(102, 150, 108, 0.3), rgba(75, 116, 82, 0.16));
+}
+
+.play-help-biomes__object-sprite {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+.play-help-biomes__chip--tree {
+  background: rgba(117, 88, 61, 0.24);
+}
+
+.play-help-biomes__chip--param {
+  background: rgba(95, 131, 199, 0.2);
+}
+
+.play-help-biomes__chip--pokemon {
+  background: rgba(177, 100, 158, 0.2);
+}
+
+.play-help-biomes__chips--pokemon-faces {
+  gap: 6px;
+}
+
+.play-help-biomes__chip--pokemon-face {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(165deg, rgba(150, 94, 167, 0.34), rgba(120, 73, 136, 0.18));
+}
+
+.play-help-biomes__pokemon-face {
+  width: 30px;
+  height: 30px;
+  image-rendering: pixelated;
+  object-fit: contain;
+  border-radius: 8px;
+  background: radial-gradient(circle at 45% 30%, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.05) 60%);
+}
+
+.play-help-biomes__chip--empty {
+  opacity: 0.72;
+  font-style: italic;
+}
+
+.play-help-biomes__chip--more {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+@media (max-width: 940px) {
+  .play-help-biomes__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .play-help-biomes__terrain-preview-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 body.play-help-wiki-open {

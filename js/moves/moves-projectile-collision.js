@@ -223,7 +223,7 @@ export function applySplashToWild(proj, wildList, splashAbsZ, wildSpatial = null
     if (wild === proj.sourceEntity) return;
     if (Math.hypot(hx - proj.x, hy - proj.y) > r) return;
     if (!projectileZInPokemonHurtbox(splashAbsZ, dex, z)) return;
-    if (wild.takeDamage) wild.takeDamage(d);
+    if (wild.takeDamage) wild.takeDamage(d, proj.sourceEntity || null);
   };
   if (wildSpatial) {
     queryWildSpatialIndexInAabb(wildSpatial, minX, minY, maxX, maxY, visit);

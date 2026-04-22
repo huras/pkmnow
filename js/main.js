@@ -13,7 +13,13 @@ import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
 import { imageCache } from './image-cache.js';
 import { BIOMES } from './biomes.js';
-import { player, setPlayerPos, showPlayerSocialEmotion } from './player.js';
+import {
+  player,
+  setPlayerPos,
+  showPlayerSocialEmotion,
+  isPlayerInfiniteLifeEnabled,
+  setPlayerInfiniteLifeEnabled
+} from './player.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
@@ -71,7 +77,10 @@ import { forceTriggerLightningNearPlayer } from './weather/lightning.js';
 import { installPlayPointerCombat } from './main/play-mouse-combat.js';
 import {
   clearPlayCrystalTackleState,
+  getInventoryScatterItemFootprint,
   placeInventoryItemAsScatterDetailNear,
+  resolveGroundDropItemKeyForToken,
+  resolveInventoryScatterPlacementNear,
   refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './main/play-crystal-tackle.js';
@@ -472,6 +481,7 @@ wireMinimapLanguageSelect();
 syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
+const btnInfiniteLifeToggle = document.getElementById('btnInfiniteLifeToggle');
 const infoBar = document.getElementById('hud-info');
 const btnExport = document.getElementById('exportBtn');
 const btnImport = document.getElementById('importBtn');
@@ -523,6 +533,15 @@ if (playBgmNowPlayingEl) {
   playBgmNowPlayingEl.hidden = true;
   playBgmNowPlayingEl.style.display = 'none';
 }
+if (btnInfiniteLifeToggle instanceof HTMLButtonElement) {
+  btnInfiniteLifeToggle.addEventListener('click', () => {
+    setPlayerInfiniteLifeEnabled(!isPlayerInfiniteLifeEnabled());
+    syncInfiniteLifeToggleUi();
+    playCharacterSelector?.updatePlayVitalsHud();
+    focusGameCanvas();
+  });
+}
+syncInfiniteLifeToggleUi();
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -1312,6 +1331,17 @@ function resetMinimapPlayFooter() {
   if (coordsEl) coordsEl.textContent = t('play.minimapCoordsEmpty');
 }
 
+function syncInfiniteLifeToggleUi() {
+  if (!(btnInfiniteLifeToggle instanceof HTMLButtonElement)) return;
+  const on = isPlayerInfiniteLifeEnabled();
+  btnInfiniteLifeToggle.textContent = on ? 'Infinite Life: ON' : 'Infinite Life: OFF';
+  btnInfiniteLifeToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btnInfiniteLifeToggle.classList.toggle('is-active', on);
+  btnInfiniteLifeToggle.title = on
+    ? 'Infinite life enabled. Click to allow HP loss.'
+    : 'Infinite life disabled. Click to become immortal.';
+}
+
 /** @param {boolean} [force] when true, skip throttle (e.g. keyboard) */
 function refreshPlayModeInfoBar(force = false) {
   if (!currentData || appMode !== 'play') return;
@@ -1766,7 +1796,7 @@ function updateView() {
   if (appMode === 'map') updateWorldMapCameraBounds();
   const settings = getSettings();
   if (currentData) {
-    render(canvas, currentData, { settings, hover });
+    render(canvas, currentData, { settings, hover, inventoryDropPreview: playInventoryDropPreview });
     renderMapOverlaySvg(mapOverlaySvg, currentData, {
       canvas,
       appMode,
@@ -1812,6 +1842,7 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     const nowMs = performance.now();
     if (nowMs - lastPlayAuxHudSyncAtMs < PLAY_AUX_HUD_SYNC_CADENCE_MS) return;
     lastPlayAuxHudSyncAtMs = nowMs;
+    playCharacterSelector?.updatePlayVitalsHud();
     playCharacterSelector?.updatePlayAltitudeHud(data);
     playCharacterSelector?.updatePlayMovesCooldownHud();
     playCharacterSelector?.updatePlayFieldMoveChargeHud();
@@ -2015,22 +2046,73 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 const PLAY_INVENTORY_DROP_PREFIX = 'pkmn-inventory-drop:';
+/** @type {{ worldX: number, worldY: number, ox: number, oy: number, cols: number, rows: number, itemKey?: string, canDrop: boolean } | null} */
+let playInventoryDropPreview = null;
+/** @type {string | null} */
+let activeInventoryHudDragToken = null;
+
+function clearPlayInventoryDropPreview() {
+  playInventoryDropPreview = null;
+}
+
+/**
+ * @param {DragEvent} e
+ * @returns {string | null}
+ */
+function getInventoryDropTokenFromDragEvent(e) {
+  const raw = e.dataTransfer?.getData('text/plain') || '';
+  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return null;
+  return raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+}
 
 canvas.addEventListener('dragover', (e) => {
   if (!currentData || appMode !== 'play') return;
   const types = e.dataTransfer?.types;
   if (!types || ![...types].includes('text/plain')) return;
+  // Allow drop even when browsers hide getData() during dragover.
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
+  const token = getInventoryDropTokenFromDragEvent(e) || activeInventoryHudDragToken;
+  if (!token) {
+    clearPlayInventoryDropPreview();
+    return;
+  }
+  const itemKey = resolveGroundDropItemKeyForToken(token);
+  const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
+  const { worldX, worldY } = playScreenPixelsToWorldTileCoords(
+    canvas.width,
+    canvas.height,
+    mousePxX,
+    mousePxY,
+    player
+  );
+  const candidate =
+    itemKey && currentData
+      ? resolveInventoryScatterPlacementNear(worldX, worldY, itemKey, currentData, 12)
+      : null;
+  const blockedFootprint = getInventoryScatterItemFootprint(itemKey || '');
+  playInventoryDropPreview = candidate
+    ? { worldX, worldY, ...candidate, canDrop: true }
+    : {
+        worldX,
+        worldY,
+        ox: Math.floor(worldX),
+        oy: Math.floor(worldY),
+        cols: Math.max(1, blockedFootprint?.cols || 1),
+        rows: Math.max(1, blockedFootprint?.rows || 1),
+        ...(itemKey ? { itemKey } : {}),
+        canDrop: false
+      };
 });
 
 canvas.addEventListener('drop', (e) => {
   if (!currentData || appMode !== 'play' || !canvas) return;
-  const raw = e.dataTransfer?.getData('text/plain') || '';
-  if (!raw.startsWith(PLAY_INVENTORY_DROP_PREFIX)) return;
+  const token = getInventoryDropTokenFromDragEvent(e) || activeInventoryHudDragToken;
+  if (!token) return;
   e.preventDefault();
   e.stopPropagation();
-  const token = raw.slice(PLAY_INVENTORY_DROP_PREFIX.length);
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
   const spent = trySpendOneInventoryUnitForGroundDrop(token);
   if (!spent?.itemKey) return;
   const { mousePxX, mousePxY } = clientToCanvasPixels(canvas, e.clientX, e.clientY);
@@ -2050,10 +2132,30 @@ canvas.addEventListener('drop', (e) => {
   focusGameCanvas();
 });
 
+canvas.addEventListener('dragleave', () => {
+  clearPlayInventoryDropPreview();
+});
+
+window.addEventListener('dragend', () => {
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
+});
+
+window.addEventListener('play-item-hud-drag-token', (ev) => {
+  const tokenRaw = String((/** @type {CustomEvent<{ token?: string }>} */ (ev)).detail?.token || '').trim();
+  activeInventoryHudDragToken = tokenRaw.length ? tokenRaw : null;
+});
+
+window.addEventListener('play-item-hud-drag-end', () => {
+  activeInventoryHudDragToken = null;
+  clearPlayInventoryDropPreview();
+});
+
 canvas.addEventListener('mouseleave', () => {
   if (appMode === 'play') {
     playInputState.mouseValid = false;
     invalidatePlayPointerHover();
+    clearPlayInventoryDropPreview();
   }
   if (currentData && appMode === 'map') updateView();
 });
@@ -2098,6 +2200,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
   invalidatePlayPointerHover();
+  clearPlayInventoryDropPreview();
   appMode = 'play';
   syncMapContinueButtonVisibility();
   btnExport?.classList.add('hidden');
@@ -2111,6 +2214,8 @@ function enterPlayMode(gx, gy, opts = {}) {
   if (infoBar) infoBar.innerHTML = '';
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = t('play.fpsPlaceholder');
+  syncInfiniteLifeToggleUi();
+  playCharacterSelector?.updatePlayVitalsHud();
 
   if (playWorldTimeRun) playWorldTimeRun.checked = worldTimeRunning;
   lastWorldTimePanelPhase = null;
@@ -2148,6 +2253,7 @@ btnBackToMap?.addEventListener('click', () => {
   clearPlayCrystalTackleState();
   clearPlayCameraSnapshot();
   playInputState.fieldChargeUiActive = null;
+  clearPlayInventoryDropPreview();
   appMode = 'map';
   syncMapContinueButtonVisibility();
   btnExport?.classList.remove('hidden');
@@ -2174,6 +2280,7 @@ btnBackToMap?.addEventListener('click', () => {
   dismissPlayBgmToast();
   if (playBgmNowPlayingTrackEl) playBgmNowPlayingTrackEl.textContent = '—';
   if (playBgmNowPlayingStatusEl) playBgmNowPlayingStatusEl.textContent = t('play.idle');
+  syncInfiniteLifeToggleUi();
   syncRegionViewShell();
   resizeCanvas();
   updateView();
@@ -2479,6 +2586,7 @@ loadTilesetImages().then(async () => {
   void playSocialOverlay.refreshPortraits(player.dexId);
   window.addEventListener('pkmn-player-species-changed', () => {
     void playSocialOverlay.refreshPortraits(player.dexId);
+    playCharacterSelector?.updatePlayVitalsHud();
   });
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);

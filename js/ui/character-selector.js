@@ -136,6 +136,10 @@ export class CharacterSelector {
     /** Item HUD: dimmed to 50% unless hovered, dragging from inventory, or post-pickup highlight. */
     this._playItemHudPointerInside = false;
     this._playItemHudInventoryDragActive = false;
+    /** @type {HTMLDivElement | null} */
+    this._playItemHudDragGhostEl = null;
+    /** @type {HTMLCanvasElement | null} */
+    this._playItemHudDragTransparentCanvas = null;
     this._playItemHudPickupOpaqueUntil = 0;
     /** @type {Map<string, number>} itemKey → expiry (ms); several keys can pop in parallel. */
     this._playItemPopUntilByKey = new Map();
@@ -159,7 +163,20 @@ export class CharacterSelector {
     this._onDocInventoryDragEnd = () => {
       if (!this._playItemHudInventoryDragActive) return;
       this._playItemHudInventoryDragActive = false;
+      this._setPlayItemHudDragGhostVisible(false);
+      this._clearPlayItemHudDragGhostContent();
+      window.dispatchEvent(new CustomEvent('play-item-hud-drag-end'));
       this._syncPlayItemHudOpacity();
+    };
+    /** @param {DragEvent} ev */
+    this._onDocInventoryDragOver = (ev) => {
+      if (!this._playItemHudInventoryDragActive) return;
+      this._setPlayItemHudDragGhostPosition(ev.clientX, ev.clientY);
+      const itemHud = this.container?.querySelector('#play-item-hud');
+      const target = ev.target;
+      const hoveringHud =
+        itemHud instanceof HTMLElement && target instanceof Node ? itemHud.contains(target) : false;
+      this._setPlayItemHudDragGhostVisible(hoveringHud);
     };
     this._onTogglePlayItemHud = () => {
       this.setPlayItemHudCollapsed(!this.playItemHudCollapsed);
@@ -202,6 +219,70 @@ export class CharacterSelector {
     syncSelectedFieldSkillForDex(player.dexId);
     syncSelectedSpecialAttackForDex(player.dexId);
     this.updatePreview().catch(() => {});
+  }
+
+  _ensurePlayItemHudDragGhost() {
+    if (this._playItemHudDragGhostEl instanceof HTMLDivElement) return this._playItemHudDragGhostEl;
+    const ghost = document.createElement('div');
+    ghost.setAttribute('aria-hidden', 'true');
+    Object.assign(ghost.style, {
+      position: 'fixed',
+      left: '0px',
+      top: '0px',
+      transform: 'translate(-9999px,-9999px)',
+      pointerEvents: 'none',
+      zIndex: '999999',
+      opacity: '0',
+      transition: 'opacity 60ms linear',
+      filter: 'drop-shadow(0 3px 9px rgba(0,0,0,0.38))'
+    });
+    document.body.appendChild(ghost);
+    this._playItemHudDragGhostEl = ghost;
+    return ghost;
+  }
+
+  _clearPlayItemHudDragGhostContent() {
+    const ghost = this._playItemHudDragGhostEl;
+    if (!ghost) return;
+    ghost.innerHTML = '';
+  }
+
+  _setPlayItemHudDragGhostVisible(on) {
+    const ghost = this._playItemHudDragGhostEl;
+    if (!ghost) return;
+    ghost.style.opacity = on ? '0.98' : '0';
+  }
+
+  _setPlayItemHudDragGhostPosition(clientX, clientY) {
+    const ghost = this._playItemHudDragGhostEl;
+    if (!ghost) return;
+    const x = Math.round((Number(clientX) || 0) + 14);
+    const y = Math.round((Number(clientY) || 0) + 14);
+    ghost.style.transform = `translate(${x}px,${y}px)`;
+  }
+
+  _mountPlayItemHudDragGhostFromRow(row) {
+    const ghost = this._ensurePlayItemHudDragGhost();
+    ghost.innerHTML = '';
+    const clone = row.cloneNode(true);
+    if (!(clone instanceof HTMLElement)) return;
+    clone.removeAttribute('draggable');
+    clone.classList.remove('play-item-hud__row--pop');
+    clone.style.margin = '0';
+    clone.style.width = `${Math.ceil(row.getBoundingClientRect().width)}px`;
+    clone.style.pointerEvents = 'none';
+    ghost.appendChild(clone);
+  }
+
+  _ensurePlayItemHudTransparentDragCanvas() {
+    if (this._playItemHudDragTransparentCanvas instanceof HTMLCanvasElement) {
+      return this._playItemHudDragTransparentCanvas;
+    }
+    const c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 1;
+    this._playItemHudDragTransparentCanvas = c;
+    return c;
   }
 
   /** @param {'full' | 'minimal'} mode */
@@ -277,6 +358,21 @@ export class CharacterSelector {
       aboveSea === 0 ? '0' : (aboveSea > 0 ? '+' : '') + aboveSea.toFixed(1);
   }
 
+  updatePlayVitalsHud() {
+    const fillEl = this.container?.querySelector('#player-hp-hud-fill');
+    const valueEl = this.container?.querySelector('#player-hp-hud-value');
+    const hudEl = this.container?.querySelector('#player-hp-hud');
+    if (!fillEl || !valueEl || !hudEl) return;
+    const maxHp = Math.max(1, Number(player.maxHp) || 100);
+    const hpRaw = Number(player.hp);
+    const hp = Math.max(0, Math.min(maxHp, Number.isFinite(hpRaw) ? hpRaw : maxHp));
+    const hp01 = hp / maxHp;
+    valueEl.textContent = `${Math.round(hp)}/${Math.round(maxHp)}`;
+    fillEl.style.width = `${(hp01 * 100).toFixed(1)}%`;
+    hudEl.classList.toggle('player-hp-hud--warn', hp01 <= 0.52 && hp01 > 0.24);
+    hudEl.classList.toggle('player-hp-hud--danger', hp01 <= 0.24);
+  }
+
   /** Clears move cooldown UI (e.g. when leaving play mode). */
   clearPlayMovesCooldownHud() {
     const movesEl = this.container?.querySelector('#current-player-moves');
@@ -298,6 +394,8 @@ export class CharacterSelector {
     this._playItemPopGenByKey.clear();
     this._playItemHudPointerInside = false;
     this._playItemHudInventoryDragActive = false;
+    this._setPlayItemHudDragGhostVisible(false);
+    this._clearPlayItemHudDragGhostContent();
     const v = this.container?.querySelector('#play-item-crystal-count');
     if (v) v.textContent = '0';
     const listEl = this.container?.querySelector('#play-item-loot-list');
@@ -456,6 +554,15 @@ export class CharacterSelector {
           <div class="player-info">
             <span class="player-name" id="current-player-name">${activeName}</span>
             <div class="player-types" id="current-player-types"></div>
+            <div class="player-hp-hud" id="player-hp-hud" aria-label="Player HP">
+              <div class="player-hp-hud__row">
+                <span class="player-hp-hud__label">HP</span>
+                <span class="player-hp-hud__value" id="player-hp-hud-value">100/100</span>
+              </div>
+              <div class="player-hp-hud__bar">
+                <div class="player-hp-hud__fill" id="player-hp-hud-fill"></div>
+              </div>
+            </div>
           </div>
           <div class="selector-header__actions">
             <button
@@ -571,6 +678,7 @@ export class CharacterSelector {
     window.addEventListener('play-player-input-bindings-change', this._onInputBindingsChange);
     window.addEventListener('play-item-hud-pickup', this._onPlayItemHudPickup);
     document.addEventListener('dragend', this._onDocInventoryDragEnd);
+    document.addEventListener('dragover', this._onDocInventoryDragOver);
     window.addEventListener('play-toggle-item-hud', this._onTogglePlayItemHud);
 
     const itemHudToggleBtn = this.container?.querySelector('#play-item-hud-toggle');
@@ -609,6 +717,12 @@ export class CharacterSelector {
         }
         e.dataTransfer.setData('text/plain', `pkmn-inventory-drop:${token}`);
         e.dataTransfer.effectAllowed = 'copyMove';
+        const transparentDrag = this._ensurePlayItemHudTransparentDragCanvas();
+        e.dataTransfer.setDragImage(transparentDrag, 0, 0);
+        this._mountPlayItemHudDragGhostFromRow(row);
+        this._setPlayItemHudDragGhostPosition(e.clientX, e.clientY);
+        this._setPlayItemHudDragGhostVisible(true);
+        window.dispatchEvent(new CustomEvent('play-item-hud-drag-token', { detail: { token } }));
         this._playItemHudInventoryDragActive = true;
         this._syncPlayItemHudOpacity();
       });
@@ -707,6 +821,7 @@ export class CharacterSelector {
       }
     }
     this.updateFieldSkillDisplay();
+    this.updatePlayVitalsHud();
 
     let portraitEl = pillEl.querySelector('#player-preview-portrait');
     if (!portraitEl) {

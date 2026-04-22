@@ -62,7 +62,9 @@ import {
   drawStrengthGrabProgressBar,
   drawWildEmotionOverlay,
   drawWildHpBar,
-  drawEntityStaminaBar
+  drawPlayerHpBar,
+  drawEntityStaminaBar,
+  drawInventoryGroundDropPreview
 } from './render/render-ui-world.js';
 import { drawWildSpeechBubbleOverlay } from './render/render-speech-bubble.js';
 import {
@@ -1634,6 +1636,7 @@ export function render(canvas, data, options = {}) {
           drawWildLeaderRoamTarget(ctx, item, { snapPx, tileW, tileH, time });
         }
         if (item.type === 'wild') drawWildHpBar(ctx, item, spawnYOffset, tileW, tileH);
+        if (item.type === 'player') drawPlayerHpBar(ctx, item, spawnYOffset, tileW, tileH);
         drawEntityStaminaBar(ctx, item, spawnYOffset, tileW, tileH);
 
 
@@ -1884,6 +1887,60 @@ export function render(canvas, data, options = {}) {
     ctx.restore();
     if (strengthGrabPrompt && !drewSplitStrengthGrabOutline) {
       drawStrengthGrabTargetOutline(ctx, strengthGrabPrompt, tileW, tileH, snapPx, time);
+    }
+    if (options.inventoryDropPreview) {
+      drawInventoryGroundDropPreview(ctx, options.inventoryDropPreview, tileW, tileH, snapPx, time);
+      const previewItemKey = String(options.inventoryDropPreview.itemKey || '');
+      const previewObjSet = previewItemKey ? OBJECT_SETS[previewItemKey] : null;
+      if (previewObjSet) {
+        const cols = Math.max(1, Math.floor(Number(options.inventoryDropPreview.cols) || 1));
+        const rows = Math.max(1, Math.floor(Number(options.inventoryDropPreview.rows) || 1));
+        const ox = Math.floor(Number(options.inventoryDropPreview.ox) || 0);
+        const oy = Math.floor(Number(options.inventoryDropPreview.oy) || 0);
+        const originTile = getCached(ox, oy);
+        const baseHeight = Number(originTile?.heightStep);
+        const previewGetCached =
+          Number.isFinite(baseHeight)
+            ? (tx, ty) => {
+                const t = getCached(tx, ty);
+                if (!t) return t;
+                if (tx >= ox && tx < ox + cols && ty >= oy && ty < oy + rows) {
+                  return { ...t, heightStep: baseHeight };
+                }
+                return t;
+              }
+            : getCached;
+        ctx.save();
+        if (!options.inventoryDropPreview.canDrop) ctx.filter = 'grayscale(0.85) saturate(0.4)';
+        ctx.globalAlpha *= options.inventoryDropPreview.canDrop ? 0.8 : 0.46;
+        drawScatter(
+          ctx,
+          {
+            type: 'scatter',
+            objSet: previewObjSet,
+            originX: ox,
+            originY: oy,
+            cols,
+            rows,
+            itemKey: previewItemKey,
+            isSortable: true,
+            isBurning: false,
+            isCharred: false,
+            windSway: false
+          },
+          {
+            tileW,
+            tileH,
+            snapPx,
+            time,
+            lodDetail,
+            canopyAnimTime,
+            imageCache,
+            getCached: previewGetCached
+          }
+        );
+        ctx.restore();
+      }
     }
 
     addRenderFramePhaseMs('rndEntitiesMs', performance.now() - tEnt0);

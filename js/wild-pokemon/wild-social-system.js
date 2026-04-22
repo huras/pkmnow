@@ -431,7 +431,7 @@ export function triggerPlayerSocialAction(actionInput, player, data) {
   }
 
   if (isTackleSocialAction(action) && primaryDist <= PLAYER_SOCIAL_TACKLE_HIT_RADIUS) {
-    if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE);
+    if (typeof primary.takeDamage === 'function') primary.takeDamage(PLAYER_SOCIAL_TACKLE_DAMAGE, player);
     setEmotion(primary, 5, false, 'Pain');
     setWildSpeechBubble(
       primary,

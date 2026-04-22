@@ -1191,17 +1191,19 @@ export function castUltimate(sourceX, sourceY, targetX, targetY, sourceEntity) {
 /**
  * Wild aggressive Pokémon attack when in melee range.
  * @param {object} entity
- * @param {number} playerX
- * @param {number} playerY
+ * @param {number} targetX
+ * @param {number} targetY
  * @param {number} dt
+ * @param {object | null} [targetEntity]
+ * @param {boolean} [forceWarAttack]
  */
-export function tryCastWildMove(entity, playerX, playerY, dt) {
+export function tryCastWildMove(entity, targetX, targetY, dt, targetEntity = null, forceWarAttack = false) {
   if (!entity || entity.isDespawning || (entity.spawnPhase ?? 1) < 0.5) return;
   const beh = getEffectiveWildBehavior(entity);
-  if (beh.archetype !== 'aggressive') return;
+  if (beh.archetype !== 'aggressive' && !forceWarAttack) return;
   if (entity.aiState !== 'approach') return;
-  const dx = entity.x - playerX;
-  const dy = entity.y - playerY;
+  const dx = entity.x - targetX;
+  const dy = entity.y - targetY;
   const distP = Math.hypot(dx, dy);
   const stop = beh.stopDist ?? 1.2;
   if (distP > stop + 0.7) return;
@@ -1210,10 +1212,14 @@ export function tryCastWildMove(entity, playerX, playerY, dt) {
   if (entity.wildMoveCd > 0) return;
 
   // Temporary test mode: all wild aggro uses melee Cut only.
-  const ang = Math.atan2(playerY - entity.y, playerX - entity.x);
+  const ang = Math.atan2(targetY - entity.y, targetX - entity.x);
   spawnFieldCutSlashFx(entity.x, entity.y, ang, { radiusTiles: 1.28, lifeSec: 0.24, z: 0.06 });
   if (distP <= 1.7) {
-    tryDamagePlayerFromProjectile(8, false, null);
+    if (targetEntity && typeof targetEntity.takeDamage === 'function') {
+      targetEntity.takeDamage(8, entity);
+    } else {
+      tryDamagePlayerFromProjectile(8, false, null);
+    }
   }
   entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT * getWildAggressiveMoveCooldownMultiplier(entity);
   playWildAttackCry(entity);

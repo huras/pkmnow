@@ -1,0 +1,2 @@
+add shiny system
+add random encounter spawn on grass walk

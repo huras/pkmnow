@@ -800,6 +800,15 @@ export function registerPlayKeyboard(api) {
   const RUN_DOUBLE_TAP_MS = 320;
   let runTapDir = /** @type {'up'|'down'|'left'|'right'|null} */ (null);
   let runTapAt = 0;
+  const clearHeldPlayKeys = () => {
+    heldKeys.clear();
+    runTapDir = null;
+    runTapAt = 0;
+    playInputState.spaceHeld = false;
+    playInputState.shiftLeftHeld = false;
+    playInputState.shiftRightHeld = false;
+    playInputState.ctrlLeftHeld = false;
+  };
 
   /** Capture phase: run before browser default actions (e.g. Ctrl+W close tab). */
   window.addEventListener(
@@ -946,4 +955,15 @@ export function registerPlayKeyboard(api) {
     },
     true
   );
+
+  window.addEventListener('blur', () => {
+    if (getAppMode() !== 'play') return;
+    clearHeldPlayKeys();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (getAppMode() !== 'play') return;
+    clearHeldPlayKeys();
+  });
 }

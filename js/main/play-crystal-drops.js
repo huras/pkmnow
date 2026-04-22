@@ -360,6 +360,27 @@ export function restoreCollectedDetailInventoryFromSnapshot(rows) {
 /** `data-inventory-drag` value for the aggregated “Crystal Shards” HUD row. */
 export const PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE = '__pkmn_crystal_shards__';
 
+/**
+ * Resolves the concrete `itemKey` that a HUD drag token currently maps to, without
+ * mutating inventory counts.
+ * @param {string} tokenOrItemKey
+ * @returns {string | null}
+ */
+export function resolveGroundDropItemKeyForToken(tokenOrItemKey) {
+  const raw = String(tokenOrItemKey || '');
+  if (!raw) return null;
+  if (raw === PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE) {
+    if ((crystalLootCount | 0) <= 0) return null;
+    const keys = [];
+    for (const [k, c] of collectedDetailInventory.entries()) {
+      if ((c | 0) > 0 && isCrystalItemKey(k)) keys.push(String(k));
+    }
+    keys.sort();
+    return keys[0] || null;
+  }
+  return (collectedDetailInventory.get(raw) ?? 0) > 0 ? raw : null;
+}
+
 function spendOneUnitForItemKey(itemKey) {
   const key = String(itemKey || '');
   const prev = collectedDetailInventory.get(key) ?? 0;

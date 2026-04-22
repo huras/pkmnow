@@ -12,6 +12,8 @@ import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircl
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { harvestBerryTree, getBerryTreeState } from './berry-tree-system.js';
 import {
+  getScatterItemKeyOverride,
+  hasScatterItemKeyOverride,
   setScatterItemKeyOverride,
   clearScatterItemKeyOverrides,
   SCATTER_ITEM_KEY_OVERRIDE_EMPTY
@@ -41,6 +43,7 @@ import {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  resolveGroundDropItemKeyForToken,
   refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
@@ -54,6 +57,7 @@ export {
   getCrystalLootCount,
   getCollectedDetailInventorySnapshot,
   PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE,
+  resolveGroundDropItemKeyForToken,
   refundOneInventoryUnitFromGroundDrop,
   trySpendOneInventoryUnitForGroundDrop
 } from './play-crystal-drops.js';
@@ -1078,11 +1082,56 @@ export function strengthRelocateCarriedDetailNear(
  * @returns {boolean}
  */
 export function placeInventoryItemAsScatterDetailNear(landX, landY, itemKey, data, chebRadius = 8) {
-  if (!data) return false;
-  const resolvedItemKey = String(itemKey || '');
-  if (!resolvedItemKey) return false;
+  const resolved = resolveInventoryScatterPlacementNear(landX, landY, itemKey, data, chebRadius);
+  if (!resolved) return false;
+  const { ox, oy, itemKey: resolvedItemKey } = resolved;
   const objSet = OBJECT_SETS[resolvedItemKey];
   if (!objSet) return false;
+  const nowSec = performance.now() * 0.001;
+  const key = `${ox},${oy}`;
+  const exSt = detailBreakStateByOrigin.get(key);
+  if (exSt && !exSt.destroyed) return false;
+  strengthCarriedBlockRegenKeys.delete(key);
+  detailBreakStateByOrigin.delete(key);
+  detailHitHpBars.delete(key);
+  detailHitShakeAtSec.delete(key);
+  unregisterDestroyedDetailOrigin(ox, oy);
+  burnedScatterTreeOrigins.delete(key);
+  harvestedBurnedScatterTreeOrigins.delete(key);
+  burningScatterTreeEndsAtSecByOrigin.delete(key);
+  scatterTreeBurnMeterByOrigin.delete(key);
+  scatterTreeFireSpreadDepthByOrigin.delete(key);
+  const st = getOrCreateDetailBreakState(ox, oy, resolvedItemKey, objSet, nowSec);
+  st.hitsRemaining = Math.max(1, Math.floor(Number(st.hitsMax) || 1));
+  st.destroyed = false;
+  st.regenAtSec = 0;
+  st.lastHitAtSec = nowSec;
+  st.strengthReloPlaced = true;
+  destroyedCrystalScatterOrigins.delete(key);
+  setScatterItemKeyOverride(ox, oy, resolvedItemKey);
+  invalidateChunksOverlappingFootprint(ox, oy, st.cols, st.rows);
+  clearScatterSolidBlockCache();
+  invalidateStaticEntityCache();
+  return true;
+}
+
+/**
+ * Resolves where an inventory item would be placed if dropped near this world position.
+ * Returns nearest valid origin + footprint metadata; returns `null` when blocked.
+ * @param {number} landX
+ * @param {number} landY
+ * @param {string} itemKey
+ * @param {object | null | undefined} data
+ * @param {number} [chebRadius]
+ * @returns {{ ox: number, oy: number, cols: number, rows: number, itemKey: string } | null}
+ */
+export function resolveInventoryScatterPlacementNear(landX, landY, itemKey, data, chebRadius = 8) {
+  if (!data) return null;
+  const resolvedItemKey = String(itemKey || '');
+  if (!resolvedItemKey) return null;
+  const footprint = getInventoryScatterItemFootprint(resolvedItemKey);
+  if (!footprint) return null;
+  const { cols, rows } = footprint;
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
   const cx = Math.max(0.5, Math.min(microW - 0.5, Number(landX) || 0.5));
@@ -1101,39 +1150,70 @@ export function placeInventoryItemAsScatterDetailNear(landX, landY, itemKey, dat
     }
   }
   cand.sort((a, b) => a.d2 - b.d2);
-  const nowSec = performance.now() * 0.001;
   for (const c of cand) {
-    const tile = getMicroTile(c.ox, c.oy, data);
-    if (!tile || !tileSurfaceAllowsScatterVegetation(tile)) continue;
-    if (isPlayScatterTreeOriginCharred(c.ox, c.oy) || isPlayScatterTreeOriginBurning(c.ox, c.oy)) continue;
-    if (scatterPhysicsCircleAtOrigin(c.ox, c.oy, data)) continue;
-    const key = `${c.ox},${c.oy}`;
-    const exSt = detailBreakStateByOrigin.get(key);
-    if (exSt && !exSt.destroyed) continue;
-    strengthCarriedBlockRegenKeys.delete(key);
-    detailBreakStateByOrigin.delete(key);
-    detailHitHpBars.delete(key);
-    detailHitShakeAtSec.delete(key);
-    unregisterDestroyedDetailOrigin(c.ox, c.oy);
-    burnedScatterTreeOrigins.delete(key);
-    harvestedBurnedScatterTreeOrigins.delete(key);
-    burningScatterTreeEndsAtSecByOrigin.delete(key);
-    scatterTreeBurnMeterByOrigin.delete(key);
-    scatterTreeFireSpreadDepthByOrigin.delete(key);
-    const st = getOrCreateDetailBreakState(c.ox, c.oy, resolvedItemKey, objSet, nowSec);
-    st.hitsRemaining = Math.max(1, Math.floor(Number(st.hitsMax) || 1));
-    st.destroyed = false;
-    st.regenAtSec = 0;
-    st.lastHitAtSec = nowSec;
-    st.strengthReloPlaced = true;
-    destroyedCrystalScatterOrigins.delete(key);
-    setScatterItemKeyOverride(c.ox, c.oy, resolvedItemKey);
-    invalidateChunksOverlappingFootprint(c.ox, c.oy, st.cols, st.rows);
-    clearScatterSolidBlockCache();
-    invalidateStaticEntityCache();
-    return true;
+    if (!canPlaceInventoryScatterFootprintAt(c.ox, c.oy, cols, rows, data)) continue;
+    return { ox: c.ox, oy: c.oy, cols, rows, itemKey: resolvedItemKey };
   }
-  return false;
+  return null;
+}
+
+/**
+ * @param {string} itemKey
+ * @returns {{ cols: number, rows: number } | null}
+ */
+export function getInventoryScatterItemFootprint(itemKey) {
+  const resolvedItemKey = String(itemKey || '');
+  if (!resolvedItemKey) return null;
+  const objSet = OBJECT_SETS[resolvedItemKey];
+  if (!objSet) return null;
+  const parsed = parseShape(objSet?.shape || '[1x1]');
+  return {
+    cols: Math.max(1, Math.floor(Number(parsed.cols) || 1)),
+    rows: Math.max(1, Math.floor(Number(parsed.rows) || 1))
+  };
+}
+
+/**
+ * Ensures the entire footprint is placeable (same level, no occupied roots/overrides, valid surface).
+ * @param {number} ox
+ * @param {number} oy
+ * @param {number} cols
+ * @param {number} rows
+ * @param {object | null | undefined} data
+ * @returns {boolean}
+ */
+function canPlaceInventoryScatterFootprintAt(ox, oy, cols, rows, data) {
+  if (!data) return false;
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const oxf = Math.floor(Number(ox) || 0);
+  const oyf = Math.floor(Number(oy) || 0);
+  const cf = Math.max(1, Math.floor(Number(cols) || 1));
+  const rf = Math.max(1, Math.floor(Number(rows) || 1));
+  if (oxf < 0 || oyf < 0 || oxf + cf > microW || oyf + rf > microH) return false;
+  const originTile = getMicroTile(oxf, oyf, data);
+  if (!originTile || !tileSurfaceAllowsScatterVegetation(originTile)) return false;
+  const baseHeight = Number(originTile.heightStep) || 0;
+
+  for (let dy = 0; dy < rf; dy++) {
+    for (let dx = 0; dx < cf; dx++) {
+      const tx = oxf + dx;
+      const ty = oyf + dy;
+      const tile = getMicroTile(tx, ty, data);
+      if (!tile || !tileSurfaceAllowsScatterVegetation(tile)) return false;
+      if ((Number(tile.heightStep) || 0) !== baseHeight) return false;
+      if (isPlayScatterTreeOriginCharred(tx, ty) || isPlayScatterTreeOriginBurning(tx, ty)) return false;
+      if (scatterPhysicsCircleAtOrigin(tx, ty, data)) return false;
+      const key = `${tx},${ty}`;
+      const exSt = detailBreakStateByOrigin.get(key);
+      if (exSt && !exSt.destroyed) return false;
+      if (hasScatterItemKeyOverride(tx, ty)) {
+        const overrideKey = getScatterItemKeyOverride(tx, ty);
+        if (overrideKey && overrideKey !== SCATTER_ITEM_KEY_OVERRIDE_EMPTY) return false;
+      }
+    }
+  }
+  return true;
 }
 
 /**

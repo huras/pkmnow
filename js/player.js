@@ -64,6 +64,8 @@ const PLAYER_BASE_MAX_JUMPS = 2;
 const PLAYER_FLYING_MAX_JUMPS = 6;
 /** Player stamina is intentionally higher than generic entity default. */
 const PLAYER_STAMINA_MAX = ENTITY_STAMINA_MAX * 2;
+const PLAYER_HIT_KNOCKBACK_SPEED = 4.4;
+const PLAYER_HIT_KNOCKBACK_LOCK_SEC = 0.14;
 
 /** Creative flight: Space up / Shift down. Winged Flying-types = snappier; Mewtwo/Mew = smoother levitation + walk cycle aloft. */
 /** Creative flight ceiling (world tile units); HUD / UI may import this. */
@@ -117,13 +119,16 @@ const TACKLE_LUNGE_CURVE = 'sin';
 const TACKLE_VISUAL_DEPTH_Y_SCALE = 0.72;
 
 const SAVED_DEX_KEY = 'pkmn_player_dex_id';
+const PLAYER_INFINITE_LIFE_KEY = 'pkmn_player_infinite_life';
 /** Default species when nothing valid is stored (Charmander). */
 const DEFAULT_PLAYER_DEX_ID = 4;
 const _savedDex = parseInt(localStorage.getItem(SAVED_DEX_KEY), 10);
+const _savedInfiniteLife = localStorage.getItem(PLAYER_INFINITE_LIFE_KEY);
 const initialDex =
   Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
     ? _savedDex
     : DEFAULT_PLAYER_DEX_ID;
+const initialInfiniteLife = _savedInfiniteLife == null ? true : _savedInfiniteLife !== '0';
 
 export const player = {
   x: 0,
@@ -165,11 +170,15 @@ export const player = {
   /** Play mode: HP when hit by wild projectiles. */
   hp: 100,
   maxHp: 100,
+  /** Default enabled: keep HP intact while still applying hit feedback/knockback. */
+  infiniteLife: initialInfiniteLife,
   /** Sprint / wild sprint-speed drain; regens when not draining. */
   stamina: PLAYER_STAMINA_MAX,
   maxStamina: PLAYER_STAMINA_MAX,
   /** Seconds remaining: ignore projectile damage while > 0. */
   projIFrameSec: 0,
+  /** Seconds remaining: movement input lock while hit knockback is active. */
+  hitKnockbackLockSec: 0,
   /** HUD-only poison indicator after Poison Sting. */
   poisonVisualSec: 0,
   /** Seconds remaining: play `shoot` PMD slice after a successful player cast (if asset exists). */
@@ -250,6 +259,7 @@ export function setPlayerSpecies(dexId) {
   ensureEntityStamina(player);
   player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
+  player.hitKnockbackLockSec = 0;
   player.moveShootAnimSec = 0;
   player._shootAnimTick = 0;
   player._chargeAnimTick = 0;
@@ -360,6 +370,7 @@ export function setPlayerPos(x, y) {
   ensureEntityStamina(player);
   player.stamina = player.maxStamina;
   player.projIFrameSec = 0;
+  player.hitKnockbackLockSec = 0;
   player.poisonVisualSec = 0;
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
@@ -411,26 +422,80 @@ export function showPlayerSocialEmotion(action) {
 /**
  * @param {number} amount
  * @param {boolean} [applyPoisonVisual]
- * @returns {boolean} true if damage was applied (not blocked by iframes)
+ * @param {any} [data]
+ * @param {{ x?: number, y?: number, vx?: number, vy?: number, sourceEntity?: { x?: number, y?: number } } | null} [hitSource]
+ * @returns {boolean} true if hit was applied (not blocked by iframes)
  */
-export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null) {
+export function tryDamagePlayerFromProjectile(amount, applyPoisonVisual = false, data = null, hitSource = null) {
   if (player.projIFrameSec > 0) return false;
   const maxH = player.maxHp ?? 100;
   const cur = player.hp ?? maxH;
-  player.hp = Math.max(0, cur - amount);
+  if (player.infiniteLife) player.hp = maxH;
+  else player.hp = Math.max(0, cur - amount);
   rumblePlayerGamepadPokemonHitTaken();
   player.projIFrameSec = 0.55;
+  applyPlayerHitKnockback(hitSource);
   if (applyPoisonVisual) player.poisonVisualSec = 3;
   const extraCarryDropDamage = onStrengthCarrierDamaged(player, data);
-  if (extraCarryDropDamage > 0) {
+  if (extraCarryDropDamage > 0 && !player.infiniteLife) {
     player.hp = Math.max(0, (player.hp ?? maxH) - extraCarryDropDamage);
   }
+  if (player.infiniteLife) player.hp = maxH;
   return true;
+}
+
+/**
+ * @param {{ x?: number, y?: number, vx?: number, vy?: number, sourceEntity?: { x?: number, y?: number } } | null} hitSource
+ */
+export function applyPlayerHitKnockback(hitSource) {
+  if (!hitSource) return;
+  const srcEntX = Number(hitSource?.sourceEntity?.x);
+  const srcEntY = Number(hitSource?.sourceEntity?.y);
+  const srcX = Number.isFinite(srcEntX)
+    ? srcEntX
+    : (Number(hitSource.x) || 0) - (Number(hitSource.vx) || 0) * 0.07;
+  const srcY = Number.isFinite(srcEntY)
+    ? srcEntY
+    : (Number(hitSource.y) || 0) - (Number(hitSource.vy) || 0) * 0.07;
+  let dx = (player.x ?? 0) - srcX;
+  let dy = (player.y ?? 0) - srcY;
+  let len = Math.hypot(dx, dy);
+  if (len < 1e-5) {
+    dx = -(Number(hitSource.vx) || 0);
+    dy = -(Number(hitSource.vy) || 0);
+    len = Math.hypot(dx, dy);
+  }
+  if (len < 1e-5) return;
+  const nx = dx / len;
+  const ny = dy / len;
+  const keepVel = 0.18;
+  player.vx = (player.vx || 0) * keepVel + nx * PLAYER_HIT_KNOCKBACK_SPEED;
+  player.vy = (player.vy || 0) * keepVel + ny * PLAYER_HIT_KNOCKBACK_SPEED;
+  player.hitKnockbackLockSec = Math.max(player.hitKnockbackLockSec || 0, PLAYER_HIT_KNOCKBACK_LOCK_SEC);
+}
+
+export function isPlayerInfiniteLifeEnabled() {
+  return !!player.infiniteLife;
+}
+
+export function setPlayerInfiniteLifeEnabled(enabled) {
+  player.infiniteLife = !!enabled;
+  try {
+    localStorage.setItem(PLAYER_INFINITE_LIFE_KEY, player.infiniteLife ? '1' : '0');
+  } catch {
+    /* noop */
+  }
+  if (player.infiniteLife) {
+    player.hp = player.maxHp ?? 100;
+  }
 }
 
 /** @param {number} dt */
 export function updatePlayerCombatTimers(dt) {
   if (player.projIFrameSec > 0) player.projIFrameSec = Math.max(0, player.projIFrameSec - dt);
+  if (player.hitKnockbackLockSec > 0) {
+    player.hitKnockbackLockSec = Math.max(0, player.hitKnockbackLockSec - dt);
+  }
   if (player.poisonVisualSec > 0) player.poisonVisualSec = Math.max(0, player.poisonVisualSec - dt);
   if (player.cutThirdHitLockoutSec > 0) {
     player.cutThirdHitLockoutSec = Math.max(0, player.cutThirdHitLockoutSec - dt);
@@ -797,9 +862,15 @@ export function updatePlayer(dt, data, gameTimeSec) {
   const carryBlocksWalk = strengthCarryBlocksWalk(player);
   const blockedTurnInputX = carryBlocksWalk ? Number(player.inputX) || 0 : 0;
   const blockedTurnInputY = carryBlocksWalk ? Number(player.inputY) || 0 : 0;
+  const hitKnockbackLocked = (player.hitKnockbackLockSec || 0) > 1e-5;
   if (carryBlocksWalk) {
     player.runMode = false;
     player.flameChargeDashSec = 0;
+  }
+  if (hitKnockbackLocked) {
+    player.inputX = 0;
+    player.inputY = 0;
+    player.runMode = false;
   }
 
   if ((player.cutThirdHitLockoutSec || 0) > 0) {

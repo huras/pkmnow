@@ -58,6 +58,7 @@ My ideias organizadas por tópico
   - defende de outros pokémons;
   - defende de voadores querendo pousar;
   - tenta dominar território alheio.
+- Pokémons selvagens coletam madeira, palha e pedras na natureza para construir/expandir ninhos.
 - Spawn determinístico ou random:
   - alguns fixos e outros random?
 - Spawns possíveis:
@@ -91,6 +92,11 @@ My ideias organizadas por tópico
   - player acertou um pokémon que o boss/facção "gosta" ou protege
   - comportamento travesso/mischievous do boss (ataque por zoeira/caos)
 - Comunicação in-world via ícones, imagens e emojis (telegraph social antes do ataque coordenado).
+- Leitura psíquica leve: player consegue "ver" pensamentos/intenções dos pokémons (emojis + tópicos de conversa).
+- Isso permite provocar eventos sociais específicos com mais controle (event prompting guiado por intenção).
+- Exemplo: perto de um rio, identificar pokémons com tópico de ponte e perguntar o que precisam para construir/ajudar na travessia.
+- Pokémons que se oferecem para te guiar até pontos de interesse/recursos.
+- Pokémons enganosos que fingem guiar, mas levam o player para emboscadas.
 - Eventos sociais de troca de liderança dentro de grupos de pokémon (leader swap).
 - Troca de líder deixa movimentação de grupo mais dinâmica e menos previsível.
 - A mesma mecânica abre espaço para vários outros eventos sociais (disputa, reconciliação, proteção, fuga coordenada).
@@ -188,6 +194,10 @@ My ideias organizadas por tópico
   - labirintos gigantes e altos
   - lugar totalmente escuro
   - ilha afastada que exige glider
+- Versão barata para começar dungeons na jungle sem sistema de elevação:
+  - entradas como buracos/fendas no chão (ground holes).
+  - pista visual: crack no chão indica dungeon.
+  - algumas cracks ficam escondidas sob grama para incentivar exploração/cut.
 - Fazer dungeons que podem ser abordadas por vários ângulos.
 - Referência: Hyrule Castle em Zelda BOTW.
 - Link: https://youtu.be/TI7X27QLFdQ?si=W6VIEjiVblQISt_j&t=1128
@@ -343,6 +353,13 @@ My ideias organizadas por tópico
 - Dano aumenta a porcentagem em vez de "gastar HP" como métrica principal de pressão (HP pode existir como secundário ou só fora desse modo).
 - Porcentagem alta amplifica knockback/KO potential (curva de scaling configurável por espécie/peso).
 - Assistência de combo: se o jogo detectar uma linha de ricochete limpa (ex.: 1-2 árvores) para o alvo voltar ao attacker, executar automaticamente o ricochete para facilitar combos longos.
+- Criar "Smash control mode": combinações de input (direção + botão + força) disparam golpes diferentes.
+- Exemplo de mapeamento Water:
+  - `B` = Water Gun
+  - `Forward + B` = Water Cannon / jato forte frontal
+  - `Strong + Forward + B` = Surf
+  - `Up + B` (ou com salto/espaço) = versão aérea/ascendente
+- Objetivo: não ficar preso em "1 botão = 1 golpe", e testar um combate mais profundo sem depender de muitos botões dedicados.
 
 
 23) Grab / Strength como ferramenta central (não só puzzle)

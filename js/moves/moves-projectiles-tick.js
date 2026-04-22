@@ -123,7 +123,7 @@ export function tickActiveProjectiles(ctx) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
-            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
+            if (tryDamagePlayerFromProjectile(proj.damage, poison, data, proj)) {
               spawnHitParticles(hx, hy, player.z ?? 0);
             }
             proj.playerBeamHitDone = true;
@@ -144,7 +144,7 @@ export function tickActiveProjectiles(ctx) {
           if (!projectileZInPokemonHurtbox(zBeam, dex, z)) return;
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
-          if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (wild.takeDamage) wild.takeDamage(proj.damage, proj.sourceEntity || null);
           if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(hx, hy, z);
@@ -257,7 +257,7 @@ export function tickActiveProjectiles(ctx) {
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) <= halfW + hurtR) {
             const poison = false;
-            if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
+            if (tryDamagePlayerFromProjectile(proj.damage, poison, data, proj)) {
               spawnHitParticles(hx, hy, player.z ?? 0);
             }
             proj.playerBeamHitDone = true;
@@ -290,7 +290,7 @@ export function tickActiveProjectiles(ctx) {
           if (distPointToSegmentTiles(hx, hy, sx0, sy0, sx1, sy1) > halfW + hurtR) return;
           const lastDmg = wild._prismaticStreamDmgSec;
           if (Number.isFinite(lastDmg) && nowSecWild - lastDmg < PRISMATIC_STREAM_WILD_HIT_COOLDOWN_SEC) return;
-          if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (wild.takeDamage) wild.takeDamage(proj.damage, proj.sourceEntity || null);
           if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           wild._prismaticStreamDmgSec = nowSecWild;
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
@@ -396,7 +396,7 @@ export function tickActiveProjectiles(ctx) {
         const dist =
           len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
         if (dist > r + hurtR) return;
-        if (wild.takeDamage) wild.takeDamage(proj.damage);
+        if (wild.takeDamage) wild.takeDamage(proj.damage, proj.sourceEntity || null);
         if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
         spawnHitParticles(hx, hy, z);
         set.add(wild);
@@ -412,7 +412,7 @@ export function tickActiveProjectiles(ctx) {
           const dist =
             len2 < 1e-12 ? Math.hypot(hx - px0, hy - py0) : distPointToSegmentTiles(hx, hy, px0, py0, proj.x, proj.y);
           if (dist <= r + hurtR) {
-            if (tryDamagePlayerFromProjectile(proj.damage, false, data)) {
+            if (tryDamagePlayerFromProjectile(proj.damage, false, data, proj)) {
               spawnHitParticles(hx, hy, player.z ?? 0);
             }
             proj.playerWgPierceDone = true;
@@ -440,7 +440,7 @@ export function tickActiveProjectiles(ctx) {
             projectileZInPokemonHurtbox(iz + (projAbsZ - (proj.z ?? 0)), dpx, playerAbsZ) &&
             Math.hypot(phx - ix, phy - iy) <= sr + hr
           ) {
-            tryDamagePlayerFromProjectile(sd, false, data);
+            tryDamagePlayerFromProjectile(sd, false, data, proj);
             spawnHitParticles(ix, iy, player.z ?? 0);
           }
         }
@@ -633,7 +633,7 @@ export function tickActiveProjectiles(ctx) {
       const poisonChance = proj.poisonChance != null ? proj.poisonChance : 0.22;
       const poison = poisonCapable && Math.random() < poisonChance;
       const pz = player.z ?? 0;
-      if (tryDamagePlayerFromProjectile(proj.damage, poison, data)) {
+      if (tryDamagePlayerFromProjectile(proj.damage, poison, data, proj)) {
         spawnHitParticles(proj.x, proj.y, pz);
       }
       if (proj.type === 'incinerateCore') {
@@ -659,7 +659,7 @@ export function tickActiveProjectiles(ctx) {
           if (!projectileZInPokemonHurtbox(projHitWorldZ, dex, z)) return;
           const hurtR = getPokemonHurtboxRadiusTiles(dex);
           if (!checkDamageHitCircle(proj.x, proj.y, proj.radius, hx, hy, hurtR)) return;
-          if (wild.takeDamage) wild.takeDamage(proj.damage);
+          if (wild.takeDamage) wild.takeDamage(proj.damage, proj.sourceEntity || null);
           if (proj.sourceEntity === player) rumblePlayerGamepadPokemonHitDealt();
           if (proj.hasTackleTrait) applyWildKnockbackFromProjectile(wild, proj);
           spawnHitParticles(proj.x, proj.y, z);

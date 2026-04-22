@@ -47,11 +47,144 @@ export function ensureGroupBehaviorState(entity) {
   if (entity.groupCohesionSec == null) entity.groupCohesionSec = 0;
   if (entity._followerTackleCooldownSec == null) entity._followerTackleCooldownSec = 0;
   if (entity.groupPhase == null) entity.groupPhase = 'ROAM';
+  if (entity.groupWarTargetKind == null) entity.groupWarTargetKind = null;
+  if (entity.groupWarTargetKey == null) entity.groupWarTargetKey = null;
+  if (entity.groupWarTimerSec == null) entity.groupWarTimerSec = 0;
   if (entity.groupPhaseTimer == null) {
     entity.groupPhaseTimer = PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
   }
   if (entity.discoveryCooldown == null) entity.discoveryCooldown = DISCOVERY_INITIAL_COOLDOWN_SEC;
   if (entity.scenicCooldown == null) entity.scenicCooldown = 15.0 + Math.random() * 20.0;
+}
+
+const GROUP_WAR_DEFAULT_SEC = 18.0;
+
+/**
+ * @param {any} attacker
+ * @returns {{ kind: 'player' | 'entity', key: string | null }}
+ */
+function resolveGroupWarAttacker(attacker) {
+  if (attacker && typeof attacker === 'object') {
+    const key = String(attacker.key || '');
+    if (key) return { kind: 'entity', key };
+  }
+  return { kind: 'player', key: null };
+}
+
+/**
+ * @param {string} groupId
+ * @param {{ kind: 'player' | 'entity', key: string | null }} attackerToken
+ * @param {Map<string, any>} entitiesByKey
+ * @param {number} durationSec
+ */
+function setWildGroupWarState(groupId, attackerToken, entitiesByKey, durationSec) {
+  const gid = String(groupId || '');
+  if (!gid) return;
+  const warSec = Math.max(2.5, Number(durationSec) || GROUP_WAR_DEFAULT_SEC);
+
+  for (const entity of entitiesByKey.values()) {
+    if (!entity || String(entity.groupId || '') !== gid) continue;
+    ensureGroupBehaviorState(entity);
+    entity.groupPhase = 'WAR';
+    entity.groupWarTargetKind = attackerToken.kind;
+    entity.groupWarTargetKey = attackerToken.key;
+    entity.groupWarTimerSec = Math.max(Number(entity.groupWarTimerSec) || 0, warSec);
+    entity.discoveryCooldown = Math.max(Number(entity.discoveryCooldown) || 0, 8.0);
+    if (entity.deadState) continue;
+    entity.aiState = 'approach';
+    entity.alertTimer = Math.max(Number(entity.alertTimer) || 0, 1.1);
+    entity.targetX = null;
+    entity.targetY = null;
+    entity.idlePauseTimer = 0;
+    entity.wanderTimer = 0;
+  }
+}
+
+/**
+ * Any hit on a grouped member triggers full group retaliation.
+ *
+ * @param {object} victim
+ * @param {any} attacker
+ * @param {Map<string, any>} entitiesByKey
+ */
+export function startWildGroupWarFromHit(victim, attacker, entitiesByKey) {
+  if (!victim || !entitiesByKey) return;
+  const gid = String(victim.groupId || '');
+  if (!gid) return;
+  ensureGroupBehaviorState(victim);
+
+  const attackerToken = resolveGroupWarAttacker(attacker);
+  if (attackerToken.kind === 'entity') {
+    const attackerEntity = entitiesByKey.get(attackerToken.key || '');
+    if (!attackerEntity) return;
+    if (String(attackerEntity.groupId || '') === gid) return;
+  }
+  setWildGroupWarState(gid, attackerToken, entitiesByKey, GROUP_WAR_DEFAULT_SEC);
+}
+
+/**
+ * @param {object} entity
+ * @param {Map<string, any>} entitiesByKey
+ * @param {number} dt
+ */
+export function tickWildGroupWarState(entity, entitiesByKey, dt) {
+  if (!entity) return;
+  ensureGroupBehaviorState(entity);
+  if ((Number(entity.groupWarTimerSec) || 0) <= 0) return;
+
+  entity.groupWarTimerSec = Math.max(0, (Number(entity.groupWarTimerSec) || 0) - Math.max(0, Number(dt) || 0));
+  if ((Number(entity.groupWarTimerSec) || 0) <= 0) {
+    entity.groupWarTargetKind = null;
+    entity.groupWarTargetKey = null;
+    if (entity.groupPhase === 'WAR') {
+      entity.groupPhase = 'ROAM';
+    }
+    return;
+  }
+
+  if (entity.groupWarTargetKind === 'entity' && entitiesByKey) {
+    const target = entitiesByKey.get(String(entity.groupWarTargetKey || ''));
+    if (!target || target.isDespawning || target.deadState || (Number(target.hp) || 0) <= 0) {
+      entity.groupWarTimerSec = 0;
+      entity.groupWarTargetKind = null;
+      entity.groupWarTargetKey = null;
+      if (entity.groupPhase === 'WAR') entity.groupPhase = 'ROAM';
+      return;
+    }
+  }
+  entity.groupPhase = 'WAR';
+}
+
+/**
+ * @param {object} entity
+ * @param {Map<string, any>} entitiesByKey
+ * @param {number} playerX
+ * @param {number} playerY
+ * @returns {{ kind: 'player' | 'entity', entity: any | null, x: number, y: number } | null}
+ */
+export function resolveWildGroupWarTarget(entity, entitiesByKey, playerX, playerY) {
+  if (!entity) return null;
+  ensureGroupBehaviorState(entity);
+  if ((Number(entity.groupWarTimerSec) || 0) <= 0) return null;
+
+  if (entity.groupWarTargetKind === 'entity') {
+    const target = entitiesByKey?.get(String(entity.groupWarTargetKey || ''));
+    if (!target || target.isDespawning || target.deadState || (Number(target.hp) || 0) <= 0) return null;
+    return {
+      kind: 'entity',
+      entity: target,
+      x: Number(target.x) || 0,
+      y: Number(target.y) || 0
+    };
+  }
+
+  if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return null;
+  return {
+    kind: 'player',
+    entity: null,
+    x: Number(playerX) || 0,
+    y: Number(playerY) || 0
+  };
 }
 
 /** @param {string | null | undefined} facing */
@@ -377,6 +510,9 @@ export function releaseWildGroupFollowersFromLeader(leaderEntity, entitiesByKey)
     e.groupHomeY = null;
     e.groupPhase = 'ROAM';
     e.groupPhaseTimer = PHASE_ROAM_MIN_SEC + Math.random() * (PHASE_ROAM_MAX_SEC - PHASE_ROAM_MIN_SEC);
+    e.groupWarTargetKind = null;
+    e.groupWarTargetKey = null;
+    e.groupWarTimerSec = 0;
     e.discoveryCooldown = 0;
     e.targetX = null;
     e.targetY = null;
