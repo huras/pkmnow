@@ -31,7 +31,7 @@ export function getAllBerryTreeStates() {
 }
 
 export const BERRY_TYPES = [
-  'Cheri', 'Chesto', 'Pecha', 'Rawst', 'Aspear', 'Leppa', 'Oran'
+  'Cheri', 'Chesto', 'Pecha', 'Rawst', 'Aspear', 'Leppa', 'Oran', 'Iapapa'
 ];
 
 /**
@@ -109,10 +109,16 @@ export const BERRY_TREE_TILES = {
     1: [[410, 476], [411, 477]],
     2: [[412, 478], [413, 479]]
   },
+  'Lapapa': {
+    0: [[480], [481]],
+    1: [[416, 482], [417, 483]],
+    2: [[484], [485]]
+  },
+  // Alias kept for compatibility with existing item/icon naming.
   'Iapapa': {
     0: [[480], [481]],
     1: [[416, 482], [417, 483]],
-    2: [[418, 484], [419, 485]]
+    2: [[484], [485]]
   },
   'Razz': {
     0: [[420, 486], [421, 487]],
@@ -222,11 +228,13 @@ export function getBerryTypeFromKey(itemKey) {
   const parts = String(itemKey || '').toLowerCase().split('-');
   const typePart = parts.find(p => {
     const nameOnly = p.split(' ')[0].trim();
-    return BERRY_TYPES.some(t => t.toLowerCase() === nameOnly);
+    const normalized = nameOnly === 'lapapa' ? 'iapapa' : nameOnly;
+    return BERRY_TYPES.some(t => t.toLowerCase() === normalized);
   });
   if (typePart) {
     const nameOnly = typePart.split(' ')[0].trim();
-    return BERRY_TYPES.find(t => t.toLowerCase() === nameOnly);
+    const normalized = nameOnly === 'lapapa' ? 'iapapa' : nameOnly;
+    return BERRY_TYPES.find(t => t.toLowerCase() === normalized);
   }
   return BERRY_TYPES[0]; // Fallback
 }

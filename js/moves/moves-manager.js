@@ -66,6 +66,7 @@ import {
   getEffectiveWildBehavior,
   getWildAggressiveMoveCooldownMultiplier
 } from '../wild-pokemon/wild-effective-behavior.js';
+import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import { buildWildSpatialIndex } from './moves-projectile-collision.js';
 import { playFloorHit2Sfx } from '../audio/floor-hit-2-sfx.js';
 import { scheduleThunderStrike, tickThunderStrikes } from './thunder-move.js';
@@ -1219,6 +1220,27 @@ export function tryCastWildMove(entity, targetX, targetY, dt, targetEntity = nul
       targetEntity.takeDamage(8, entity);
     } else {
       tryDamagePlayerFromProjectile(8, false, null);
+      const fx = Math.cos(ang);
+      const fy = Math.sin(ang);
+      let bestOtherWild = null;
+      let bestScore = Infinity;
+      for (const other of entitiesByKey.values()) {
+        if (!other || other === entity) continue;
+        if (other.isDespawning || other.deadState || (other.spawnPhase ?? 1) < 0.5) continue;
+        if (typeof other.takeDamage !== 'function') continue;
+        const ox = (Number(other.x) || 0) - (Number(entity.x) || 0);
+        const oy = (Number(other.y) || 0) - (Number(entity.y) || 0);
+        const d = Math.hypot(ox, oy);
+        if (d < 0.15 || d > 1.9) continue;
+        const dot = (ox * fx + oy * fy) / d;
+        if (dot < 0.18) continue;
+        const score = d + (1 - dot) * 0.6;
+        if (score < bestScore) {
+          bestScore = score;
+          bestOtherWild = other;
+        }
+      }
+      if (bestOtherWild) bestOtherWild.takeDamage(8, entity);
     }
   }
   entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT * getWildAggressiveMoveCooldownMultiplier(entity);

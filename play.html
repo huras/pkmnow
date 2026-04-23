@@ -252,6 +252,21 @@
                     <path d="M8 12l7.8 7"/>
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  id="minimap-pokeradar-toggle"
+                  class="minimap-panel__pokeradar-btn"
+                  title="Pokeradar"
+                  aria-label="Pokeradar"
+                  aria-pressed="false"
+                >
+                  <svg class="minimap-panel__pokeradar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 18a6 6 0 1 0-6-6"/>
+                    <path d="M12 14a2 2 0 1 0-2-2"/>
+                    <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+                    <path d="M3 21h18"/>
+                  </svg>
+                </button>
               </div>
             </div>
             <div class="minimap-panel__header-row">
@@ -441,7 +456,40 @@
             </div>
           </header>
           <div class="minimap-panel__map-wrap">
+            <div
+              id="minimap-far-cry-id-stack"
+              class="minimap-panel__far-cry-id-stack"
+              hidden
+              aria-live="polite"
+              aria-label="Cry learning"
+            ></div>
             <canvas id="minimap" width="230" height="192" data-zoom="close" data-i18n-aria-label="play.minimapCanvasLabel" aria-label="リージョンミニマップ"></canvas>
+            <button
+              type="button"
+              id="minimap-macro-grid-toggle"
+              class="minimap-panel__show-spawned-btn minimap-panel__macro-grid-toggle"
+              data-i18n-title="play.minimapMacroGridToggle"
+              data-i18n-aria-label="play.minimapMacroGridToggle"
+              title="Macro tile grid on minimap"
+              aria-label="Macro tile grid on minimap"
+              aria-pressed="false"
+            >
+              <svg
+                class="minimap-panel__macro-grid-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="1" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+              </svg>
+            </button>
             <button
               type="button"
               id="minimap-show-spawned-toggle"

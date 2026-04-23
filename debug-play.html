@@ -236,7 +236,16 @@
               </button>
             </div>
           </header>
-          <canvas id="minimap" width="230" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+          <div class="minimap-panel__map-wrap">
+            <div
+              id="minimap-far-cry-id-stack"
+              class="minimap-panel__far-cry-id-stack"
+              hidden
+              aria-live="polite"
+              aria-label="Cry learning"
+            ></div>
+            <canvas id="minimap" width="230" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+          </div>
           <footer
             class="minimap-panel__footer minimap-panel__footer--biome"
             role="status"

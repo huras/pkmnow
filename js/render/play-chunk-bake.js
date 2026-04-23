@@ -10,7 +10,10 @@ import {
   FOLIAGE_DENSITY_THRESHOLD,
   usesPoolAutotileMaskForFoliage,
   isSortableScatter,
-  tileSurfaceAllowsScatterVegetation
+  tileSurfaceAllowsScatterVegetation,
+  SCATTER_NOISE_SEED_OFFSET,
+  SCATTER_NOISE_SCALE,
+  SCATTER_NOISE_THRESHOLD
 } from '../biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, LAND_STEPS, foliageDensity } from '../chunking.js';
 import { imageCache } from '../image-cache.js';
@@ -26,7 +29,8 @@ import {
   isPlayFormalTreeRootDestroyed,
   getFormalTreeRegrowVisualAlpha01
 } from '../main/play-crystal-tackle.js';
-import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
+import { hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
+import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 
 const BIOME_COLOR_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
 
@@ -461,7 +465,11 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       }
 
       // 2. Scatter Objects
-      if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !tile.isRoad && !tile.urbanBuilding) {
+      if (
+        foliageDensity(mxScan, myScan, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD &&
+        !tile.isRoad &&
+        !tile.urbanBuilding
+      ) {
         const isFormalNeighbor = (tx, ty) =>
           !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
@@ -478,10 +486,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
               validOriginMemo
             )
           ) {
-            const items = BIOME_VEGETATION[tile.biomeId] || [];
-            const itemKey =
-              getScatterItemKeyOverride(mxScan, myScan) ||
-              items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+            const itemKey = resolveScatterVegetationItemKey(mxScan, myScan, tile, data.seed);
             if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
             const objSet = OBJECT_SETS[itemKey];
             if (objSet) {
@@ -553,7 +558,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       const t = getCachedTile(mx, my);
       if (!t || t.isRoad || t.isCity) continue;
       if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
-      if (foliageDensity(mx, my, data.seed + 111, 2.5) > 0.82) {
+      if (foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD) {
         suppressedSet.add(toLocalSuppressionKey(mx, my));
       }
     }

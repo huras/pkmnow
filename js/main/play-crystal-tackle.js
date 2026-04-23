@@ -1,11 +1,5 @@
 import { clearScatterSolidBlockCache } from '../scatter-pass2-debug.js';
-import {
-  BIOME_VEGETATION,
-  BERRY_PATCH_THRESHOLD,
-  getTreeType,
-  TREE_TILES,
-  tileSurfaceAllowsScatterVegetation
-} from '../biome-tiles.js';
+import { BIOME_VEGETATION, getTreeType, TREE_TILES, tileSurfaceAllowsScatterVegetation } from '../biome-tiles.js';
 import { getEncounters } from '../ecodex.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -74,6 +68,7 @@ import { playCrystalClinkSfx } from '../audio/crystal-clink-sfx.js';
 import { playRockSmashingSfx, playRockSmashingBreakSfx } from '../audio/rock-smashing-sfx.js';
 import { getChargeLevel } from './play-charge-levels.js';
 import { rumblePlayerGamepadDetailImpact } from './play-gamepad-rumble.js';
+import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 
 /** Scatter micro-origins `(ox,oy)` whose crystal base was broken by tackle (persist for this play session). */
 const destroyedCrystalScatterOrigins = new Set();
@@ -1254,9 +1249,7 @@ function scatterItemKeyIsPureGrassDecoration(itemKey) {
 }
 
 /**
- * Same procedural scatter pick as `scatterPhysicsCircleAtOrigin` / static-entity-cache:
- * override (if any) + berry-patch filter + `seed + 222` index into filtered list.
- * Tackle/Cut must use this — not the raw `BIOME_VEGETATION` list — or hits miss what is drawn.
+ * Same scatter itemKey resolution as bake / walkability / static entity cache (vegetation channels + RNG).
  * @param {number} ox
  * @param {number} oy
  * @param {object | null | undefined} tile
@@ -1264,20 +1257,7 @@ function scatterItemKeyIsPureGrassDecoration(itemKey) {
  * @returns {string | null}
  */
 function scatterProceduralItemKeyAtOrigin(ox, oy, tile, seed) {
-  if (!tile) return null;
-  if (hasScatterItemKeyOverride(ox, oy)) {
-    const forced = getScatterItemKeyOverride(ox, oy);
-    if (forced && forced !== SCATTER_ITEM_KEY_OVERRIDE_EMPTY) return forced;
-  }
-  const itemsO = BIOME_VEGETATION[tile.biomeId] || [];
-  if (!itemsO.length) return null;
-  const isBerryPatchO = tile.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
-  const filteredO = itemsO.filter((ik) => {
-    const isB = ik.includes('berry-tree-');
-    return isBerryPatchO ? isB : !isB;
-  });
-  if (!filteredO.length) return null;
-  return filteredO[Math.floor(seededHash(ox, oy, seed + 222) * filteredO.length)];
+  return resolveScatterVegetationItemKey(ox, oy, tile, seed);
 }
 
 function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
@@ -1827,7 +1807,10 @@ function collectDetailHitsInDisk(px, py, radiusTiles, data, opts) {
 
       const oTile = getTileCached(ox, oy);
       if (!oTile) continue;
-      if (!validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)) {
+      const overrideKey = getScatterItemKeyOverride(ox, oy);
+      const hasForcedScatter =
+        !!overrideKey && overrideKey !== SCATTER_ITEM_KEY_OVERRIDE_EMPTY;
+      if (!hasForcedScatter && !validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)) {
         continue;
       }
       const itemKey = scatterProceduralItemKeyAtOrigin(ox, oy, oTile, seed);
@@ -2004,7 +1987,11 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
         // still allow tackle to break/pick by testing a compact footprint-center circle.
         const oTile = getTileCached(ox, oy);
         if (!oTile) continue;
+        const overrideKey = getScatterItemKeyOverride(ox, oy);
+        const hasForcedScatter =
+          !!overrideKey && overrideKey !== SCATTER_ITEM_KEY_OVERRIDE_EMPTY;
         if (
+          !hasForcedScatter &&
           !validScatterOriginMicro(ox, oy, seed, microWm, microHm, getTileCached, originMemo)
         ) {
           continue;

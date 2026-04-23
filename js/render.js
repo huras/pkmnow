@@ -2150,7 +2150,8 @@ export function render(canvas, data, options = {}) {
       renderMinimap(minimapCanvas, data, player, {
         recentTrailMicro: globalMapPlayerTrailRecentMicro,
         playVision,
-        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug
+        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug,
+        showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay
       });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);

@@ -16,7 +16,14 @@ import {
   syncEntityZWithTerrain
 } from '../walkability.js';
 import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
-import { WILD_WANDER_RADIUS_TILES } from './wild-pokemon-constants.js';
+import {
+  WILD_WANDER_RADIUS_TILES,
+  WILD_GROUP_LEADER_ROAM_SPATIAL_FREQ_RAD_PER_TILE
+} from './wild-pokemon-constants.js';
+import {
+  leaderRoamBezierSteerUnit,
+  leaderRoamCurveLegRenderable
+} from './wild-leader-roam-curve.js';
 import { WILD_EMOTION_NONPERSIST_CLEAR_SEC } from '../pokemon/emotion-display-timing.js';
 import {
   defaultPortraitSlugForBalloon,
@@ -33,7 +40,14 @@ import { rollBossPromotedDex } from './wild-boss-variants.js';
 import { encounterNameToDex } from '../pokemon/gen1-name-to-dex.js';
 import { advanceWildSpeechBubble, setWildSpeechBubble } from '../social/speech-bubble-state.js';
 import { getEncounters } from '../ecodex.js';
-import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
+import {
+  WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+  ENTITY_GRAVITY,
+  ENTITY_JUMP_IMPULSE,
+  ENTITY_AIR_JUMP_MAX_GROUND,
+  ENTITY_AIR_JUMP_MAX_FLYING
+} from '../world-movement-constants.js';
+import { speciesHasFlyingType } from '../pokemon/pokemon-type-helpers.js';
 import {
   ensureEntityStamina,
   tickEntityStamina,
@@ -51,11 +65,8 @@ const WANDER_MOVE_MIN = 0.45;
 const WANDER_MOVE_EXTRA = 1.2;
 const WANDER_IDLE_MIN = 0.35;
 const WANDER_IDLE_EXTRA = 1.0;
-const WILD_GRAVITY = 45.0;
-const WILD_JUMP_IMPULSE = 12.0;
 const WILD_JUMP_BLOCKED_FRAMES_FLEE = 14;
 const WILD_JUMP_BLOCKED_FRAMES_WANDER = 28;
-const WILD_JUMP_COOLDOWN_SEC = 0.85;
 const WILD_TREE_BODY_R = 0.28;
 const WILD_VISION_RANGE_BASE_MULT = 1.45;
 const WILD_VISION_RANGE_MIN_TILES = 8.5;
@@ -70,6 +81,7 @@ export function ensureWildPhysicsState(entity) {
   if (entity.jumping == null) entity.jumping = false;
   if (entity.jumpSerial == null) entity.jumpSerial = 0;
   if (entity.jumpCooldown == null) entity.jumpCooldown = 0;
+  if (entity.jumpsUsed == null) entity.jumpsUsed = 0;
   if (entity._blockedMoveFrames == null) entity._blockedMoveFrames = 0;
   if (entity._wanderLastNx == null) entity._wanderLastNx = 0;
   if (entity._wanderLastNy == null) entity._wanderLastNy = 1;
@@ -151,26 +163,41 @@ export function integrateWildPokemonVertical(entity, dt) {
   if (entity.jumpCooldown > 0) entity.jumpCooldown = Math.max(0, entity.jumpCooldown - dt);
   if (!entity.grounded) {
     const zWildPrev = entity.z ?? 0;
-    entity.vz -= WILD_GRAVITY * dt;
+    entity.vz -= ENTITY_GRAVITY * dt;
     entity.z += entity.vz * dt;
     if (entity.z <= 0) {
       entity.z = 0;
       entity.vz = 0;
       entity.grounded = true;
       entity.jumping = false;
+      entity.jumpsUsed = 0;
       if (zWildPrev > 0.04) playFloorHit2Sfx(entity);
     }
   }
 }
 
-export function tryWildPokemonJump(entity) {
-  if (!entity.grounded || (entity.jumpCooldown || 0) > 0) return;
-  entity.vz = WILD_JUMP_IMPULSE;
+/**
+ * Same vertical contract as {@link tryJumpPlayer}: `ENTITY_JUMP_IMPULSE`, `jumpsUsed` / max jumps, no AI cooldown.
+ *
+ * @param {object} entity
+ * @param {{ vzScale?: number }} [opts]
+ * @returns {boolean}
+ */
+export function tryWildPokemonJump(entity, opts = {}) {
+  ensureWildPhysicsState(entity);
+  if ((entity.cutThirdHitLockoutSec || 0) > 0) return false;
+  const canFly = speciesHasFlyingType(entity.dexId ?? 0);
+  if (entity.grounded || (entity.z ?? 0) <= 0.001) entity.jumpsUsed = 0;
+  const maxJumps = canFly ? ENTITY_AIR_JUMP_MAX_FLYING : ENTITY_AIR_JUMP_MAX_GROUND;
+  if ((entity.jumpsUsed || 0) >= maxJumps) return false;
+  const vzScale = Math.max(0.35, Math.min(2.5, Number(opts?.vzScale) || 1));
+  entity.vz = ENTITY_JUMP_IMPULSE * vzScale;
   entity.grounded = false;
   entity.jumping = true;
+  entity.jumpsUsed = (entity.jumpsUsed || 0) + 1;
   entity.jumpSerial = (entity.jumpSerial || 0) + 1;
-  entity.jumpCooldown = WILD_JUMP_COOLDOWN_SEC;
   entity._blockedMoveFrames = 0;
+  return true;
 }
 
 export function wildFeetDeltaForEntity(entity) {
@@ -207,6 +234,66 @@ function assignWildTargetIfEndpointClear(entity, targetX, targetY, data, air) {
   entity.targetX = targetX;
   entity.targetY = targetY;
   return true;
+}
+
+function clearLeaderRoamCurveState(entity) {
+  entity._leaderRoamP0x = null;
+  entity._leaderRoamP0y = null;
+  entity._leaderRoamP2x = null;
+  entity._leaderRoamP2y = null;
+  entity._leaderRoamBulgeSign = null;
+  entity._leaderRoamPathPhaseRad = null;
+}
+
+/**
+ * Quadratic Bezier leg for group leader ROAM wander (debug + steering).
+ * @param {object} entity
+ * @param {boolean} followerMode
+ */
+function syncLeaderRoamCurveLeg(entity, followerMode) {
+  if (
+    followerMode ||
+    !entity.groupId ||
+    String(entity.groupLeaderKey || '') !== String(entity.key || '') ||
+    String(entity.groupPhase || '') !== 'ROAM'
+  ) {
+    clearLeaderRoamCurveState(entity);
+    return;
+  }
+  const tx = entity.targetX;
+  const ty = entity.targetY;
+  if (!Number.isFinite(tx) || !Number.isFinite(ty)) {
+    clearLeaderRoamCurveState(entity);
+    return;
+  }
+  if (
+    Number.isFinite(entity._leaderRoamP2x) &&
+    Number.isFinite(entity._leaderRoamP2y) &&
+    Math.abs(entity._leaderRoamP2x - tx) < 1e-5 &&
+    Math.abs(entity._leaderRoamP2y - ty) < 1e-5 &&
+    Number.isFinite(entity._leaderRoamP0x)
+  ) {
+    return;
+  }
+  const p0x = Number(entity.x) || 0;
+  const p0y = Number(entity.y) || 0;
+  const dx = tx - p0x;
+  const dy = ty - p0y;
+  if (Math.hypot(dx, dy) < 0.45) {
+    clearLeaderRoamCurveState(entity);
+    return;
+  }
+  entity._leaderRoamP0x = p0x;
+  entity._leaderRoamP0y = p0y;
+  entity._leaderRoamP2x = tx;
+  entity._leaderRoamP2y = ty;
+  const h = seededHashInt(
+    Math.floor(tx * 1000) | 0,
+    Math.floor(ty * 1000) | 0,
+    ((entity.dexId ?? 1) * 1315423911) ^ ((String(entity.key || '').length * 17489) | 0)
+  );
+  entity._leaderRoamBulgeSign = h % 2 === 0 ? 1 : -1;
+  entity._leaderRoamPathPhaseRad = 0;
 }
 
 export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTreeTrunks = false) {
@@ -910,10 +997,13 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         }
       }
       if (entity.targetX === null) {
+        clearLeaderRoamCurveState(entity);
         entity.idlePauseTimer = 1.0;
         return;
       }
     }
+
+    syncLeaderRoamCurveLeg(entity, followerMode);
 
     const dxT = entity.targetX - entity.x;
     const dyT = entity.targetY - entity.y;
@@ -931,6 +1021,7 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
         entity.animMoving = false;
         return;
       }
+      clearLeaderRoamCurveState(entity);
       entity.targetX = null;
       entity.targetY = null;
       entity.idlePauseTimer = WANDER_IDLE_MIN + Math.random() * WANDER_IDLE_EXTRA;
@@ -971,7 +1062,14 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       return;
     }
 
-    let moveAng = Math.atan2(dyT, dxT);
+    if (WILD_GROUP_LEADER_ROAM_SPATIAL_FREQ_RAD_PER_TILE !== 0 && leaderRoamCurveLegRenderable(entity)) {
+      const ds = Math.hypot((Number(entity.vx) || 0) * dt, (Number(entity.vy) || 0) * dt);
+      entity._leaderRoamPathPhaseRad =
+        (Number(entity._leaderRoamPathPhaseRad) || 0) + ds * WILD_GROUP_LEADER_ROAM_SPATIAL_FREQ_RAD_PER_TILE;
+    }
+
+    const curveUnit = leaderRoamBezierSteerUnit(entity);
+    let moveAng = curveUnit ? Math.atan2(curveUnit.ny, curveUnit.nx) : Math.atan2(dyT, dxT);
     const nxT = Math.cos(moveAng);
     const nyT = Math.sin(moveAng);
     
@@ -1036,13 +1134,11 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (
     entity.grounded &&
     !air &&
-    (entity.jumpCooldown || 0) <= 0 &&
     stepLen > 0.045 &&
     !wildWalkOk(nx, ny, data, entity.x, entity.y, entity, false, true) &&
     wildWalkOk(nx, ny, data, entity.x, entity.y, entity, true, true)
   ) {
-    tryWildPokemonJump(entity);
-    air = wildIsAirborne(entity);
+    if (tryWildPokemonJump(entity)) air = wildIsAirborne(entity);
   }
 
   const moved = tryApplyWildPokemonMove(entity, nx, ny, data, air);

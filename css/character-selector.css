@@ -42,7 +42,7 @@
   opacity: 1;
 }
 
-.play-item-hud.play-item-hud--collapsed .play-item-hud__grid {
+.play-item-hud.play-item-hud--collapsed .play-item-hud__inventory-scroll {
   display: none;
 }
 
@@ -130,11 +130,38 @@
   border-color: rgba(148, 180, 255, 0.7);
 }
 
+/* Cap visible inventory to ~3 grid rows; full list scrolls vertically. */
+.play-item-hud__inventory-scroll {
+  --play-item-hud-row-cap: 90px;
+  --play-item-hud-gap: 6px;
+  max-height: calc(
+    3 * var(--play-item-hud-row-cap) + 2 * var(--play-item-hud-gap)
+  );
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.play-item-hud__inventory-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.play-item-hud__inventory-scroll::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(120, 150, 255, 0.35);
+}
+
+.play-item-hud__inventory-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 180, 255, 0.55);
+}
+
 .play-item-hud__grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--play-item-hud-gap, 6px);
   align-items: stretch;
+  grid-auto-rows: minmax(var(--play-item-hud-row-cap, 90px), auto);
 }
 
 /* Loot rows are direct grid children with crystal (display:contents on wrapper). */

@@ -6,11 +6,14 @@ import {
   FOLIAGE_DENSITY_THRESHOLD,
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
-  getTreeType
+  getTreeType,
+  SCATTER_NOISE_SEED_OFFSET,
+  SCATTER_NOISE_SCALE,
+  SCATTER_NOISE_THRESHOLD
 } from '../biome-tiles.js';
+import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 import { PLAY_CHUNK_SIZE } from './render-constants.js';
 import { hasPlayChunk, getPlayChunkCacheRevision } from './play-chunk-cache.js';
-import { seededHash } from '../tessellation-logic.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import {
@@ -20,6 +23,7 @@ import {
 } from '../pokemon/spritecollab-portraits.js';
 import { drawFarCryMinimapEchoes } from './render-far-cry.js';
 import { getActiveFarCryMinimapEchoes } from '../main/far-cry-system.js';
+import { isDexCryIdentified } from '../wild-pokemon/cry-identification-progress.js';
 import { t } from '../i18n/index.js';
 
 // ---------------------------------------------------------------------------
@@ -378,11 +382,11 @@ function classifyLocalMinimapTile(mx, my, tile, data) {
   if (isTreeRoot || isTreeRight) return MM_TILE_TREE;
 
   if (!tile.isRoad && !tile.isCity && !tile.urbanBuilding) {
-    const scatterNoise = foliageDensity(mx, my, data.seed + 111, 2.5);
-    if (scatterNoise > 0.82) {
+    const scatterNoise = foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE);
+    if (scatterNoise > SCATTER_NOISE_THRESHOLD) {
       const items = BIOME_VEGETATION[tile.biomeId] || [];
       if (items.length) {
-        const itemKey = items[Math.floor(seededHash(mx, my, data.seed + 222) * items.length)] || '';
+        const itemKey = resolveScatterVegetationItemKey(mx, my, tile, data.seed) || '';
         const item = String(itemKey).toLowerCase();
         if (item.includes('crystal')) return MM_TILE_CRYSTAL;
         if (item.includes('rock')) return MM_TILE_ROCK;
@@ -799,14 +803,14 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
   for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
     const m = markers[i];
     const isDistanceEstimate = !!m.ent._distanceInactivated;
-    const speciesHidden = !m.ent.minimapSpeciesKnown;
+    const dexId = Math.floor(Number(m.ent.dexId) || 0);
+    const portraitRevealed = !!m.ent.minimapSpeciesKnown || isDexCryIdentified(dexId);
+    const speciesHidden = !portraitRevealed;
     const sx = (m.mx - tf.ox + 0.5) * tf.scale;
     const sy = (m.my - tf.oy + 0.5) * tf.scale;
     if (sx < -screenPad || sy < -screenPad || sx > canvasSize.w + screenPad || sy > canvasSize.h + screenPad) {
       continue;
     }
-
-    const dexId = Math.floor(Number(m.ent.dexId) || 0);
     const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
     if (speciesHidden) {
       queueUnknownPokemonMinimapIconLoad();
@@ -923,6 +927,40 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
   }
 }
 
+/**
+ * Region macro-tile edges (same space as base minimap cache: one cell = one macro tile).
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} viewW
+ * @param {number} viewH
+ * @param {{ tfOx: number, tfOy: number, tfScale: number, mapMacroW: number, mapMacroH: number }} tf
+ */
+function drawMacroTileGridOnMinimap(ctx, viewW, viewH, tf) {
+  const { tfOx, tfOy, tfScale, mapMacroW, mapMacroH } = tf;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, viewW, viewH);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1;
+  for (let gx = 0; gx <= mapMacroW; gx++) {
+    const sx = Math.floor((gx - tfOx) * tfScale) + 0.5;
+    if (sx < -2 || sx > viewW + 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx, viewH);
+    ctx.stroke();
+  }
+  for (let gy = 0; gy <= mapMacroH; gy++) {
+    const sy = Math.floor((gy - tfOy) * tfScale) + 0.5;
+    if (sy < -2 || sy > viewH + 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(0, sy);
+    ctx.lineTo(viewW, sy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------------------
 // Public API — same signature as before
 // ---------------------------------------------------------------------------
@@ -930,7 +968,11 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
  * @param {HTMLCanvasElement} canvas
  * @param {object} data  world data (biomes, width, height, paths, graph, …)
  * @param {object} player  {x, y} in micro-tile coordinates
- * @param {{ recentTrailMicro?: Array<{ x: number, y: number }>, debugShowAllSpawned?: boolean }} [options]
+ * @param {{
+ *   recentTrailMicro?: Array<{ x: number, y: number }>,
+ *   debugShowAllSpawned?: boolean,
+ *   showMacroTileGrid?: boolean
+ * }} [options]
  */
 export function renderMinimap(canvas, data, player, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -1015,6 +1057,16 @@ export function renderMinimap(canvas, data, player, options = {}) {
       }
       ctx.restore();
     }
+  }
+
+  if (options.showMacroTileGrid) {
+    drawMacroTileGridOnMinimap(ctx, w, h, {
+      tfOx,
+      tfOy,
+      tfScale,
+      mapMacroW: data.width,
+      mapMacroH: data.height
+    });
   }
 
   // --- Viewport border pulse for local sprite zooms ---

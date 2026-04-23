@@ -433,9 +433,9 @@ export class CharacterSelector {
       this._syncPlayItemHudOpacity();
       return;
     }
-    const rows = getCollectedDetailInventorySnapshot()
-      .filter((r) => !String(r.itemKey || '').toLowerCase().includes('crystal'))
-      .slice(0, 8);
+    const rows = getCollectedDetailInventorySnapshot().filter((r) =>
+      !String(r.itemKey || '').toLowerCase().includes('crystal')
+    );
     const sig = `${crystalN}|${rows.map((r) => `${r.itemKey}:${r.count | 0}`).join(';')}`;
     if (sig === this._lastPlayItemHudSig) {
       this._syncPlayItemHudOpacity();
@@ -640,23 +640,25 @@ export class CharacterSelector {
               title="Minimize item inventory (Gamepad A)"
             >A Min</button>
           </div>
-          <div class="play-item-hud__grid" id="play-item-grid">
-            <div
-              class="play-item-hud__row play-item-hud__row--draggable"
-              id="play-item-crystal-row"
-              draggable="false"
-              data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
-              title="Drag to the map to drop"
-            >
-              <span class="play-item-hud__icon" aria-hidden="true">
-                <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="36" height="36" alt="" decoding="async" />
-              </span>
-              <div class="play-item-hud__meta">
-                <span class="play-item-hud__label">Crystal Shards</span>
-                <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+          <div class="play-item-hud__inventory-scroll" id="play-item-inventory-scroll">
+            <div class="play-item-hud__grid" id="play-item-grid">
+              <div
+                class="play-item-hud__row play-item-hud__row--draggable"
+                id="play-item-crystal-row"
+                draggable="false"
+                data-inventory-drag="${PLAY_INVENTORY_DRAG_CRYSTAL_AGGREGATE}"
+                title="Drag to the map to drop"
+              >
+                <span class="play-item-hud__icon" aria-hidden="true">
+                  <img id="play-item-crystal-icon" class="play-item-hud__icon-img" width="36" height="36" alt="" decoding="async" />
+                </span>
+                <div class="play-item-hud__meta">
+                  <span class="play-item-hud__label">Crystal Shards</span>
+                  <span class="play-item-hud__count" id="play-item-crystal-count">0</span>
+                </div>
               </div>
+              <div id="play-item-loot-list"></div>
             </div>
-            <div id="play-item-loot-list"></div>
           </div>
         </div>
       </div>

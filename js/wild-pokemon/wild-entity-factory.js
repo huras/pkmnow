@@ -12,7 +12,8 @@ import { entitiesByKey } from './wild-core-state.js';
 import {
   releaseWildGroupFollowersFromLeader,
   beginGroupCombatBreakFromHit,
-  promoteWildGroupLeaderIfNeeded
+  promoteWildGroupLeaderIfNeeded,
+  wildAttackerAndVictimSameGroup
 } from './wild-group-behavior.js';
 import { markWildPokemonFainted } from './wild-pokemon-persistence.js';
 import { player, gainPlayerExp } from '../player.js';
@@ -21,6 +22,7 @@ const PLAYER_WILD_DEFEAT_EXP = 20;
 
 export function bindStandardWildTakeDamage(entity) {
   entity.takeDamage = function (amount, attacker = null) {
+    if (wildAttackerAndVictimSameGroup(attacker, this)) return;
     const wasAlive = !this.deadState && (Number(this.hp) || 0) > 0;
     const memory = ensureSocialMemory(this);
     if (Number(amount) > 0) markWildMinimapSpeciesKnown(this);

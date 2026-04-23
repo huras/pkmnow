@@ -1,4 +1,5 @@
 import { getAllBerryTreeStates } from './berry-tree-system.js';
+import { ensurePokemondbItemIconInCache } from '../social/pokemondb-item-icon-paths.js';
 
 const BERRY_EMOJIS = {
   'Cheri': '🍒',
@@ -15,6 +16,14 @@ const MATURITY_LABELS = {
   1: 'Growing',
   2: 'Mature'
 };
+
+function berryItemSlugFromType(type) {
+  const base = String(type || '').trim().toLowerCase();
+  if (!base) return null;
+  // Keep compatibility with both spellings seen across data sources.
+  const normalized = base === 'lapapa' ? 'iapapa' : base;
+  return `${normalized}-berry`;
+}
 
 /**
  * Renders the list of discovered berry trees in the minimap popover.
@@ -72,7 +81,28 @@ export function renderBerriesPopoverList(listRoot, player) {
 
     const icon = document.createElement('div');
     icon.className = 'berry-item__icon';
-    icon.textContent = BERRY_EMOJIS[state.type] || '🫐';
+    const iconImg = document.createElement('img');
+    iconImg.className = 'berry-item__icon-img';
+    iconImg.width = 24;
+    iconImg.height = 24;
+    iconImg.alt = '';
+    iconImg.decoding = 'async';
+    iconImg.loading = 'lazy';
+    iconImg.style.display = 'none';
+    const iconFallback = document.createElement('span');
+    iconFallback.className = 'berry-item__icon-fallback';
+    iconFallback.textContent = BERRY_EMOJIS[state.type] || '🫐';
+    icon.appendChild(iconImg);
+    icon.appendChild(iconFallback);
+    const slug = berryItemSlugFromType(state.type);
+    if (slug) {
+      void ensurePokemondbItemIconInCache(slug).then((res) => {
+        if (!res?.path || !iconImg.isConnected) return;
+        iconImg.src = res.path;
+        iconImg.style.display = '';
+        if (iconFallback.isConnected) iconFallback.style.display = 'none';
+      });
+    }
     
     const info = document.createElement('div');
     info.className = 'berry-item__info';
