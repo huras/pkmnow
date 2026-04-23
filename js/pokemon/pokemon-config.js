@@ -483,7 +483,7 @@ export const POKEMON_CONFIG = {
   462: { name: 'Magnezone', types: ['electric', 'steel'], heightTiles: 3.7, baseSpeed: 60 },
   463: { name: 'Lickilicky', types: ['normal'], heightTiles: 4.8, baseSpeed: 50 },
   464: { name: 'Rhyperior', types: ['ground', 'rock'], heightTiles: 6.4, baseSpeed: 40 },
-  465: { name: 'Tangrowth', types: ['grass'], heightTiles: 5.5, baseSpeed: 50 },
+  465: { name: 'Tangrowth', types: ['grass'], heightTiles: 3.5, baseSpeed: 50 },
   466: { name: 'Electivire', types: ['electric'], heightTiles: 5.1, baseSpeed: 95 },
   467: { name: 'Magmortar', types: ['fire'], heightTiles: 4.6, baseSpeed: 83 },
   468: { name: 'Togekiss', types: ['fairy', 'flying'], heightTiles: 4.4, baseSpeed: 80 },

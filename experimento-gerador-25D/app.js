@@ -2,10 +2,17 @@ import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js';
 import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.21/+esm';
 import { generate, DEFAULT_CONFIG } from '../js/generator.js';
-import { getMicroTile, MACRO_TILE_STRIDE } from '../js/chunking.js';
+import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity } from '../js/chunking.js';
 import { computeTerrainRoleAndSprite } from '../js/main/terrain-role-helpers.js';
 import { TessellationEngine } from '../js/tessellation-engine.js';
 import { BIOMES } from '../js/biomes.js';
+import {
+  getTreeType,
+  TREE_TILES,
+  tileSurfaceAllowsScatterVegetation,
+  TREE_DENSITY_THRESHOLD,
+  TREE_NOISE_SCALE,
+} from '../js/biome-tiles.js';
 
 document.querySelector('#app').innerHTML = `
   <div id="viewport"></div>
@@ -43,7 +50,14 @@ const frameMsEl = document.getElementById('frame-ms');
 const triCountEl = document.getElementById('tri-count');
 const macroCoordEl = document.getElementById('macro-coord');
 
-const settings = { microSpan: 96, stepHeight: 0.55, wallShade: 0.72, worldHeightScale: 10 };
+const settings = {
+  microSpan: 96,
+  stepHeight: 0.55,
+  wallShade: 0.72,
+  worldHeightScale: 10,
+  showVegetation: true,
+  vegetationDensity: 0.85,
+};
 const debugSettings = { showAxes: true, axesSize: 24, wireframeOnly: false };
 
 const TILE_PX = 16;
@@ -62,6 +76,10 @@ let pendingMacroDown = null;
 
 let worldMesh = null;
 let detailFloorMesh = null;
+let vegetationGroup = null;
+const treeBillboardTextureCache = new Map();
+const vegetationBillboards = [];
+const vegetationMaterials = [];
 let lastFrameTs = performance.now();
 let lastPerfPaintTs = lastFrameTs;
 const frameTimestamps = [];
@@ -150,6 +168,124 @@ function pushFace(builder, a, b, c, d, uv, tint) {
   builder.c.push(tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint);
 }
 
+function deterministic01(x, y, seed) {
+  let h = (seed * 374761393 + x * 668265263 + y * 1274126177) | 0;
+  h = ((h ^ (h >> 13)) * 1103515245) | 0;
+  return (h & 0x7fffffff) / 0x7fffffff;
+}
+
+function seedToInt(seedValue) {
+  if (typeof seedValue === 'number' && Number.isFinite(seedValue)) return seedValue | 0;
+  const text = String(seedValue ?? '');
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+  return h | 0;
+}
+
+function getTileUvRect(tileId, cols, texW, texH) {
+  const sx = (tileId % cols) * TILE_PX;
+  const sy = Math.floor(tileId / cols) * TILE_PX;
+  return { sx, sy, sw: TILE_PX, sh: TILE_PX, texW, texH };
+}
+
+async function getTreeBillboardTexture(treeType) {
+  if (!treeType || !TREE_TILES[treeType]) return null;
+  if (treeBillboardTextureCache.has(treeType)) return treeBillboardTextureCache.get(treeType);
+
+  const naturePath = 'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png';
+  const natureTex = await textureFor(naturePath);
+  if (!natureTex?.image) return null;
+
+  const cols = 57;
+  const srcW = natureTex.image.width;
+  const srcH = natureTex.image.height;
+  const spec = TREE_TILES[treeType];
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 48;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = false;
+
+  // Match formal-tree canopy ordering from render pipeline:
+  // spec.top is laid out as [lowerRowL, lowerRowR, upperRowL, upperRowR].
+  // So billboard rows must be upper first, then lower, then base.
+  for (let i = 0; i < 2; i++) {
+    const uv = getTileUvRect(spec.top[i + 2], cols, srcW, srcH);
+    ctx.drawImage(natureTex.image, uv.sx, uv.sy, uv.sw, uv.sh, i * 16, 0, 16, 16);
+  }
+  for (let i = 0; i < 2; i++) {
+    const uv = getTileUvRect(spec.top[i], cols, srcW, srcH);
+    ctx.drawImage(natureTex.image, uv.sx, uv.sy, uv.sw, uv.sh, i * 16, 16, 16, 16);
+  }
+  // base row
+  for (let i = 0; i < 2; i++) {
+    const uv = getTileUvRect(spec.base[i], cols, srcW, srcH);
+    ctx.drawImage(natureTex.image, uv.sx, uv.sy, uv.sw, uv.sh, i * 16, 32, 16, 16);
+  }
+
+  const out = new THREE.CanvasTexture(canvas);
+  out.colorSpace = THREE.SRGBColorSpace;
+  out.magFilter = THREE.NearestFilter;
+  out.minFilter = THREE.NearestFilter;
+  out.generateMipmaps = false;
+  treeBillboardTextureCache.set(treeType, out);
+  return out;
+}
+
+async function buildVegetationBillboards(cells, span, half, worldSeed) {
+  vegetationBillboards.length = 0;
+  vegetationMaterials.length = 0;
+  vegetationGroup = new THREE.Group();
+  detailGroup.add(vegetationGroup);
+  if (!settings.showVegetation) return;
+  const seedInt = seedToInt(worldSeed);
+
+  for (let y = 0; y < span; y++) {
+    for (let x = 0; x < span; x++) {
+      const c = cells[idx(span, x, y)];
+      if (!tileSurfaceAllowsScatterVegetation(c)) continue;
+      if ((c.mx + c.my) % 3 !== 0) continue;
+      const treeNoise = foliageDensity(c.mx, c.my, seedInt + 5555, TREE_NOISE_SCALE);
+      if (treeNoise < TREE_DENSITY_THRESHOLD) continue;
+
+      const right = x + 1 < span ? cells[idx(span, x + 1, y)] : getMicroTile(c.mx + 1, c.my, currentWorld);
+      if (!right || right.heightStep !== c.h) continue;
+
+      const biomeId = c.biomeId;
+      const treeType = getTreeType(biomeId, c.mx, c.my, seedInt);
+      if (!treeType) continue;
+      if (c.h <= 0) continue;
+      const noise = deterministic01(c.mx, c.my, seedInt + 9001);
+      const gate = 0.99 - settings.vegetationDensity * 0.08;
+      if (noise < gate) continue;
+
+      const tex = await getTreeBillboardTexture(treeType);
+      if (!tex) continue;
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        alphaTest: 0.2,
+        side: THREE.DoubleSide,
+      });
+      mat.userData.baseMap = tex;
+      const spr = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      const px = x - half + 1.0;
+      const pz = y - half + 0.5;
+      const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
+      const width = baseScale;
+      const height = baseScale * 1.5;
+      const py = c.h * settings.stepHeight + 0.05 + height * 0.5;
+      spr.position.set(px, py, pz);
+      spr.scale.set(width, height, 1);
+      vegetationBillboards.push(spr);
+      vegetationMaterials.push(mat);
+      vegetationGroup.add(spr);
+    }
+    if (y % 10 === 0) await nextFrame();
+  }
+}
+
 function clearGroup(group) {
   for (const child of group.children) {
     if (child.geometry) child.geometry.dispose?.();
@@ -177,7 +313,25 @@ function applyWireframeMode() {
     }
     mat.needsUpdate = true;
   }
+  for (const mat of vegetationMaterials) {
+    if (!mat) continue;
+    if (debugSettings.wireframeOnly) {
+      mat.wireframe = true;
+      mat.map = null;
+      mat.color.set('#b8ffb8');
+      mat.transparent = false;
+      mat.alphaTest = 0;
+    } else {
+      mat.wireframe = false;
+      mat.map = mat.userData.baseMap || null;
+      mat.color.set('#ffffff');
+      mat.transparent = true;
+      mat.alphaTest = 0.2;
+    }
+    mat.needsUpdate = true;
+  }
   if (detailFloorMesh) detailFloorMesh.visible = !debugSettings.wireframeOnly;
+  if (vegetationGroup) vegetationGroup.visible = !!settings.showVegetation;
 }
 
 function setViewMode(mode) {
@@ -324,7 +478,18 @@ async function buildDetailTerrain(world, centerMicroX, centerMicroY) {
     const set = role.set;
     const file = set?.file ? TessellationEngine.getImagePath(set.file).replace(/\\/g, '/') : null;
     if (file) needed.add(file);
-    cells[idx(span, x, y)] = { h: t.heightStep, file, cols: TessellationEngine.getTerrainSheetCols(set), sprite: role.spriteId ?? set?.centerId ?? 0 };
+    cells[idx(span, x, y)] = {
+      h: t.heightStep,
+      heightStep: t.heightStep,
+      file,
+      cols: TessellationEngine.getTerrainSheetCols(set),
+      sprite: role.spriteId ?? set?.centerId ?? 0,
+      biomeId: t.biomeId,
+      isRoad: t.isRoad,
+      isCity: t.isCity,
+      mx,
+      my,
+    };
     if (x === span - 1 && y % 8 === 0) await nextFrame();
   }
   await Promise.all([...needed].map(textureFor));
@@ -374,6 +539,7 @@ async function buildDetailTerrain(world, centerMicroX, centerMicroY) {
   );
   detailFloorMesh.position.y = floorY - 0.02;
   detailGroup.add(detailFloorMesh);
+  await buildVegetationBillboards(cells, span, half, world.seed);
   triCountEl.textContent = triTotal.toLocaleString('en-US');
   applyWireframeMode();
 }
@@ -460,6 +626,7 @@ function animate(nowTs) {
   frameDurationsMs.push(dt);
   if (frameDurationsMs.length > FRAME_MS_WINDOW) frameDurationsMs.shift();
   controls.update();
+  for (const b of vegetationBillboards) b.quaternion.copy(camera.quaternion);
   renderer.render(scene, camera);
   updatePerfOverlay(nowTs);
   requestAnimationFrame(animate);
@@ -468,6 +635,18 @@ function animate(nowTs) {
 const gui = new GUI({ title: 'Render Params' });
 gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && buildDetailTerrain(currentWorld, selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
 gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && buildDetailTerrain(currentWorld, selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => {
+  if (vegetationGroup) vegetationGroup.visible = !!v;
+});
+gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
+  if (currentWorld && selectedMacro) {
+    buildDetailTerrain(
+      currentWorld,
+      selectedMacro.x * MACRO_TILE_STRIDE + halfStride,
+      selectedMacro.y * MACRO_TILE_STRIDE + halfStride,
+    );
+  }
+});
 gui.add(settings, 'worldHeightScale', 2, 80, 1).name('World Height Scale').onFinishChange(() => {
   if (!currentWorld) return;
   buildWorldMacroMesh(currentWorld);
