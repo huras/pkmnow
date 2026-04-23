@@ -21,7 +21,7 @@ import {
   GRASS_TILES,
   FOLIAGE_DENSITY_THRESHOLD,
 } from '../../js/biome-tiles.js';
-import { renderLayout, createSceneGraph } from './ui-scene.js';
+import { renderLayout, createSceneGraph, DEFAULT_ORBIT_ZOOM_DISTANCE } from './ui-scene.js';
 import {
   TILE_PX,
   clamp,
@@ -59,7 +59,8 @@ export function startApp() {
   const halfStride = Math.floor(MACRO_TILE_STRIDE / 2);
   const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, new THREE.Color(b.color)]));
   const atlasTextures = new Map();
-  const pickMeshes = [];
+  /** Terrain pick targets for the active detail buffer only (swapped on stream). */
+  let pickMeshes = [];
 
   let currentWorld = null;
   let currentBounds = null;
@@ -71,6 +72,10 @@ export function startApp() {
   let pendingDetailDown = null;
   let worldMesh = null;
   let detailFloorMesh = null;
+
+  /** Double-buffered detail rebuild: coalesce overlapping requests into `pendingDetailCenter`. */
+  let detailRebuildInFlight = false;
+  let pendingDetailCenter = null;
 
   const perf = {
     lastFrameTs: performance.now(),
@@ -188,6 +193,15 @@ export function startApp() {
     if (detailFloorMesh) detailFloorMesh.visible = !debugSettings.wireframeOnly;
   }
 
+  function applyOrbitZoom(dirX, dirY, dirZ) {
+    const len = Math.hypot(dirX, dirY, dirZ);
+    if (len < 1e-8) return;
+    const s = DEFAULT_ORBIT_ZOOM_DISTANCE / len;
+    sceneBits.camera.position.set(dirX * s, dirY * s, dirZ * s);
+    sceneBits.controls.target.set(0, 0, 0);
+    sceneBits.controls.update();
+  }
+
   function setViewMode(mode) {
     viewMode = mode;
     sceneBits.worldGroup.visible = mode === 'world';
@@ -198,53 +212,132 @@ export function startApp() {
     ui.detailBtn.disabled = mode === 'detail';
     if (mode === 'world') {
       ui.pickInfo.textContent = 'Hover macro tiles in World mode, click to open Detail.';
-      sceneBits.camera.position.set(130, 150, 130);
-      sceneBits.controls.target.set(0, 0, 0);
+      applyOrbitZoom(130, 150, 130);
     } else {
       ui.pickInfo.textContent = 'Detail mode (micro tiles). Click to inspect.';
-      sceneBits.camera.position.set(80, 90, 80);
-      sceneBits.controls.target.set(0, 0, 0);
+      applyOrbitZoom(80, 90, 80);
     }
   }
 
+  function detailCenterFromSelectionOrBounds() {
+    if (currentBounds) {
+      return {
+        x: currentBounds.startX + currentBounds.span * 0.5,
+        y: currentBounds.startY + currentBounds.span * 0.5,
+      };
+    }
+    if (!currentWorld) return null;
+    const macroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
+    const macroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
+    return {
+      x: macroX * MACRO_TILE_STRIDE + halfStride,
+      y: macroY * MACRO_TILE_STRIDE + halfStride,
+    };
+  }
+
   async function rebuildDetail(centerMicroX, centerMicroY) {
-    const result = await buildDetailTerrain({
-      THREE,
-      world: currentWorld,
-      centerMicroX,
-      centerMicroY,
-      settings,
-      detailGroup: sceneBits.detailGroup,
-      pickMeshes,
-      triCountEl: ui.triCountEl,
-      getMicroTile,
-      MACRO_TILE_STRIDE,
-      computeTerrainRoleAndSprite,
-      TessellationEngine,
-      textureFor: textureForLocal,
-      uvRect,
-      pushFace,
-      idx,
-      clamp,
-      nextFrame,
-      buildVegetationBillboards: (args) => vegetationSystem.buildVegetationBillboards(args),
-      applyWireframeMode,
-      clearGroup,
-      atlasTextures,
-    });
-    currentBounds = result.currentBounds;
-    detailFloorMesh = result.detailFloorMesh;
-    playerController.setContext(currentWorld, currentBounds);
+    if (!currentWorld) return;
+    if (detailRebuildInFlight) {
+      pendingDetailCenter = { x: centerMicroX, y: centerMicroY };
+      return;
+    }
+    detailRebuildInFlight = true;
+    let cx = centerMicroX;
+    let cy = centerMicroY;
+    try {
+      for (;;) {
+        const inactive = sceneBits.getInactiveDetailGroup();
+        const nextPick = [];
+        const result = await buildDetailTerrain({
+          THREE,
+          world: currentWorld,
+          centerMicroX: cx,
+          centerMicroY: cy,
+          settings,
+          detailGroup: inactive,
+          pickMeshes: nextPick,
+          triCountEl: ui.triCountEl,
+          getMicroTile,
+          MACRO_TILE_STRIDE,
+          computeTerrainRoleAndSprite,
+          TessellationEngine,
+          textureFor: textureForLocal,
+          uvRect,
+          pushFace,
+          idx,
+          clamp,
+          nextFrame,
+          buildVegetationBillboards: (args) => vegetationSystem.buildVegetationBillboards(args),
+          applyWireframeMode,
+          clearGroup,
+          atlasTextures,
+        });
+        sceneBits.swapDetailBuffers();
+        pickMeshes = nextPick;
+        currentBounds = result.currentBounds;
+        detailFloorMesh = result.detailFloorMesh;
+        playerController.setContext(currentWorld, currentBounds);
+
+        const span = currentBounds.span;
+        sceneBits.camera.far = Math.max(4000, span * 10);
+        sceneBits.camera.updateProjectionMatrix();
+        if (sceneBits.scene.fog) {
+          const fogFar = Math.max(420, 80 + span * 2.2);
+          sceneBits.scene.fog.far = fogFar;
+          sceneBits.scene.fog.near = Math.min(200, fogFar * 0.22);
+        }
+
+        if (pendingDetailCenter) {
+          const p = pendingDetailCenter;
+          pendingDetailCenter = null;
+          cx = p.x;
+          cy = p.y;
+          continue;
+        }
+        break;
+      }
+    } finally {
+      detailRebuildInFlight = false;
+    }
   }
 
   async function rebuildCurrentDetail() {
     if (!currentWorld) return;
-    const macroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
-    const macroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
-    await rebuildDetail(
-      macroX * MACRO_TILE_STRIDE + halfStride,
-      macroY * MACRO_TILE_STRIDE + halfStride,
-    );
+    const c = detailCenterFromSelectionOrBounds();
+    if (!c) return;
+    await rebuildDetail(c.x, c.y);
+  }
+
+  /**
+   * Stream the detail window with the player near the edge of `currentBounds`.
+   * Whole-world procedural streaming (partial `generate()`) is a separate milestone; see `js/generator.js`.
+   */
+  function tryStreamDetailNearPlayer() {
+    if (viewMode !== 'detail' || !currentWorld || !currentBounds || detailRebuildInFlight) return;
+    if (!playerController.isActive()) return;
+    const p = playerController.getWorldMicroXY();
+    if (!p) return;
+    const microW = currentWorld.width * MACRO_TILE_STRIDE;
+    const microH = currentWorld.height * MACRO_TILE_STRIDE;
+    const maxSpan = Math.min(2000, microW, microH);
+    const span = clamp(Math.floor(settings.microSpan), 64, maxSpan);
+    // Wider band than the old 8% so detail rebuild runs before the player reaches rendered mesh edges.
+    const margin = clamp(Math.floor(span * 0.16), 12, 200);
+    const imx = Math.floor(p.x);
+    const imy = Math.floor(p.y);
+    const { startX, startY } = currentBounds;
+    const near =
+      imx < startX + margin ||
+      imx >= startX + span - margin ||
+      imy < startY + margin ||
+      imy >= startY + span - margin;
+    if (!near) return;
+    const desiredStartX = clamp(Math.floor(imx - span * 0.5), 0, microW - span);
+    const desiredStartY = clamp(Math.floor(imy - span * 0.5), 0, microH - span);
+    if (desiredStartX === startX && desiredStartY === startY) return;
+    const cx = desiredStartX + span * 0.5;
+    const cy = desiredStartY + span * 0.5;
+    void rebuildDetail(cx, cy);
   }
 
   async function regenerate() {
@@ -343,6 +436,7 @@ export function startApp() {
     sceneBits.controls.update();
     updateFollowCamera();
     playerController.tick(dtSec);
+    tryStreamDetailNearPlayer();
     playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);
     skySystem.tick(nowTs * 0.001);
@@ -352,8 +446,14 @@ export function startApp() {
   }
 
   const gui = new GUI({ title: 'Render Params' });
-  gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
-  gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+  gui.add(settings, 'microSpan', 64, 2000, 1).name('Visible Tiles').onFinishChange(() => {
+    const c = detailCenterFromSelectionOrBounds();
+    if (currentWorld && c) void rebuildDetail(c.x, c.y);
+  });
+  gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => {
+    const c = detailCenterFromSelectionOrBounds();
+    if (currentWorld && c) void rebuildDetail(c.x, c.y);
+  });
   gui.add(settings, 'detailsYOffset', -5.0, 5.0, 0.01).name('Details Y Offset').onChange(async () => {
     if (!currentWorld) return;
     worldMesh = buildWorldMacroMesh({
@@ -382,7 +482,8 @@ export function startApp() {
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'followPlayerCamera').name('Camera Follow Player');
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
-    if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+    const c = detailCenterFromSelectionOrBounds();
+    if (currentWorld && c) void rebuildDetail(c.x, c.y);
   });
   gui.add(settings, 'worldHeightScale', 2, 80, 1).name('World Height Scale').onFinishChange(() => {
     if (!currentWorld) return;

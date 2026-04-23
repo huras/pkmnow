@@ -155,7 +155,8 @@ export async function buildDetailTerrain({
   clearGroup(detailGroup);
   const microW = world.width * MACRO_TILE_STRIDE;
   const microH = world.height * MACRO_TILE_STRIDE;
-  const span = clamp(Math.floor(settings.microSpan), 64, Math.min(microW, microH));
+  const maxSpan = Math.min(2000, microW, microH);
+  const span = clamp(Math.floor(settings.microSpan), 64, maxSpan);
   const startX = clamp(Math.floor(centerMicroX - span * 0.5), 0, microW - span);
   const startY = clamp(Math.floor(centerMicroY - span * 0.5), 0, microH - span);
   const currentBounds = { span, startX, startY };

@@ -1,3 +1,6 @@
+/** Default camera–target distance (matches HUD “Zoom”). */
+export const DEFAULT_ORBIT_ZOOM_DISTANCE = 23;
+
 export function renderLayout() {
   document.querySelector('#app').innerHTML = `
     <div id="viewport"></div>
@@ -57,10 +60,18 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   scene.fog = new THREE.Fog('#7ea8d8', 120, 420);
 
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-  camera.position.set(130, 150, 130);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
+  {
+    const dx = 130;
+    const dy = 150;
+    const dz = 130;
+    const len = Math.hypot(dx, dy, dz);
+    const s = DEFAULT_ORBIT_ZOOM_DISTANCE / len;
+    camera.position.set(dx * s, dy * s, dz * s);
+  }
+  controls.update();
   controls.enableDamping = true;
   controls.minDistance = 8;
   controls.maxDistance = 1200;
@@ -69,11 +80,34 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   controls.enableRotate = true;
 
   const worldGroup = new THREE.Group();
-  const detailGroup = new THREE.Group();
+  /** Root for detail; holds A/B buffers for seamless swap while rebuilding. */
+  const detailRoot = new THREE.Group();
+  const detailGroupA = new THREE.Group();
+  const detailGroupB = new THREE.Group();
+  detailRoot.add(detailGroupA);
+  detailRoot.add(detailGroupB);
   const playerGroup = new THREE.Group();
   scene.add(worldGroup);
-  scene.add(detailGroup);
+  scene.add(detailRoot);
   scene.add(playerGroup);
+
+  let activeDetailBuffer = 'A';
+  detailGroupA.visible = true;
+  detailGroupB.visible = false;
+
+  function getActiveDetailGroup() {
+    return activeDetailBuffer === 'A' ? detailGroupA : detailGroupB;
+  }
+
+  function getInactiveDetailGroup() {
+    return activeDetailBuffer === 'A' ? detailGroupB : detailGroupA;
+  }
+
+  function swapDetailBuffers() {
+    activeDetailBuffer = activeDetailBuffer === 'A' ? 'B' : 'A';
+    detailGroupA.visible = activeDetailBuffer === 'A';
+    detailGroupB.visible = activeDetailBuffer === 'B';
+  }
 
   const ambientLight = new THREE.AmbientLight('#ffffff', 0.62);
   scene.add(ambientLight);
@@ -117,7 +151,14 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
     camera,
     controls,
     worldGroup,
-    detailGroup,
+    /** @deprecated name — same as `detailRoot` (parent of A/B). */
+    detailGroup: detailRoot,
+    detailRoot,
+    detailGroupA,
+    detailGroupB,
+    getActiveDetailGroup,
+    getInactiveDetailGroup,
+    swapDetailBuffers,
     playerGroup,
     axesHelper,
     hoverMarker,

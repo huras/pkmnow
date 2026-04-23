@@ -1,5 +1,6 @@
 import { getDexAnimMeta } from '../../js/pokemon/pmd-anim-metadata.js';
 import { PMD_DEFAULT_MON_ANIMS, PMD_MON_SHEET } from '../../js/pokemon/pmd-default-timing.js';
+import { MACRO_TILE_STRIDE } from '../../js/chunking.js';
 import { canWalkMicroTile, pivotCellHeightTraversalOk, isCliffDrop, okHeightStepTransition } from '../../js/walkability.js';
 
 const DIR_TO_ROW = {
@@ -369,13 +370,12 @@ export function createPlayerController({
       }
     }
 
-    if (state.bounds) {
-      const minX = state.bounds.startX + 0.05;
-      const minY = state.bounds.startY + 0.05;
-      const maxX = state.bounds.startX + state.bounds.span - 0.05;
-      const maxY = state.bounds.startY + state.bounds.span - 0.05;
-      state.x = Math.max(minX, Math.min(maxX, nx));
-      state.y = Math.max(minY, Math.min(maxY, ny));
+    if (state.world) {
+      const eps = 0.05;
+      const maxMicroX = state.world.width * MACRO_TILE_STRIDE - eps;
+      const maxMicroY = state.world.height * MACRO_TILE_STRIDE - eps;
+      state.x = Math.max(eps, Math.min(maxMicroX, nx));
+      state.y = Math.max(eps, Math.min(maxMicroY, ny));
     } else {
       state.x = nx;
       state.y = ny;
@@ -446,6 +446,12 @@ export function createPlayerController({
   }
 
   function placeAt(mx, my) {
+    if (state.world) {
+      const maxMx = state.world.width * MACRO_TILE_STRIDE - 1;
+      const maxMy = state.world.height * MACRO_TILE_STRIDE - 1;
+      mx = Math.max(0, Math.min(maxMx, mx));
+      my = Math.max(0, Math.min(maxMy, my));
+    }
     state.x = mx + 0.5;
     state.y = my + 0.5;
     state.vz = 0;
@@ -501,6 +507,11 @@ export function createPlayerController({
     },
     isActive() {
       return !!state.active;
+    },
+    /** Continuous world micro coordinates (for streaming / camera). */
+    getWorldMicroXY() {
+      if (!state.active) return null;
+      return { x: state.x, y: state.y };
     },
     getAnchorPosition() {
       if (!state.active || !state.mesh) return null;
