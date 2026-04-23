@@ -5,21 +5,27 @@ import { generate, DEFAULT_CONFIG } from '../js/generator.js';
 import { getMicroTile, MACRO_TILE_STRIDE } from '../js/chunking.js';
 import { computeTerrainRoleAndSprite } from '../js/main/terrain-role-helpers.js';
 import { TessellationEngine } from '../js/tessellation-engine.js';
+import { BIOMES } from '../js/biomes.js';
 
 document.querySelector('#app').innerHTML = `
   <div id="viewport"></div>
   <aside class="hud">
     <h1>Gerador 25D (Three.js)</h1>
-    <p>Terreno voxel 3D com sprites do 2D.</p>
+    <p>World map macro + detail micro.</p>
     <label class="field">Seed<input id="seed-input" type="text" value="botw-25d-001" /></label>
-    <button id="regen-btn" type="button">Regenerar</button>
-    <p id="pick-info" class="hint">Clique no terreno para inspecionar tile.</p>
+    <div style="display:flex;gap:8px;">
+      <button id="regen-btn" type="button">Regenerar</button>
+      <button id="world-btn" type="button">World Map</button>
+      <button id="detail-btn" type="button">Detail View</button>
+    </div>
+    <p id="pick-info" class="hint">Hover macro tiles in World mode, click to open Detail.</p>
     <div class="perf-panel">
       <div><span>FPS now</span><strong id="fps-now">--</strong></div>
       <div><span>FPS 1s</span><strong id="fps-1s">--</strong></div>
       <div><span>FPS 5s</span><strong id="fps-5s">--</strong></div>
       <div><span>Frame ms</span><strong id="frame-ms">--</strong></div>
       <div><span>Triangles</span><strong id="tri-count">--</strong></div>
+      <div><span>Macro</span><strong id="macro-coord">--</strong></div>
     </div>
   </aside>
 `;
@@ -27,15 +33,19 @@ document.querySelector('#app').innerHTML = `
 const viewport = document.getElementById('viewport');
 const seedInput = document.getElementById('seed-input');
 const regenBtn = document.getElementById('regen-btn');
+const worldBtn = document.getElementById('world-btn');
+const detailBtn = document.getElementById('detail-btn');
 const pickInfo = document.getElementById('pick-info');
 const fpsNowEl = document.getElementById('fps-now');
 const fps1sEl = document.getElementById('fps-1s');
 const fps5sEl = document.getElementById('fps-5s');
 const frameMsEl = document.getElementById('frame-ms');
 const triCountEl = document.getElementById('tri-count');
+const macroCoordEl = document.getElementById('macro-coord');
 
-const settings = { microSpan: 96, stepHeight: 0.55, wallShade: 0.72 };
+const settings = { microSpan: 96, stepHeight: 0.55, wallShade: 0.72, worldHeightScale: 10 };
 const debugSettings = { showAxes: true, axesSize: 24, wireframeOnly: false };
+
 const TILE_PX = 16;
 const atlasTextures = new Map();
 const pickMeshes = [];
@@ -45,6 +55,13 @@ const pointer = new THREE.Vector2();
 let currentWorld = null;
 let currentBounds = null;
 let rendering = false;
+let viewMode = 'world';
+let hoverMacro = null;
+let selectedMacro = null;
+let pendingMacroDown = null;
+
+let worldMesh = null;
+let detailFloorMesh = null;
 let lastFrameTs = performance.now();
 let lastPerfPaintTs = lastFrameTs;
 const frameTimestamps = [];
@@ -62,31 +79,46 @@ scene.background = new THREE.Color('#7ea8d8');
 scene.fog = new THREE.Fog('#7ea8d8', 120, 420);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(80, 90, 80);
-
+camera.position.set(130, 150, 130);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.minDistance = 40;
-controls.maxDistance = 260;
-controls.minPolarAngle = Math.PI * 0.2;
-controls.maxPolarAngle = Math.PI * 0.44;
+controls.maxDistance = 500;
+controls.minPolarAngle = Math.PI * 0.15;
+controls.maxPolarAngle = Math.PI * 0.48;
 controls.enableRotate = true;
 
-const terrainGroup = new THREE.Group();
-scene.add(terrainGroup);
+const worldGroup = new THREE.Group();
+const detailGroup = new THREE.Group();
+scene.add(worldGroup);
+scene.add(detailGroup);
+
 const axesHelper = new THREE.AxesHelper(debugSettings.axesSize);
 axesHelper.visible = debugSettings.showAxes;
 scene.add(axesHelper);
-let terrainFloorMesh = null;
+
+const hoverMarkerGeom = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(1, 0, 1),
+  new THREE.Vector3(0, 0, 1),
+]);
+const hoverMarker = new THREE.LineLoop(
+  hoverMarkerGeom,
+  new THREE.LineBasicMaterial({ color: '#ffff66' }),
+);
+hoverMarker.visible = false;
+worldGroup.add(hoverMarker);
 
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const idx = (w, x, y) => y * w + x;
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const halfStride = Math.floor(MACRO_TILE_STRIDE / 2);
+const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, new THREE.Color(b.color)]));
 
 function resolveTextureUrl(filePath) {
   if (!filePath) return null;
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
   const normalized = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
   if (normalized.startsWith('tilesets/')) return `../${normalized}`;
   return `../tilesets/${normalized.split('/').pop()}`;
@@ -95,9 +127,7 @@ function resolveTextureUrl(filePath) {
 async function textureFor(filePath) {
   if (!filePath) return null;
   if (atlasTextures.has(filePath)) return atlasTextures.get(filePath);
-  const url = resolveTextureUrl(filePath);
-  if (!url) return null;
-  const tex = await new THREE.TextureLoader().loadAsync(url);
+  const tex = await new THREE.TextureLoader().loadAsync(resolveTextureUrl(filePath));
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
@@ -120,6 +150,14 @@ function pushFace(builder, a, b, c, d, uv, tint) {
   builder.c.push(tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint);
 }
 
+function clearGroup(group) {
+  for (const child of group.children) {
+    if (child.geometry) child.geometry.dispose?.();
+    if (child.material && !Array.isArray(child.material)) child.material.dispose?.();
+  }
+  group.clear();
+}
+
 function applyWireframeMode() {
   for (const mesh of pickMeshes) {
     const mat = mesh.material;
@@ -130,29 +168,150 @@ function applyWireframeMode() {
       mat.vertexColors = false;
       mat.color.set('#ffffff');
       mat.transparent = false;
-      mat.needsUpdate = true;
     } else {
       mat.wireframe = false;
       mat.map = mat.userData.baseMap || null;
       mat.vertexColors = true;
       mat.color.set('#ffffff');
       mat.transparent = true;
-      mat.needsUpdate = true;
     }
+    mat.needsUpdate = true;
   }
-  if (terrainFloorMesh) {
-    terrainFloorMesh.visible = !debugSettings.wireframeOnly;
+  if (detailFloorMesh) detailFloorMesh.visible = !debugSettings.wireframeOnly;
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  worldGroup.visible = mode === 'world';
+  detailGroup.visible = mode === 'detail';
+  worldBtn.disabled = mode === 'world';
+  detailBtn.disabled = mode === 'detail';
+  if (mode === 'world') {
+    pickInfo.textContent = 'Hover macro tiles in World mode, click to open Detail.';
+    camera.position.set(130, 150, 130);
+    controls.target.set(0, 0, 0);
+  } else {
+    pickInfo.textContent = 'Detail mode (micro tiles). Click to inspect.';
+    camera.position.set(80, 90, 80);
+    controls.target.set(0, 0, 0);
   }
 }
 
-async function buildTerrain(world) {
+function updateHoverMarker(mx, my) {
+  if (!currentWorld || mx == null || my == null) {
+    hoverMarker.visible = false;
+    macroCoordEl.textContent = '--';
+    return;
+  }
+  const halfW = (currentWorld.width - 1) * 0.5;
+  const halfH = (currentWorld.height - 1) * 0.5;
+  const w = currentWorld.width;
+  const h = currentWorld.height;
+  const cx0 = clamp(mx, 0, w - 1);
+  const cy0 = clamp(my, 0, h - 1);
+  const cx1 = clamp(mx + 1, 0, w - 1);
+  const cy1 = clamp(my + 1, 0, h - 1);
+
+  const y00 = currentWorld.cells[idx(w, cx0, cy0)] * settings.worldHeightScale + 0.28;
+  const y10 = currentWorld.cells[idx(w, cx1, cy0)] * settings.worldHeightScale + 0.28;
+  const y11 = currentWorld.cells[idx(w, cx1, cy1)] * settings.worldHeightScale + 0.28;
+  const y01 = currentWorld.cells[idx(w, cx0, cy1)] * settings.worldHeightScale + 0.28;
+
+  const px0 = mx - halfW;
+  const pz0 = my - halfH;
+  const pos = hoverMarker.geometry.getAttribute('position');
+  pos.setXYZ(0, px0, y00, pz0);
+  pos.setXYZ(1, px0 + 1, y10, pz0);
+  pos.setXYZ(2, px0 + 1, y11, pz0 + 1);
+  pos.setXYZ(3, px0, y01, pz0 + 1);
+  pos.needsUpdate = true;
+  hoverMarker.position.set(0, 0, 0);
+  hoverMarker.visible = true;
+  macroCoordEl.textContent = `${mx},${my}`;
+}
+
+function buildWorldMacroMesh(world) {
+  clearGroup(worldGroup);
+  worldGroup.add(hoverMarker);
+  const w = world.width;
+  const h = world.height;
+  const halfW = (w - 1) * 0.5;
+  const halfH = (h - 1) * 0.5;
+  const macroPos = (mx, my, yOffset = 0) => {
+    const i = idx(w, mx, my);
+    const y = world.cells[i] * settings.worldHeightScale + yOffset;
+    return new THREE.Vector3(mx - halfW, y, my - halfH);
+  };
+  const geom = new THREE.PlaneGeometry(w - 1, h - 1, w - 1, h - 1);
+  geom.rotateX(-Math.PI / 2);
+  const positions = geom.getAttribute('position');
+  const colors = new Float32Array(positions.count * 3);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = idx(w, x, y);
+    positions.setY(i, world.cells[i] * settings.worldHeightScale);
+    const color = biomeColorById.get(world.biomes[i]) || new THREE.Color('#888888');
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+  }
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: false });
+  worldMesh = new THREE.Mesh(geom, mat);
+  worldGroup.add(worldMesh);
+
+  // Roads overlay as line segments above terrain.
+  const roadSeg = [];
+  for (const p of world.paths || []) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    for (let i = 1; i < p.length; i++) {
+      const a = p[i - 1];
+      const b = p[i];
+      const va = macroPos(a.x, a.y, 0.45);
+      const vb = macroPos(b.x, b.y, 0.45);
+      roadSeg.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+    }
+  }
+  if (roadSeg.length > 0) {
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.Float32BufferAttribute(roadSeg, 3));
+    const rm = new THREE.LineBasicMaterial({
+      color: '#ffe187',
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const roads = new THREE.LineSegments(rg, rm);
+    roads.renderOrder = 20;
+    worldGroup.add(roads);
+  }
+
+  // City markers above terrain (white=city, red=gym).
+  for (const n of world.graph?.nodes || []) {
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(n.isGym ? 0.9 : 0.65, 10, 10),
+      new THREE.MeshBasicMaterial({
+        color: n.isGym ? '#ff4f4f' : '#ffffff',
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    const p = macroPos(n.x, n.y, 0.9);
+    marker.position.copy(p);
+    marker.renderOrder = 21;
+    worldGroup.add(marker);
+  }
+}
+
+async function buildDetailTerrain(world, centerMicroX, centerMicroY) {
   pickMeshes.length = 0;
-  terrainGroup.clear();
+  clearGroup(detailGroup);
   const microW = world.width * MACRO_TILE_STRIDE;
   const microH = world.height * MACRO_TILE_STRIDE;
   const span = clamp(Math.floor(settings.microSpan), 64, Math.min(microW, microH));
-  const startX = Math.floor((microW - span) * 0.5);
-  const startY = Math.floor((microH - span) * 0.5);
+  const startX = clamp(Math.floor(centerMicroX - span * 0.5), 0, microW - span);
+  const startY = clamp(Math.floor(centerMicroY - span * 0.5), 0, microH - span);
   currentBounds = { span, startX, startY };
 
   const cells = new Array(span * span);
@@ -165,11 +324,8 @@ async function buildTerrain(world) {
     const set = role.set;
     const file = set?.file ? TessellationEngine.getImagePath(set.file).replace(/\\/g, '/') : null;
     if (file) needed.add(file);
-    cells[idx(span, x, y)] = { mx, my, h: t.heightStep, biomeId: t.biomeId, role, file, cols: TessellationEngine.getTerrainSheetCols(set), sprite: role.spriteId ?? set?.centerId ?? 0 };
-    if (x === span - 1 && y % 8 === 0) {
-      pickInfo.textContent = `Preparing terrain data... ${Math.round((y / span) * 100)}%`;
-      await nextFrame();
-    }
+    cells[idx(span, x, y)] = { h: t.heightStep, file, cols: TessellationEngine.getTerrainSheetCols(set), sprite: role.spriteId ?? set?.centerId ?? 0 };
+    if (x === span - 1 && y % 8 === 0) await nextFrame();
   }
   await Promise.all([...needed].map(textureFor));
 
@@ -195,12 +351,9 @@ async function buildTerrain(world) {
     const dh = d ? d.h * settings.stepHeight : floorY;
     if (Math.abs(y0 - rh) > 1e-6) pushFace(b, { x: x1, y: Math.min(y0, rh), z: z0 }, { x: x1, y: Math.max(y0, rh), z: z0 }, { x: x1, y: Math.min(y0, rh), z: z1 }, { x: x1, y: Math.max(y0, rh), z: z1 }, uv, settings.wallShade);
     if (Math.abs(y0 - dh) > 1e-6) pushFace(b, { x: x0, y: Math.min(y0, dh), z: z1 }, { x: x1, y: Math.min(y0, dh), z: z1 }, { x: x0, y: Math.max(y0, dh), z: z1 }, { x: x1, y: Math.max(y0, dh), z: z1 }, uv, settings.wallShade);
-    if (x === span - 1 && y % 8 === 0) {
-      pickInfo.textContent = `Building voxel mesh... ${Math.round((y / span) * 100)}%`;
-      await nextFrame();
-    }
   }
 
+  let triTotal = 0;
   for (const [file, data] of builders.entries()) {
     const tex = atlasTextures.get(file);
     const g = new THREE.BufferGeometry();
@@ -210,22 +363,17 @@ async function buildTerrain(world) {
     const m = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
     m.userData.baseMap = tex;
     const mesh = new THREE.Mesh(g, m);
-    terrainGroup.add(mesh);
+    detailGroup.add(mesh);
     pickMeshes.push(mesh);
+    triTotal += Math.floor(g.getAttribute('position').count / 3);
   }
 
-  terrainFloorMesh = new THREE.Mesh(
+  detailFloorMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(span + 20, span + 20).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: '#2d3a2f' }),
   );
-  terrainFloorMesh.position.y = floorY - 0.02;
-  terrainGroup.add(terrainFloorMesh);
-
-  let triTotal = 0;
-  for (const mesh of pickMeshes) {
-    const pos = mesh.geometry?.getAttribute?.('position');
-    if (pos) triTotal += Math.floor(pos.count / 3);
-  }
+  detailFloorMesh.position.y = floorY - 0.02;
+  detailGroup.add(detailFloorMesh);
   triCountEl.textContent = triTotal.toLocaleString('en-US');
   applyWireframeMode();
 }
@@ -235,11 +383,17 @@ async function regenerate() {
   rendering = true;
   regenBtn.disabled = true;
   regenBtn.textContent = 'Gerando...';
-  pickInfo.textContent = 'Processando terreno 3D...';
   try {
     currentWorld = generate(seedInput.value, { ...DEFAULT_CONFIG, cityCount: 16, gymCount: 8 });
-    await buildTerrain(currentWorld);
-    pickInfo.textContent = 'Clique no terreno para inspecionar tile.';
+    buildWorldMacroMesh(currentWorld);
+    const centerMacroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
+    const centerMacroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
+    await buildDetailTerrain(
+      currentWorld,
+      centerMacroX * MACRO_TILE_STRIDE + halfStride,
+      centerMacroY * MACRO_TILE_STRIDE + halfStride,
+    );
+    setViewMode(viewMode);
   } finally {
     regenBtn.disabled = false;
     regenBtn.textContent = 'Regenerar';
@@ -247,7 +401,7 @@ async function regenerate() {
   }
 }
 
-function pickAt(clientX, clientY) {
+function pickDetailAt(clientX, clientY) {
   if (!currentWorld || !currentBounds) return;
   const r = renderer.domElement.getBoundingClientRect();
   pointer.x = ((clientX - r.left) / r.width) * 2 - 1;
@@ -262,7 +416,22 @@ function pickAt(clientX, clientY) {
   const my = currentBounds.startY + ly;
   const t = getMicroTile(mx, my, currentWorld);
   const role = computeTerrainRoleAndSprite(mx, my, currentWorld, t.heightStep);
-  pickInfo.textContent = `mx:${mx} my:${my} | h:${t.heightStep} | biome:${t.biomeId} | set:${role.setName ?? '-'} | sprite:${role.spriteId ?? '-'}`;
+  pickInfo.textContent = `detail mx:${mx} my:${my} | h:${t.heightStep} | biome:${t.biomeId} | set:${role.setName ?? '-'} | sprite:${role.spriteId ?? '-'}`;
+}
+
+function pickMacroFromPoint(clientX, clientY) {
+  if (!currentWorld || !worldMesh) return null;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((clientX - r.left) / r.width) * 2 - 1;
+  pointer.y = -((clientY - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(worldMesh, false);
+  if (!hits.length) return null;
+  const halfW = (currentWorld.width - 1) * 0.5;
+  const halfH = (currentWorld.height - 1) * 0.5;
+  const x = clamp(Math.floor(hits[0].point.x + halfW), 0, currentWorld.width - 1);
+  const y = clamp(Math.floor(hits[0].point.z + halfH), 0, currentWorld.height - 1);
+  return { x, y };
 }
 
 function updatePerfOverlay(nowTs) {
@@ -297,24 +466,66 @@ function animate(nowTs) {
 }
 
 const gui = new GUI({ title: 'Render Params' });
-gui.add(settings, 'microSpan', 96, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && regenerate());
-gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && regenerate());
+gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && buildDetailTerrain(currentWorld, selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && buildDetailTerrain(currentWorld, selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+gui.add(settings, 'worldHeightScale', 2, 80, 1).name('World Height Scale').onFinishChange(() => {
+  if (!currentWorld) return;
+  buildWorldMacroMesh(currentWorld);
+  if (hoverMacro) updateHoverMarker(hoverMacro.x, hoverMacro.y);
+});
 const dbg = gui.addFolder('Debug');
-dbg.add(debugSettings, 'showAxes').name('Show XYZ Axes').onChange((v) => {
-  axesHelper.visible = !!v;
-});
-dbg.add(debugSettings, 'axesSize', 4, 120, 1).name('Axes Size').onChange((v) => {
-  const scale = Math.max(0.05, Number(v) / 24);
-  axesHelper.scale.setScalar(scale);
-});
-dbg.add(debugSettings, 'wireframeOnly').name('Wireframe Only').onChange(() => {
-  applyWireframeMode();
+dbg.add(debugSettings, 'showAxes').name('Show XYZ Axes').onChange((v) => { axesHelper.visible = !!v; });
+dbg.add(debugSettings, 'axesSize', 4, 120, 1).name('Axes Size').onChange((v) => axesHelper.scale.setScalar(Math.max(0.05, Number(v) / 24)));
+dbg.add(debugSettings, 'wireframeOnly').name('Wireframe Only').onChange(applyWireframeMode);
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (viewMode !== 'world' || rendering) return;
+  hoverMacro = pickMacroFromPoint(e.clientX, e.clientY);
+  updateHoverMarker(hoverMacro?.x, hoverMacro?.y);
 });
 
-renderer.domElement.addEventListener('pointerdown', (e) => { if (e.button === 0 && !rendering) pickAt(e.clientX, e.clientY); });
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || rendering) return;
+  if (viewMode === 'world') {
+    pendingMacroDown = pickMacroFromPoint(e.clientX, e.clientY);
+    return;
+  }
+  pickDetailAt(e.clientX, e.clientY);
+});
+
+renderer.domElement.addEventListener('pointerup', async (e) => {
+  if (e.button !== 0 || rendering) return;
+  if (viewMode !== 'world') return;
+  if (!pendingMacroDown) return;
+
+  const macroUp = pickMacroFromPoint(e.clientX, e.clientY);
+  const isSameTile =
+    macroUp &&
+    macroUp.x === pendingMacroDown.x &&
+    macroUp.y === pendingMacroDown.y;
+  pendingMacroDown = null;
+  if (!isSameTile) return;
+
+  selectedMacro = macroUp;
+  await buildDetailTerrain(
+    currentWorld,
+    selectedMacro.x * MACRO_TILE_STRIDE + halfStride,
+    selectedMacro.y * MACRO_TILE_STRIDE + halfStride,
+  );
+  setViewMode('detail');
+  pickInfo.textContent = `Selected macro ${selectedMacro.x},${selectedMacro.y}.`;
+});
+
+worldBtn.addEventListener('click', () => setViewMode('world'));
+detailBtn.addEventListener('click', async () => {
+  if (!selectedMacro && currentWorld) selectedMacro = { x: Math.floor(currentWorld.width * 0.5), y: Math.floor(currentWorld.height * 0.5) };
+  if (currentWorld && selectedMacro) await buildDetailTerrain(currentWorld, selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+  setViewMode('detail');
+});
 regenBtn.addEventListener('click', () => regenerate().catch((e) => { console.error(e); pickInfo.textContent = `Error: ${e?.message || e}`; rendering = false; }));
 seedInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') regenerate().catch((e2) => { console.error(e2); pickInfo.textContent = `Error: ${e2?.message || e2}`; rendering = false; }); });
 window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
+setViewMode('world');
 requestAnimationFrame(animate);
 regenerate().catch((e) => { console.error(e); pickInfo.textContent = `Startup error: ${e?.message || e}`; rendering = false; });

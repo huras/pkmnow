@@ -580,7 +580,7 @@ export function resolveDynamicShadowDynamics(settings) {
   const az = tDay * Math.PI;
   const dirX = -Math.cos(az);
   // Top-down projection: cast mostly toward screen-up (north), not screen-down.
-  const dirY = -(0.26 + lowSun01 * 0.34);
+  const dirY = (0.26 + lowSun01 * 0.34);
   const lenTiles = 0.05 + lowSun01 * 0.27 + moonI * 0.06;
   const skewXTan = dirX * (0.06 + lowSun01 * 0.34 + moonI * 0.05);
 
@@ -897,7 +897,9 @@ export function drawVegetationHybridShadow(ctx, item, options) {
   } = options;
   if (lodDetail >= 2) return;
   if (shadowPolicyByType(item) !== 'vegetationSilhouette') return;
-  if (frameShadowBudget.vegetationSilhouetteDraws >= HYBRID_SHADOW_FRAME_BUDGET.maxVegetationSilhouetteDraws) return;
+  // Trees/berry shadows must stay stable across the whole viewport.
+  // Do not early-cut by frame budget here, otherwise top-sorted entities
+  // consume the cap and lower screen rows lose shadows.
 
   let meta = null;
   let shake01 = 0;

@@ -237,6 +237,7 @@ const _tileCachePool = new Map();
  * @param {number} mx @param {number} my @returns {number}
  */
 const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
+const ENTITY_COLLECTION_SHADOW_PAD_TILES = 5;
 
 /**
  * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
@@ -651,8 +652,14 @@ export function render(canvas, data, options = {}) {
 
     // PASS 3.5: Entity Collection & Drawing
     const tCollect0 = performance.now();
+    const worldMicroW = width * MACRO_TILE_STRIDE;
+    const worldMicroH = height * MACRO_TILE_STRIDE;
+    const collectStartX = Math.max(0, Math.floor(startX - ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectStartY = Math.max(0, Math.floor(startY - ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectEndX = Math.min(worldMicroW, Math.ceil(endX + ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectEndY = Math.min(worldMicroH, Math.ceil(endY + ENTITY_COLLECTION_SHADOW_PAD_TILES));
     const renderItems = collectRenderItems({ 
-      data, player, startX, startY, endX, endY, lodDetail, width, height, getCached, time, 
+      data, player, startX: collectStartX, startY: collectStartY, endX: collectEndX, endY: collectEndY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
       imageCache, tileW, tileH, isPlayerWalkingAnim, latchGround, snapPx, playVision
     });
