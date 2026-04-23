@@ -53,6 +53,7 @@ export function startApp() {
     timeOfDay: 12,
     showVegetation: true,
     vegetationDensity: 1.0,
+    followPlayerCamera: true,
   };
   const debugSettings = { showAxes: true, axesSize: 24, wireframeOnly: false };
   const halfStride = Math.floor(MACRO_TILE_STRIDE / 2);
@@ -77,6 +78,19 @@ export function startApp() {
     frameDurationsMs: [],
     FRAME_MS_WINDOW: 120,
   };
+  const followTmpTarget = new THREE.Vector3();
+  const followTmpDelta = new THREE.Vector3();
+
+  function updateFollowCamera() {
+    if (viewMode !== 'detail' || !settings.followPlayerCamera || !playerController.isActive()) return;
+    const anchor = playerController.getAnchorPosition();
+    if (!anchor) return;
+    followTmpTarget.set(anchor.x, anchor.y, anchor.z);
+    followTmpDelta.copy(followTmpTarget).sub(sceneBits.controls.target);
+    if (followTmpDelta.lengthSq() < 1e-8) return;
+    sceneBits.controls.target.addScaledVector(followTmpDelta, 0.22);
+    sceneBits.camera.position.addScaledVector(followTmpDelta, 0.22);
+  }
 
   const sceneBits = createSceneGraph(THREE, OrbitControls, ui.viewport, debugSettings);
   const textureForLocal = (filePath) => textureFor(THREE, atlasTextures, filePath);
@@ -322,6 +336,7 @@ export function startApp() {
     perf.frameDurationsMs.push(dt);
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
+    updateFollowCamera();
     playerController.tick(dtSec);
     playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);
@@ -360,6 +375,7 @@ export function startApp() {
   });
   gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
+  gui.add(settings, 'followPlayerCamera').name('Camera Follow Player');
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
     if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
   });

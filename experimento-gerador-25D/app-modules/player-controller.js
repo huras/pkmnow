@@ -1,5 +1,6 @@
 import { getDexAnimMeta } from '../../js/pokemon/pmd-anim-metadata.js';
 import { PMD_DEFAULT_MON_ANIMS, PMD_MON_SHEET } from '../../js/pokemon/pmd-default-timing.js';
+import { canWalkMicroTile, pivotCellHeightTraversalOk } from '../../js/walkability.js';
 
 const DIR_TO_ROW = {
   down: 0,
@@ -87,6 +88,7 @@ export function createPlayerController({
     mesh: null,
     lastFrameKey: '',
     helperLookAt: new THREE.Vector3(),
+    movingNow: false,
   };
 
   async function ensureSprites(dexId = state.dexId) {
@@ -163,7 +165,7 @@ export function createPlayerController({
 
   function drawCurrentFrame(force = false) {
     if (!state.mesh || !state.frameCtx) return;
-    const moving = state.keys.size > 0;
+    const moving = !!state.movingNow;
     const tex = moving ? (state.walkTex || state.idleTex) : (state.idleTex || state.walkTex);
     const img = tex?.image;
     if (!img) return;
@@ -232,15 +234,50 @@ export function createPlayerController({
     return t?.heightStep ?? 0;
   }
 
+  function canWalkAt(nx, ny, ox, oy, isAirborne) {
+    if (!state.world) return false;
+    if (!canWalkMicroTile(nx, ny, state.world, ox, oy, undefined, isAirborne, false, false)) return false;
+    return pivotCellHeightTraversalOk(nx, ny, ox, oy, state.world, false);
+  }
+
   function updatePosition(dt) {
     const input = getInputVector();
     if (input.moving) {
       state.facing = facingFromInput(input.x, input.y, state.facing);
       state.animRow = DIR_TO_ROW[state.facing] || 0;
     }
+    const ox = state.x;
+    const oy = state.y;
     const speed = state.walkSpeed;
-    const nx = state.x + input.x * speed * dt;
-    const ny = state.y + input.y * speed * dt;
+    const ax = input.x * speed * dt;
+    const ay = input.y * speed * dt;
+    const isAirborne = !state.grounded;
+    let nx = ox;
+    let ny = oy;
+
+    if (Math.abs(ax) > 1e-7 || Math.abs(ay) > 1e-7) {
+      if (canWalkAt(ox + ax, oy + ay, ox, oy, isAirborne)) {
+        nx = ox + ax;
+        ny = oy + ay;
+      } else if (canWalkAt(ox + ax, oy, ox, oy, isAirborne)) {
+        nx = ox + ax;
+      } else if (canWalkAt(ox, oy + ay, ox, oy, isAirborne)) {
+        ny = oy + ay;
+      } else {
+        let lo = 0;
+        let hi = 1;
+        for (let i = 0; i < 10; i++) {
+          const mid = (lo + hi) * 0.5;
+          const tx = ox + ax * mid;
+          const ty = oy + ay * mid;
+          if (canWalkAt(tx, ty, ox, oy, isAirborne)) lo = mid;
+          else hi = mid;
+        }
+        nx = ox + ax * lo;
+        ny = oy + ay * lo;
+      }
+    }
+
     if (state.bounds) {
       const minX = state.bounds.startX + 0.05;
       const minY = state.bounds.startY + 0.05;
@@ -262,7 +299,9 @@ export function createPlayerController({
         state.grounded = true;
       }
     }
-    updateAnim(dt, input.moving);
+    const moved = Math.hypot(state.x - ox, state.y - oy) > 0.0008;
+    state.movingNow = moved;
+    updateAnim(dt, moved);
   }
 
   function syncMeshTransform() {
@@ -330,6 +369,17 @@ export function createPlayerController({
     },
     onKeyUp(code) {
       state.keys.delete(code);
+    },
+    isActive() {
+      return !!state.active;
+    },
+    getAnchorPosition() {
+      if (!state.active || !state.mesh) return null;
+      return {
+        x: state.mesh.position.x,
+        y: state.mesh.position.y + 1.6,
+        z: state.mesh.position.z,
+      };
     },
     tick,
     faceCamera,
