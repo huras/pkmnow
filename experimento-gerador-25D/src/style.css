@@ -77,3 +77,28 @@ body,
 .hint {
   opacity: 0.88;
 }
+
+.perf-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(6, 10, 18, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+
+.perf-panel div {
+  display: contents;
+}
+
+.perf-panel span {
+  color: #b9c3da;
+}
+
+.perf-panel strong {
+  color: #e8ffef;
+  font-variant-numeric: tabular-nums;
+}
