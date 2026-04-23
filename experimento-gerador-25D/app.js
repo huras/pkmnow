@@ -1,3 +1,6 @@
+import { startApp } from './app-modules/app-main.js';
+
+startApp();
 import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js';
 import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.21/+esm';
@@ -6,12 +9,19 @@ import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity } from '../js/chunking.
 import { computeTerrainRoleAndSprite } from '../js/main/terrain-role-helpers.js';
 import { TessellationEngine } from '../js/tessellation-engine.js';
 import { BIOMES } from '../js/biomes.js';
+import { OBJECT_SETS } from '../js/tessellation-data.js';
+import { resolveScatterVegetationItemKey } from '../js/vegetation-channels.js';
+import { validScatterOriginMicro } from '../js/scatter-pass2-debug.js';
+import { parseShape } from '../js/tessellation-logic.js';
 import {
   getTreeType,
   TREE_TILES,
   tileSurfaceAllowsScatterVegetation,
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
+  getGrassVariant,
+  GRASS_TILES,
+  FOLIAGE_DENSITY_THRESHOLD,
 } from '../js/biome-tiles.js';
 
 document.querySelector('#app').innerHTML = `
@@ -56,7 +66,7 @@ const settings = {
   wallShade: 0.72,
   worldHeightScale: 10,
   showVegetation: true,
-  vegetationDensity: 0.85,
+  vegetationDensity: 1.0,
 };
 const debugSettings = { showAxes: true, axesSize: 24, wireframeOnly: false };
 
@@ -78,6 +88,7 @@ let worldMesh = null;
 let detailFloorMesh = null;
 let vegetationGroup = null;
 const treeBillboardTextureCache = new Map();
+const objectBillboardTextureCache = new Map();
 const vegetationBillboards = [];
 const vegetationMaterials = [];
 let lastFrameTs = performance.now();
@@ -233,6 +244,100 @@ async function getTreeBillboardTexture(treeType) {
   return out;
 }
 
+function atlasColsFromPath(path) {
+  if (path?.includes('caves')) return 50;
+  if (path?.includes('Berry Trees')) return 66;
+  return 57;
+}
+
+function normalizedShape(shape) {
+  return String(shape || '1x1').replace('[', '').replace(']', '');
+}
+
+async function getObjectBillboardTexture(itemKey) {
+  if (!itemKey || !OBJECT_SETS[itemKey]) return null;
+  if (objectBillboardTextureCache.has(itemKey)) return objectBillboardTextureCache.get(itemKey);
+
+  const objSet = OBJECT_SETS[itemKey];
+  const atlasPath = TessellationEngine.getImagePath(objSet.file).replace(/\\/g, '/');
+  const atlasTex = await textureFor(atlasPath);
+  if (!atlasTex?.image) return null;
+
+  const cols = atlasColsFromPath(atlasPath);
+  const { cols: shapeCols } = parseShape(normalizedShape(objSet.shape));
+  const base = objSet.parts?.find((p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL');
+  const top = objSet.parts?.find((p) => p.role === 'top' || p.role === 'tops');
+
+  const placements = [];
+  if (base?.ids?.length) {
+    for (let i = 0; i < base.ids.length; i++) {
+      placements.push({ id: base.ids[i], x: i % shapeCols, y: Math.floor(i / shapeCols) });
+    }
+  }
+  if (top?.ids?.length) {
+    const topRows = Math.ceil(top.ids.length / shapeCols);
+    for (let i = 0; i < top.ids.length; i++) {
+      const ox = i % shapeCols;
+      const oy = Math.floor(i / shapeCols);
+      placements.push({ id: top.ids[i], x: ox, y: oy - topRows });
+    }
+  }
+  if (placements.length === 0) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of placements) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const tilesW = maxX - minX + 1;
+  const tilesH = maxY - minY + 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = tilesW * TILE_PX;
+  canvas.height = tilesH * TILE_PX;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = false;
+
+  for (const p of placements) {
+    const sx = (p.id % cols) * TILE_PX;
+    const sy = Math.floor(p.id / cols) * TILE_PX;
+    const dx = (p.x - minX) * TILE_PX;
+    const dy = (p.y - minY) * TILE_PX;
+    ctx.drawImage(atlasTex.image, sx, sy, TILE_PX, TILE_PX, dx, dy, TILE_PX, TILE_PX);
+  }
+
+  const out = new THREE.CanvasTexture(canvas);
+  out.colorSpace = THREE.SRGBColorSpace;
+  out.magFilter = THREE.NearestFilter;
+  out.minFilter = THREE.NearestFilter;
+  out.generateMipmaps = false;
+
+  const meta = { texture: out, tilesW, tilesH };
+  objectBillboardTextureCache.set(itemKey, meta);
+  return meta;
+}
+
+function addBillboard(texture, px, py, pz, width, height) {
+  const mat = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.2,
+    side: THREE.DoubleSide,
+  });
+  mat.userData.baseMap = texture;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  mesh.position.set(px, py + height * 0.5, pz);
+  mesh.scale.set(width, height, 1);
+  vegetationBillboards.push(mesh);
+  vegetationMaterials.push(mat);
+  vegetationGroup.add(mesh);
+}
+
 async function buildVegetationBillboards(cells, span, half, worldSeed) {
   vegetationBillboards.length = 0;
   vegetationMaterials.length = 0;
@@ -240,10 +345,19 @@ async function buildVegetationBillboards(cells, span, half, worldSeed) {
   detailGroup.add(vegetationGroup);
   if (!settings.showVegetation) return;
   const seedInt = seedToInt(worldSeed);
+  const microW = currentWorld.width * MACRO_TILE_STRIDE;
+  const microH = currentWorld.height * MACRO_TILE_STRIDE;
+  const originMemo = new Map();
+  const getTile = (mx, my) => getMicroTile(mx, my, currentWorld);
 
   for (let y = 0; y < span; y++) {
     for (let x = 0; x < span; x++) {
       const c = cells[idx(span, x, y)];
+      const px = x - half + 0.5;
+      const pz = y - half + 0.5;
+      const py = c.h * settings.stepHeight + 0.05;
+
+      // --- 1) Formal trees ---
       if (!tileSurfaceAllowsScatterVegetation(c)) continue;
       if ((c.mx + c.my) % 3 !== 0) continue;
       const treeNoise = foliageDensity(c.mx, c.my, seedInt + 5555, TREE_NOISE_SCALE);
@@ -257,8 +371,7 @@ async function buildVegetationBillboards(cells, span, half, worldSeed) {
       if (!treeType) continue;
       if (c.h <= 0) continue;
       const noise = deterministic01(c.mx, c.my, seedInt + 9001);
-      const gate = 0.99 - settings.vegetationDensity * 0.08;
-      if (noise < gate) continue;
+      if (noise > settings.vegetationDensity) continue;
 
       const tex = await getTreeBillboardTexture(treeType);
       if (!tex) continue;
@@ -270,17 +383,83 @@ async function buildVegetationBillboards(cells, span, half, worldSeed) {
       });
       mat.userData.baseMap = tex;
       const spr = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-      const px = x - half + 1.0;
-      const pz = y - half + 0.5;
       const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
       const width = baseScale;
       const height = baseScale * 1.5;
-      const py = c.h * settings.stepHeight + 0.05 + height * 0.5;
-      spr.position.set(px, py, pz);
+      spr.position.set(px + 0.5, py + height * 0.5, pz);
       spr.scale.set(width, height, 1);
       vegetationBillboards.push(spr);
       vegetationMaterials.push(mat);
       vegetationGroup.add(spr);
+
+      // Formal tree root should not also spawn scatter/grass overlays.
+      continue;
+    }
+    if (y % 10 === 0) await nextFrame();
+  }
+
+  // --- 2) Scatter details (rocks/crystals/props) + grass details ---
+  for (let y = 0; y < span; y++) {
+    for (let x = 0; x < span; x++) {
+      const c = cells[idx(span, x, y)];
+      const px = x - half + 0.5;
+      const pz = y - half + 0.5;
+      const py = c.h * settings.stepHeight + 0.05;
+
+      if (!tileSurfaceAllowsScatterVegetation(c)) continue;
+
+      // 2a. Scatter objects
+      if (
+        validScatterOriginMicro(c.mx, c.my, seedInt, microW, microH, getTile, originMemo)
+      ) {
+        const itemKey = resolveScatterVegetationItemKey(c.mx, c.my, c, seedInt);
+        if (itemKey) {
+          const scatterNoise = deterministic01(c.mx, c.my, seedInt + 7011);
+          if (scatterNoise <= settings.vegetationDensity) {
+            const texInfo = await getObjectBillboardTexture(itemKey);
+            if (texInfo?.texture) {
+              const width = Math.max(0.9, texInfo.tilesW * 0.92);
+              const height = Math.max(1.1, texInfo.tilesH * 0.92);
+              addBillboard(texInfo.texture, px, py, pz, width, height);
+              continue;
+            }
+          }
+        }
+      }
+
+      // 2b. Ground grass details
+      const grassVariant = getGrassVariant(c.biomeId);
+      const grassTiles = grassVariant ? GRASS_TILES[grassVariant] : null;
+      const grassTileId = grassTiles?.original ?? grassTiles?.small ?? grassTiles?.grass2;
+      if (!grassTileId || c.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) continue;
+      const grassNoise = deterministic01(c.mx, c.my, seedInt + 9123);
+      if (grassNoise > settings.vegetationDensity) continue;
+
+      const grassKey = `grass:${grassVariant}:${grassTileId}`;
+      const grassMeta = objectBillboardTextureCache.get(grassKey);
+      if (!grassMeta) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 16;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+        ctx.imageSmoothingEnabled = false;
+        const naturePath = 'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png';
+        const natureTex = await textureFor(naturePath);
+        if (!natureTex?.image) continue;
+        const cols = 57;
+        const sx = (grassTileId % cols) * 16;
+        const sy = Math.floor(grassTileId / cols) * 16;
+        ctx.drawImage(natureTex.image, sx, sy, 16, 16, 0, 0, 16, 16);
+        const out = new THREE.CanvasTexture(canvas);
+        out.colorSpace = THREE.SRGBColorSpace;
+        out.magFilter = THREE.NearestFilter;
+        out.minFilter = THREE.NearestFilter;
+        out.generateMipmaps = false;
+        objectBillboardTextureCache.set(grassKey, { texture: out, tilesW: 1, tilesH: 1 });
+      }
+      const finalGrass = objectBillboardTextureCache.get(grassKey);
+      if (finalGrass?.texture) addBillboard(finalGrass.texture, px, py, pz, 0.9, 1.0);
     }
     if (y % 10 === 0) await nextFrame();
   }
@@ -487,6 +666,8 @@ async function buildDetailTerrain(world, centerMicroX, centerMicroY) {
       biomeId: t.biomeId,
       isRoad: t.isRoad,
       isCity: t.isCity,
+      foliageDensity: t.foliageDensity ?? 0,
+      berryPatchDensity: t.berryPatchDensity ?? 0,
       mx,
       my,
     };
