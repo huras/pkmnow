@@ -16,6 +16,7 @@ export function renderLayout() {
         <div><span>FPS 1s</span><strong id="fps-1s">--</strong></div>
         <div><span>FPS 5s</span><strong id="fps-5s">--</strong></div>
         <div><span>Frame ms</span><strong id="frame-ms">--</strong></div>
+        <div><span>Zoom</span><strong id="zoom-dist">--</strong></div>
         <div><span>Triangles</span><strong id="tri-count">--</strong></div>
         <div><span>Macro</span><strong id="macro-coord">--</strong></div>
       </div>
@@ -33,6 +34,7 @@ export function renderLayout() {
     fps1sEl: document.getElementById('fps-1s'),
     fps5sEl: document.getElementById('fps-5s'),
     frameMsEl: document.getElementById('frame-ms'),
+    zoomDistEl: document.getElementById('zoom-dist'),
     triCountEl: document.getElementById('tri-count'),
     macroCoordEl: document.getElementById('macro-coord'),
   };
@@ -60,8 +62,8 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
-  controls.minDistance = 40;
-  controls.maxDistance = 500;
+  controls.minDistance = 8;
+  controls.maxDistance = 1200;
   controls.minPolarAngle = Math.PI * 0.15;
   controls.maxPolarAngle = Math.PI * 0.48;
   controls.enableRotate = true;

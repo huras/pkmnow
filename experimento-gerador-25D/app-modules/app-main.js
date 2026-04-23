@@ -68,6 +68,7 @@ export function startApp() {
   let hoverMacro = null;
   let selectedMacro = null;
   let pendingMacroDown = null;
+  let pendingDetailDown = null;
   let worldMesh = null;
   let detailFloorMesh = null;
 
@@ -103,6 +104,7 @@ export function startApp() {
     THREE,
     playerGroup: sceneBits.playerGroup,
     camera: sceneBits.camera,
+    controls: sceneBits.controls,
     settings,
     textureFor: textureForLocal,
     getMicroTile,
@@ -322,10 +324,12 @@ export function startApp() {
     const fps1s = count1s;
     const fps5s = perf.frameTimestamps.length / 5;
     const meanMs = perf.frameDurationsMs.length > 0 ? perf.frameDurationsMs.reduce((s, v) => s + v, 0) / perf.frameDurationsMs.length : 0;
+    const zoomDist = sceneBits.camera.position.distanceTo(sceneBits.controls.target);
     ui.fpsNowEl.textContent = fpsNow.toFixed(1);
     ui.fps1sEl.textContent = fps1s.toFixed(0);
     ui.fps5sEl.textContent = fps5s.toFixed(1);
     ui.frameMsEl.textContent = meanMs.toFixed(2);
+    ui.zoomDistEl.textContent = zoomDist.toFixed(1);
   }
 
   function animate(nowTs) {
@@ -428,24 +432,33 @@ export function startApp() {
       pendingMacroDown = pickMacroFromPoint(e.clientX, e.clientY);
       return;
     }
-    const picked = pickDetailAt(e.clientX, e.clientY);
-    if (picked) {
-      playerController.placeAt(picked.mx, picked.my);
-      ui.pickInfo.textContent = `Player spawned at mx:${picked.mx} my:${picked.my}. Use WASD/Arrows to move, Space to jump.`;
-    }
+    pendingDetailDown = pickDetailAt(e.clientX, e.clientY) || null;
   });
 
   sceneBits.renderer.domElement.addEventListener('pointerup', async (e) => {
     if (e.button !== 0 || rendering) return;
-    if (viewMode !== 'world' || !pendingMacroDown) return;
-    const macroUp = pickMacroFromPoint(e.clientX, e.clientY);
-    const isSameTile = macroUp && macroUp.x === pendingMacroDown.x && macroUp.y === pendingMacroDown.y;
-    pendingMacroDown = null;
-    if (!isSameTile) return;
-    selectedMacro = macroUp;
-    await rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
-    setViewMode('detail');
-    ui.pickInfo.textContent = `Selected macro ${selectedMacro.x},${selectedMacro.y}.`;
+    if (viewMode === 'world') {
+      if (!pendingMacroDown) return;
+      const macroUp = pickMacroFromPoint(e.clientX, e.clientY);
+      const isSameTile = macroUp && macroUp.x === pendingMacroDown.x && macroUp.y === pendingMacroDown.y;
+      pendingMacroDown = null;
+      if (!isSameTile) return;
+      selectedMacro = macroUp;
+      await rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+      setViewMode('detail');
+      ui.pickInfo.textContent = `Selected macro ${selectedMacro.x},${selectedMacro.y}.`;
+      return;
+    }
+    if (viewMode === 'detail') {
+      if (!pendingDetailDown) return;
+      const detailUp = pickDetailAt(e.clientX, e.clientY);
+      const isSameTile = detailUp && detailUp.mx === pendingDetailDown.mx && detailUp.my === pendingDetailDown.my;
+      const picked = pendingDetailDown;
+      pendingDetailDown = null;
+      if (!isSameTile) return;
+      playerController.placeAt(picked.mx, picked.my);
+      ui.pickInfo.textContent = `Player spawned at mx:${picked.mx} my:${picked.my}. Use WASD/Arrows to move, Space to jump.`;
+    }
   });
 
   ui.worldBtn.addEventListener('click', () => setViewMode('world'));

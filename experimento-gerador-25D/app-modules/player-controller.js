@@ -68,6 +68,7 @@ export function createPlayerController({
   THREE,
   playerGroup,
   camera,
+  controls,
   settings,
   textureFor,
   getMicroTile,
@@ -112,6 +113,8 @@ export function createPlayerController({
     mesh: null,
     lastFrameKey: '',
     helperLookAt: new THREE.Vector3(),
+    moveForward: new THREE.Vector3(),
+    moveRight: new THREE.Vector3(),
     movingNow: false,
     frameLift01Cache: new Map(),
     frameGroundLiftWorld: 0,
@@ -253,11 +256,51 @@ export function createPlayerController({
   }
 
   function getInputVector() {
-    const ix = (state.keys.has('KeyD') ? 1 : 0) + (state.keys.has('ArrowRight') ? 1 : 0) - (state.keys.has('KeyA') ? 1 : 0) - (state.keys.has('ArrowLeft') ? 1 : 0);
-    const iy = (state.keys.has('KeyS') ? 1 : 0) + (state.keys.has('ArrowDown') ? 1 : 0) - (state.keys.has('KeyW') ? 1 : 0) - (state.keys.has('ArrowUp') ? 1 : 0);
-    const len = Math.hypot(ix, iy);
-    if (len < 1e-6) return { x: 0, y: 0, moving: false };
-    return { x: ix / len, y: iy / len, moving: true };
+    const inputRight =
+      (state.keys.has('KeyD') ? 1 : 0) +
+      (state.keys.has('ArrowRight') ? 1 : 0) -
+      (state.keys.has('KeyA') ? 1 : 0) -
+      (state.keys.has('ArrowLeft') ? 1 : 0);
+    const inputForward =
+      (state.keys.has('KeyW') ? 1 : 0) +
+      (state.keys.has('ArrowUp') ? 1 : 0) -
+      (state.keys.has('KeyS') ? 1 : 0) -
+      (state.keys.has('ArrowDown') ? 1 : 0);
+    if (Math.abs(inputRight) < 1e-6 && Math.abs(inputForward) < 1e-6) {
+      return { x: 0, y: 0, moving: false, faceX: 0, faceY: 0 };
+    }
+
+    // Camera-relative movement on horizontal plane (XZ), mapped to world micro axes (x,y).
+    state.moveForward.copy(controls.target).sub(camera.position).setY(0);
+    if (state.moveForward.lengthSq() < 1e-8) {
+      state.moveForward.set(0, 0, 1);
+    } else {
+      state.moveForward.normalize();
+    }
+    state.moveRight.set(state.moveForward.z, 0, -state.moveForward.x).normalize();
+
+    // In this world-axis convention, strafe sign must be inverted to match expected A(left)/D(right).
+    const worldX = -state.moveRight.x * inputRight + state.moveForward.x * inputForward;
+    const worldY = -state.moveRight.z * inputRight + state.moveForward.z * inputForward;
+    const len = Math.hypot(worldX, worldY);
+    if (len < 1e-6) {
+      return {
+        x: 0,
+        y: 0,
+        moving: false,
+        faceX: inputRight,
+        // W should map to "up" row in PMD facing map.
+        faceY: -inputForward,
+      };
+    }
+    return {
+      x: worldX / len,
+      y: worldY / len,
+      moving: true,
+      faceX: inputRight,
+      // W should map to "up" row in PMD facing map.
+      faceY: -inputForward,
+    };
   }
 
   function sampleGroundStep(mx, my) {
@@ -275,7 +318,8 @@ export function createPlayerController({
   function updatePosition(dt) {
     const input = getInputVector();
     if (input.moving) {
-      state.facing = facingFromInput(input.x, input.y, state.facing);
+      // Facing follows local input intent (W/S = up/down), movement remains camera-relative.
+      state.facing = facingFromInput(input.faceX, input.faceY, state.facing);
       state.animRow = DIR_TO_ROW[state.facing] || 0;
     }
     const ox = state.x;
