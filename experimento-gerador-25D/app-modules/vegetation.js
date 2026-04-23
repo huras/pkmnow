@@ -32,8 +32,105 @@ export function createVegetationSystem(deps) {
   let vegetationGroup = null;
   const treeBillboardTextureCache = new Map();
   const objectBillboardTextureCache = new Map();
-  const vegetationBillboards = [];
   const vegetationMaterials = [];
+  const shaderMats = [];
+
+  const camRight = new THREE.Vector3(1, 0, 0);
+  const camUp = new THREE.Vector3(0, 1, 0);
+
+  function makeBillboardShaderMaterial(texture) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        map: { value: texture },
+        cameraRight: { value: camRight.clone() },
+        cameraUp: { value: camUp.clone() },
+        useTexture: { value: true },
+        flatColor: { value: new THREE.Color('#ffffff') },
+        alphaCut: { value: 0.2 },
+      },
+      vertexShader: `
+        attribute vec3 center;
+        attribute vec2 offset;
+        varying vec2 vUv;
+        uniform vec3 cameraRight;
+        uniform vec3 cameraUp;
+        void main() {
+          vec3 worldPos = center + cameraRight * offset.x + cameraUp * offset.y;
+          gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
+          vUv = uv;
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D map;
+        uniform bool useTexture;
+        uniform vec3 flatColor;
+        uniform float alphaCut;
+        void main() {
+          if (useTexture) {
+            vec4 tex = texture2D(map, vUv);
+            if (tex.a < alphaCut) discard;
+            gl_FragColor = tex;
+          } else {
+            gl_FragColor = vec4(flatColor, 1.0);
+          }
+        }
+      `,
+      // Cutout pipeline (discard by alpha) so depth buffer handles ordering correctly.
+      // This avoids classic transparent-sorting artifacts between many billboards.
+      transparent: false,
+      depthWrite: true,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      wireframe: false,
+    });
+    vegetationMaterials.push(mat);
+    shaderMats.push(mat);
+    return mat;
+  }
+
+  function pushQuad(batch, cx, cy, cz, width, height) {
+    const hw = width * 0.5;
+    const h = height;
+    const off = [
+      [-hw, 0],
+      [hw, 0],
+      [-hw, h],
+      [hw, 0],
+      [hw, h],
+      [-hw, h],
+    ];
+    const uv = [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ];
+    for (let i = 0; i < 6; i++) {
+      batch.center.push(cx, cy, cz);
+      batch.offset.push(off[i][0], off[i][1]);
+      batch.uv.push(uv[i][0], uv[i][1]);
+    }
+  }
+
+  function flushBatches(textureBatches) {
+    for (const batch of textureBatches.values()) {
+      if (batch.center.length === 0) continue;
+      const g = new THREE.BufferGeometry();
+      // Three.js uses `position` count to issue draw calls, even with custom attrs/shader billboarding.
+      g.setAttribute('position', new THREE.Float32BufferAttribute(batch.center, 3));
+      g.setAttribute('center', new THREE.Float32BufferAttribute(batch.center, 3));
+      g.setAttribute('offset', new THREE.Float32BufferAttribute(batch.offset, 2));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(batch.uv, 2));
+      g.computeBoundingBox();
+      g.computeBoundingSphere();
+      const m = makeBillboardShaderMaterial(batch.texture);
+      const mesh = new THREE.Mesh(g, m);
+      vegetationGroup.add(mesh);
+    }
+  }
 
   async function getTreeBillboardTexture(treeType) {
     if (!treeType || !TREE_TILES[treeType]) return null;
@@ -142,28 +239,23 @@ export function createVegetationSystem(deps) {
     return meta;
   }
 
-  function addBillboard(texture, px, py, pz, width, height) {
-    const mat = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      alphaTest: 0.2,
-      side: THREE.DoubleSide,
-    });
-    mat.userData.baseMap = texture;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-    mesh.position.set(px, py + height * 0.5, pz);
-    mesh.scale.set(width, height, 1);
-    vegetationBillboards.push(mesh);
-    vegetationMaterials.push(mat);
-    vegetationGroup.add(mesh);
+  function getBatch(textureBatches, texture) {
+    const key = texture.uuid;
+    if (!textureBatches.has(key)) {
+      textureBatches.set(key, { texture, center: [], offset: [], uv: [] });
+    }
+    return textureBatches.get(key);
   }
 
   async function buildVegetationBillboards({ cells, span, half, worldSeed, currentWorld, detailGroup }) {
-    vegetationBillboards.length = 0;
-    vegetationMaterials.length = 0;
     vegetationGroup = new THREE.Group();
     detailGroup.add(vegetationGroup);
     if (!settings.showVegetation) return;
+
+    vegetationMaterials.length = 0;
+    shaderMats.length = 0;
+    const textureBatches = new Map();
+    const treeRoots = new Set();
 
     const seedInt = seedToInt(worldSeed);
     const microW = currentWorld.width * MACRO_TILE_STRIDE;
@@ -174,41 +266,26 @@ export function createVegetationSystem(deps) {
     for (let y = 0; y < span; y++) {
       for (let x = 0; x < span; x++) {
         const c = cells[idx(span, x, y)];
-        const px = x - half + 0.5;
-        const pz = y - half + 0.5;
-        const py = c.h * settings.stepHeight + 0.05;
-
         if (!tileSurfaceAllowsScatterVegetation(c)) continue;
         if ((c.mx + c.my) % 3 !== 0) continue;
         const treeNoise = foliageDensity(c.mx, c.my, seedInt + 5555, TREE_NOISE_SCALE);
         if (treeNoise < TREE_DENSITY_THRESHOLD) continue;
-
         const right = x + 1 < span ? cells[idx(span, x + 1, y)] : getMicroTile(c.mx + 1, c.my, currentWorld);
         if (!right || right.heightStep !== c.h) continue;
 
         const treeType = getTreeType(c.biomeId, c.mx, c.my, seedInt);
         if (!treeType || c.h <= 0) continue;
-        const noise = deterministic01(c.mx, c.my, seedInt + 9001);
-        if (noise > settings.vegetationDensity) continue;
+        if (deterministic01(c.mx, c.my, seedInt + 9001) > settings.vegetationDensity) continue;
 
         const tex = await getTreeBillboardTexture(treeType);
         if (!tex) continue;
-        const mat = new THREE.MeshBasicMaterial({
-          map: tex,
-          transparent: true,
-          alphaTest: 0.2,
-          side: THREE.DoubleSide,
-        });
-        mat.userData.baseMap = tex;
-        const spr = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+        const batch = getBatch(textureBatches, tex);
+        const px = x - half + 1.0;
+        const pz = y - half + 0.5;
+        const py = c.h * settings.stepHeight + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
-        const width = baseScale;
-        const height = baseScale * 1.5;
-        spr.position.set(px + 0.5, py + height * 0.5, pz);
-        spr.scale.set(width, height, 1);
-        vegetationBillboards.push(spr);
-        vegetationMaterials.push(mat);
-        vegetationGroup.add(spr);
+        pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
+        treeRoots.add(`${c.mx},${c.my}`);
       }
       if (y % 10 === 0) await nextFrame();
     }
@@ -216,24 +293,22 @@ export function createVegetationSystem(deps) {
     for (let y = 0; y < span; y++) {
       for (let x = 0; x < span; x++) {
         const c = cells[idx(span, x, y)];
+        if (!tileSurfaceAllowsScatterVegetation(c)) continue;
+        if (treeRoots.has(`${c.mx},${c.my}`)) continue;
         const px = x - half + 0.5;
         const pz = y - half + 0.5;
         const py = c.h * settings.stepHeight + 0.05;
 
-        if (!tileSurfaceAllowsScatterVegetation(c)) continue;
-
         if (validScatterOriginMicro(c.mx, c.my, seedInt, microW, microH, getTile, originMemo)) {
           const itemKey = resolveScatterVegetationItemKey(c.mx, c.my, c, seedInt);
-          if (itemKey) {
-            const scatterNoise = deterministic01(c.mx, c.my, seedInt + 7011);
-            if (scatterNoise <= settings.vegetationDensity) {
-              const texInfo = await getObjectBillboardTexture(itemKey);
-              if (texInfo?.texture) {
-                const width = Math.max(0.9, texInfo.tilesW * 0.92);
-                const height = Math.max(1.1, texInfo.tilesH * 0.92);
-                addBillboard(texInfo.texture, px, py, pz, width, height);
-                continue;
-              }
+          if (itemKey && deterministic01(c.mx, c.my, seedInt + 7011) <= settings.vegetationDensity) {
+            const texInfo = await getObjectBillboardTexture(itemKey);
+            if (texInfo?.texture) {
+              const batch = getBatch(textureBatches, texInfo.texture);
+              const w = Math.max(0.9, texInfo.tilesW * 0.92);
+              const h = Math.max(1.1, texInfo.tilesH * 0.92);
+              pushQuad(batch, px, py, pz, w, h);
+              continue;
             }
           }
         }
@@ -242,11 +317,10 @@ export function createVegetationSystem(deps) {
         const grassTiles = grassVariant ? GRASS_TILES[grassVariant] : null;
         const grassTileId = grassTiles?.original ?? grassTiles?.small ?? grassTiles?.grass2;
         if (!grassTileId || c.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) continue;
-        const grassNoise = deterministic01(c.mx, c.my, seedInt + 9123);
-        if (grassNoise > settings.vegetationDensity) continue;
+        if (deterministic01(c.mx, c.my, seedInt + 9123) > settings.vegetationDensity) continue;
 
         const grassKey = `grass:${grassVariant}:${grassTileId}`;
-        const grassMeta = objectBillboardTextureCache.get(grassKey);
+        let grassMeta = objectBillboardTextureCache.get(grassKey);
         if (!grassMeta) {
           const canvas = document.createElement('canvas');
           canvas.width = 16;
@@ -266,38 +340,37 @@ export function createVegetationSystem(deps) {
           out.magFilter = THREE.NearestFilter;
           out.minFilter = THREE.NearestFilter;
           out.generateMipmaps = false;
-          objectBillboardTextureCache.set(grassKey, { texture: out, tilesW: 1, tilesH: 1 });
+          grassMeta = { texture: out, tilesW: 1, tilesH: 1 };
+          objectBillboardTextureCache.set(grassKey, grassMeta);
         }
-        const finalGrass = objectBillboardTextureCache.get(grassKey);
-        if (finalGrass?.texture) addBillboard(finalGrass.texture, px, py, pz, 0.9, 1.0);
+        const batch = getBatch(textureBatches, grassMeta.texture);
+        pushQuad(batch, px, py, pz, 0.9, 1.0);
       }
       if (y % 10 === 0) await nextFrame();
     }
+
+    flushBatches(textureBatches);
   }
 
   function applyWireframeMode(wireframeOnly) {
     for (const mat of vegetationMaterials) {
       if (!mat) continue;
-      if (wireframeOnly) {
-        mat.wireframe = true;
-        mat.map = null;
-        mat.color.set('#b8ffb8');
-        mat.transparent = false;
-        mat.alphaTest = 0;
-      } else {
-        mat.wireframe = false;
-        mat.map = mat.userData.baseMap || null;
-        mat.color.set('#ffffff');
-        mat.transparent = true;
-        mat.alphaTest = 0.2;
-      }
+      mat.wireframe = !!wireframeOnly;
+      mat.uniforms.useTexture.value = !wireframeOnly;
+      mat.uniforms.flatColor.value.set(wireframeOnly ? '#b8ffb8' : '#ffffff');
+      mat.uniforms.alphaCut.value = wireframeOnly ? 0.0 : 0.2;
       mat.needsUpdate = true;
     }
     if (vegetationGroup) vegetationGroup.visible = !!settings.showVegetation;
   }
 
   function faceCamera(camera) {
-    for (const b of vegetationBillboards) b.quaternion.copy(camera.quaternion);
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    for (const mat of shaderMats) {
+      mat.uniforms.cameraRight.value.copy(camRight);
+      mat.uniforms.cameraUp.value.copy(camUp);
+    }
   }
 
   function setVisible(visible) {
