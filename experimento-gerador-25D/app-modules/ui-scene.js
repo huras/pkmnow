@@ -43,6 +43,11 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  renderer.shadowMap.enabled = true;
+  // Hard pixel-style shadow edges (no soft PCF filtering).
+  renderer.shadowMap.type = THREE.BasicShadowMap;
   viewport.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -65,6 +70,25 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   const detailGroup = new THREE.Group();
   scene.add(worldGroup);
   scene.add(detailGroup);
+
+  const ambientLight = new THREE.AmbientLight('#ffffff', 0.62);
+  scene.add(ambientLight);
+  const hemiLight = new THREE.HemisphereLight('#cfe6ff', '#5a6a80', 0.5);
+  scene.add(hemiLight);
+  const sunLight = new THREE.DirectionalLight('#fff4d4', 0.85);
+  sunLight.position.set(180, 260, 120);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = 800;
+  sunLight.shadow.camera.left = -320;
+  sunLight.shadow.camera.right = 320;
+  sunLight.shadow.camera.top = 320;
+  sunLight.shadow.camera.bottom = -320;
+  sunLight.shadow.bias = -0.00015;
+  sunLight.shadow.normalBias = 0.02;
+  sunLight.shadow.intensity = 0.55;
+  scene.add(sunLight);
 
   const axesHelper = new THREE.AxesHelper(debugSettings.axesSize);
   axesHelper.visible = debugSettings.showAxes;
@@ -92,6 +116,9 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
     detailGroup,
     axesHelper,
     hoverMarker,
+    ambientLight,
+    hemiLight,
+    sunLight,
     raycaster: new THREE.Raycaster(),
     pointer: new THREE.Vector2(),
   };

@@ -75,8 +75,9 @@ export function buildWorldMacroMesh({
   }
   geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geom.computeVertexNormals();
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: false });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: false });
   const worldMesh = new THREE.Mesh(geom, mat);
+  worldMesh.receiveShadow = true;
   worldGroup.add(worldMesh);
 
   const roadSeg = [];
@@ -116,6 +117,8 @@ export function buildWorldMacroMesh({
     );
     marker.position.copy(macroPos(n.x, n.y, 0.9));
     marker.renderOrder = 21;
+    marker.castShadow = true;
+    marker.receiveShadow = true;
     worldGroup.add(marker);
   }
 
@@ -221,9 +224,12 @@ export async function buildDetailTerrain({
     g.setAttribute('position', new THREE.Float32BufferAttribute(data.p, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(data.u, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(data.c, 3));
-    const m = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
+    g.computeVertexNormals();
+    const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
     m.userData.baseMap = tex;
     const mesh = new THREE.Mesh(g, m);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
     detailGroup.add(mesh);
     pickMeshes.push(mesh);
     triTotal += Math.floor(g.getAttribute('position').count / 3);
@@ -231,9 +237,10 @@ export async function buildDetailTerrain({
 
   const detailFloorMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(span + 20, span + 20).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: '#2d3a2f' }),
+    new THREE.MeshLambertMaterial({ color: '#2d3a2f' }),
   );
   detailFloorMesh.position.y = floorY - 0.02;
+  detailFloorMesh.receiveShadow = true;
   detailGroup.add(detailFloorMesh);
   await buildVegetationBillboards({ cells, span, half, worldSeed: world.seed, currentWorld: world, detailGroup });
   triCountEl.textContent = triTotal.toLocaleString('en-US');

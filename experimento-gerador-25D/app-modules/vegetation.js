@@ -33,59 +33,63 @@ export function createVegetationSystem(deps) {
   const treeBillboardTextureCache = new Map();
   const objectBillboardTextureCache = new Map();
   const vegetationMaterials = [];
-  const shaderMats = [];
+  const litMats = [];
+  const depthMats = [];
 
   const camRight = new THREE.Vector3(1, 0, 0);
   const camUp = new THREE.Vector3(0, 1, 0);
+  
+  function patchBillboardVertexShader(shader) {
+    shader.uniforms.cameraRight = { value: camRight.clone() };
+    shader.uniforms.cameraUp = { value: camUp.clone() };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+attribute vec3 center;
+attribute vec2 offset;
+uniform vec3 cameraRight;
+uniform vec3 cameraUp;`,
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `vec3 objectNormal = normalize(cross(cameraRight, cameraUp));`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `vec3 transformed = center + cameraRight * offset.x + cameraUp * offset.y;`,
+      );
+  }
 
-  function makeBillboardShaderMaterial(texture) {
-    const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        map: { value: texture },
-        cameraRight: { value: camRight.clone() },
-        cameraUp: { value: camUp.clone() },
-        useTexture: { value: true },
-        flatColor: { value: new THREE.Color('#ffffff') },
-        alphaCut: { value: 0.2 },
-      },
-      vertexShader: `
-        attribute vec3 center;
-        attribute vec2 offset;
-        varying vec2 vUv;
-        uniform vec3 cameraRight;
-        uniform vec3 cameraUp;
-        void main() {
-          vec3 worldPos = center + cameraRight * offset.x + cameraUp * offset.y;
-          gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
-          vUv = uv;
-        }
-      `,
-      fragmentShader: `
-        varying vec2 vUv;
-        uniform sampler2D map;
-        uniform bool useTexture;
-        uniform vec3 flatColor;
-        uniform float alphaCut;
-        void main() {
-          if (useTexture) {
-            vec4 tex = texture2D(map, vUv);
-            if (tex.a < alphaCut) discard;
-            gl_FragColor = tex;
-          } else {
-            gl_FragColor = vec4(flatColor, 1.0);
-          }
-        }
-      `,
-      // Cutout pipeline (discard by alpha) so depth buffer handles ordering correctly.
-      // This avoids classic transparent-sorting artifacts between many billboards.
+  function makeBillboardLitMaterial(texture) {
+    const mat = new THREE.MeshLambertMaterial({
+      map: texture,
+      alphaTest: 0.2,
       transparent: false,
-      depthWrite: true,
-      depthTest: true,
       side: THREE.DoubleSide,
-      wireframe: false,
     });
+    mat.userData.baseMap = texture;
+    mat.onBeforeCompile = (shader) => {
+      patchBillboardVertexShader(shader);
+      mat.userData.shader = shader;
+    };
     vegetationMaterials.push(mat);
-    shaderMats.push(mat);
+    litMats.push(mat);
+    return mat;
+  }
+
+  function makeBillboardDepthMaterial(texture) {
+    const mat = new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking,
+      map: texture,
+      alphaTest: 0.2,
+      side: THREE.DoubleSide,
+    });
+    mat.onBeforeCompile = (shader) => {
+      patchBillboardVertexShader(shader);
+      mat.userData.shader = shader;
+    };
+    depthMats.push(mat);
     return mat;
   }
 
@@ -126,8 +130,11 @@ export function createVegetationSystem(deps) {
       g.setAttribute('uv', new THREE.Float32BufferAttribute(batch.uv, 2));
       g.computeBoundingBox();
       g.computeBoundingSphere();
-      const m = makeBillboardShaderMaterial(batch.texture);
+      const m = makeBillboardLitMaterial(batch.texture);
       const mesh = new THREE.Mesh(g, m);
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      mesh.customDepthMaterial = makeBillboardDepthMaterial(batch.texture);
       vegetationGroup.add(mesh);
     }
   }
@@ -253,7 +260,8 @@ export function createVegetationSystem(deps) {
     if (!settings.showVegetation) return;
 
     vegetationMaterials.length = 0;
-    shaderMats.length = 0;
+    litMats.length = 0;
+    depthMats.length = 0;
     const textureBatches = new Map();
     const treeRoots = new Set();
 
@@ -356,9 +364,9 @@ export function createVegetationSystem(deps) {
     for (const mat of vegetationMaterials) {
       if (!mat) continue;
       mat.wireframe = !!wireframeOnly;
-      mat.uniforms.useTexture.value = !wireframeOnly;
-      mat.uniforms.flatColor.value.set(wireframeOnly ? '#b8ffb8' : '#ffffff');
-      mat.uniforms.alphaCut.value = wireframeOnly ? 0.0 : 0.2;
+      mat.map = wireframeOnly ? null : (mat.userData.baseMap || null);
+      mat.color.set(wireframeOnly ? '#b8ffb8' : '#ffffff');
+      mat.alphaTest = wireframeOnly ? 0.0 : 0.2;
       mat.needsUpdate = true;
     }
     if (vegetationGroup) vegetationGroup.visible = !!settings.showVegetation;
@@ -367,9 +375,17 @@ export function createVegetationSystem(deps) {
   function faceCamera(camera) {
     camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-    for (const mat of shaderMats) {
-      mat.uniforms.cameraRight.value.copy(camRight);
-      mat.uniforms.cameraUp.value.copy(camUp);
+    for (const mat of litMats) {
+      const shader = mat.userData.shader;
+      if (!shader) continue;
+      shader.uniforms.cameraRight.value.copy(camRight);
+      shader.uniforms.cameraUp.value.copy(camUp);
+    }
+    for (const mat of depthMats) {
+      const shader = mat.userData.shader;
+      if (!shader) continue;
+      shader.uniforms.cameraRight.value.copy(camRight);
+      shader.uniforms.cameraUp.value.copy(camUp);
     }
   }
 

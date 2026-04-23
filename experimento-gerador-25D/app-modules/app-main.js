@@ -38,6 +38,7 @@ import {
 } from './utils.js';
 import { createVegetationSystem } from './vegetation.js';
 import { buildWorldMacroMesh, buildDetailTerrain, updateHoverMarker } from './terrain.js';
+import { createProceduralSkySystem } from './sky.js';
 
 export function startApp() {
   const ui = renderLayout();
@@ -46,6 +47,7 @@ export function startApp() {
     stepHeight: 0.55,
     wallShade: 0.72,
     worldHeightScale: 10,
+    timeOfDay: 12,
     showVegetation: true,
     vegetationDensity: 1.0,
   };
@@ -74,6 +76,33 @@ export function startApp() {
   };
 
   const sceneBits = createSceneGraph(THREE, OrbitControls, ui.viewport, debugSettings);
+  const skySystem = createProceduralSkySystem({
+    THREE,
+    scene: sceneBits.scene,
+    camera: sceneBits.camera,
+  });
+
+  function applyTimeOfDay(hours) {
+    const h = ((Number(hours) % 24) + 24) % 24;
+    settings.timeOfDay = h;
+    const t = ((h - 12) * Math.PI) / 12;
+    const sunElev01 = Math.max(0, Math.cos(t));
+    const sunSwing = Math.sin(t);
+
+    // Orbit the light around the world center; low at dawn/dusk, high at noon.
+    const orbitRadius = 280;
+    const sx = sunSwing * orbitRadius;
+    const sz = Math.cos(t) * orbitRadius * 0.62;
+    const sy = 28 + sunElev01 * 300;
+    sceneBits.sunLight.position.set(sx, sy, sz);
+
+    // Brighter stylized curve (Nintendo-ish readability), especially around noon.
+    sceneBits.sunLight.intensity = 0.35 + sunElev01 * 1.25;
+    sceneBits.ambientLight.intensity = 0.34 + sunElev01 * 0.46;
+    sceneBits.hemiLight.intensity = 0.26 + sunElev01 * 0.52;
+    sceneBits.sunLight.shadow.intensity = 0.34 + sunElev01 * 0.22;
+    skySystem.update(h, sceneBits.sunLight.position);
+  }
 
   const textureForLocal = (filePath) => textureFor(THREE, atlasTextures, filePath);
   const vegetationSystem = createVegetationSystem({
@@ -266,6 +295,7 @@ export function startApp() {
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
     vegetationSystem.faceCamera(sceneBits.camera);
+    skySystem.tick(nowTs * 0.001);
     sceneBits.renderer.render(sceneBits.scene, sceneBits.camera);
     updatePerfOverlay(nowTs);
     requestAnimationFrame(animate);
@@ -274,6 +304,7 @@ export function startApp() {
   const gui = new GUI({ title: 'Render Params' });
   gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
   gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+  gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
     if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
@@ -357,6 +388,7 @@ export function startApp() {
     sceneBits.renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
+  applyTimeOfDay(settings.timeOfDay);
   setViewMode('world');
   requestAnimationFrame(animate);
   regenerate().catch((e) => { console.error(e); ui.pickInfo.textContent = `Startup error: ${e?.message || e}`; rendering = false; });
