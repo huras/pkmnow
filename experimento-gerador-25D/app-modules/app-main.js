@@ -10,6 +10,7 @@ import { OBJECT_SETS } from '../../js/tessellation-data.js';
 import { resolveScatterVegetationItemKey } from '../../js/vegetation-channels.js';
 import { validScatterOriginMicro } from '../../js/scatter-pass2-debug.js';
 import { parseShape } from '../../js/tessellation-logic.js';
+import { BERRY_TREE_TILES, getBerryTypeFromKey } from '../../js/main/berry-tree-system.js';
 import {
   getTreeType,
   TREE_TILES,
@@ -47,6 +48,7 @@ export function startApp() {
     stepHeight: 0.55,
     wallShade: 0.72,
     worldHeightScale: 10,
+    detailsYOffset: -0.15,
     timeOfDay: 12,
     showVegetation: true,
     vegetationDensity: 1.0,
@@ -110,6 +112,8 @@ export function startApp() {
     OBJECT_SETS,
     TessellationEngine,
     parseShape,
+    BERRY_TREE_TILES,
+    getBerryTypeFromKey,
     getTreeType,
     TREE_TILES,
     tileSurfaceAllowsScatterVegetation,
@@ -202,6 +206,16 @@ export function startApp() {
     });
     currentBounds = result.currentBounds;
     detailFloorMesh = result.detailFloorMesh;
+  }
+
+  async function rebuildCurrentDetail() {
+    if (!currentWorld) return;
+    const macroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
+    const macroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
+    await rebuildDetail(
+      macroX * MACRO_TILE_STRIDE + halfStride,
+      macroY * MACRO_TILE_STRIDE + halfStride,
+    );
   }
 
   async function regenerate() {
@@ -304,6 +318,30 @@ export function startApp() {
   const gui = new GUI({ title: 'Render Params' });
   gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
   gui.add(settings, 'stepHeight', 0.25, 1.2, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+  gui.add(settings, 'detailsYOffset', -5.0, 5.0, 0.01).name('Details Y Offset').onChange(async () => {
+    if (!currentWorld) return;
+    worldMesh = buildWorldMacroMesh({
+      THREE,
+      world: currentWorld,
+      worldGroup: sceneBits.worldGroup,
+      hoverMarker: sceneBits.hoverMarker,
+      settings,
+      biomeColorById,
+      clearGroup,
+      idx,
+    });
+    if (hoverMacro) updateHoverMarker({
+      currentWorld,
+      mx: hoverMacro.x,
+      my: hoverMacro.y,
+      hoverMarker: sceneBits.hoverMarker,
+      macroCoordEl: ui.macroCoordEl,
+      settings,
+      idx,
+      clamp,
+    });
+    await rebuildCurrentDetail();
+  });
   gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {

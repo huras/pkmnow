@@ -22,10 +22,11 @@ export function updateHoverMarker({
   const cx1 = clamp(mx + 1, 0, w - 1);
   const cy1 = clamp(my + 1, 0, h - 1);
 
-  const y00 = currentWorld.cells[idx(w, cx0, cy0)] * settings.worldHeightScale + 0.28;
-  const y10 = currentWorld.cells[idx(w, cx1, cy0)] * settings.worldHeightScale + 0.28;
-  const y11 = currentWorld.cells[idx(w, cx1, cy1)] * settings.worldHeightScale + 0.28;
-  const y01 = currentWorld.cells[idx(w, cx0, cy1)] * settings.worldHeightScale + 0.28;
+  const detailLift = settings.detailsYOffset ?? 0;
+  const y00 = currentWorld.cells[idx(w, cx0, cy0)] * settings.worldHeightScale + detailLift + 0.28;
+  const y10 = currentWorld.cells[idx(w, cx1, cy0)] * settings.worldHeightScale + detailLift + 0.28;
+  const y11 = currentWorld.cells[idx(w, cx1, cy1)] * settings.worldHeightScale + detailLift + 0.28;
+  const y01 = currentWorld.cells[idx(w, cx0, cy1)] * settings.worldHeightScale + detailLift + 0.28;
 
   const px0 = mx - halfW;
   const pz0 = my - halfH;
@@ -56,9 +57,10 @@ export function buildWorldMacroMesh({
   const h = world.height;
   const halfW = (w - 1) * 0.5;
   const halfH = (h - 1) * 0.5;
+  const detailLift = settings.detailsYOffset ?? 0;
   const macroPos = (mx, my, yOffset = 0) => {
     const i = idx(w, mx, my);
-    const y = world.cells[i] * settings.worldHeightScale + yOffset;
+    const y = world.cells[i] * settings.worldHeightScale + detailLift + yOffset;
     return new THREE.Vector3(mx - halfW, y, my - halfH);
   };
   const geom = new THREE.PlaneGeometry(w - 1, h - 1, w - 1, h - 1);

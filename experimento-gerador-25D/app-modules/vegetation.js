@@ -4,6 +4,8 @@ export function createVegetationSystem(deps) {
     OBJECT_SETS,
     TessellationEngine,
     parseShape,
+    BERRY_TREE_TILES,
+    getBerryTypeFromKey,
     getTreeType,
     TREE_TILES,
     tileSurfaceAllowsScatterVegetation,
@@ -180,6 +182,56 @@ uniform vec3 cameraUp;`,
 
   async function getObjectBillboardTexture(itemKey) {
     if (!itemKey || !OBJECT_SETS[itemKey]) return null;
+    const isBerryTree = String(itemKey).toLowerCase().includes('berry-tree-');
+
+    if (isBerryTree) {
+      const berryType = getBerryTypeFromKey(itemKey);
+      const berryCacheKey = `berry:${berryType}:stage2:anim0`;
+      if (objectBillboardTextureCache.has(berryCacheKey)) return objectBillboardTextureCache.get(berryCacheKey);
+
+      const objSet = OBJECT_SETS[itemKey];
+      const atlasPath = TessellationEngine.getImagePath(objSet.file).replace(/\\/g, '/');
+      const atlasTex = await textureFor(atlasPath);
+      if (!atlasTex?.image) return null;
+      const cols = atlasColsFromPath(atlasPath);
+
+      // Use a full mature frame by default (top + bottom) so berry trees render as 2x1.
+      const frame = BERRY_TREE_TILES[berryType]?.[2]?.[0];
+      const ids = Array.isArray(frame) ? frame : [];
+      if (!ids.length) return null;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = ids.length >= 2 ? 32 : 16;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.imageSmoothingEnabled = false;
+
+      const topId = ids.length >= 2 ? ids[0] : null;
+      const bottomId = ids.length >= 2 ? ids[1] : ids[0];
+      if (topId != null) {
+        const sx = (topId % cols) * TILE_PX;
+        const sy = Math.floor(topId / cols) * TILE_PX;
+        ctx.drawImage(atlasTex.image, sx, sy, TILE_PX, TILE_PX, 0, 0, TILE_PX, TILE_PX);
+      }
+      if (bottomId != null) {
+        const sx = (bottomId % cols) * TILE_PX;
+        const sy = Math.floor(bottomId / cols) * TILE_PX;
+        const dy = ids.length >= 2 ? 16 : 0;
+        ctx.drawImage(atlasTex.image, sx, sy, TILE_PX, TILE_PX, 0, dy, TILE_PX, TILE_PX);
+      }
+
+      const out = new THREE.CanvasTexture(canvas);
+      out.colorSpace = THREE.SRGBColorSpace;
+      out.magFilter = THREE.NearestFilter;
+      out.minFilter = THREE.NearestFilter;
+      out.generateMipmaps = false;
+
+      const meta = { texture: out, tilesW: 1, tilesH: ids.length >= 2 ? 2 : 1 };
+      objectBillboardTextureCache.set(berryCacheKey, meta);
+      return meta;
+    }
+
     if (objectBillboardTextureCache.has(itemKey)) return objectBillboardTextureCache.get(itemKey);
 
     const objSet = OBJECT_SETS[itemKey];
@@ -268,6 +320,7 @@ uniform vec3 cameraUp;`,
     const seedInt = seedToInt(worldSeed);
     const microW = currentWorld.width * MACRO_TILE_STRIDE;
     const microH = currentWorld.height * MACRO_TILE_STRIDE;
+    const detailLift = settings.detailsYOffset ?? 0;
     const originMemo = new Map();
     const getTile = (mx, my) => getMicroTile(mx, my, currentWorld);
 
@@ -290,7 +343,7 @@ uniform vec3 cameraUp;`,
         const batch = getBatch(textureBatches, tex);
         const px = x - half + 1.0;
         const pz = y - half + 0.5;
-        const py = c.h * settings.stepHeight + 0.05;
+        const py = c.h * settings.stepHeight + detailLift + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
         pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
         treeRoots.add(`${c.mx},${c.my}`);
@@ -305,7 +358,7 @@ uniform vec3 cameraUp;`,
         if (treeRoots.has(`${c.mx},${c.my}`)) continue;
         const px = x - half + 0.5;
         const pz = y - half + 0.5;
-        const py = c.h * settings.stepHeight + 0.05;
+        const py = c.h * settings.stepHeight + detailLift + 0.05;
 
         if (validScatterOriginMicro(c.mx, c.my, seedInt, microW, microH, getTile, originMemo)) {
           const itemKey = resolveScatterVegetationItemKey(c.mx, c.my, c, seedInt);
