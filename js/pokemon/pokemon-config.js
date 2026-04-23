@@ -168,7 +168,7 @@ export const POKEMON_CONFIG = {
   147: { name: 'Dratini', types: ['dragon'], heightTiles: 2, baseSpeed: 50 },
   148: { name: 'Dragonair', types: ['dragon'], heightTiles: 3, baseSpeed: 70 },
   149: { name: 'Dragonite', types: ['dragon', 'flying'], heightTiles: 4.4, baseSpeed: 80 },
-  150: { name: 'Mewtwo', types: ['psychic'], heightTiles: 4.1, baseSpeed: 130 },
+  150: { name: 'Mewtwo', types: ['psychic'], heightTiles: 2.1, baseSpeed: 130 },
   151: { name: 'Mew', types: ['psychic'], heightTiles: 3.5, baseSpeed: 100 },
   152: { name: 'Chikorita', types: ['grass'], heightTiles: 2.5, baseSpeed: 45 },
   153: { name: 'Bayleef', types: ['grass'], heightTiles: 3.5, baseSpeed: 60 },

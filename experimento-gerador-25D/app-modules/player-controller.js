@@ -387,7 +387,7 @@ export function createPlayerController({
     // If we were grounded and walked onto a lower surface without a valid ramp/stair connector,
     // do NOT snap Y instantly — enter freefall from the previous elevation.
     if (state.grounded && state.world && (Math.abs(state.x - ox) > 1e-7 || Math.abs(state.y - oy) > 1e-7)) {
-      const step = Math.max(1e-4, Number(settings.stepHeight) || 0.55);
+      const step = Math.max(1e-4, Number(settings.stepHeight) || 1);
       const drop = prevGroundY - groundY;
       const cliff = isCliffDrop(ox, oy, state.x, state.y, state.world);
       const bigDrop = drop > step * 1.25;

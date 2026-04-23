@@ -46,7 +46,7 @@ export function startApp() {
   const ui = renderLayout();
   const settings = {
     microSpan: 96,
-    stepHeight: 0.55,
+    stepHeight: 1,
     wallShade: 0.72,
     worldHeightScale: 10,
     detailsYOffset: -0.15,
@@ -114,6 +114,17 @@ export function startApp() {
     textureFor: textureForLocal,
     getMicroTile,
   });
+
+  /** When the detail window re-centers, mesh XZ is stable but Orbit target may lag; snap rig to anchor. */
+  function snapDetailOrbitToPlayerAnchor() {
+    if (viewMode !== 'detail' || !settings.followPlayerCamera || !playerController.isActive()) return;
+    const anchor = playerController.getAnchorPosition();
+    if (!anchor) return;
+    followTmpDelta.copy(sceneBits.camera.position).sub(sceneBits.controls.target);
+    followTmpTarget.set(anchor.x, anchor.y, anchor.z);
+    sceneBits.controls.target.copy(followTmpTarget);
+    sceneBits.camera.position.copy(sceneBits.controls.target).add(followTmpDelta);
+  }
 
   function applyTimeOfDay(hours) {
     const h = ((Number(hours) % 24) + 24) % 24;
@@ -277,6 +288,7 @@ export function startApp() {
         currentBounds = result.currentBounds;
         detailFloorMesh = result.detailFloorMesh;
         playerController.setContext(currentWorld, currentBounds);
+        snapDetailOrbitToPlayerAnchor();
 
         const span = currentBounds.span;
         sceneBits.camera.far = Math.max(4000, span * 10);
@@ -433,10 +445,10 @@ export function startApp() {
     perf.frameTimestamps.push(nowTs);
     perf.frameDurationsMs.push(dt);
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
-    sceneBits.controls.update();
-    updateFollowCamera();
     playerController.tick(dtSec);
     tryStreamDetailNearPlayer();
+    updateFollowCamera();
+    sceneBits.controls.update();
     playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);
     skySystem.tick(nowTs * 0.001);
