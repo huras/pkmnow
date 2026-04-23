@@ -40,6 +40,7 @@ import {
 import { createVegetationSystem } from './vegetation.js';
 import { buildWorldMacroMesh, buildDetailTerrain, updateHoverMarker } from './terrain.js';
 import { createProceduralSkySystem } from './sky.js';
+import { createPlayerController } from './player-controller.js';
 
 export function startApp() {
   const ui = renderLayout();
@@ -78,10 +79,19 @@ export function startApp() {
   };
 
   const sceneBits = createSceneGraph(THREE, OrbitControls, ui.viewport, debugSettings);
+  const textureForLocal = (filePath) => textureFor(THREE, atlasTextures, filePath);
   const skySystem = createProceduralSkySystem({
     THREE,
     scene: sceneBits.scene,
     camera: sceneBits.camera,
+  });
+  const playerController = createPlayerController({
+    THREE,
+    playerGroup: sceneBits.playerGroup,
+    camera: sceneBits.camera,
+    settings,
+    textureFor: textureForLocal,
+    getMicroTile,
   });
 
   function applyTimeOfDay(hours) {
@@ -106,7 +116,6 @@ export function startApp() {
     skySystem.update(h, sceneBits.sunLight.position);
   }
 
-  const textureForLocal = (filePath) => textureFor(THREE, atlasTextures, filePath);
   const vegetationSystem = createVegetationSystem({
     THREE,
     OBJECT_SETS,
@@ -166,6 +175,8 @@ export function startApp() {
     viewMode = mode;
     sceneBits.worldGroup.visible = mode === 'world';
     sceneBits.detailGroup.visible = mode === 'detail';
+    sceneBits.playerGroup.visible = mode === 'detail';
+    playerController.setVisible(mode === 'detail');
     ui.worldBtn.disabled = mode === 'world';
     ui.detailBtn.disabled = mode === 'detail';
     if (mode === 'world') {
@@ -206,6 +217,7 @@ export function startApp() {
     });
     currentBounds = result.currentBounds;
     detailFloorMesh = result.detailFloorMesh;
+    playerController.setContext(currentWorld, currentBounds);
   }
 
   async function rebuildCurrentDetail() {
@@ -265,6 +277,7 @@ export function startApp() {
     const t = getMicroTile(mx, my, currentWorld);
     const role = computeTerrainRoleAndSprite(mx, my, currentWorld, t.heightStep);
     ui.pickInfo.textContent = `detail mx:${mx} my:${my} | h:${t.heightStep} | biome:${t.biomeId} | set:${role.setName ?? '-'} | sprite:${role.spriteId ?? '-'}`;
+    return { mx, my, t, role };
   }
 
   function pickMacroFromPoint(clientX, clientY) {
@@ -303,11 +316,14 @@ export function startApp() {
 
   function animate(nowTs) {
     const dt = Math.max(0.0001, nowTs - perf.lastFrameTs);
+    const dtSec = dt * 0.001;
     perf.lastFrameTs = nowTs;
     perf.frameTimestamps.push(nowTs);
     perf.frameDurationsMs.push(dt);
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
+    playerController.tick(dtSec);
+    playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);
     skySystem.tick(nowTs * 0.001);
     sceneBits.renderer.render(sceneBits.scene, sceneBits.camera);
@@ -396,7 +412,11 @@ export function startApp() {
       pendingMacroDown = pickMacroFromPoint(e.clientX, e.clientY);
       return;
     }
-    pickDetailAt(e.clientX, e.clientY);
+    const picked = pickDetailAt(e.clientX, e.clientY);
+    if (picked) {
+      playerController.placeAt(picked.mx, picked.my);
+      ui.pickInfo.textContent = `Player spawned at mx:${picked.mx} my:${picked.my}. Use WASD/Arrows to move, Space to jump.`;
+    }
   });
 
   sceneBits.renderer.domElement.addEventListener('pointerup', async (e) => {
@@ -425,9 +445,23 @@ export function startApp() {
     sceneBits.camera.updateProjectionMatrix();
     sceneBits.renderer.setSize(window.innerWidth, window.innerHeight);
   });
+  window.addEventListener('keydown', (e) => {
+    const isMoveKey = e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD'
+      || e.code === 'ArrowUp' || e.code === 'ArrowLeft' || e.code === 'ArrowDown' || e.code === 'ArrowRight';
+    if (viewMode !== 'detail') return;
+    if (isMoveKey || e.code === 'Space') e.preventDefault();
+    if (isMoveKey) playerController.onKeyDown(e.code);
+    if (e.code === 'Space' && !e.repeat) playerController.jump();
+  });
+  window.addEventListener('keyup', (e) => {
+    if (viewMode !== 'detail') return;
+    playerController.onKeyUp(e.code);
+  });
 
   applyTimeOfDay(settings.timeOfDay);
   setViewMode('world');
   requestAnimationFrame(animate);
-  regenerate().catch((e) => { console.error(e); ui.pickInfo.textContent = `Startup error: ${e?.message || e}`; rendering = false; });
+  playerController.init()
+    .then(() => regenerate())
+    .catch((e) => { console.error(e); ui.pickInfo.textContent = `Startup error: ${e?.message || e}`; rendering = false; });
 }

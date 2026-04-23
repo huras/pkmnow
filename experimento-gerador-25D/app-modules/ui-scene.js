@@ -68,8 +68,10 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
 
   const worldGroup = new THREE.Group();
   const detailGroup = new THREE.Group();
+  const playerGroup = new THREE.Group();
   scene.add(worldGroup);
   scene.add(detailGroup);
+  scene.add(playerGroup);
 
   const ambientLight = new THREE.AmbientLight('#ffffff', 0.62);
   scene.add(ambientLight);
@@ -114,6 +116,7 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
     controls,
     worldGroup,
     detailGroup,
+    playerGroup,
     axesHelper,
     hoverMarker,
     ambientLight,
