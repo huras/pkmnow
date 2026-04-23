@@ -1,4 +1,5 @@
 import { NATIONAL_DEX_MAX, getNationalSpeciesName, padDex3 } from '../pokemon/national-dex-registry.js';
+import { probeSpriteCollabPortraitPrefix } from '../pokemon/spritecollab-portraits.js';
 import { getCryIdentifiedDexIdsSnapshot } from '../wild-pokemon/cry-identification-progress.js';
 import {
   FAR_CRY_IDENTIFICATION_CRIES_REQUIRED,
@@ -7,6 +8,20 @@ import {
 
 const SORT_DEX_ASC = 'dex-asc';
 const SORT_CRY_DESC = 'cries-desc';
+/** @type {Map<number, string | null>} */
+const portraitPrefixByDex = new Map();
+
+/**
+ * @param {number} dexId
+ * @returns {Promise<string | null>}
+ */
+async function resolvePortraitPrefix(dexId) {
+  const d = Math.max(1, Math.floor(Number(dexId) || 1));
+  if (portraitPrefixByDex.has(d)) return portraitPrefixByDex.get(d) ?? null;
+  const prefix = await probeSpriteCollabPortraitPrefix(d);
+  portraitPrefixByDex.set(d, prefix ?? null);
+  return prefix ?? null;
+}
 
 export class PokeradarModal {
   /**
@@ -24,6 +39,8 @@ export class PokeradarModal {
     this._sortEl = null;
     this._showIdentifiedEl = null;
     this._showUnidentifiedEl = null;
+    /** @type {AbortController | null} */
+    this._portraitAbort = null;
     this._onKeyDown = this._handleKeyDown.bind(this);
   }
 
@@ -149,6 +166,10 @@ export class PokeradarModal {
       return;
     }
 
+    if (this._portraitAbort) this._portraitAbort.abort();
+    this._portraitAbort = new AbortController();
+    const signal = this._portraitAbort.signal;
+
     this._listEl.innerHTML = rows
       .map((r) => {
         const status = r.identified ? 'Identified' : 'Unknown';
@@ -156,6 +177,18 @@ export class PokeradarModal {
         return `
           <div class="${cls}" role="listitem">
             <div class="pokeradar-row__head">
+              <div class="pokeradar-row__portrait-wrap">
+                <span class="pokeradar-row__no-portrait" aria-hidden="true">◉</span>
+                <img
+                  class="pokeradar-row__portrait pokeradar-row__portrait--loading"
+                  alt="${r.name}"
+                  width="42"
+                  height="42"
+                  loading="lazy"
+                  decoding="async"
+                  data-dex="${r.dexId}"
+                />
+              </div>
               <span class="pokeradar-row__dex">#${padDex3(r.dexId)}</span>
               <span class="pokeradar-row__name">${r.name}</span>
             </div>
@@ -167,6 +200,45 @@ export class PokeradarModal {
         `;
       })
       .join('');
+    void this._loadPortraits(signal);
+  }
+
+  /**
+   * @param {AbortSignal} signal
+   */
+  async _loadPortraits(signal) {
+    const imgs = Array.from(
+      this._listEl?.querySelectorAll('img.pokeradar-row__portrait[data-dex]') ?? []
+    );
+    await Promise.all(
+      imgs.map(async (img) => {
+        if (signal.aborted) return;
+        const dex = Math.floor(Number(img.dataset.dex) || 0);
+        if (dex < 1) {
+          img.classList.remove('pokeradar-row__portrait--loading');
+          return;
+        }
+        try {
+          const prefix = await resolvePortraitPrefix(dex);
+          if (signal.aborted) return;
+          const fallback = img.parentElement?.querySelector('.pokeradar-row__no-portrait');
+          if (prefix) {
+            img.onload = () => {
+              img.classList.remove('pokeradar-row__portrait--loading');
+              if (fallback) fallback.style.display = 'none';
+            };
+            img.onerror = () => {
+              img.classList.remove('pokeradar-row__portrait--loading');
+            };
+            img.src = `${prefix}Normal.png`;
+          } else {
+            img.classList.remove('pokeradar-row__portrait--loading');
+          }
+        } catch {
+          img.classList.remove('pokeradar-row__portrait--loading');
+        }
+      })
+    );
   }
 
   open() {
@@ -186,6 +258,10 @@ export class PokeradarModal {
 
   close() {
     if (!this._el || !this._isOpen) return;
+    if (this._portraitAbort) {
+      this._portraitAbort.abort();
+      this._portraitAbort = null;
+    }
     this._el.classList.remove('pokeradar-modal--open');
     this._el.setAttribute('aria-hidden', 'true');
     this._isOpen = false;

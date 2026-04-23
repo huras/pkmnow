@@ -221,6 +221,7 @@ const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
 const btnMinimapMacroGridToggle = document.getElementById('minimap-macro-grid-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
+const btnMinimapPokeradarCornerToggle = document.getElementById('minimap-pokeradar-corner-toggle');
 const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
 const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
 const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
@@ -1230,9 +1231,14 @@ installPlayHelpWikiModal({
 const pokeradarModal = installPokeradarModal({
   onOpenChange: (isOpen) => {
     btnMinimapPokeradarToggle?.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+    btnMinimapPokeradarCornerToggle?.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
   }
 });
 btnMinimapPokeradarToggle?.addEventListener('click', () => {
+  if (pokeradarModal.isOpen()) pokeradarModal.close();
+  else pokeradarModal.open();
+});
+btnMinimapPokeradarCornerToggle?.addEventListener('click', () => {
   if (pokeradarModal.isOpen()) pokeradarModal.close();
   else pokeradarModal.open();
 });

@@ -16,6 +16,11 @@ My ideias organizadas por tópico
 -----------------------------
 - Rotas onde passa até carro.
 - Rotas com estrada de terra ou estrada normal.
+- Rotas podem cortar/cindir montanhas mantendo parte do terreno original em volta (não virar só corredor de road).
+- Ao longo das rotas, gerar áreas circulares centradas em pontos do caminho para criar espaço de batalha, grama e ambiente.
+- Criar categoria de biome "road biome" com variações:
+  - alguns road biomes geram esses bolsões circulares;
+  - outros mantêm rota mais linear/seca para variar ritmo.
 - Soltar o jogador no mapa com construções fixas em locais aleatórios, com conteúdo e "caminho de balas" guiando.
 - Wikipédia do mundo gerado:
   - Cidades
@@ -27,6 +32,7 @@ My ideias organizadas por tópico
   - Quests
   - Biomes and Flora (talvez procedural no talo)
   - Estruturas naturais (florestas, lagos, montanhas, mares)
+  - Dex de biomas mostrando variação de spawn por dia/período
 - Histórico no mapa-múndi das decisões do player:
   - quando equipar/trocar ataques, registrar no mapa a posição onde isso aconteceu;
   - usar isso como "rastro mental" para entender o que o player estava pensando ao atravessar cada região.
@@ -59,6 +65,7 @@ My ideias organizadas por tópico
   - defende de voadores querendo pousar;
   - tenta dominar território alheio.
 - Pokémons selvagens coletam madeira, palha e pedras na natureza para construir/expandir ninhos.
+- Spawns de pokémon mudam conforme o dia/período (manhã, tarde, noite; e/ou dias específicos).
 - Spawn determinístico ou random:
   - alguns fixos e outros random?
 - Spawns possíveis:
@@ -100,6 +107,16 @@ My ideias organizadas por tópico
 - Eventos sociais de troca de liderança dentro de grupos de pokémon (leader swap).
 - Troca de líder deixa movimentação de grupo mais dinâmica e menos previsível.
 - A mesma mecânica abre espaço para vários outros eventos sociais (disputa, reconciliação, proteção, fuga coordenada).
+- Debugar/fortalecer sistema social para permitir brigas entre grupos de pokémon.
+- Instinto de proteção de mãe e filhotes como gatilho social forte (defesa, alerta, fuga coordenada).
+- Camadas sociais separadas por papéis/comportamentos:
+  - filhotes
+  - fêmeas
+  - machos
+- Regras sociais inspiradas em natureza:
+  - machos não disputam com fêmeas da mesma forma que disputam entre si;
+  - fêmeas não aceitam todos os machos (seleção social/comportamental).
+- Tom de apresentação: tudo cômico e sem palavras, usando só símbolos/emoji estilo anime para diálogo.
 
 
 5) Recursos, crafting e sobrevivência
@@ -388,3 +405,35 @@ My ideias organizadas por tópico
 - Pode facilitar leitura estratégica (stats/estado/função) e acelerar prototipagem de sistemas sociais/combate.
 - Bom para testes de UX/clareza sem depender 100% de animação sprite em todas as interações.
 - Nota: isso é separado da ideia de "pokémon como carta" na mecânica de moves (ver tópico 11: limite de 2 ataques).
+
+
+26) Demo/hack inicial com mapas clássicos (Fire)
+-------------------------------------------------
+- Liberar primeiro uma demo/hack usando mapas originais de Fire para validar gameplay rápido.
+- Manter os sistemas de batalha modificados do projeto (não é remake fiel; é prova de conceito dos novos sistemas).
+- Aumentar espaço de luta nas rotas para combate mais dinâmico.
+- Abrir algumas áreas específicas em formato "mundo aberto" (semiaberto) como showcase do jogo real.
+- Objetivo: entregar uma demo do core do projeto antes da versão completa do mundo procedural.
+
+
+27) Sprites de distância (LOD visual)
+-------------------------------------
+- Usar sprites estilo HeartGold/SoulSilver para pokémons distantes e revoadas de pássaros.
+- Como esses sprites são menores, reforçam a leitura de que as entidades estão "mais longe".
+- Benefício extra: ajuda performance/percepção visual sem precisar renderizar sprites grandes em longa distância.
+
+
+28) Geração de bioma por blocos (palette builder)
+-------------------------------------------------
+- Definir o bioma por blocos/chunks para montar uma "palette" de mundo usando a engine atual.
+- Esses blocos podem carregar regras visuais + ecológicas + de spawn já pré-coesas.
+- Opção de forçar geração de rotas junto com os blocos para manter navegação consistente.
+- Bom para acelerar prototipagem de mapa sem depender de gerador totalmente livre desde o início.
+
+
+29) Biome Scenario Editor + Quest Editor
+----------------------------------------
+- Criar um editor de cenários de bioma para montar mapas/cenários manualmente com apoio da engine.
+- Editor pode combinar terreno, pontos de interesse, spawn rules e eventos locais em um workflow visual.
+- Extensão opcional: editar quests com sistema estilo RPG Maker (event pages, condições, gatilhos, recompensas).
+- Objetivo: acelerar criação de conteúdo jogável sem precisar codar cada variação manualmente.

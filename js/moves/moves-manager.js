@@ -1329,6 +1329,8 @@ export function getPlayerMoveCooldownUiMax(moveId) {
         PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[3],
         PLAYER_THUNDERBOLT_COOLDOWN_BY_LEVEL[4]
       );
+    case 'flash':
+      return 0;
     case 'rainDance':
     case 'sunnyDay':
     case 'blizzard':
@@ -1398,6 +1400,8 @@ export function getPlayerMoveCooldownRemaining(moveId) {
       return playerThundershockCooldown;
     case 'thunderbolt':
       return playerThunderboltCooldown;
+    case 'flash':
+      return 0;
     case 'rainDance':
     case 'sunnyDay':
     case 'blizzard':

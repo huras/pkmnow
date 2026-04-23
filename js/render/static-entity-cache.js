@@ -14,6 +14,7 @@
 
 import {
   BIOME_VEGETATION,
+  BIOME_TO_TERRAIN,
   getTreeType,
   TREE_DENSITY_THRESHOLD,
   TREE_NOISE_SCALE,
@@ -23,8 +24,8 @@ import {
 } from '../biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity } from '../chunking.js';
 import { validScatterOriginMicro } from '../scatter-pass2-debug.js';
-import { OBJECT_SETS } from '../tessellation-data.js';
-import { parseShape } from '../tessellation-logic.js';
+import { OBJECT_SETS, TERRAIN_SETS } from '../tessellation-data.js';
+import { getRoleForCell, parseShape, terrainRoleAllowsScatter2CContinuation } from '../tessellation-logic.js';
 import { hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 import { PLAY_CHUNK_SIZE } from './render-constants.js';
@@ -106,8 +107,24 @@ export function getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH) {
         (mxScan + myScan) % 3 === 0 &&
         foliageDensity(mxScan, myScan, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD
       ) {
-        if (directGet(mxScan + 1, myScan)?.heightStep === t.heightStep) {
-          entities.push({ type: 'tree', treeType, originX: mxScan, originY: myScan, biomeId: t.biomeId });
+        const rightTile = directGet(mxScan + 1, myScan);
+        if (
+          t.heightStep >= 1 &&
+          !t.isRoad &&
+          !t.isCity &&
+          rightTile?.heightStep === t.heightStep
+        ) {
+          let canDrawFormal = true;
+          const set = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
+          if (set) {
+            const checkAtOrAbove = (r, c) => (directGet(c, r)?.heightStep ?? -99) >= t.heightStep;
+            const role = getRoleForCell(myScan, mxScan, fullH, fullW, checkAtOrAbove, set.type);
+            const rightRole = getRoleForCell(myScan, mxScan + 1, fullH, fullW, checkAtOrAbove, set.type);
+            canDrawFormal = role === 'CENTER' && terrainRoleAllowsScatter2CContinuation(rightRole);
+          }
+          if (canDrawFormal) {
+            entities.push({ type: 'tree', treeType, originX: mxScan, originY: myScan, biomeId: t.biomeId });
+          }
         }
       }
 

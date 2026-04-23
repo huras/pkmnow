@@ -1,0 +1,79 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: Inter, 'Segoe UI', Roboto, sans-serif;
+}
+
+#viewport {
+  width: 100%;
+  height: 100%;
+}
+
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: min(320px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(20, 24, 36, 0.82);
+  color: #e8ebf5;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.hud h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.hud p {
+  margin: 0;
+  font-size: 13px;
+  color: #c7cedd;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.field input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(8, 11, 19, 0.75);
+  color: #ffffff;
+  padding: 8px 10px;
+}
+
+#regen-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: #161b2a;
+  background: #88f0b2;
+  cursor: pointer;
+}
+
+#regen-btn:hover {
+  filter: brightness(1.06);
+}
+
+.hint {
+  opacity: 0.88;
+}

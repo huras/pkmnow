@@ -938,6 +938,48 @@
   gap: 8px;
 }
 
+.pokeradar-row__head {
+  gap: 9px;
+}
+
+.pokeradar-row__portrait-wrap {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(180, 206, 255, 0.3);
+  background: rgba(8, 14, 40, 0.86);
+}
+
+.pokeradar-row__portrait {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.pokeradar-row__portrait--loading {
+  opacity: 0.15;
+}
+
+.pokeradar-row__no-portrait {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.92rem;
+  color: rgba(172, 199, 255, 0.7);
+  pointer-events: none;
+}
+
 .pokeradar-row__dex {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.72rem;

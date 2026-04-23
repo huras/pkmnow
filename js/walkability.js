@@ -33,7 +33,11 @@ import {
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
 import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
-import { hasScatterItemKeyOverride } from './main/scatter-item-override.js';
+import {
+  hasScatterItemKeyOverride,
+  getScatterItemKeyOverride,
+  SCATTER_ITEM_KEY_OVERRIDE_EMPTY
+} from './main/scatter-item-override.js';
 import { resolveScatterVegetationItemKey } from './vegetation-channels.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
@@ -601,9 +605,11 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;
   const hasForcedItemKey = hasScatterItemKeyOverride(ox0, oy0);
+  const forcedItemKey = hasForcedItemKey ? getScatterItemKeyOverride(ox0, oy0) : null;
+  if (forcedItemKey === SCATTER_ITEM_KEY_OVERRIDE_EMPTY) return null;
   if (!hasForcedItemKey && !validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
 
-  const itemKey = resolveScatterVegetationItemKey(ox0, oy0, nTile, seed);
+  const itemKey = hasForcedItemKey ? forcedItemKey : resolveScatterVegetationItemKey(ox0, oy0, nTile, seed);
   if (!itemKey) return null;
 
   const isTree = scatterItemKeyIsTree(itemKey);

@@ -466,6 +466,46 @@
             <canvas id="minimap" width="230" height="192" data-zoom="close" data-i18n-aria-label="play.minimapCanvasLabel" aria-label="リージョンミニマップ"></canvas>
             <button
               type="button"
+              id="minimap-pokeradar-corner-toggle"
+              class="minimap-panel__show-spawned-btn minimap-panel__pokeradar-corner-toggle"
+              title="Pokeradar"
+              aria-label="Pokeradar"
+              aria-pressed="false"
+            >
+              <svg
+                class="minimap-panel__show-spawned-icon minimap-panel__show-spawned-icon--off"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 18a6 6 0 1 0-6-6" />
+                <path d="M12 14a2 2 0 1 0-2-2" />
+                <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                <path d="M3 21h18" />
+              </svg>
+              <svg
+                class="minimap-panel__show-spawned-icon minimap-panel__show-spawned-icon--on"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+                <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <button
+              type="button"
               id="minimap-macro-grid-toggle"
               class="minimap-panel__show-spawned-btn minimap-panel__macro-grid-toggle"
               data-i18n-title="play.minimapMacroGridToggle"

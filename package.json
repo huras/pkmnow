@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "25d": "npm --prefix ./experimento-gerador-25D run dev",
+    "vendor:lz-string": "node scripts/vendor-lz-string.mjs",
     "build:palettes": "node scripts/bake-terrain-palettes.mjs",
     "crawl:pokemondb-items": "node scripts/crawl-pokemondb-items.mjs",
     "download:pokemondb-item-images": "node scripts/download-pokemondb-item-images.mjs",
@@ -13,6 +15,7 @@
   },
   "devDependencies": {
     "cheerio": "^1.2.0",
+    "lz-string": "^1.5.0",
     "pngjs": "^7.0.0"
   }
 }

@@ -41,6 +41,8 @@ const CRY_ID_COMPLETE_FX_MS = 3100;
 
 /** Wrapper for FLIP when rows reorder / a slot is removed (keep in sync with CSS if tuned). */
 const CRY_STACK_FLIP_MS = 320;
+/** Recently-heard already-identified rows stay visible in the top stack for this long. */
+const CRY_ID_IDENTIFIED_ROW_VISIBLE_MS = 6500;
 
 const CRY_ROW_SHELL_CLS = 'minimap-panel__far-cry-id-row-shell';
 const CRY_ROW_INNER_CLS = 'minimap-panel__far-cry-id-row';
@@ -49,6 +51,8 @@ let stackEl = /** @type {HTMLElement | null} */ (null);
 let cryStackRenderFlushScheduled = false;
 /** Dex ids currently playing the “learned cry” completion FX (avoids double-fire). */
 const cryIdCompleteFxInFlight = new Set();
+/** @type {Map<number, number>} dexId -> last heard ms for already-identified dexes (recent spotlight in stack) */
+const lastKnownCryMsByDex = new Map();
 
 function effectiveListenMaxDistMicro() {
   const v = Number(FAR_CRY_IDENTIFICATION_LISTEN_MAX_DIST_MICRO_TILES);
@@ -100,6 +104,10 @@ function cryLearnLabelText() {
   } catch {
     return 'Getting used to Pokémon cry…';
   }
+}
+
+function cryKnownLabelText() {
+  return 'Cry already identified';
 }
 
 function ensureStackEl() {
@@ -177,7 +185,7 @@ function applyCryStackRowReorderFlip(container, rectsBeforeByDex) {
 }
 
 /**
- * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number }} entry
+ * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number, isKnown: boolean }} entry
  */
 function createCryStackRowInner(entry) {
   const wrap = document.createElement('div');
@@ -213,16 +221,13 @@ function createCryStackRowInner(entry) {
 
 /**
  * @param {HTMLElement} inner
- * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number }} entry
+ * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number, isKnown: boolean }} entry
  */
 function syncCryStackRowInnerContent(inner, entry) {
+  inner.classList.toggle('minimap-panel__far-cry-id-row--known', !!entry.isKnown);
   const label = inner.querySelector('.minimap-panel__far-cry-id-row-label');
   if (label) {
-    try {
-      label.textContent = cryLearnLabelText();
-    } catch {
-      label.textContent = 'Getting used to Pokémon cry…';
-    }
+    label.textContent = entry.isKnown ? cryKnownLabelText() : cryLearnLabelText();
   }
 
   const slotsWrap = inner.querySelector('.minimap-panel__far-cry-id-slots');
@@ -259,7 +264,7 @@ function syncCryStackRowInnerContent(inner, entry) {
 }
 
 /**
- * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number }} entry
+ * @param {{ dex: number, count: number, progress: number, distSq: number, lastMs: number, isKnown: boolean }} entry
  */
 function createCryStackRowShell(entry) {
   const shell = document.createElement('div');
@@ -270,8 +275,10 @@ function createCryStackRowShell(entry) {
 }
 
 function buildSortedProgressEntries() {
-  /** @type {{ dex: number, count: number, progress: number, distSq: number, lastMs: number }[]} */
+  /** @type {{ dex: number, count: number, progress: number, distSq: number, lastMs: number, isKnown: boolean }[]} */
   const rows = [];
+  const now = performance.now();
+  const req = Math.max(1, Math.floor(Number(FAR_CRY_IDENTIFICATION_CRIES_REQUIRED) || 1));
   for (const [dexRaw, nRaw] of wildCryHearCountByDex) {
     const dex = Math.floor(Number(dexRaw) || 0);
     const count = Math.max(0, Math.floor(Number(nRaw) || 0));
@@ -279,12 +286,34 @@ function buildSortedProgressEntries() {
     rows.push({
       dex,
       count,
-      progress: count / FAR_CRY_IDENTIFICATION_CRIES_REQUIRED,
+      progress: count / req,
       distSq: minPlayerDistSqToDexWild(dex),
-      lastMs: Number(lastCryMsByDex.get(dex)) || 0
+      lastMs: Number(lastCryMsByDex.get(dex)) || 0,
+      isKnown: false
+    });
+  }
+  for (const [dexRaw, heardMsRaw] of [...lastKnownCryMsByDex]) {
+    const dex = Math.floor(Number(dexRaw) || 0);
+    const heardMs = Number(heardMsRaw) || 0;
+    if (dex < 1 || !isDexCryIdentified(dex)) {
+      lastKnownCryMsByDex.delete(dex);
+      continue;
+    }
+    if (now - heardMs > CRY_ID_IDENTIFIED_ROW_VISIBLE_MS) {
+      lastKnownCryMsByDex.delete(dex);
+      continue;
+    }
+    rows.push({
+      dex,
+      count: req,
+      progress: 1,
+      distSq: minPlayerDistSqToDexWild(dex),
+      lastMs: heardMs,
+      isKnown: true
     });
   }
   rows.sort((a, b) => {
+    if (a.isKnown !== b.isKnown) return a.isKnown ? 1 : -1;
     if (b.progress !== a.progress) return b.progress - a.progress;
     if (b.lastMs !== a.lastMs) return b.lastMs - a.lastMs;
     return a.distSq - b.distSq;
@@ -374,7 +403,7 @@ function renderCryIdentificationStack() {
 
 /** Kept for `onLocaleChanged` in main.js */
 export function setFarCryIdentificationHintLocale() {
-  if (wildCryHearCountByDex.size > 0) scheduleCryStackRender();
+  if (wildCryHearCountByDex.size > 0 || lastKnownCryMsByDex.size > 0) scheduleCryStackRender();
 }
 
 function refreshBarAfterPartialChange() {
@@ -434,8 +463,12 @@ function queueCryIdentificationCompleteFx(dexId) {
 export function tryRegisterWildNaturalCryForIdentification(entity) {
   if (!entity || !isWildEntityRegistered(entity)) return;
   const dexId = Math.floor(Number(entity.dexId) || 0) || 1;
-  if (isDexCryIdentified(dexId)) return;
   if (!isPlayerInHearRangeOfEntity(entity)) return;
+  if (isDexCryIdentified(dexId)) {
+    lastKnownCryMsByDex.set(dexId, performance.now());
+    scheduleCryStackRender();
+    return;
+  }
 
   const prev = Math.max(0, Math.floor(Number(wildCryHearCountByDex.get(dexId)) || 0));
   const next = prev + 1;
@@ -453,6 +486,7 @@ export function tryRegisterWildNaturalCryForIdentification(entity) {
 export function cancelFarCryIdentificationChallenge() {
   wildCryHearCountByDex.clear();
   lastCryMsByDex.clear();
+  lastKnownCryMsByDex.clear();
   cryIdCompleteFxInFlight.clear();
   ensureStackEl();
   if (stackEl) {
@@ -467,6 +501,9 @@ export function pruneWildCryHearCountsForAlreadyIdentifiedDexes() {
       wildCryHearCountByDex.delete(d);
       lastCryMsByDex.delete(d);
     }
+  }
+  for (const d of [...lastKnownCryMsByDex.keys()]) {
+    if (!isDexCryIdentified(d)) lastKnownCryMsByDex.delete(d);
   }
   refreshBarAfterPartialChange();
 }

@@ -59,6 +59,27 @@
         <div id="play-immersive-hint" class="play-immersive-hint" aria-live="polite" aria-label="Context actions"></div>
         <canvas id="map" width="512" height="512" aria-label="Pré-visualização do mapa gerado"></canvas>
         <div id="minimap-panel" class="minimap-panel hidden">
+          <section id="play-event-log-hud" class="play-event-log-hud" aria-label="Debug event log">
+            <div class="play-event-log-hud__drag-handle" aria-hidden="true">
+              <span class="play-event-log-hud__drag-title">Event Log</span>
+              <button
+                type="button"
+                class="play-event-log-hud__minimize-btn"
+                data-play-event-log-toggle-collapse
+                aria-label="Minimize event log"
+                aria-expanded="true"
+                title="Minimize event log"
+              >−</button>
+            </div>
+            <div class="play-event-log-hud__tabs" role="group" aria-label="Event channels">
+              <button type="button" class="play-event-log-hud__tab" data-play-event-log-filter="all" aria-pressed="true">All</button>
+              <button type="button" class="play-event-log-hud__tab" data-play-event-log-filter="local" aria-pressed="false">Local</button>
+              <button type="button" class="play-event-log-hud__tab" data-play-event-log-filter="global" aria-pressed="false">Global</button>
+              <button type="button" class="play-event-log-hud__tab" data-play-event-log-filter="social" aria-pressed="false">Social</button>
+            </div>
+            <div id="play-event-log-list" class="play-event-log-hud__list" aria-live="polite"></div>
+            <div class="play-event-log-hud__resize-handle" aria-hidden="true"></div>
+          </section>
           <div id="minimap-audio-popover" class="minimap-audio-popover hidden" role="dialog" aria-label="Volume e música">
             <div class="minimap-audio-popover__row">
               <label class="minimap-audio-popover__label" for="minimap-mix-bgm">BGM</label>
@@ -87,153 +108,183 @@
               </button>
             </div>
           </div>
+          <div id="minimap-language-popover" class="minimap-language-popover hidden" role="dialog" aria-label="Idioma">
+            <div class="minimap-language-popover__row">
+              <label class="minimap-language-popover__label" for="minimap-language-select">Idioma</label>
+              <select id="minimap-language-select" class="minimap-language-popover__select" aria-label="Idioma"></select>
+            </div>
+          </div>
           <header class="minimap-panel__header">
-            <span class="minimap-panel__title">Região</span>
-            <div class="minimap-panel__header-actions">
-              <button
-                type="button"
-                id="minimap-groups-toggle"
-                class="minimap-panel__groups-btn"
-                title="Grupos de Pokémon selvagens ativos"
-                aria-label="Grupos de Pokémon selvagens ativos"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__groups-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="18" cy="5" r="2.2"/>
-                  <circle cx="6" cy="12" r="2.2"/>
-                  <circle cx="18" cy="19" r="2.2"/>
-                  <path d="M8 12l7.8-5"/>
-                  <path d="M8 12l7.8 7"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-help-toggle"
-                class="minimap-panel__help-btn"
-                title="Ajuda — controles e interface"
-                aria-label="Ajuda — controles e interface"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__help-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-save-toggle"
-                class="minimap-panel__save-btn"
-                title="Salvar ou limpar progresso deste mapa"
-                aria-label="Salvar ou limpar progresso deste mapa"
-              >
-                <svg class="minimap-panel__save-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/>
-                  <polyline points="7 3 7 8 15 8"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-time-toggle"
-                class="minimap-panel__time-btn"
-                title="Tempo do mundo"
-                aria-label="Tempo do mundo"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__time-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-weather-toggle"
-                class="minimap-panel__weather-btn"
-                title="Clima"
-                aria-label="Clima"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__weather-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M18 10h-1.26A8 8 0 1 0 9 18h9a5 5 0 0 0 0-10z"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-social-toggle"
-                class="minimap-panel__social-btn"
-                title="Social actions (numpad)"
-                aria-label="Social actions (numpad)"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__social-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="3" y="3" width="7" height="7"/>
-                  <rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/>
-                  <rect x="3" y="14" width="7" height="7"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-social-inspector-toggle"
-                class="minimap-panel__social-inspector-btn"
-                title="Social Inspector"
-                aria-label="Social Inspector"
-                aria-pressed="false"
-              >
-                <svg class="minimap-panel__social-inspector-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
-                  <circle cx="18" cy="18" r="4" fill="rgba(14,16,24,0.85)" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M18 16.5v3M16.5 18h3" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-audio-toggle"
-                class="minimap-panel__music-btn"
-                title="Volume BGM e gritos"
-                aria-label="Volume BGM e gritos"
-                aria-pressed="false"
-              >
-                <svg
-                  class="minimap-panel__music-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M9 18V5l12-2v13" />
-                  <circle cx="6" cy="18" r="3" />
-                  <circle cx="18" cy="16" r="3" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                id="minimap-adaptive-perf-toggle"
-                class="minimap-panel__adaptive-perf-btn"
-                title="Adaptive performance caps"
-                aria-label="Adaptive performance caps"
-                aria-pressed="false"
-              >
-                <svg
-                  class="minimap-panel__adaptive-perf-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M4 14a8 8 0 1 1 16 0" />
-                  <path d="M12 14l4-4" />
-                  <circle cx="12" cy="14" r="1.3" />
-                </svg>
-              </button>
+            <div id="minimap-toolbar-drag-handle" class="minimap-panel__toolbar-handle" aria-hidden="true">
+              <span class="minimap-panel__toolbar-title">Toolbox</span>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Debug</span>
+              <div class="minimap-panel__header-actions">
+                <button type="button" id="minimap-rmb-mode-toggle" class="minimap-panel__rmb-mode-btn" data-mode="game" aria-pressed="false" title="Botão direito: mover no campo / menu debug" aria-label="Botão direito: mover no campo / menu debug">
+                  <svg class="minimap-panel__rmb-mode-icon minimap-panel__rmb-mode-icon--game" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v3M12 16v3M5 12h3M16 12h3" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg class="minimap-panel__rmb-mode-icon minimap-panel__rmb-mode-icon--debug" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M9 6h11M9 12h11M9 18h11" />
+                    <circle cx="5" cy="6" r="1.75" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="12" r="1.75" fill="currentColor" stroke="none" />
+                    <circle cx="5" cy="18" r="1.75" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                <button type="button" id="minimap-collider-toggle" class="minimap-panel__collider-btn" title="Collider Debug (C)" aria-label="Collider Debug (C)" aria-pressed="false">
+                  <svg class="minimap-panel__collider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8" />
+                    <path d="M12 4v16" />
+                    <path d="M4 12h16" />
+                  </svg>
+                </button>
+                <button type="button" id="minimap-event-log-toggle" class="minimap-panel__event-log-btn" title="Debug event log" aria-label="Debug event log" aria-pressed="false">
+                  <svg class="minimap-panel__event-log-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 4h16v16H4z"/>
+                    <path d="M8 8h8"/>
+                    <path d="M8 12h8"/>
+                    <path d="M8 16h5"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-help-toggle" class="minimap-panel__help-btn" title="Ajuda — controles e interface" aria-label="Ajuda — controles e interface" aria-pressed="false">
+                  <svg class="minimap-panel__help-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Wild</span>
+              <div class="minimap-panel__header-actions">
+                <button type="button" id="minimap-berries-toggle" class="minimap-panel__berries-btn" title="Berry Tree Status" aria-label="Berry Tree Status" aria-pressed="false">
+                  <svg class="minimap-panel__berries-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+                    <path d="M12 16C14.2091 16 16 14.2091 16 12C16 9.79086 14.2091 8 12 8C9.79086 8 8 9.79086 8 12C8 14.2091 9.79086 16 12 16Z"/>
+                    <path d="M12 8V2"/>
+                    <path d="M12 22V16"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-groups-toggle" class="minimap-panel__groups-btn" title="Grupos de Pokémon selvagens ativos" aria-label="Grupos de Pokémon selvagens ativos" aria-pressed="false">
+                  <svg class="minimap-panel__groups-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="18" cy="5" r="2.2"/>
+                    <circle cx="6" cy="12" r="2.2"/>
+                    <circle cx="18" cy="19" r="2.2"/>
+                    <path d="M8 12l7.8-5"/>
+                    <path d="M8 12l7.8 7"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-pokeradar-toggle" class="minimap-panel__pokeradar-btn" title="Pokeradar" aria-label="Pokeradar" aria-pressed="false">
+                  <svg class="minimap-panel__pokeradar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 18a6 6 0 1 0-6-6"/>
+                    <path d="M12 14a2 2 0 1 0-2-2"/>
+                    <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+                    <path d="M3 21h18"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-pokeradar-corner-toggle" class="minimap-panel__pokeradar-corner-btn" title="Pokeradar canto no minimapa" aria-label="Pokeradar canto no minimapa" aria-pressed="false">
+                  <svg class="minimap-panel__pokeradar-corner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 5h7v2H7v5H5z"/>
+                    <path d="M12 16a4 4 0 1 0-4-4"/>
+                    <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Display</span>
+              <div class="minimap-panel__header-actions">
+                <button type="button" id="minimap-screen-grid-cam-toggle" class="minimap-panel__screen-grid-cam-btn" title="Screen-grid camera (ALTTP)" aria-label="Screen-grid camera (ALTTP)" aria-pressed="false">
+                  <svg class="minimap-panel__screen-grid-cam-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="12" y1="3" x2="12" y2="21"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-macro-grid-toggle" class="minimap-panel__macro-grid-btn" title="Macro tile grid" aria-label="Macro tile grid" aria-pressed="false">
+                  <svg class="minimap-panel__macro-grid-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 3h18v18H3z"/>
+                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-show-spawned-toggle" class="minimap-panel__show-spawned-btn" title="Mostrar todos os spawns debug" aria-label="Mostrar todos os spawns debug" aria-pressed="false">
+                  <svg class="minimap-panel__show-spawned-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-adaptive-perf-toggle" class="minimap-panel__adaptive-perf-btn" title="Adaptive performance caps" aria-label="Adaptive performance caps" aria-pressed="false">
+                  <svg class="minimap-panel__adaptive-perf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 14a8 8 0 1 1 16 0" />
+                    <path d="M12 14l4-4" />
+                    <circle cx="12" cy="14" r="1.3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">World</span>
+              <div class="minimap-panel__header-actions">
+                <button type="button" id="minimap-language-toggle" class="minimap-panel__language-btn" title="Idioma" aria-label="Idioma" aria-pressed="false">
+                  <svg class="minimap-panel__language-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M2 12h20"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-time-toggle" class="minimap-panel__time-btn" title="Tempo do mundo" aria-label="Tempo do mundo" aria-pressed="false">
+                  <svg class="minimap-panel__time-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-weather-toggle" class="minimap-panel__weather-btn" title="Clima" aria-label="Clima" aria-pressed="false">
+                  <svg class="minimap-panel__weather-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 10h-1.26A8 8 0 1 0 9 18h9a5 5 0 0 0 0-10z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Social</span>
+              <div class="minimap-panel__header-actions">
+                <button type="button" id="minimap-social-toggle" class="minimap-panel__social-btn" title="Social actions (numpad)" aria-label="Social actions (numpad)" aria-pressed="false">
+                  <svg class="minimap-panel__social-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-social-inspector-toggle" class="minimap-panel__social-inspector-btn" title="Social Inspector" aria-label="Social Inspector" aria-pressed="false">
+                  <svg class="minimap-panel__social-inspector-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+                    <circle cx="18" cy="18" r="4" fill="rgba(14,16,24,0.85)" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M18 16.5v3M16.5 18h3" stroke="currentColor" stroke-width="1.5"/>
+                  </svg>
+                </button>
+                <button type="button" id="minimap-audio-toggle" class="minimap-panel__music-btn" title="Volume BGM e gritos" aria-label="Volume BGM e gritos" aria-pressed="false">
+                  <svg class="minimap-panel__music-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 18V5l12-2v13" />
+                    <circle cx="6" cy="18" r="3" />
+                    <circle cx="18" cy="16" r="3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Progress</span>
+              <div class="minimap-panel__header-actions minimap-panel__header-actions--single">
+                <button type="button" id="minimap-save-toggle" class="minimap-panel__save-btn" title="Salvar ou limpar progresso deste mapa" aria-label="Salvar ou limpar progresso deste mapa">
+                  <svg class="minimap-panel__save-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </header>
           <div class="minimap-panel__map-wrap">
@@ -400,6 +451,12 @@
             </div>
             <div id="minimap-groups-popover-list" class="minimap-groups-popover__list"></div>
           </div>
+          <div id="minimap-berries-popover" class="minimap-berries-popover hidden" role="dialog" aria-label="Berry Trees on Map">
+            <div class="minimap-berries-popover__head">
+              <span>Berry Trees on Map</span>
+            </div>
+            <div id="minimap-berries-popover-list" class="minimap-berries-popover__list"></div>
+          </div>
 
           <!-- Social Inspector panel -->
           <div id="minimap-social-inspector-popover" class="minimap-social-inspector-popover hidden" role="dialog" aria-label="Social Inspector">
@@ -413,6 +470,34 @@
               </div>
             </div>
             <div id="social-inspector-list" class="social-inspector__list"></div>
+          </div>
+          <div id="minimap-camera-popover" class="minimap-camera-popover hidden" role="dialog" aria-label="ALTTP camera options">
+            <div class="minimap-camera-popover__head">ALTTP Camera</div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-camera-enable-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">
+                Enable screen-grid camera
+              </button>
+            </div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-camera-allow-other-screens-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="true">
+                Allow other Zelda screens
+              </button>
+            </div>
+            <label class="minimap-camera-popover__row" for="minimap-camera-scroll-duration">
+              <span class="minimap-camera-popover__label">Room scroll (s)</span>
+              <input type="range" id="minimap-camera-scroll-duration" min="0.05" max="1.25" step="0.01" value="0.75" />
+              <span id="minimap-camera-scroll-duration-readout" class="minimap-camera-popover__value">0.75s</span>
+            </label>
+            <label class="minimap-camera-popover__row" for="minimap-camera-blend-in">
+              <span class="minimap-camera-popover__label">Blend in (s)</span>
+              <input type="range" id="minimap-camera-blend-in" min="0.05" max="1.5" step="0.01" value="0.40" />
+              <span id="minimap-camera-blend-in-readout" class="minimap-camera-popover__value">0.40s</span>
+            </label>
+            <label class="minimap-camera-popover__row" for="minimap-camera-blend-out">
+              <span class="minimap-camera-popover__label">Blend out (s)</span>
+              <input type="range" id="minimap-camera-blend-out" min="0.05" max="1.5" step="0.01" value="0.45" />
+              <span id="minimap-camera-blend-out-readout" class="minimap-camera-popover__value">0.45s</span>
+            </label>
           </div>
         </div>
         <div id="play-fps" class="play-fps" aria-live="polite" aria-label="Frames por segundo"></div>
