@@ -62,10 +62,11 @@ const CHUNK_SIZE = 32;
 const TERRAIN_BOTTOM_Y = -14;
 
 const renderSettings = {
-  heightScale: 14,
+  heightScale: 7,
   landTerraces: 26,
   waterTerraces: 14,
   cliffSharpness: 1.32,
+  wallShade: 0.58,
   nearLodDistance: 85,
   farLodDistance: 150,
 };
@@ -107,119 +108,179 @@ function getTerracedHeightY(world, x, y) {
   return terraced * renderSettings.heightScale;
 }
 
-function getBiomeColor(world, x, y) {
-  const idx = y * world.width + x;
-  return biomeColorById.get(world.biomes[idx]) || fallbackBiomeColor;
+function getCellTerracedHeightY(world, x, y, sampleStride = 1) {
+  const centerX = Math.round(x + sampleStride * 0.5);
+  const centerY = Math.round(y + sampleStride * 0.5);
+  return getTerracedHeightY(world, centerX, centerY);
 }
 
-function pushTri(positions, colors, a, b, c, color) {
-  positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-  for (let i = 0; i < 3; i++) {
-    colors.push(color.r, color.g, color.b);
-  }
+function shadeColor(color, factor) {
+  return {
+    r: color.r * factor,
+    g: color.g * factor,
+    b: color.b * factor,
+  };
 }
 
-function pushQuad(positions, colors, a, b, c, d, color) {
-  pushTri(positions, colors, a, b, c, color);
-  pushTri(positions, colors, a, c, d, color);
+function createTerrainShaderMaterial(detailFactor) {
+  return new THREE.ShaderMaterial({
+    vertexColors: true,
+    uniforms: {
+      uLightDir: { value: new THREE.Vector3(0.72, 1.0, 0.5).normalize() },
+      uFogColor: { value: scene.fog.color.clone() },
+      uFogNear: { value: scene.fog.near },
+      uFogFar: { value: scene.fog.far },
+      uDetailFactor: { value: detailFactor },
+    },
+    vertexShader: `
+      varying vec3 vColor;
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+
+      void main() {
+        vColor = color;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uLightDir;
+      uniform vec3 uFogColor;
+      uniform float uFogNear;
+      uniform float uFogFar;
+      uniform float uDetailFactor;
+
+      varying vec3 vColor;
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+
+      void main() {
+        vec3 normal = normalize(vWorldNormal);
+        vec3 lightDir = normalize(uLightDir);
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+
+        float ndl = max(dot(normal, lightDir), 0.0);
+        float toon = floor(ndl * 3.5) / 3.5;
+
+        vec3 baseColor = mix(vColor * 0.82, vColor * 1.1, uDetailFactor);
+        vec3 lit = baseColor * (0.46 + toon * 0.68);
+
+        float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 2.2);
+        lit += rim * 0.14 * baseColor;
+
+        float fogDepth = length(cameraPosition - vWorldPos);
+        float fogFactor = smoothstep(uFogNear, uFogFar, fogDepth);
+        vec3 finalColor = mix(lit, uFogColor, fogFactor);
+
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `,
+  });
 }
 
 function buildChunkGeometry(world, xStart, yStart, xEnd, yEnd, sampleStride) {
   const positions = [];
+  const normals = [];
   const colors = [];
-  const halfW = world.width * 0.5;
-  const halfH = world.height * 0.5;
+  const halfW = (world.width - 1) * 0.5;
+  const halfH = (world.height - 1) * 0.5;
+  const eps = 0.001;
 
-  const getNeighborHeight = (x, y) => {
-    if (x < 0 || y < 0 || x >= world.width || y >= world.height) return TERRAIN_BOTTOM_Y;
-    return getTerracedHeightY(world, x, y);
-  };
+  function pushVertex(px, py, pz, nx, ny, nz, color) {
+    positions.push(px, py, pz);
+    normals.push(nx, ny, nz);
+    colors.push(color.r, color.g, color.b);
+  }
 
-  for (let y = yStart; y < yEnd; y += sampleStride) {
-    for (let x = xStart; x < xEnd; x += sampleStride) {
-      const h = getTerracedHeightY(world, x, y);
-      const baseColor = getBiomeColor(world, x, y);
-      const topColor = baseColor.clone().offsetHSL(0, 0, 0.07);
-      const sideColor = baseColor.clone().multiplyScalar(0.72);
+  function pushTri(a, b, c, normal, color) {
+    pushVertex(a.x, a.y, a.z, normal.x, normal.y, normal.z, color);
+    pushVertex(b.x, b.y, b.z, normal.x, normal.y, normal.z, color);
+    pushVertex(c.x, c.y, c.z, normal.x, normal.y, normal.z, color);
+  }
 
-      const x0 = x - halfW;
-      const x1 = x0 + sampleStride;
-      const z0 = y - halfH;
-      const z1 = z0 + sampleStride;
+  function pushQuad(a, b, c, d, normal, color) {
+    // Force triangle winding to match the provided normal so backface culling
+    // does not randomly hide top faces depending on local axis ordering.
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const abz = b.z - a.z;
+    const acx = c.x - a.x;
+    const acy = c.y - a.y;
+    const acz = c.z - a.z;
+    const cx = aby * acz - abz * acy;
+    const cy = abz * acx - abx * acz;
+    const cz = abx * acy - aby * acx;
+    const dot = cx * normal.x + cy * normal.y + cz * normal.z;
 
-      // Top face
-      pushQuad(
-        positions,
-        colors,
-        new THREE.Vector3(x0, h, z0),
-        new THREE.Vector3(x1, h, z0),
-        new THREE.Vector3(x1, h, z1),
-        new THREE.Vector3(x0, h, z1),
-        topColor,
-      );
+    if (dot >= 0) {
+      pushTri(a, b, c, normal, color);
+      pushTri(c, b, d, normal, color);
+    } else {
+      pushTri(a, c, b, normal, color);
+      pushTri(c, d, b, normal, color);
+    }
+  }
 
-      // North wall
-      const nH = getNeighborHeight(x, y - sampleStride);
-      if (h > nH + 0.001) {
-        pushQuad(
-          positions,
-          colors,
-          new THREE.Vector3(x0, h, z0),
-          new THREE.Vector3(x1, h, z0),
-          new THREE.Vector3(x1, nH, z0),
-          new THREE.Vector3(x0, nH, z0),
-          sideColor,
-        );
+  for (let gy = yStart; gy < yEnd; gy += sampleStride) {
+    for (let gx = xStart; gx < xEnd; gx += sampleStride) {
+      const idx = gy * world.width + gx;
+      const topColor = biomeColorById.get(world.biomes[idx]) || fallbackBiomeColor;
+      const wallColor = shadeColor(topColor, renderSettings.wallShade);
+
+      const x0 = gx - halfW;
+      const x1 = gx + sampleStride - halfW;
+      const z0 = gy - halfH;
+      const z1 = gy + sampleStride - halfH;
+
+      const h = getCellTerracedHeightY(world, gx, gy, sampleStride);
+      const p00 = { x: x0, y: h, z: z0 };
+      const p10 = { x: x1, y: h, z: z0 };
+      const p01 = { x: x0, y: h, z: z1 };
+      const p11 = { x: x1, y: h, z: z1 };
+
+      // Flat top per cell (voxel-like terrace), matching terrain-steps reference style.
+      pushQuad(p00, p10, p01, p11, { x: 0, y: 1, z: 0 }, topColor);
+
+      const rightX = gx + sampleStride;
+      const hasRight = rightX < world.width - 1;
+      const rightHeight = hasRight
+        ? getCellTerracedHeightY(world, rightX, gy, sampleStride)
+        : TERRAIN_BOTTOM_Y;
+      if (Math.abs(h - rightHeight) > eps) {
+        const topY = Math.max(h, rightHeight);
+        const botY = Math.min(h, rightHeight);
+        const normalX = h > rightHeight ? 1 : -1;
+        const a = { x: x1, y: botY, z: z0 };
+        const b = { x: x1, y: topY, z: z0 };
+        const c = { x: x1, y: botY, z: z1 };
+        const d = { x: x1, y: topY, z: z1 };
+        pushQuad(a, b, c, d, { x: normalX, y: 0, z: 0 }, wallColor);
       }
 
-      // South wall
-      const sH = getNeighborHeight(x, y + sampleStride);
-      if (h > sH + 0.001) {
-        pushQuad(
-          positions,
-          colors,
-          new THREE.Vector3(x1, h, z1),
-          new THREE.Vector3(x0, h, z1),
-          new THREE.Vector3(x0, sH, z1),
-          new THREE.Vector3(x1, sH, z1),
-          sideColor,
-        );
-      }
-
-      // West wall
-      const wH = getNeighborHeight(x - sampleStride, y);
-      if (h > wH + 0.001) {
-        pushQuad(
-          positions,
-          colors,
-          new THREE.Vector3(x0, h, z1),
-          new THREE.Vector3(x0, h, z0),
-          new THREE.Vector3(x0, wH, z0),
-          new THREE.Vector3(x0, wH, z1),
-          sideColor,
-        );
-      }
-
-      // East wall
-      const eH = getNeighborHeight(x + sampleStride, y);
-      if (h > eH + 0.001) {
-        pushQuad(
-          positions,
-          colors,
-          new THREE.Vector3(x1, h, z0),
-          new THREE.Vector3(x1, h, z1),
-          new THREE.Vector3(x1, eH, z1),
-          new THREE.Vector3(x1, eH, z0),
-          sideColor,
-        );
+      const bottomYCell = gy + sampleStride;
+      const hasBottom = bottomYCell < world.height - 1;
+      const bottomHeight = hasBottom
+        ? getCellTerracedHeightY(world, gx, bottomYCell, sampleStride)
+        : TERRAIN_BOTTOM_Y;
+      if (Math.abs(h - bottomHeight) > eps) {
+        const topY = Math.max(h, bottomHeight);
+        const botY = Math.min(h, bottomHeight);
+        const normalZ = h > bottomHeight ? 1 : -1;
+        const a = { x: x0, y: botY, z: z1 };
+        const b = { x: x1, y: botY, z: z1 };
+        const c = { x: x0, y: topY, z: z1 };
+        const d = { x: x1, y: topY, z: z1 };
+        pushQuad(a, b, c, d, { x: 0, y: 0, z: normalZ }, wallColor);
       }
     }
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
   return geometry;
 }
 
@@ -266,23 +327,13 @@ function buildWorldMesh(world) {
   const height = world.height;
   const halfW = (width - 1) * 0.5;
   const halfH = (height - 1) * 0.5;
-  terrainMaterialNear = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.95,
-    metalness: 0,
-    flatShading: true,
-  });
-  terrainMaterialFar = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 1.0,
-    metalness: 0,
-    flatShading: true,
-  });
+  terrainMaterialNear = createTerrainShaderMaterial(1.0);
+  terrainMaterialFar = createTerrainShaderMaterial(0.72);
 
-  for (let y = 0; y < height; y += CHUNK_SIZE) {
-    for (let x = 0; x < width; x += CHUNK_SIZE) {
-      const xEnd = Math.min(width, x + CHUNK_SIZE);
-      const yEnd = Math.min(height, y + CHUNK_SIZE);
+  for (let y = 0; y < height - 1; y += CHUNK_SIZE) {
+    for (let x = 0; x < width - 1; x += CHUNK_SIZE) {
+      const xEnd = Math.min(width - 1, x + CHUNK_SIZE);
+      const yEnd = Math.min(height - 1, y + CHUNK_SIZE);
       const chunkLod = buildChunkLod(world, x, y, xEnd, yEnd);
       terrainGroup.add(chunkLod);
     }
@@ -332,7 +383,7 @@ function regenerate() {
 
 function setupGui() {
   const gui = new GUI({ title: 'Render Params' });
-  gui.add(renderSettings, 'heightScale', 16, 90, 1).name('Height Scale').onFinishChange(() => {
+  gui.add(renderSettings, 'heightScale', 24, 90, 1).name('Height Scale').onFinishChange(() => {
     if (currentWorld) buildWorldMesh(currentWorld);
   });
   gui.add(renderSettings, 'landTerraces', 8, 40, 1).name('Land Steps').onFinishChange(() => {
@@ -344,8 +395,9 @@ function setupGui() {
   gui.add(renderSettings, 'cliffSharpness', 0.75, 2.0, 0.01).name('Cliff Sharpness').onFinishChange(() => {
     if (currentWorld) buildWorldMesh(currentWorld);
   });
-  gui.add(renderSettings, 'nearLodDistance', 40, 140, 1).name('Near LOD Dist');
-  gui.add(renderSettings, 'farLodDistance', 80, 260, 1).name('Far Cull Dist');
+  gui.add(renderSettings, 'wallShade', 0.25, 1.0, 0.01).name('Wall Shade').onFinishChange(() => {
+    if (currentWorld) buildWorldMesh(currentWorld);
+  });
 }
 
 function updateTerrainLod() {

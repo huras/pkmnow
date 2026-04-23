@@ -781,7 +781,8 @@ function resolveDynamicShadowDynamics(settings) {
   const lowSun01 = 1 - sunArc01;
   const az = tDay * Math.PI;
   const dirX = -Math.cos(az);
-  const dirY = 0.26 + lowSun01 * 0.34;
+  // Top-down projection: cast mostly toward screen-up (north), not screen-down.
+  const dirY = -(0.26 + lowSun01 * 0.34);
   const lenTiles = 0.05 + lowSun01 * 0.27 + moonI * 0.06;
   const skewXTan = dirX * (0.06 + lowSun01 * 0.34 + moonI * 0.05);
 
