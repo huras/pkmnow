@@ -118,6 +118,7 @@ export function createPlayerController({
     movingNow: false,
     frameLift01Cache: new Map(),
     frameGroundLiftWorld: 0,
+    logicalGroundY: 0,
   };
 
   async function ensureSprites(dexId = state.dexId) {
@@ -389,6 +390,7 @@ export function createPlayerController({
     const tileMy = Math.floor(state.y);
     const hStep = sampleGroundStep(tileMx, tileMy);
     const groundY = hStep * settings.stepHeight + (settings.detailsYOffset ?? 0);
+    state.logicalGroundY = groundY;
     state.mesh.position.set(
       lx - half,
       groundY + state.z - state.frameGroundLiftWorld,
@@ -453,7 +455,8 @@ export function createPlayerController({
       if (!state.active || !state.mesh) return null;
       return {
         x: state.mesh.position.x,
-        y: state.mesh.position.y + 1.6,
+        // Keep camera follow height stable: logical terrain height + jump, not sprite frame visual offsets.
+        y: state.logicalGroundY + state.z + 1.6,
         z: state.mesh.position.z,
       };
     },
