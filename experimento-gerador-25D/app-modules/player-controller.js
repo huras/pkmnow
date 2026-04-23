@@ -40,6 +40,30 @@ function facingFromInput(ix, iy, prev = 'down') {
   return 'down-left';
 }
 
+function computeOpaqueBottomLift01(ctx, w, h) {
+  try {
+    const img = ctx.getImageData(0, 0, w, h);
+    const data = img.data;
+    let bottomOpaqueY = -1;
+    for (let y = h - 1; y >= 0; y--) {
+      const rowStart = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const a = data[rowStart + x * 4 + 3];
+        if (a > 8) {
+          bottomOpaqueY = y;
+          break;
+        }
+      }
+      if (bottomOpaqueY >= 0) break;
+    }
+    if (bottomOpaqueY < 0) return 0;
+    const liftPx = Math.max(0, (h - 1) - bottomOpaqueY);
+    return liftPx / Math.max(1, h);
+  } catch {
+    return 0;
+  }
+}
+
 export function createPlayerController({
   THREE,
   playerGroup,
@@ -89,6 +113,8 @@ export function createPlayerController({
     lastFrameKey: '',
     helperLookAt: new THREE.Vector3(),
     movingNow: false,
+    frameLift01Cache: new Map(),
+    frameGroundLiftWorld: 0,
   };
 
   async function ensureSprites(dexId = state.dexId) {
@@ -198,6 +224,12 @@ export function createPlayerController({
       frameW,
       frameH,
     );
+    if (!state.frameLift01Cache.has(key)) {
+      const lift01 = computeOpaqueBottomLift01(state.frameCtx, frameW, frameH);
+      state.frameLift01Cache.set(key, lift01);
+    }
+    const lift01 = state.frameLift01Cache.get(key) || 0;
+    state.frameGroundLiftWorld = lift01 * (state.mesh?.scale.y || 0);
     state.frameTex.needsUpdate = true;
   }
 
@@ -315,7 +347,7 @@ export function createPlayerController({
     const groundY = hStep * settings.stepHeight + (settings.detailsYOffset ?? 0);
     state.mesh.position.set(
       lx - half,
-      groundY + state.z,
+      groundY + state.z - state.frameGroundLiftWorld,
       ly - half,
     );
   }
