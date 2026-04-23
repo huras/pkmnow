@@ -1,6 +1,6 @@
 import { getDexAnimMeta } from '../../js/pokemon/pmd-anim-metadata.js';
 import { PMD_DEFAULT_MON_ANIMS, PMD_MON_SHEET } from '../../js/pokemon/pmd-default-timing.js';
-import { canWalkMicroTile, pivotCellHeightTraversalOk } from '../../js/walkability.js';
+import { canWalkMicroTile, pivotCellHeightTraversalOk, isCliffDrop, okHeightStepTransition } from '../../js/walkability.js';
 
 const DIR_TO_ROW = {
   down: 0,
@@ -90,9 +90,11 @@ export function createPlayerController({
     bounds: null,
     x: 0,
     y: 0,
-    z: 0,
+    worldY: 0,
     vz: 0,
     grounded: true,
+    jumpsUsed: 0,
+    maxAirJumps: 2,
     facing: 'down',
     animRow: 0,
     animFrame: 0,
@@ -310,9 +312,20 @@ export function createPlayerController({
     return t?.heightStep ?? 0;
   }
 
+  function groundYAtWorldXY(wx, wy) {
+    const mx = Math.floor(wx);
+    const my = Math.floor(wy);
+    const hStep = sampleGroundStep(mx, my);
+    return hStep * settings.stepHeight + (settings.detailsYOffset ?? 0);
+  }
+
   function canWalkAt(nx, ny, ox, oy, isAirborne) {
     if (!state.world) return false;
-    if (!canWalkMicroTile(nx, ny, state.world, ox, oy, undefined, isAirborne, false, false)) return false;
+    if (isAirborne) {
+      // Match 2D behavior: airborne probes do not enforce source-height traversal constraints.
+      return canWalkMicroTile(nx, ny, state.world, undefined, undefined, undefined, true, false, false);
+    }
+    if (!canWalkMicroTile(nx, ny, state.world, ox, oy, undefined, false, false, false)) return false;
     return pivotCellHeightTraversalOk(nx, ny, ox, oy, state.world, false);
   }
 
@@ -325,6 +338,7 @@ export function createPlayerController({
     }
     const ox = state.x;
     const oy = state.y;
+    const prevGroundY = groundYAtWorldXY(ox, oy);
     const speed = state.walkSpeed;
     const ax = input.x * speed * dt;
     const ay = input.y * speed * dt;
@@ -367,13 +381,46 @@ export function createPlayerController({
       state.y = ny;
     }
 
-    if (!state.grounded) {
+    const groundY = groundYAtWorldXY(state.x, state.y);
+    state.logicalGroundY = groundY;
+
+    // If we were grounded and walked onto a lower surface without a valid ramp/stair connector,
+    // do NOT snap Y instantly — enter freefall from the previous elevation.
+    if (state.grounded && state.world && (Math.abs(state.x - ox) > 1e-7 || Math.abs(state.y - oy) > 1e-7)) {
+      const step = Math.max(1e-4, Number(settings.stepHeight) || 0.55);
+      const drop = prevGroundY - groundY;
+      const cliff = isCliffDrop(ox, oy, state.x, state.y, state.world);
+      const bigDrop = drop > step * 1.25;
+
+      const smx = Math.floor(ox);
+      const smy = Math.floor(oy);
+      const dmx = Math.floor(state.x);
+      const dmy = Math.floor(state.y);
+      const srcTile = getMicroTile(smx, smy, state.world);
+      const dstTile = getMicroTile(dmx, dmy, state.world);
+      const supportedStepDown =
+        !!srcTile &&
+        !!dstTile &&
+        dstTile.heightStep < srcTile.heightStep &&
+        okHeightStepTransition(srcTile, dstTile);
+
+      if ((cliff || bigDrop || drop > 1e-4) && !supportedStepDown) {
+        state.grounded = false;
+        state.vz = 0;
+      }
+    }
+
+    if (state.grounded) {
+      state.worldY = groundY;
+      state.vz = 0;
+    } else {
       state.vz -= state.gravity * dt;
-      state.z += state.vz * dt;
-      if (state.z <= 0) {
-        state.z = 0;
+      state.worldY += state.vz * dt;
+      if (state.vz <= 0 && state.worldY <= groundY) {
+        state.worldY = groundY;
         state.vz = 0;
         state.grounded = true;
+        state.jumpsUsed = 0;
       }
     }
     const moved = Math.hypot(state.x - ox, state.y - oy) > 0.0008;
@@ -393,7 +440,7 @@ export function createPlayerController({
     state.logicalGroundY = groundY;
     state.mesh.position.set(
       lx - half,
-      groundY + state.z - state.frameGroundLiftWorld,
+      state.worldY - state.frameGroundLiftWorld,
       ly - half,
     );
   }
@@ -401,9 +448,10 @@ export function createPlayerController({
   function placeAt(mx, my) {
     state.x = mx + 0.5;
     state.y = my + 0.5;
-    state.z = 0;
     state.vz = 0;
     state.grounded = true;
+    state.jumpsUsed = 0;
+    state.worldY = groundYAtWorldXY(state.x, state.y);
     state.active = true;
     state.mesh.visible = !!state.visible;
     syncMeshTransform();
@@ -437,9 +485,12 @@ export function createPlayerController({
     },
     placeAt,
     jump() {
-      if (!state.active || !state.grounded) return false;
+      if (!state.active) return false;
+      if (state.grounded) state.jumpsUsed = 0;
+      if (state.jumpsUsed >= state.maxAirJumps) return false;
       state.vz = state.jumpImpulse;
       state.grounded = false;
+      state.jumpsUsed += 1;
       return true;
     },
     onKeyDown(code) {
@@ -456,7 +507,7 @@ export function createPlayerController({
       return {
         x: state.mesh.position.x,
         // Keep camera follow height stable: logical terrain height + jump, not sprite frame visual offsets.
-        y: state.logicalGroundY + state.z + 1.6,
+        y: state.worldY + 1.6,
         z: state.mesh.position.z,
       };
     },

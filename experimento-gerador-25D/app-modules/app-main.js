@@ -128,7 +128,8 @@ export function startApp() {
     sceneBits.sunLight.intensity = 0.35 + sunElev01 * 1.25;
     sceneBits.ambientLight.intensity = 0.34 + sunElev01 * 0.46;
     sceneBits.hemiLight.intensity = 0.26 + sunElev01 * 0.52;
-    sceneBits.sunLight.shadow.intensity = 0.34 + sunElev01 * 0.22;
+    // Keep soft edges, but restore stronger contact/readability on terrain/details.
+    sceneBits.sunLight.shadow.intensity = 0.72 + sunElev01 * 0.18;
     skySystem.update(h, sceneBits.sunLight.position);
   }
 

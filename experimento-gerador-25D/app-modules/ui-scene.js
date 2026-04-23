@@ -48,8 +48,8 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
-  // Hard pixel-style shadow edges (no soft PCF filtering).
-  renderer.shadowMap.type = THREE.BasicShadowMap;
+  // Softer filtered shadows to avoid blocky stair-step edges.
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   viewport.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
