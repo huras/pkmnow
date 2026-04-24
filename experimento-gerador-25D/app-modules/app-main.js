@@ -29,7 +29,6 @@ import {
   nextFrame,
   textureFor,
   uvRect,
-  pushFace,
   deterministic01,
   seedToInt,
   getTileUvRect,
@@ -45,7 +44,7 @@ import { createPlayerController } from './player-controller.js';
 export function startApp() {
   const ui = renderLayout();
   const settings = {
-    microSpan: 96,
+    microSpan: 350,
     stepHeight: 0.55,
     wallShade: 0.72,
     worldHeightScale: 10,
@@ -71,6 +70,18 @@ export function startApp() {
   let pendingDetailDown = null;
   let worldMesh = null;
   let detailFloorMesh = null;
+  const detailStream = {
+    runtime: null,
+    cache: new Map(),
+    wanted: new Set(),
+    queue: [],
+    building: false,
+    version: 0,
+    radiusNear: 3,
+    radiusFar: 5,
+    unloadMargin: 1,
+    lastUpdateTs: 0,
+  };
 
   const perf = {
     lastFrameTs: performance.now(),
@@ -207,7 +218,182 @@ export function startApp() {
     }
   }
 
+  function removeChunkMeshesFromScene(record) {
+    if (!record?.attached || !Array.isArray(record.meshes)) return;
+    for (const mesh of record.meshes) {
+      sceneBits.detailGroup.remove(mesh);
+      const pickIdx = pickMeshes.indexOf(mesh);
+      if (pickIdx >= 0) pickMeshes.splice(pickIdx, 1);
+    }
+    record.attached = false;
+  }
+
+  function addChunkMeshesToScene(record) {
+    if (!record || record.attached || !Array.isArray(record.meshes)) return;
+    for (const mesh of record.meshes) {
+      sceneBits.detailGroup.add(mesh);
+      pickMeshes.push(mesh);
+    }
+    record.attached = true;
+  }
+
+  function clearDetailStream() {
+    for (const record of detailStream.cache.values()) {
+      removeChunkMeshesFromScene(record);
+      if (Array.isArray(record.meshes)) {
+        for (const mesh of record.meshes) {
+          mesh.geometry?.dispose?.();
+          if (mesh.material && !Array.isArray(mesh.material)) mesh.material.dispose?.();
+        }
+      }
+    }
+    detailStream.cache.clear();
+    detailStream.wanted.clear();
+    detailStream.queue = [];
+    detailStream.building = false;
+  }
+
+  function refreshMeshingHud() {
+    let chunksRendered = 0;
+    let mergedFaces = 0;
+    let preTri = 0;
+    let postTri = 0;
+    for (const record of detailStream.cache.values()) {
+      if (!record?.attached) continue;
+      chunksRendered++;
+      mergedFaces += record.mergedFaceCount || 0;
+      preTri += record.preTriEstimate || 0;
+      postTri += record.triCount || 0;
+    }
+    ui.triCountEl.textContent = postTri.toLocaleString('en-US');
+    if (ui.meshingStatsEl) {
+      ui.meshingStatsEl.textContent = `chunks:${chunksRendered} | merged:${mergedFaces} | tri pre/post:${preTri}/${postTri}`;
+    }
+  }
+
+  function computeStreamCenterChunk() {
+    if (!currentBounds || !detailStream.runtime) return { cx: 0, cy: 0 };
+    const half = currentBounds.span * 0.5;
+    const anchor = playerController.isActive() ? playerController.getAnchorPosition() : null;
+    const localX = (anchor ? anchor.x : sceneBits.controls.target.x) + half;
+    const localY = (anchor ? anchor.z : sceneBits.controls.target.z) + half;
+    const cx = clamp(
+      Math.floor(localX / detailStream.runtime.chunkSize),
+      0,
+      detailStream.runtime.chunkCols - 1,
+    );
+    const cy = clamp(
+      Math.floor(localY / detailStream.runtime.chunkSize),
+      0,
+      detailStream.runtime.chunkRows - 1,
+    );
+    return { cx, cy };
+  }
+
+  function makeCacheKey(chunkKey, lod) {
+    return `${chunkKey}|lod${lod}`;
+  }
+
+  function enqueueChunkBuild(chunkKey, lod) {
+    const cacheKey = makeCacheKey(chunkKey, lod);
+    if (!chunkKey || detailStream.queue.some((q) => q.cacheKey === cacheKey)) return;
+    detailStream.queue.push({ chunkKey, lod, cacheKey });
+  }
+
+  async function pumpChunkBuildQueue() {
+    if (!detailStream.runtime || detailStream.building) return;
+    while (detailStream.queue.length > 0) {
+      const next = detailStream.queue.shift();
+      if (!next) return;
+      const { chunkKey, lod, cacheKey } = next;
+      const existing = detailStream.cache.get(cacheKey);
+      if (existing?.state === 'ready') {
+        if (detailStream.wanted.has(cacheKey)) addChunkMeshesToScene(existing);
+        continue;
+      }
+      if (existing?.state === 'building') return;
+      detailStream.cache.set(cacheKey, { state: 'building', attached: false, chunkKey, lod });
+      detailStream.building = true;
+      const runVersion = detailStream.version;
+      try {
+        const built = await detailStream.runtime.buildChunkByKey(chunkKey, lod);
+        if (runVersion !== detailStream.version) return;
+        detailStream.building = false;
+        if (!built) {
+          detailStream.cache.delete(cacheKey);
+          continue;
+        }
+        const record = { ...built, state: 'ready', attached: false, chunkKey, lod };
+        detailStream.cache.set(cacheKey, record);
+        if (detailStream.wanted.has(cacheKey)) addChunkMeshesToScene(record);
+        refreshMeshingHud();
+        applyWireframeMode();
+        return;
+      } catch (err) {
+        detailStream.building = false;
+        detailStream.cache.delete(cacheKey);
+        console.error('Chunk build failed:', cacheKey, err);
+        return;
+      }
+    }
+  }
+
+  function updateChunkStreaming(force = false) {
+    if (!detailStream.runtime || !currentBounds || viewMode !== 'detail') return;
+    const now = performance.now();
+    if (!force && now - detailStream.lastUpdateTs < 120) return;
+    detailStream.lastUpdateTs = now;
+
+    const center = computeStreamCenterChunk();
+    const nextWanted = new Set();
+    const wantedLodByChunk = new Map();
+    for (let y = center.cy - detailStream.radiusFar; y <= center.cy + detailStream.radiusFar; y++) {
+      if (y < 0 || y >= detailStream.runtime.chunkRows) continue;
+      for (let x = center.cx - detailStream.radiusFar; x <= center.cx + detailStream.radiusFar; x++) {
+        if (x < 0 || x >= detailStream.runtime.chunkCols) continue;
+        const dx = Math.abs(x - center.cx);
+        const dy = Math.abs(y - center.cy);
+        const dist = Math.max(dx, dy);
+        const lod = dist <= detailStream.radiusNear ? 0 : 1;
+        const chunkKey = `${x},${y}`;
+        wantedLodByChunk.set(chunkKey, lod);
+        nextWanted.add(makeCacheKey(chunkKey, lod));
+      }
+    }
+    detailStream.wanted = nextWanted;
+
+    for (const [cacheKey, record] of detailStream.cache.entries()) {
+      const [sx, sy] = String(record.chunkKey || '').split(',').map((v) => Number(v));
+      const dx = Math.abs(sx - center.cx);
+      const dy = Math.abs(sy - center.cy);
+      const withinDetach = Math.max(dx, dy) <= detailStream.radiusFar + detailStream.unloadMargin;
+      const wantedLod = wantedLodByChunk.get(record.chunkKey);
+      const lodMismatch = Number.isFinite(wantedLod) && wantedLod !== record.lod;
+      if (!nextWanted.has(cacheKey) && !withinDetach) {
+        removeChunkMeshesFromScene(record);
+      } else if (lodMismatch) {
+        removeChunkMeshesFromScene(record);
+      }
+    }
+
+    for (const cacheKey of nextWanted) {
+      const [chunkKey, lodToken] = cacheKey.split('|lod');
+      const lod = Number(lodToken) || 0;
+      const record = detailStream.cache.get(cacheKey);
+      if (!record) {
+        enqueueChunkBuild(chunkKey, lod);
+        continue;
+      }
+      if (record.state === 'ready') addChunkMeshesToScene(record);
+    }
+
+    refreshMeshingHud();
+    void pumpChunkBuildQueue();
+  }
+
   async function rebuildDetail(centerMicroX, centerMicroY) {
+    detailStream.version++;
+    clearDetailStream();
     const result = await buildDetailTerrain({
       THREE,
       world: currentWorld,
@@ -223,7 +409,6 @@ export function startApp() {
       TessellationEngine,
       textureFor: textureForLocal,
       uvRect,
-      pushFace,
       idx,
       clamp,
       nextFrame,
@@ -234,6 +419,9 @@ export function startApp() {
     });
     currentBounds = result.currentBounds;
     detailFloorMesh = result.detailFloorMesh;
+    detailStream.runtime = result.chunkRuntime || null;
+    refreshMeshingHud();
+    updateChunkStreaming(true);
     playerController.setContext(currentWorld, currentBounds);
   }
 
@@ -326,11 +514,17 @@ export function startApp() {
     const fps5s = perf.frameTimestamps.length / 5;
     const meanMs = perf.frameDurationsMs.length > 0 ? perf.frameDurationsMs.reduce((s, v) => s + v, 0) / perf.frameDurationsMs.length : 0;
     const zoomDist = sceneBits.camera.position.distanceTo(sceneBits.controls.target);
+    const camRotDegX = THREE.MathUtils.radToDeg(sceneBits.camera.rotation.x);
+    const camRotDegY = THREE.MathUtils.radToDeg(sceneBits.camera.rotation.y);
+    const camRotDegZ = THREE.MathUtils.radToDeg(sceneBits.camera.rotation.z);
     ui.fpsNowEl.textContent = fpsNow.toFixed(1);
     ui.fps1sEl.textContent = fps1s.toFixed(0);
     ui.fps5sEl.textContent = fps5s.toFixed(1);
     ui.frameMsEl.textContent = meanMs.toFixed(2);
     ui.zoomDistEl.textContent = zoomDist.toFixed(1);
+    ui.camRotXEl.textContent = camRotDegX.toFixed(1);
+    ui.camRotYEl.textContent = camRotDegY.toFixed(1);
+    ui.camRotZEl.textContent = camRotDegZ.toFixed(1);
   }
 
   function animate(nowTs) {
@@ -342,6 +536,8 @@ export function startApp() {
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
     updateFollowCamera();
+    updateChunkStreaming(false);
+    void pumpChunkBuildQueue();
     playerController.tick(dtSec);
     playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);

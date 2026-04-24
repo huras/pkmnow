@@ -1,3 +1,40 @@
+const workerState = {
+  worker: null,
+  seq: 1,
+  pending: new Map(),
+  activeVersion: null,
+};
+
+function getChunkMesherWorker() {
+  if (workerState.worker) return workerState.worker;
+  const worker = new Worker(new URL('./chunk-mesher-worker.js', import.meta.url), { type: 'module' });
+  worker.onmessage = (event) => {
+    const msg = event.data || {};
+    const pending = workerState.pending.get(msg.requestId);
+    if (!pending) return;
+    workerState.pending.delete(msg.requestId);
+    if (msg.type === 'build-result') {
+      if (!msg.ok) pending.resolve(null);
+      else pending.resolve(msg.payload);
+      return;
+    }
+    pending.resolve(msg);
+  };
+  worker.onerror = (err) => {
+    console.error('chunk mesher worker error', err);
+  };
+  workerState.worker = worker;
+  return worker;
+}
+
+function requestWorker(worker, type, payload) {
+  return new Promise((resolve, reject) => {
+    const requestId = workerState.seq++;
+    workerState.pending.set(requestId, { resolve, reject });
+    worker.postMessage({ requestId, type, payload });
+  });
+}
+
 export function updateHoverMarker({
   currentWorld,
   mx,
@@ -142,7 +179,6 @@ export async function buildDetailTerrain({
   TessellationEngine,
   textureFor,
   uvRect,
-  pushFace,
   idx,
   clamp,
   nextFrame,
@@ -151,6 +187,40 @@ export async function buildDetailTerrain({
   clearGroup,
   atlasTextures,
 }) {
+  const DETAIL_CHUNK_SIZE = 24;
+  const EPS = 1e-6;
+  const pushFaceStretched = (builder, a, b, c, d, uv, tint) => {
+    builder.p.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    builder.u.push(uv.u0, uv.v1, uv.u0, uv.v0, uv.u1, uv.v1, uv.u1, uv.v1, uv.u0, uv.v0, uv.u1, uv.v0);
+    builder.c.push(tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint, tint);
+  };
+  const lerp3 = (p0, p1, t) => ({
+    x: p0.x + (p1.x - p0.x) * t,
+    y: p0.y + (p1.y - p0.y) * t,
+    z: p0.z + (p1.z - p0.z) * t,
+  });
+  const bilerp3 = (a, b, c, d, u, v) => {
+    const ab = lerp3(a, b, u);
+    const cd = lerp3(c, d, u);
+    return lerp3(ab, cd, v);
+  };
+  const pushFaceTiled = (builder, a, b, c, d, uv, tint, tilesU = 1, tilesV = 1) => {
+    const tu = Math.max(1, Math.floor(tilesU));
+    const tv = Math.max(1, Math.floor(tilesV));
+    for (let vy = 0; vy < tv; vy++) {
+      const v0 = vy / tv;
+      const v1 = (vy + 1) / tv;
+      for (let ux = 0; ux < tu; ux++) {
+        const u0 = ux / tu;
+        const u1 = (ux + 1) / tu;
+        const p00 = bilerp3(a, b, c, d, u0, v0);
+        const p10 = bilerp3(a, b, c, d, u1, v0);
+        const p01 = bilerp3(a, b, c, d, u0, v1);
+        const p11 = bilerp3(a, b, c, d, u1, v1);
+        pushFaceStretched(builder, p00, p10, p01, p11, uv, tint);
+      }
+    }
+  };
   pickMeshes.length = 0;
   clearGroup(detailGroup);
   const microW = world.width * MACRO_TILE_STRIDE;
@@ -158,6 +228,7 @@ export async function buildDetailTerrain({
   const span = clamp(Math.floor(settings.microSpan), 64, Math.min(microW, microH));
   const startX = clamp(Math.floor(centerMicroX - span * 0.5), 0, microW - span);
   const startY = clamp(Math.floor(centerMicroY - span * 0.5), 0, microH - span);
+  const runtimeVersion = `${world.seed}:${startX}:${startY}:${span}:${settings.stepHeight}:${settings.wallShade}`;
   const currentBounds = { span, startX, startY };
 
   const cells = new Array(span * span);
@@ -187,54 +258,313 @@ export async function buildDetailTerrain({
     if (x === span - 1 && y % 8 === 0) await nextFrame();
   }
   await Promise.all([...needed].map(textureFor));
+  const fileById = [...needed];
+  const fileIdByPath = new Map(fileById.map((f, i) => [f, i]));
 
   let minH = Infinity;
   for (const c of cells) minH = Math.min(minH, c.h);
   const floorY = (minH - 2) * settings.stepHeight;
   const half = span * 0.5;
-  const builders = new Map();
-  const getBuilder = (k) => {
-    if (!builders.has(k)) builders.set(k, { p: [], u: [], c: [] });
-    return builders.get(k);
-  };
+  const fileIdByCell = new Int16Array(span * span);
+  const spriteByCell = new Uint16Array(span * span);
+  const colsByCell = new Uint16Array(span * span);
+  const heightByCell = new Float32Array(span * span);
+  for (let y = 0; y < span; y++) {
+    for (let x = 0; x < span; x++) {
+      const i = idx(span, x, y);
+      const cell = cells[i];
+      fileIdByCell[i] = cell.file ? fileIdByPath.get(cell.file) : -1;
+      spriteByCell[i] = cell.sprite || 0;
+      colsByCell[i] = cell.cols || 1;
+      heightByCell[i] = Number(cell.h) || 0;
+    }
+  }
+  const atlasMetaByFileId = fileById.map((file) => {
+    const tex = atlasTextures.get(file);
+    const w = tex?.image?.width || 1;
+    const h = tex?.image?.height || 1;
+    return { w, h };
+  });
+  const chunkCols = Math.ceil(span / DETAIL_CHUNK_SIZE);
+  const chunkRows = Math.ceil(span / DETAIL_CHUNK_SIZE);
+  const chunkModels = [];
 
-  for (let y = 0; y < span; y++) for (let x = 0; x < span; x++) {
-    const cell = cells[idx(span, x, y)];
-    if (!cell.file) continue;
-    const tex = atlasTextures.get(cell.file);
-    if (!tex) continue;
-    const uv = uvRect(tex, cell.sprite, cell.cols);
-    const b = getBuilder(cell.file);
-    const x0 = x - half;
-    const x1 = x0 + 1;
-    const z0 = y - half;
-    const z1 = z0 + 1;
-    const y0 = cell.h * settings.stepHeight;
-    pushFace(b, { x: x0, y: y0, z: z0 }, { x: x1, y: y0, z: z0 }, { x: x0, y: y0, z: z1 }, { x: x1, y: y0, z: z1 }, uv, 1);
-    const r = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
-    const d = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
-    const rh = r ? r.h * settings.stepHeight : floorY;
-    const dh = d ? d.h * settings.stepHeight : floorY;
-    if (Math.abs(y0 - rh) > 1e-6) pushFace(b, { x: x1, y: Math.min(y0, rh), z: z0 }, { x: x1, y: Math.max(y0, rh), z: z0 }, { x: x1, y: Math.min(y0, rh), z: z1 }, { x: x1, y: Math.max(y0, rh), z: z1 }, uv, settings.wallShade);
-    if (Math.abs(y0 - dh) > 1e-6) pushFace(b, { x: x0, y: Math.min(y0, dh), z: z1 }, { x: x1, y: Math.min(y0, dh), z: z1 }, { x: x0, y: Math.max(y0, dh), z: z1 }, { x: x1, y: Math.max(y0, dh), z: z1 }, uv, settings.wallShade);
+  for (let chunkY = 0; chunkY < chunkRows; chunkY++) {
+    for (let chunkX = 0; chunkX < chunkCols; chunkX++) {
+      const x0 = chunkX * DETAIL_CHUNK_SIZE;
+      const y0 = chunkY * DETAIL_CHUNK_SIZE;
+      const x1 = Math.min(span, x0 + DETAIL_CHUNK_SIZE);
+      const y1 = Math.min(span, y0 + DETAIL_CHUNK_SIZE);
+      chunkModels.push({ key: `${chunkX},${chunkY}`, chunkX, chunkY, x0, y0, x1, y1 });
+    }
   }
 
-  let triTotal = 0;
-  for (const [file, data] of builders.entries()) {
-    const tex = atlasTextures.get(file);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(data.p, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(data.u, 2));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(data.c, 3));
-    g.computeVertexNormals();
-    const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
-    m.userData.baseMap = tex;
-    const mesh = new THREE.Mesh(g, m);
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    detailGroup.add(mesh);
-    pickMeshes.push(mesh);
-    triTotal += Math.floor(g.getAttribute('position').count / 3);
+  async function buildChunkMesh(chunk, lod = 0) {
+    let chunkMergedFaceCount = 0;
+    let chunkPreFaceEstimate = 0;
+    const builders = new Map();
+    const getBuilder = (file) => {
+      if (!builders.has(file)) builders.set(file, { p: [], u: [], c: [] });
+      return builders.get(file);
+    };
+    const visitedTop = new Uint8Array(span * span);
+    const visitedWallRight = new Uint8Array(span * span);
+    const visitedWallDown = new Uint8Array(span * span);
+    const inChunk = (x, y) => x >= chunk.x0 && x < chunk.x1 && y >= chunk.y0 && y < chunk.y1;
+    const topKeyAt = (x, y) => {
+      if (!inChunk(x, y)) return null;
+      const cell = cells[idx(span, x, y)];
+      if (!cell?.file) return null;
+      return `${cell.file}|${cell.sprite}|${cell.cols}|${cell.h}`;
+    };
+    const rightWallKeyAt = (x, y) => {
+      if (lod > 0) return null;
+      if (!inChunk(x, y)) return null;
+      const cell = cells[idx(span, x, y)];
+      if (!cell?.file) return null;
+      const py0 = cell.h * settings.stepHeight;
+      const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
+      const rightH = right ? right.h * settings.stepHeight : floorY;
+      if (Math.abs(py0 - rightH) <= EPS) return null;
+      return `${cell.file}|${cell.sprite}|${cell.cols}|${Math.min(py0, rightH)}|${Math.max(py0, rightH)}`;
+    };
+    const downWallKeyAt = (x, y) => {
+      if (lod > 0) return null;
+      if (!inChunk(x, y)) return null;
+      const cell = cells[idx(span, x, y)];
+      if (!cell?.file) return null;
+      const py0 = cell.h * settings.stepHeight;
+      const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+      const downH = down ? down.h * settings.stepHeight : floorY;
+      if (Math.abs(py0 - downH) <= EPS) return null;
+      return `${cell.file}|${cell.sprite}|${cell.cols}|${Math.min(py0, downH)}|${Math.max(py0, downH)}`;
+    };
+    const pushChunkFace = (builder, a, b, c, d, uv, tint) => {
+      chunkMergedFaceCount++;
+      pushFaceStretched(builder, a, b, c, d, uv, tint);
+    };
+
+    for (let y = chunk.y0; y < chunk.y1; y++) {
+      for (let x = chunk.x0; x < chunk.x1; x++) {
+        const cell = cells[idx(span, x, y)];
+        if (!cell?.file) continue;
+        chunkPreFaceEstimate++;
+        const py0 = cell.h * settings.stepHeight;
+        const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
+        const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+        const rightH = right ? right.h * settings.stepHeight : floorY;
+        const downH = down ? down.h * settings.stepHeight : floorY;
+        if (Math.abs(py0 - rightH) > EPS) chunkPreFaceEstimate++;
+        if (Math.abs(py0 - downH) > EPS) chunkPreFaceEstimate++;
+      }
+    }
+
+    for (let y = chunk.y0; y < chunk.y1; y++) {
+      for (let x = chunk.x0; x < chunk.x1; x++) {
+        const flatI = idx(span, x, y);
+        if (visitedTop[flatI]) continue;
+        const key = topKeyAt(x, y);
+        if (!key) continue;
+        const cell = cells[flatI];
+        const tex = atlasTextures.get(cell.file);
+        if (!tex) continue;
+        const uv = uvRect(tex, cell.sprite, cell.cols);
+        let runW = 1;
+        while (x + runW < chunk.x1 && !visitedTop[idx(span, x + runW, y)] && topKeyAt(x + runW, y) === key) runW++;
+        let runH = 1;
+        while (y + runH < chunk.y1) {
+          let rowOk = true;
+          for (let xx = x; xx < x + runW; xx++) {
+            const rowI = idx(span, xx, y + runH);
+            if (visitedTop[rowI] || topKeyAt(xx, y + runH) !== key) {
+              rowOk = false;
+              break;
+            }
+          }
+          if (!rowOk) break;
+          runH++;
+        }
+        for (let yy = y; yy < y + runH; yy++) {
+          for (let xx = x; xx < x + runW; xx++) visitedTop[idx(span, xx, yy)] = 1;
+        }
+        const b = getBuilder(cell.file);
+        const px0 = x - half;
+        const px1 = px0 + runW;
+        const pz0 = y - half;
+        const pz1 = pz0 + runH;
+        const py0 = cell.h * settings.stepHeight;
+        pushFaceTiled(
+          b,
+          { x: px0, y: py0, z: pz0 },
+          { x: px1, y: py0, z: pz0 },
+          { x: px0, y: py0, z: pz1 },
+          { x: px1, y: py0, z: pz1 },
+          uv,
+          1,
+          runW,
+          runH,
+        );
+        chunkMergedFaceCount++;
+      }
+    }
+
+    for (let y = chunk.y0; y < chunk.y1; y++) {
+      for (let x = chunk.x0; x < chunk.x1; x++) {
+        const flatI = idx(span, x, y);
+        if (visitedWallRight[flatI]) continue;
+        const key = rightWallKeyAt(x, y);
+        if (!key) continue;
+        const cell = cells[flatI];
+        const tex = atlasTextures.get(cell.file);
+        if (!tex) continue;
+        const uv = uvRect(tex, cell.sprite, cell.cols);
+        const py0 = cell.h * settings.stepHeight;
+        const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
+        const rightH = right ? right.h * settings.stepHeight : floorY;
+        const minY = Math.min(py0, rightH);
+        const maxY = Math.max(py0, rightH);
+        let runH = 1;
+        while (y + runH < chunk.y1 && !visitedWallRight[idx(span, x, y + runH)] && rightWallKeyAt(x, y + runH) === key) runH++;
+        for (let yy = y; yy < y + runH; yy++) visitedWallRight[idx(span, x, yy)] = 1;
+        const b = getBuilder(cell.file);
+        const px = x - half + 1;
+        const pz0 = y - half;
+        const pz1 = pz0 + runH;
+        const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(EPS, settings.stepHeight)));
+        pushFaceTiled(
+          b,
+          { x: px, y: minY, z: pz0 },
+          { x: px, y: maxY, z: pz0 },
+          { x: px, y: minY, z: pz1 },
+          { x: px, y: maxY, z: pz1 },
+          uv,
+          settings.wallShade,
+          wallSteps,
+          runH,
+        );
+        chunkMergedFaceCount++;
+      }
+    }
+
+    for (let y = chunk.y0; y < chunk.y1; y++) {
+      for (let x = chunk.x0; x < chunk.x1; x++) {
+        const flatI = idx(span, x, y);
+        if (visitedWallDown[flatI]) continue;
+        const key = downWallKeyAt(x, y);
+        if (!key) continue;
+        const cell = cells[flatI];
+        const tex = atlasTextures.get(cell.file);
+        if (!tex) continue;
+        const uv = uvRect(tex, cell.sprite, cell.cols);
+        const py0 = cell.h * settings.stepHeight;
+        const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+        const downH = down ? down.h * settings.stepHeight : floorY;
+        const minY = Math.min(py0, downH);
+        const maxY = Math.max(py0, downH);
+        let runW = 1;
+        while (x + runW < chunk.x1 && !visitedWallDown[idx(span, x + runW, y)] && downWallKeyAt(x + runW, y) === key) runW++;
+        for (let xx = x; xx < x + runW; xx++) visitedWallDown[idx(span, xx, y)] = 1;
+        const b = getBuilder(cell.file);
+        const px0 = x - half;
+        const px1 = px0 + runW;
+        const pz = y - half + 1;
+        const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(EPS, settings.stepHeight)));
+        pushFaceTiled(
+          b,
+          { x: px0, y: minY, z: pz },
+          { x: px1, y: minY, z: pz },
+          { x: px0, y: maxY, z: pz },
+          { x: px1, y: maxY, z: pz },
+          uv,
+          settings.wallShade,
+          runW,
+          wallSteps,
+        );
+        chunkMergedFaceCount++;
+      }
+    }
+
+    let triCount = 0;
+    const meshes = [];
+    for (const [file, data] of builders.entries()) {
+      const tex = atlasTextures.get(file);
+      if (!tex) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(data.p, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(data.u, 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(data.c, 3));
+      g.computeVertexNormals();
+      const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
+      m.userData.baseMap = tex;
+      const mesh = new THREE.Mesh(g, m);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.userData.detailChunk = { chunkX: chunk.chunkX, chunkY: chunk.chunkY };
+      meshes.push(mesh);
+      triCount += Math.floor(g.getAttribute('position').count / 3);
+    }
+    return {
+      key: chunk.key,
+      chunkX: chunk.chunkX,
+      chunkY: chunk.chunkY,
+      lod,
+      meshes,
+      triCount,
+      mergedFaceCount: chunkMergedFaceCount,
+      preTriEstimate: chunkPreFaceEstimate * 2,
+    };
+  }
+
+  async function initWorkerDataset() {
+    try {
+      const worker = getChunkMesherWorker();
+      if (workerState.activeVersion === runtimeVersion) return true;
+      const payload = {
+        version: runtimeVersion,
+        span,
+        half,
+        floorY,
+        stepHeight: settings.stepHeight,
+        wallShade: settings.wallShade,
+        eps: EPS,
+        atlasMetaByFileId,
+        fileById,
+        fileIdByCell,
+        spriteByCell,
+        colsByCell,
+        heightByCell,
+      };
+      await requestWorker(worker, 'init-dataset', payload);
+      workerState.activeVersion = runtimeVersion;
+      return true;
+    } catch (err) {
+      console.error('Failed to initialize chunk worker dataset, using fallback.', err);
+      return false;
+    }
+  }
+
+  function buildMeshesFromWorkerPayload(payload) {
+    const meshes = [];
+    if (!payload?.builders?.length) return meshes;
+    for (const entry of payload.builders) {
+      const file = payload.fileById?.[entry.fileId];
+      if (!file) continue;
+      const tex = atlasTextures.get(file);
+      if (!tex) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(entry.p), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(entry.u), 2));
+      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(entry.c), 3));
+      g.computeVertexNormals();
+      const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
+      m.userData.baseMap = tex;
+      const mesh = new THREE.Mesh(g, m);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.userData.detailChunk = { chunkX: payload.chunkX, chunkY: payload.chunkY };
+      meshes.push(mesh);
+    }
+    return meshes;
   }
 
   const detailFloorMesh = new THREE.Mesh(
@@ -245,8 +575,48 @@ export async function buildDetailTerrain({
   detailFloorMesh.receiveShadow = true;
   detailGroup.add(detailFloorMesh);
   await buildVegetationBillboards({ cells, span, half, worldSeed: world.seed, currentWorld: world, detailGroup });
-  triCountEl.textContent = triTotal.toLocaleString('en-US');
+  triCountEl.textContent = '0';
   applyWireframeMode();
+  const workerReady = await initWorkerDataset();
 
-  return { currentBounds, detailFloorMesh };
+  return {
+    currentBounds,
+    detailFloorMesh,
+    chunkRuntime: {
+      chunkSize: DETAIL_CHUNK_SIZE,
+      chunkCols,
+      chunkRows,
+      chunks: chunkModels,
+      async buildChunkByKey(chunkKey, lod = 0) {
+        const chunk = chunkModels.find((c) => c.key === chunkKey);
+        if (!chunk) return null;
+        if (workerReady) {
+          try {
+            const payload = await requestWorker(getChunkMesherWorker(), 'build-chunk', { version: runtimeVersion, chunk, lod });
+            if (payload) {
+              return {
+                key: payload.key,
+                chunkX: payload.chunkX,
+                chunkY: payload.chunkY,
+                lod: payload.lod ?? lod,
+                meshes: buildMeshesFromWorkerPayload(payload),
+                triCount: payload.triCount || 0,
+                mergedFaceCount: payload.mergedFaceCount || 0,
+                preTriEstimate: payload.preTriEstimate || 0,
+              };
+            }
+          } catch (err) {
+            console.error('Worker chunk build failed, fallback to main thread.', err);
+          }
+        }
+        return buildChunkMesh(chunk, lod);
+      },
+    },
+    meshStats: {
+      chunkCountRendered: 0,
+      mergedFaceCount: 0,
+      preTriEstimate: 0,
+      postTriEstimate: 0,
+    },
+  };
 }

@@ -123,6 +123,16 @@ export function createPlayerController({
     logicalGroundY: 0,
   };
 
+  function createFrameTextureFromCanvas() {
+    if (!state.frameCanvas) return null;
+    const tex = new THREE.CanvasTexture(state.frameCanvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    return tex;
+  }
+
   async function ensureSprites(dexId = state.dexId) {
     state.dexId = Math.max(1, Math.floor(Number(dexId) || 25));
     const id = padDex3(state.dexId);
@@ -162,13 +172,9 @@ export function createPlayerController({
     state.frameCanvas = document.createElement('canvas');
     state.frameCanvas.width = frameW;
     state.frameCanvas.height = frameH;
-    state.frameCtx = state.frameCanvas.getContext('2d');
+    state.frameCtx = state.frameCanvas.getContext('2d', { willReadFrequently: true });
     if (state.frameCtx) state.frameCtx.imageSmoothingEnabled = false;
-    state.frameTex = new THREE.CanvasTexture(state.frameCanvas);
-    state.frameTex.colorSpace = THREE.SRGBColorSpace;
-    state.frameTex.magFilter = THREE.NearestFilter;
-    state.frameTex.minFilter = THREE.NearestFilter;
-    state.frameTex.generateMipmaps = false;
+    state.frameTex = createFrameTextureFromCanvas();
 
     const geo = new THREE.PlaneGeometry(1, 1);
     geo.translate(0, 0.5, 0);
@@ -208,6 +214,14 @@ export function createPlayerController({
     if (state.frameCanvas.width !== frameW || state.frameCanvas.height !== frameH) {
       state.frameCanvas.width = frameW;
       state.frameCanvas.height = frameH;
+      state.frameCtx = state.frameCanvas.getContext('2d', { willReadFrequently: true });
+      if (state.frameCtx) state.frameCtx.imageSmoothingEnabled = false;
+      if (state.frameTex) state.frameTex.dispose();
+      state.frameTex = createFrameTextureFromCanvas();
+      if (state.mesh?.material) {
+        state.mesh.material.map = state.frameTex;
+        state.mesh.material.needsUpdate = true;
+      }
       updateMeshScale(frameW, frameH);
     }
     const framesAcross = Math.max(1, Math.floor((img.width || frameW) / frameW));
@@ -219,17 +233,21 @@ export function createPlayerController({
     state.lastFrameKey = key;
 
     state.frameCtx.clearRect(0, 0, frameW, frameH);
-    state.frameCtx.drawImage(
-      img,
-      frame * frameW,
-      row * frameH,
-      frameW,
-      frameH,
-      0,
-      0,
-      frameW,
-      frameH,
-    );
+    const srcX = frame * frameW;
+    const srcY = row * frameH;
+    if (srcX + frameW <= (img.width || 0) && srcY + frameH <= (img.height || 0)) {
+      state.frameCtx.drawImage(
+        img,
+        srcX,
+        srcY,
+        frameW,
+        frameH,
+        0,
+        0,
+        frameW,
+        frameH,
+      );
+    }
     if (!state.frameLift01Cache.has(key)) {
       const lift01 = computeOpaqueBottomLift01(state.frameCtx, frameW, frameH);
       state.frameLift01Cache.set(key, lift01);

@@ -17,7 +17,11 @@ export function renderLayout() {
         <div><span>FPS 5s</span><strong id="fps-5s">--</strong></div>
         <div><span>Frame ms</span><strong id="frame-ms">--</strong></div>
         <div><span>Zoom</span><strong id="zoom-dist">--</strong></div>
+        <div><span>Cam Rot X</span><strong id="cam-rot-x">--</strong></div>
+        <div><span>Cam Rot Y</span><strong id="cam-rot-y">--</strong></div>
+        <div><span>Cam Rot Z</span><strong id="cam-rot-z">--</strong></div>
         <div><span>Triangles</span><strong id="tri-count">--</strong></div>
+        <div><span>Meshing</span><strong id="meshing-stats">--</strong></div>
         <div><span>Macro</span><strong id="macro-coord">--</strong></div>
       </div>
     </aside>
@@ -35,7 +39,11 @@ export function renderLayout() {
     fps5sEl: document.getElementById('fps-5s'),
     frameMsEl: document.getElementById('frame-ms'),
     zoomDistEl: document.getElementById('zoom-dist'),
+    camRotXEl: document.getElementById('cam-rot-x'),
+    camRotYEl: document.getElementById('cam-rot-y'),
+    camRotZEl: document.getElementById('cam-rot-z'),
     triCountEl: document.getElementById('tri-count'),
+    meshingStatsEl: document.getElementById('meshing-stats'),
     macroCoordEl: document.getElementById('macro-coord'),
   };
 }
