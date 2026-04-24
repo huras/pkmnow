@@ -1,7 +1,7 @@
 /**
  * Off-main-thread JSON.stringify + LZ-String for play session localStorage writes.
  */
-import LZString from '../vendor/lz-string.mjs';
+import LZString from 'https://esm.sh/lz-string@1.5.0';
 
 const STORAGE_LZ_PREFIX = 'pkmn_lz1:';
 
