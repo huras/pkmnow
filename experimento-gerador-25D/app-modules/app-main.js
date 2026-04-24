@@ -44,7 +44,7 @@ import { createPlayerController } from './player-controller.js';
 export function startApp() {
   const ui = renderLayout();
   const settings = {
-    microSpan: 350,
+    microSpan: 250,
     stepHeight: 0.55,
     wallShade: 0.72,
     worldHeightScale: 10,
@@ -481,10 +481,21 @@ export function startApp() {
       });
       const centerMacroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
       const centerMacroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
-      await rebuildDetail(
-        centerMacroX * MACRO_TILE_STRIDE + halfStride,
-        centerMacroY * MACRO_TILE_STRIDE + halfStride,
-      );
+      // Lazy detail build: only rebuild immediately if user is already in Detail mode.
+      if (viewMode === 'detail') {
+        await rebuildDetail(
+          centerMacroX * MACRO_TILE_STRIDE + halfStride,
+          centerMacroY * MACRO_TILE_STRIDE + halfStride,
+        );
+      } else {
+        detailStream.version++;
+        clearDetailStream();
+        currentBounds = null;
+        detailFloorMesh = null;
+        if (ui.triCountEl) ui.triCountEl.textContent = '--';
+        if (ui.meshingStatsEl) ui.meshingStatsEl.textContent = '--';
+        if (ui.lodStatsEl) ui.lodStatsEl.textContent = '--';
+      }
       setViewMode(viewMode);
     } finally {
       ui.regenBtn.disabled = false;
@@ -689,7 +700,10 @@ export function startApp() {
   ui.worldBtn.addEventListener('click', () => setViewMode('world'));
   ui.detailBtn.addEventListener('click', async () => {
     if (!selectedMacro && currentWorld) selectedMacro = { x: Math.floor(currentWorld.width * 0.5), y: Math.floor(currentWorld.height * 0.5) };
-    if (currentWorld && selectedMacro) await rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+    if (currentWorld && selectedMacro && !currentBounds) {
+      ui.pickInfo.textContent = 'Building detail map...';
+      await rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+    }
     setViewMode('detail');
   });
   ui.regenBtn.addEventListener('click', () => regenerate().catch((e) => { console.error(e); ui.pickInfo.textContent = `Error: ${e?.message || e}`; rendering = false; }));

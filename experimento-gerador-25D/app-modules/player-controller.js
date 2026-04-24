@@ -1,5 +1,6 @@
 import { getDexAnimMeta } from '../../js/pokemon/pmd-anim-metadata.js';
 import { PMD_DEFAULT_MON_ANIMS, PMD_MON_SHEET } from '../../js/pokemon/pmd-default-timing.js';
+import { getPokemonConfig } from '../../js/pokemon/pokemon-config.js';
 import { canWalkMicroTile, pivotCellHeightTraversalOk, isCliffDrop, okHeightStepTransition } from '../../js/walkability.js';
 import { speciesHasFlyingType } from '../../js/pokemon/pokemon-type-helpers.js';
 
@@ -16,7 +17,7 @@ const DIR_TO_ROW = {
 
 /** Flight tuning (3D): tweak these two values to change fly speed. */
 const FLIGHT_HORIZONTAL_SPEED_MULT = 9.0;
-const FLIGHT_VERTICAL_SPEED = 3.8;
+const FLIGHT_VERTICAL_SPEED = 6.8;
 
 function padDex3(dex) {
   return String(Math.max(1, Math.floor(Number(dex) || 1))).padStart(3, '0');
@@ -127,6 +128,7 @@ export function createPlayerController({
     frameLift01Cache: new Map(),
     frameGroundLiftWorld: 0,
     logicalGroundY: 0,
+    speciesHeightTiles: null,
   };
 
   function createFrameTextureFromCanvas() {
@@ -161,6 +163,8 @@ export function createPlayerController({
     state.idleTex = idleTex || walkTex;
 
     const meta = getDexAnimMeta(state.dexId);
+    const speciesCfg = getPokemonConfig(state.dexId);
+    state.speciesHeightTiles = Number(speciesCfg?.heightTiles) || null;
     state.walkMeta = meta?.walk || {
       frameWidth: PMD_MON_SHEET.frameW,
       frameHeight: PMD_MON_SHEET.frameH,
@@ -202,7 +206,12 @@ export function createPlayerController({
 
   function updateMeshScale(frameW, frameH) {
     if (!state.mesh) return;
-    const h = (frameH / 16) * PMD_MON_SHEET.scale;
+    const metaHeightTiles = Number(state.idleMeta?.heightTiles ?? state.walkMeta?.heightTiles);
+    const targetHeightTiles = Number.isFinite(metaHeightTiles) && metaHeightTiles > 0
+      ? metaHeightTiles
+      : (Number.isFinite(state.speciesHeightTiles) && state.speciesHeightTiles > 0 ? state.speciesHeightTiles : null);
+    // Prefer authored species height; fallback preserves old behavior.
+    const h = targetHeightTiles ?? ((frameH / 16) * PMD_MON_SHEET.scale);
     const w = (frameW / Math.max(1, frameH)) * h;
     state.mesh.scale.set(w, h, 1);
   }
