@@ -36,8 +36,10 @@ export function createVegetationSystem(deps) {
   const treeBillboardTextureCache = new Map();
   const objectBillboardTextureCache = new Map();
   const vegetationMaterials = [];
+  const billboardMeshes = new Set();
   const litMats = [];
   const depthMats = [];
+  let wireframeActive = false;
 
   const camRight = new THREE.Vector3(1, 0, 0);
   const camUp = new THREE.Vector3(0, 1, 0);
@@ -139,9 +141,40 @@ uniform vec3 cameraUp;`,
       mesh.castShadow = true;
       mesh.receiveShadow = false;
       mesh.customDepthMaterial = makeBillboardDepthMaterial(batch.texture);
+      billboardMeshes.add(mesh);
       meshes.push(mesh);
     }
     return meshes;
+  }
+
+  function applyLightingTuning() {
+    const tintHex = settings.billboardTint || '#ffffff';
+    const tint = new THREE.Color(tintHex);
+    const brightness = Math.max(0, Number(settings.billboardBrightness) || 0);
+    tint.multiplyScalar(brightness);
+    const emissiveHex = settings.billboardEmissive || '#000000';
+    const emissiveIntensity = Math.max(0, Number(settings.billboardEmissiveIntensity) || 0);
+    const alphaCut = Math.min(1, Math.max(0, Number(settings.billboardAlphaTest) || 0));
+    const castShadow = settings.billboardCastShadow !== false;
+    const receiveShadow = !!settings.billboardReceiveShadow;
+    for (const mat of vegetationMaterials) {
+      if (!mat) continue;
+      if (!wireframeActive) mat.color.copy(tint);
+      mat.emissive.set(emissiveHex);
+      mat.emissiveIntensity = emissiveIntensity;
+      mat.alphaTest = wireframeActive ? 0.0 : alphaCut;
+      mat.needsUpdate = true;
+    }
+    for (const mat of depthMats) {
+      if (!mat) continue;
+      mat.alphaTest = wireframeActive ? 0.0 : alphaCut;
+      mat.needsUpdate = true;
+    }
+    for (const mesh of billboardMeshes) {
+      if (!mesh) continue;
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+    }
   }
 
   function flushBatches(textureBatches) {
@@ -555,14 +588,16 @@ uniform vec3 cameraUp;`,
   }
 
   function applyWireframeMode(wireframeOnly) {
+    wireframeActive = !!wireframeOnly;
     for (const mat of vegetationMaterials) {
       if (!mat) continue;
       mat.wireframe = !!wireframeOnly;
       mat.map = wireframeOnly ? null : (mat.userData.baseMap || null);
       mat.color.set(wireframeOnly ? '#b8ffb8' : '#ffffff');
-      mat.alphaTest = wireframeOnly ? 0.0 : 0.2;
+      mat.alphaTest = wireframeOnly ? 0.0 : Math.min(1, Math.max(0, Number(settings.billboardAlphaTest) || 0.2));
       mat.needsUpdate = true;
     }
+    if (!wireframeOnly) applyLightingTuning();
     if (vegetationGroup) vegetationGroup.visible = !!settings.showVegetation;
   }
 
@@ -592,6 +627,7 @@ uniform vec3 cameraUp;`,
     buildVegetationBillboards,
     buildChunkVegetation,
     applyWireframeMode,
+    applyLightingTuning,
     faceCamera,
     setVisible,
   };

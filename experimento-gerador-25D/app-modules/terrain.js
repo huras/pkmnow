@@ -116,6 +116,7 @@ export function buildWorldMacroMesh({
   geom.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: false });
   const worldMesh = new THREE.Mesh(geom, mat);
+  worldMesh.castShadow = true;
   worldMesh.receiveShadow = true;
   worldGroup.add(worldMesh);
 
@@ -479,7 +480,7 @@ export async function buildDetailTerrain({
       const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
       m.userData.baseMap = tex;
       const mesh = new THREE.Mesh(g, m);
-      mesh.castShadow = false;
+      mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData.detailChunk = { chunkX: chunk.chunkX, chunkY: chunk.chunkY };
       meshes.push(mesh);

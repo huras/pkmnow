@@ -1,5 +1,8 @@
 import * as THREE from 'https://unpkg.com/three@0.161.0/build/three.module.js';
 import { OrbitControls } from 'https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.161.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.161.0/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.161.0/examples/jsm/postprocessing/ShaderPass.js';
 import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.21/+esm';
 import { generate, DEFAULT_CONFIG } from '../../js/generator.js';
 import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity } from '../../js/chunking.js';
@@ -55,6 +58,29 @@ export function startApp() {
     showVegetation: true,
     vegetationDensity: 1.0,
     followPlayerCamera: true,
+    cameraFocusStrength: 0.22,
+    cameraLookAhead: 1.6,
+    playerFocusBlur: true,
+    playerFocusBlurStrength: 0.25,
+    playerFocusBlurRadius: 1.3,
+    playerFocusBlurMoveBoost: 1.2,
+    playerFocusBlurFalloff: 'smooth',
+    playerFocusBlurEllipseX: 3.66,
+    playerFocusBlurEllipseY: 1.39,
+    billboardTint: '#ffffff',
+    billboardBrightness: 1.58,
+    billboardEmissive: '#000000',
+    billboardEmissiveIntensity: 0.0,
+    billboardAlphaTest: 0.2,
+    billboardCastShadow: true,
+    billboardReceiveShadow: true,
+    entityTint: '#ffffff',
+    entityBrightness: 1.61,
+    entityEmissive: '#000000',
+    entityEmissiveIntensity: 0.0,
+    entityAlphaTest: 0.25,
+    entityCastShadow: true,
+    entityReceiveShadow: false,
   };
   const debugSettings = {
     showAxes: true,
@@ -101,19 +127,111 @@ export function startApp() {
   };
   const followTmpTarget = new THREE.Vector3();
   const followTmpDelta = new THREE.Vector3();
+  const followVelRaw = new THREE.Vector2();
+  const followVelSmoothed = new THREE.Vector2();
+  const blurTmpAnchor = new THREE.Vector3();
+  const blurTmpNdc = new THREE.Vector3();
+  const blurLastAnchor = new THREE.Vector3();
+  let blurAnchorReady = false;
+  let blurMotion01 = 0;
+  let followPrevWorldPos = null;
 
-  function updateFollowCamera() {
-    if (viewMode !== 'detail' || !settings.followPlayerCamera || !playerController.isActive()) return;
+  function updateFollowCamera(dtSec) {
+    if (viewMode !== 'detail' || !settings.followPlayerCamera || !playerController.isActive()) {
+      followPrevWorldPos = null;
+      followVelRaw.set(0, 0);
+      followVelSmoothed.multiplyScalar(0.8);
+      return;
+    }
     const anchor = playerController.getAnchorPosition();
     if (!anchor) return;
-    followTmpTarget.set(anchor.x, anchor.y, anchor.z);
+    const worldPos = playerController.getWorldMicroPosition();
+    if (worldPos && followPrevWorldPos) {
+      const invDt = 1 / Math.max(1e-4, dtSec || 0.016);
+      followVelRaw.set(
+        (worldPos.x - followPrevWorldPos.x) * invDt,
+        (worldPos.y - followPrevWorldPos.y) * invDt,
+      );
+    } else {
+      followVelRaw.set(0, 0);
+    }
+    followPrevWorldPos = worldPos ? { x: worldPos.x, y: worldPos.y } : null;
+    followVelSmoothed.lerp(followVelRaw, 0.18);
+    const speed = followVelSmoothed.length();
+    const leadDist = Math.min(Number(settings.cameraLookAhead) || 0, speed * 0.08);
+    let leadX = 0;
+    let leadZ = 0;
+    if (speed > 1e-4 && leadDist > 0) {
+      leadX = (followVelSmoothed.x / speed) * leadDist;
+      leadZ = (followVelSmoothed.y / speed) * leadDist;
+    }
+    followTmpTarget.set(anchor.x + leadX, anchor.y, anchor.z + leadZ);
     followTmpDelta.copy(followTmpTarget).sub(sceneBits.controls.target);
     if (followTmpDelta.lengthSq() < 1e-8) return;
-    sceneBits.controls.target.addScaledVector(followTmpDelta, 0.22);
-    sceneBits.camera.position.addScaledVector(followTmpDelta, 0.22);
+    const focusStrength = clamp(Number(settings.cameraFocusStrength) || 0.22, 0.01, 1.0);
+    sceneBits.controls.target.addScaledVector(followTmpDelta, focusStrength);
+    sceneBits.camera.position.addScaledVector(followTmpDelta, focusStrength);
   }
 
   const sceneBits = createSceneGraph(THREE, OrbitControls, ui.viewport, debugSettings);
+  const focusBlurShader = {
+    uniforms: {
+      tDiffuse: { value: null },
+      center: { value: new THREE.Vector2(0.5, 0.5) },
+      strength: { value: 0.0 },
+      radius: { value: 0.5 },
+      aspect: { value: window.innerWidth / Math.max(1, window.innerHeight) },
+      linearFalloff: { value: 0.0 },
+      ellipseScale: { value: new THREE.Vector2(1.8, 1.0) },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tDiffuse;
+      uniform vec2 center;
+      uniform float strength;
+      uniform float radius;
+      uniform float aspect;
+      uniform float linearFalloff;
+      uniform vec2 ellipseScale;
+      varying vec2 vUv;
+      void main() {
+        vec2 toCenter = vUv - center;
+        vec2 ellipse = vec2(
+          toCenter.x * aspect / max(ellipseScale.x, 1e-4),
+          toCenter.y / max(ellipseScale.y, 1e-4)
+        );
+        float d = length(ellipse);
+        float falloff = linearFalloff > 0.5 ? clamp(d / max(radius, 1e-5), 0.0, 1.0) : smoothstep(0.0, radius, d);
+        float blur = falloff * strength;
+        if (blur <= 0.0001) {
+          gl_FragColor = texture2D(tDiffuse, vUv);
+          return;
+        }
+        vec2 off = vec2(blur * 0.012);
+        vec4 col = texture2D(tDiffuse, vUv) * 0.28;
+        col += texture2D(tDiffuse, vUv + vec2( off.x, 0.0)) * 0.12;
+        col += texture2D(tDiffuse, vUv + vec2(-off.x, 0.0)) * 0.12;
+        col += texture2D(tDiffuse, vUv + vec2(0.0,  off.y)) * 0.12;
+        col += texture2D(tDiffuse, vUv + vec2(0.0, -off.y)) * 0.12;
+        col += texture2D(tDiffuse, vUv + vec2( off.x,  off.y)) * 0.09;
+        col += texture2D(tDiffuse, vUv + vec2(-off.x,  off.y)) * 0.09;
+        col += texture2D(tDiffuse, vUv + vec2( off.x, -off.y)) * 0.09;
+        col += texture2D(tDiffuse, vUv + vec2(-off.x, -off.y)) * 0.09;
+        gl_FragColor = col;
+      }
+    `,
+  };
+  const composer = new EffectComposer(sceneBits.renderer);
+  composer.addPass(new RenderPass(sceneBits.scene, sceneBits.camera));
+  const focusBlurPass = new ShaderPass(focusBlurShader);
+  focusBlurPass.enabled = !!settings.playerFocusBlur;
+  composer.addPass(focusBlurPass);
   const textureForLocal = (filePath) => textureFor(THREE, atlasTextures, filePath);
   const skySystem = createProceduralSkySystem({
     THREE,
@@ -142,7 +260,11 @@ export function startApp() {
     const sx = sunSwing * orbitRadius;
     const sz = Math.cos(t) * orbitRadius * 0.62;
     const sy = 28 + sunElev01 * 300;
-    sceneBits.sunLight.position.set(sx, sy, sz);
+    const anchorX = viewMode === 'detail' ? sceneBits.controls.target.x : 0;
+    const anchorZ = viewMode === 'detail' ? sceneBits.controls.target.z : 0;
+    sceneBits.sunLight.position.set(anchorX + sx, sy, anchorZ + sz);
+    sceneBits.sunLight.target.position.set(anchorX, 0, anchorZ);
+    sceneBits.sunLight.target.updateMatrixWorld();
 
     // Brighter stylized curve (Nintendo-ish readability), especially around noon.
     sceneBits.sunLight.intensity = 0.5 + sunElev01 * 1.45;
@@ -158,6 +280,41 @@ export function startApp() {
     const dayLengthSec = Math.max(1, Number(settings.dayLengthMinutes) * 60);
     const hoursPerSecond = 24 / dayLengthSec;
     applyTimeOfDay(settings.timeOfDay + (dtSec * hoursPerSecond));
+  }
+
+  function updatePlayerFocusBlur(dtSec) {
+    focusBlurPass.enabled = !!settings.playerFocusBlur;
+    if (!focusBlurPass.enabled) return;
+    const anchor = playerController.getAnchorPosition();
+    if (anchor) {
+      blurTmpAnchor.set(anchor.x, anchor.y, anchor.z);
+      if (blurAnchorReady) {
+        const speed = blurTmpAnchor.distanceTo(blurLastAnchor) / Math.max(1e-4, dtSec);
+        const target01 = THREE.MathUtils.clamp(speed * 0.16, 0, 1);
+        blurMotion01 += (target01 - blurMotion01) * 0.16;
+      }
+      blurLastAnchor.copy(blurTmpAnchor);
+      blurAnchorReady = true;
+      blurTmpNdc.copy(blurTmpAnchor).project(sceneBits.camera);
+      focusBlurPass.uniforms.center.value.set(
+        THREE.MathUtils.clamp((blurTmpNdc.x + 1) * 0.5, 0, 1),
+        THREE.MathUtils.clamp((blurTmpNdc.y + 1) * 0.5, 0, 1),
+      );
+    } else {
+      blurAnchorReady = false;
+      blurMotion01 += (0 - blurMotion01) * 0.12;
+      focusBlurPass.uniforms.center.value.set(0.5, 0.5);
+    }
+    const baseStrength = Math.max(0, Number(settings.playerFocusBlurStrength) || 0);
+    const moveBoost = Math.max(0, Number(settings.playerFocusBlurMoveBoost) || 0);
+    focusBlurPass.uniforms.strength.value = baseStrength * (1 + blurMotion01 * moveBoost);
+    focusBlurPass.uniforms.radius.value = Math.max(0.1, Number(settings.playerFocusBlurRadius) || 0.5);
+    focusBlurPass.uniforms.aspect.value = sceneBits.camera.aspect;
+    focusBlurPass.uniforms.linearFalloff.value = settings.playerFocusBlurFalloff === 'linear' ? 1.0 : 0.0;
+    focusBlurPass.uniforms.ellipseScale.value.set(
+      Math.max(0.1, Number(settings.playerFocusBlurEllipseX) || 1.8),
+      Math.max(0.1, Number(settings.playerFocusBlurEllipseY) || 1.0),
+    );
   }
 
   const vegetationSystem = createVegetationSystem({
@@ -191,6 +348,7 @@ export function startApp() {
     normalizedShape,
     TILE_PX,
   });
+  vegetationSystem.applyLightingTuning();
 
   function applyWireframeMode() {
     for (const mesh of pickMeshes) {
@@ -631,14 +789,15 @@ export function startApp() {
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
     updateTimeOfDayFlow(dtSec);
-    updateFollowCamera();
+    updateFollowCamera(dtSec);
+    updatePlayerFocusBlur(dtSec);
     updateChunkStreaming(false);
     void pumpChunkBuildQueue();
     playerController.tick(dtSec);
     playerController.faceCamera();
     vegetationSystem.faceCamera(sceneBits.camera);
     skySystem.tick(nowTs * 0.001);
-    sceneBits.renderer.render(sceneBits.scene, sceneBits.camera);
+    composer.render();
     updatePerfOverlay(nowTs);
     requestAnimationFrame(animate);
   }
@@ -675,6 +834,32 @@ export function startApp() {
   gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').listen().onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'followPlayerCamera').name('Camera Follow Player');
+  gui.add(settings, 'cameraFocusStrength', 0.05, 0.5, 0.01).name('Cam Focus Strength');
+  gui.add(settings, 'cameraLookAhead', 0, 4, 0.05).name('Cam Look Ahead');
+  const camFx = gui.addFolder('Camera FX');
+  camFx.add(settings, 'playerFocusBlur').name('Player Focus Blur');
+  camFx.add(settings, 'playerFocusBlurStrength', 0, 0.9, 0.01).name('Blur Strength');
+  camFx.add(settings, 'playerFocusBlurRadius', 0.1, 2.0, 0.01).name('Blur Radius');
+  camFx.add(settings, 'playerFocusBlurEllipseX', 0.2, 4.0, 0.01).name('Blur Ellipse X');
+  camFx.add(settings, 'playerFocusBlurEllipseY', 0.2, 4.0, 0.01).name('Blur Ellipse Y');
+  camFx.add(settings, 'playerFocusBlurMoveBoost', 0, 3, 0.01).name('Move Boost');
+  camFx.add(settings, 'playerFocusBlurFalloff', ['smooth', 'linear']).name('Blur Falloff');
+  const billFx = gui.addFolder('Billboard Lighting');
+  billFx.addColor(settings, 'billboardTint').name('Tint').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardBrightness', 0, 2.5, 0.01).name('Brightness').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.addColor(settings, 'billboardEmissive').name('Emissive').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardCastShadow').name('Cast Shadow').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardReceiveShadow').name('Receive Shadow').onChange(() => vegetationSystem.applyLightingTuning());
+  const entityFx = gui.addFolder('Pokemon/Entity Lighting');
+  entityFx.addColor(settings, 'entityTint').name('Tint').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityBrightness', 0, 2.5, 0.01).name('Brightness').onChange(() => playerController.applyLightingTuning());
+  entityFx.addColor(settings, 'entityEmissive').name('Emissive').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityCastShadow').name('Cast Shadow').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityReceiveShadow').name('Receive Shadow').onChange(() => playerController.applyLightingTuning());
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
     if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
   });
@@ -773,6 +958,8 @@ export function startApp() {
     sceneBits.camera.aspect = window.innerWidth / window.innerHeight;
     sceneBits.camera.updateProjectionMatrix();
     sceneBits.renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    focusBlurPass.uniforms.aspect.value = sceneBits.camera.aspect;
   });
   window.addEventListener('keydown', (e) => {
     const isMoveKey = e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD'

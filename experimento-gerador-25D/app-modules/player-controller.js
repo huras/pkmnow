@@ -507,9 +507,25 @@ export function createPlayerController({
     state.mesh.lookAt(state.helperLookAt);
   }
 
+  function applyLightingTuning() {
+    if (!state.mesh?.material) return;
+    const mat = state.mesh.material;
+    const tint = new THREE.Color(settings.entityTint || '#ffffff');
+    const brightness = Math.max(0, Number(settings.entityBrightness) || 0);
+    tint.multiplyScalar(brightness);
+    mat.color.copy(tint);
+    mat.emissive.set(settings.entityEmissive || '#000000');
+    mat.emissiveIntensity = Math.max(0, Number(settings.entityEmissiveIntensity) || 0);
+    mat.alphaTest = Math.min(1, Math.max(0, Number(settings.entityAlphaTest) || 0.25));
+    mat.needsUpdate = true;
+    state.mesh.castShadow = settings.entityCastShadow !== false;
+    state.mesh.receiveShadow = !!settings.entityReceiveShadow;
+  }
+
   return {
     async init() {
       await ensureSprites(state.dexId);
+      applyLightingTuning();
     },
     setContext(world, bounds) {
       state.world = world;
@@ -567,6 +583,7 @@ export function createPlayerController({
         z: state.mesh.position.z,
       };
     },
+    applyLightingTuning,
     tick,
     faceCamera,
   };
