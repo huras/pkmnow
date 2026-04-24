@@ -2,7 +2,7 @@
  * Play-session autosave / resume (localStorage).
  * Extend {@link PlaySessionSaveV2} with new optional blocks; bump {@link PLAY_SESSION_SAVE_VERSION} when breaking shape.
  */
-import LZString from '../vendor/lz-string.mjs';
+import LZString from 'https://esm.sh/lz-string@1.5.0';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import {
   getCollectedDetailInventorySnapshot,
