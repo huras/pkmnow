@@ -115,6 +115,8 @@ export function buildWorldMacroMesh({
   geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geom.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: false });
+  mat.shadowSide = THREE.FrontSide;
+  mat.dithering = true;
   const worldMesh = new THREE.Mesh(geom, mat);
   worldMesh.castShadow = true;
   worldMesh.receiveShadow = true;
@@ -478,6 +480,11 @@ export async function buildDetailTerrain({
       g.setAttribute('color', new THREE.Float32BufferAttribute(data.c, 3));
       g.computeVertexNormals();
       const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
+      // Reduce terrain alpha-cut edge shimmer and double-sided shadow acne.
+      m.transparent = false;
+      m.alphaToCoverage = true;
+      m.dithering = true;
+      m.shadowSide = THREE.FrontSide;
       m.userData.baseMap = tex;
       const mesh = new THREE.Mesh(g, m);
       mesh.castShadow = true;

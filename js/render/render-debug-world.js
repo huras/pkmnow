@@ -33,8 +33,7 @@ import { getBindableMoveLabel } from '../main/player-input-slots.js';
 import { isPlayGroundDigShiftHeld } from '../main/play-input-state.js';
 import { renderPhaseMs } from './render-frame-phases.js';
 import {
-  updateAndDrawVolumetricWeatherParticles,
-  drawSandstormVolumetricHaze
+  updateAndDrawVolumetricWeatherParticles
 } from '../weather/volumetric-weather-particles.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
@@ -1346,12 +1345,6 @@ export function drawVolumetricEnvironmentalLayer(ctx, options) {
     const snowVisualI = rainI * blizzardBlend;
     const ssb = Math.max(0, Math.min(1, Number(weatherSandstormBlend01) || 0));
     const sandstormVisualI = ssb;
-
-    const hazeI = Math.min(1, ssb * (0.5 + 0.5 * vpd));
-    if (hazeI > 0.028) {
-      drawSandstormVolumetricHaze(ctx, cw, ch, hazeI);
-    }
-
     const precip = Math.max(rainVisualI * vpd, snowVisualI * vpd, sandstormVisualI * vpd);
     if (precip < 0.012 || !macroData) return;
 

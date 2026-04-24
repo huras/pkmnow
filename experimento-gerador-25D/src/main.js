@@ -1564,6 +1564,9 @@ function createTerrainShaderMaterial(detailFactor) {
       varying vec3 vWorldPos;
       varying vec3 vWorldNormal;
 
+      vec3 linearToSrgbFast(vec3 c) {
+        return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+      }
       void main() {
         vec3 normal = normalize(vWorldNormal);
         vec3 lightDir = normalize(uLightDir);
@@ -1582,7 +1585,7 @@ function createTerrainShaderMaterial(detailFactor) {
         float fogFactor = smoothstep(uFogNear, uFogFar, fogDepth);
         vec3 finalColor = mix(lit, uFogColor, fogFactor);
 
-        gl_FragColor = vec4(finalColor, 1.0);
+        gl_FragColor = vec4(linearToSrgbFast(finalColor), 1.0);
       }
     `,
   });

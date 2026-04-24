@@ -52,6 +52,8 @@ export function startApp() {
     wallShade: 0.72,
     worldHeightScale: 10,
     detailsYOffset: -0.15,
+    vegetationTreeYOffset: -0.35,
+    vegetationDetailYOffset: -0.15,
     timeOfDay: 12,
     timeFlowEnabled: true,
     dayLengthMinutes: 20,
@@ -74,8 +76,17 @@ export function startApp() {
     billboardAlphaTest: 0.2,
     billboardCastShadow: true,
     billboardReceiveShadow: true,
+    billboardSunFacing: true,
+    billboardSunFacingMix: 1.0,
+    terrainTint: '#ffffff',
+    terrainBrightness: 1.0,
+    terrainEmissive: '#000000',
+    terrainEmissiveIntensity: 0.0,
+    terrainAlphaTest: 0.25,
+    terrainCastShadow: true,
+    terrainReceiveShadow: true,
     entityTint: '#ffffff',
-    entityBrightness: 1.61,
+    entityBrightness: 2.16,
     entityEmissive: '#000000',
     entityEmissiveIntensity: 0.0,
     entityAlphaTest: 0.25,
@@ -132,6 +143,7 @@ export function startApp() {
   const blurTmpAnchor = new THREE.Vector3();
   const blurTmpNdc = new THREE.Vector3();
   const blurLastAnchor = new THREE.Vector3();
+  const sunDirTmp = new THREE.Vector3();
   let blurAnchorReady = false;
   let blurMotion01 = 0;
   let followPrevWorldPos = null;
@@ -200,6 +212,15 @@ export function startApp() {
       uniform float linearFalloff;
       uniform vec2 ellipseScale;
       varying vec2 vUv;
+      vec3 srgbToLinearFast(vec3 c) {
+        return pow(max(c, vec3(0.0)), vec3(2.2));
+      }
+      vec3 linearToSrgbFast(vec3 c) {
+        return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+      }
+      vec4 sampleLinear(sampler2D tex, vec2 uv) {
+        return texture2D(tex, uv);
+      }
       void main() {
         vec2 toCenter = vUv - center;
         vec2 ellipse = vec2(
@@ -210,20 +231,26 @@ export function startApp() {
         float falloff = linearFalloff > 0.5 ? clamp(d / max(radius, 1e-5), 0.0, 1.0) : smoothstep(0.0, radius, d);
         float blur = falloff * strength;
         if (blur <= 0.0001) {
-          gl_FragColor = texture2D(tDiffuse, vUv);
+          vec4 tex = texture2D(tDiffuse, vUv);
+          gl_FragColor = vec4(linearToSrgbFast(tex.rgb), tex.a);
           return;
         }
-        vec2 off = vec2(blur * 0.012);
-        vec4 col = texture2D(tDiffuse, vUv) * 0.28;
-        col += texture2D(tDiffuse, vUv + vec2( off.x, 0.0)) * 0.12;
-        col += texture2D(tDiffuse, vUv + vec2(-off.x, 0.0)) * 0.12;
-        col += texture2D(tDiffuse, vUv + vec2(0.0,  off.y)) * 0.12;
-        col += texture2D(tDiffuse, vUv + vec2(0.0, -off.y)) * 0.12;
-        col += texture2D(tDiffuse, vUv + vec2( off.x,  off.y)) * 0.09;
-        col += texture2D(tDiffuse, vUv + vec2(-off.x,  off.y)) * 0.09;
-        col += texture2D(tDiffuse, vUv + vec2( off.x, -off.y)) * 0.09;
-        col += texture2D(tDiffuse, vUv + vec2(-off.x, -off.y)) * 0.09;
-        gl_FragColor = col;
+        vec2 off = vec2(blur * 0.0105);
+        // 13-tap isotropic gaussian-ish kernel (center + rings at 1x and 2x radius).
+        vec4 col = sampleLinear(tDiffuse, vUv) * 0.19648255;
+        col += sampleLinear(tDiffuse, vUv + vec2( off.x, 0.0)) * 0.11577832;
+        col += sampleLinear(tDiffuse, vUv + vec2(-off.x, 0.0)) * 0.11577832;
+        col += sampleLinear(tDiffuse, vUv + vec2(0.0,  off.y)) * 0.11577832;
+        col += sampleLinear(tDiffuse, vUv + vec2(0.0, -off.y)) * 0.11577832;
+        col += sampleLinear(tDiffuse, vUv + vec2( off.x,  off.y)) * 0.06059878;
+        col += sampleLinear(tDiffuse, vUv + vec2(-off.x,  off.y)) * 0.06059878;
+        col += sampleLinear(tDiffuse, vUv + vec2( off.x, -off.y)) * 0.06059878;
+        col += sampleLinear(tDiffuse, vUv + vec2(-off.x, -off.y)) * 0.06059878;
+        col += sampleLinear(tDiffuse, vUv + vec2( off.x * 2.0, 0.0)) * 0.02699548;
+        col += sampleLinear(tDiffuse, vUv + vec2(-off.x * 2.0, 0.0)) * 0.02699548;
+        col += sampleLinear(tDiffuse, vUv + vec2(0.0,  off.y * 2.0)) * 0.02699548;
+        col += sampleLinear(tDiffuse, vUv + vec2(0.0, -off.y * 2.0)) * 0.02699548;
+        gl_FragColor = vec4(linearToSrgbFast(col.rgb), col.a);
       }
     `,
   };
@@ -260,11 +287,28 @@ export function startApp() {
     const sx = sunSwing * orbitRadius;
     const sz = Math.cos(t) * orbitRadius * 0.62;
     const sy = 28 + sunElev01 * 300;
-    const anchorX = viewMode === 'detail' ? sceneBits.controls.target.x : 0;
-    const anchorZ = viewMode === 'detail' ? sceneBits.controls.target.z : 0;
+    let anchorX = viewMode === 'detail' ? sceneBits.controls.target.x : 0;
+    let anchorZ = viewMode === 'detail' ? sceneBits.controls.target.z : 0;
+    if (viewMode === 'detail') {
+      // Terrain shadow stabilization: snap light anchor to shadow texel grid.
+      const shadowCam = sceneBits.sunLight.shadow.camera;
+      const mapSize = sceneBits.sunLight.shadow.mapSize;
+      const spanX = Math.max(1e-4, Math.abs(shadowCam.right - shadowCam.left));
+      const spanZ = Math.max(1e-4, Math.abs(shadowCam.top - shadowCam.bottom));
+      const texelX = spanX / Math.max(1, Number(mapSize.x) || 1);
+      const texelZ = spanZ / Math.max(1, Number(mapSize.y) || 1);
+      anchorX = Math.round(anchorX / texelX) * texelX;
+      anchorZ = Math.round(anchorZ / texelZ) * texelZ;
+    }
     sceneBits.sunLight.position.set(anchorX + sx, sy, anchorZ + sz);
     sceneBits.sunLight.target.position.set(anchorX, 0, anchorZ);
     sceneBits.sunLight.target.updateMatrixWorld();
+    sunDirTmp.set(
+      sceneBits.sunLight.position.x - anchorX,
+      sceneBits.sunLight.position.y,
+      sceneBits.sunLight.position.z - anchorZ,
+    ).normalize();
+    vegetationSystem.setSunDirection(sunDirTmp);
 
     // Brighter stylized curve (Nintendo-ish readability), especially around noon.
     sceneBits.sunLight.intensity = 0.5 + sunElev01 * 1.45;
@@ -380,6 +424,30 @@ export function startApp() {
     if (detailFloorMesh) detailFloorMesh.visible = !debugSettings.wireframeOnly;
   }
 
+  function applyTerrainLightingToMesh(mesh) {
+    if (!mesh?.material || Array.isArray(mesh.material)) return;
+    const mat = mesh.material;
+    const tint = new THREE.Color(settings.terrainTint || '#ffffff');
+    const brightness = Math.max(0, Number(settings.terrainBrightness) || 0);
+    tint.multiplyScalar(brightness);
+    if (!debugSettings.wireframeOnly) mat.color.copy(tint);
+    if ('emissive' in mat && mat.emissive) mat.emissive.set(settings.terrainEmissive || '#000000');
+    if ('emissiveIntensity' in mat) mat.emissiveIntensity = Math.max(0, Number(settings.terrainEmissiveIntensity) || 0);
+    mat.alphaTest = debugSettings.wireframeOnly ? 0.0 : Math.min(1, Math.max(0, Number(settings.terrainAlphaTest) || 0.25));
+    mat.needsUpdate = true;
+    mesh.castShadow = settings.terrainCastShadow !== false;
+    mesh.receiveShadow = settings.terrainReceiveShadow !== false;
+  }
+
+  function applyTerrainLightingTuning() {
+    if (worldMesh) applyTerrainLightingToMesh(worldMesh);
+    if (detailFloorMesh) applyTerrainLightingToMesh(detailFloorMesh);
+    for (const record of detailStream.cache.values()) {
+      if (!Array.isArray(record?.meshes)) continue;
+      for (const mesh of record.meshes) applyTerrainLightingToMesh(mesh);
+    }
+  }
+
   function setViewMode(mode) {
     viewMode = mode;
     sceneBits.worldGroup.visible = mode === 'world';
@@ -421,6 +489,7 @@ export function startApp() {
       mesh.userData.lod = record.lod || 0;
       sceneBits.detailGroup.add(mesh);
       pickMeshes.push(mesh);
+      applyTerrainLightingToMesh(mesh);
     }
     for (const veg of vegetationMeshes) {
       veg.userData.lod = record.lod || 0;
@@ -658,6 +727,7 @@ export function startApp() {
     currentBounds = result.currentBounds;
     detailFloorMesh = result.detailFloorMesh;
     detailStream.runtime = result.chunkRuntime || null;
+    applyTerrainLightingTuning();
     playerController.setContext(currentWorld, currentBounds);
     if (currentBounds) {
       const spawnMx = clamp(Math.floor(centerMicroX), 0, currentBounds.width - 1);
@@ -696,6 +766,7 @@ export function startApp() {
         clearGroup,
         idx,
       });
+      applyTerrainLightingTuning();
       const centerMacroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
       const centerMacroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
       // Lazy detail build: only rebuild immediately if user is already in Detail mode.
@@ -805,7 +876,7 @@ export function startApp() {
   const gui = new GUI({ title: 'Render Params' });
   gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
   gui.add(settings, 'stepHeight', 0.25, 20, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
-  gui.add(settings, 'detailsYOffset', -5.0, 5.0, 0.01).name('Details Y Offset').onChange(async () => {
+  gui.add(settings, 'detailsYOffset', -5.0, 5.0, 0.01).name('Terrain Y Offset').onChange(async () => {
     if (!currentWorld) return;
     worldMesh = buildWorldMacroMesh({
       THREE,
@@ -829,14 +900,21 @@ export function startApp() {
     });
     await rebuildCurrentDetail();
   });
-  gui.add(settings, 'timeFlowEnabled').name('Time Flow');
-  gui.add(settings, 'dayLengthMinutes', 1, 180, 1).name('Day Length (min)');
-  gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').listen().onChange(applyTimeOfDay);
+  gui.add(settings, 'vegetationTreeYOffset', -5.0, 5.0, 0.01).name('Tree Y Offset').onFinishChange(() => {
+    if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+  });
+  gui.add(settings, 'vegetationDetailYOffset', -5.0, 5.0, 0.01).name('Detail Y Offset').onFinishChange(() => {
+    if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
+  });
+  const lightingFx = gui.addFolder('Lighting');
+  lightingFx.add(settings, 'timeFlowEnabled').name('Time Flow');
+  lightingFx.add(settings, 'dayLengthMinutes', 1, 180, 1).name('Day Length (min)');
+  lightingFx.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').listen().onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'followPlayerCamera').name('Camera Follow Player');
   gui.add(settings, 'cameraFocusStrength', 0.05, 0.5, 0.01).name('Cam Focus Strength');
   gui.add(settings, 'cameraLookAhead', 0, 4, 0.05).name('Cam Look Ahead');
-  const camFx = gui.addFolder('Camera FX');
+  const camFx = lightingFx.addFolder('Camera FX');
   camFx.add(settings, 'playerFocusBlur').name('Player Focus Blur');
   camFx.add(settings, 'playerFocusBlurStrength', 0, 0.9, 0.01).name('Blur Strength');
   camFx.add(settings, 'playerFocusBlurRadius', 0.1, 2.0, 0.01).name('Blur Radius');
@@ -844,17 +922,27 @@ export function startApp() {
   camFx.add(settings, 'playerFocusBlurEllipseY', 0.2, 4.0, 0.01).name('Blur Ellipse Y');
   camFx.add(settings, 'playerFocusBlurMoveBoost', 0, 3, 0.01).name('Move Boost');
   camFx.add(settings, 'playerFocusBlurFalloff', ['smooth', 'linear']).name('Blur Falloff');
-  const billFx = gui.addFolder('Billboard Lighting');
+  const terrainFx = lightingFx.addFolder('Terrain Lighting');
+  terrainFx.addColor(settings, 'terrainTint').name('Tint').onChange(applyTerrainLightingTuning);
+  terrainFx.add(settings, 'terrainBrightness', 0, 10, 0.01).name('Brightness').onChange(applyTerrainLightingTuning);
+  terrainFx.addColor(settings, 'terrainEmissive').name('Emissive').onChange(applyTerrainLightingTuning);
+  terrainFx.add(settings, 'terrainEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(applyTerrainLightingTuning);
+  terrainFx.add(settings, 'terrainAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(applyTerrainLightingTuning);
+  terrainFx.add(settings, 'terrainCastShadow').name('Cast Shadow').onChange(applyTerrainLightingTuning);
+  terrainFx.add(settings, 'terrainReceiveShadow').name('Receive Shadow').onChange(applyTerrainLightingTuning);
+  const billFx = lightingFx.addFolder('Billboard Lighting');
   billFx.addColor(settings, 'billboardTint').name('Tint').onChange(() => vegetationSystem.applyLightingTuning());
-  billFx.add(settings, 'billboardBrightness', 0, 2.5, 0.01).name('Brightness').onChange(() => vegetationSystem.applyLightingTuning());
+  billFx.add(settings, 'billboardBrightness', 0, 10, 0.01).name('Brightness').onChange(() => vegetationSystem.applyLightingTuning());
   billFx.addColor(settings, 'billboardEmissive').name('Emissive').onChange(() => vegetationSystem.applyLightingTuning());
   billFx.add(settings, 'billboardEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => vegetationSystem.applyLightingTuning());
   billFx.add(settings, 'billboardAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => vegetationSystem.applyLightingTuning());
   billFx.add(settings, 'billboardCastShadow').name('Cast Shadow').onChange(() => vegetationSystem.applyLightingTuning());
   billFx.add(settings, 'billboardReceiveShadow').name('Receive Shadow').onChange(() => vegetationSystem.applyLightingTuning());
-  const entityFx = gui.addFolder('Pokemon/Entity Lighting');
+  billFx.add(settings, 'billboardSunFacing').name('Sun Facing Lighting');
+  billFx.add(settings, 'billboardSunFacingMix', 0, 1, 0.01).name('Sun Facing Mix');
+  const entityFx = lightingFx.addFolder('Pokemon/Entity Lighting');
   entityFx.addColor(settings, 'entityTint').name('Tint').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityBrightness', 0, 2.5, 0.01).name('Brightness').onChange(() => playerController.applyLightingTuning());
+  entityFx.add(settings, 'entityBrightness', 0, 10, 0.01).name('Brightness').onChange(() => playerController.applyLightingTuning());
   entityFx.addColor(settings, 'entityEmissive').name('Emissive').onChange(() => playerController.applyLightingTuning());
   entityFx.add(settings, 'entityEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => playerController.applyLightingTuning());
   entityFx.add(settings, 'entityAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => playerController.applyLightingTuning());
