@@ -588,7 +588,7 @@ function drawVolumetricFog(ctx, x, y, w, h, time, precip, sandCh) {
   }
 
   // Sandstorm specific tint
-  if (sandCh > 0.1) {
+  if (sandCh > 0.02) {
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = `rgba(210, 160, 80, ${sandCh * 0.2})`;
     ctx.fillRect(x, y, w, h);

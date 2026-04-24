@@ -78,6 +78,9 @@ export function createProceduralSkySystem({ THREE, scene, camera }) {
         return fract((p.x + p.y) * p.z);
       }
 
+      vec3 linearToSrgbFast(vec3 c) {
+        return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+      }
       void main() {
         vec3 dir = normalize(vWorldPos - cameraPosition);
         float h01 = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
@@ -105,7 +108,7 @@ export function createProceduralSkySystem({ THREE, scene, camera }) {
         float star = step(0.9967, n) * twinkle * uStarsIntensity * starMaskH;
         base += vec3(0.9, 0.95, 1.0) * star;
 
-        gl_FragColor = vec4(base, 1.0);
+        gl_FragColor = vec4(linearToSrgbFast(base), 1.0);
       }
     `,
   });

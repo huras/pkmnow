@@ -1,6 +1,6 @@
 export const SUPPORTED_LOCALES = ['pt-BR', 'en-US', 'ja-JP'];
 
-export const DEFAULT_LOCALE = 'ja-JP';
+export const DEFAULT_LOCALE = 'pt-BR';
 
 export const MESSAGES = {
   'pt-BR': {

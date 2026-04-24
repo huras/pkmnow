@@ -9,6 +9,7 @@ import { parseShape } from '../tessellation-logic.js';
 /** Scratch for canopy read-through: multiply on world ctx tints the whole bbox over trees. */
 let _playerCanopySilScratch = /** @type {HTMLCanvasElement | null} */ (null);
 let _motionStutterHistoryScratch = /** @type {HTMLCanvasElement | null} */ (null);
+let _motionStutterSharpScratch = /** @type {HTMLCanvasElement | null} */ (null);
 let _motionStutterPrevCameraPx = { x: 0, y: 0, valid: false };
 
 const MOTION_STUTTER_MASK_TUNING = {
@@ -122,6 +123,19 @@ function ensureMotionStutterHistoryScratch(iw, ih) {
   return _motionStutterHistoryScratch;
 }
 
+function ensureMotionStutterSharpScratch(iw, ih) {
+  const w = Math.max(1, Math.ceil(iw));
+  const h = Math.max(1, Math.ceil(ih));
+  if (!_motionStutterSharpScratch) {
+    _motionStutterSharpScratch = document.createElement('canvas');
+  }
+  if (_motionStutterSharpScratch.width !== w || _motionStutterSharpScratch.height !== h) {
+    _motionStutterSharpScratch.width = w;
+    _motionStutterSharpScratch.height = h;
+  }
+  return _motionStutterSharpScratch;
+}
+
 export function resetMotionStutterHistory() {
   _motionStutterPrevCameraPx.valid = false;
 }
@@ -139,6 +153,16 @@ export function applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx) {
     resetMotionStutterHistory();
     return;
   }
+
+  // 1. Capture current SHARP frame BEFORE we blur it.
+  const sharpHistory = ensureMotionStutterSharpScratch(cw, ch);
+  const sctx = sharpHistory.getContext('2d');
+  if (sctx) {
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.clearRect(0, 0, sharpHistory.width, sharpHistory.height);
+    sctx.drawImage(ctx.canvas, 0, 0);
+  }
+
   const history = ensureMotionStutterHistoryScratch(cw, ch);
   const hctx = history.getContext('2d');
   if (!hctx) return;
@@ -157,21 +181,28 @@ export function applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx) {
     if (camStep > 0.01) {
       const taps = 1 + Math.floor(MOTION_STUTTER_MASK_TUNING.maxSamples * speed01);
       const alphaBase = MOTION_STUTTER_MASK_TUNING.alphaMax * speed01;
+      
       ctx.save();
+      // Using 'source-over' is standard, but recursive blending (IIR) causes darkening in sRGB.
+      // By using a sharp history buffer (FIR), we limit the darken shift to a single pass.
       ctx.globalCompositeOperation = 'source-over';
       ctx.imageSmoothingEnabled = true;
       for (let i = 1; i <= taps; i++) {
         const t = i / (taps + 1);
-        ctx.globalAlpha = alphaBase * (1 - t) * 0.92;
+        // Alpha compensation: slightly boost the blend to maintain perceived luminance in mid-tones.
+        ctx.globalAlpha = alphaBase * (1 - t) * 0.95; 
         ctx.drawImage(history, dCamX * t, dCamY * t, cw, ch);
       }
       ctx.restore();
     }
   }
 
+  // 2. Commit the sharp frame we captured earlier into history for the NEXT frame's blur.
+  // This ensures the blur never "sees" its own previous results.
   hctx.setTransform(1, 0, 0, 1, 0, 0);
   hctx.clearRect(0, 0, history.width, history.height);
-  hctx.drawImage(ctx.canvas, 0, 0);
+  hctx.drawImage(sharpHistory, 0, 0);
+
   _motionStutterPrevCameraPx.x = camNoShakePx.x;
   _motionStutterPrevCameraPx.y = camNoShakePx.y;
   _motionStutterPrevCameraPx.valid = true;

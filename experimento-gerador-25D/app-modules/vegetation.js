@@ -43,10 +43,17 @@ export function createVegetationSystem(deps) {
 
   const camRight = new THREE.Vector3(1, 0, 0);
   const camUp = new THREE.Vector3(0, 1, 0);
+  const sunDir = new THREE.Vector3(0.4, 1, 0.2).normalize();
+  const sunRight = new THREE.Vector3(1, 0, 0);
+  const sunUp = new THREE.Vector3(0, 1, 0);
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  const sunForward = new THREE.Vector3();
   
   function patchBillboardVertexShader(shader) {
     shader.uniforms.cameraRight = { value: camRight.clone() };
     shader.uniforms.cameraUp = { value: camUp.clone() };
+    shader.uniforms.sunDir = { value: sunDir.clone() };
+    shader.uniforms.sunFacingMix = { value: 0.0 };
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -54,11 +61,15 @@ export function createVegetationSystem(deps) {
 attribute vec3 center;
 attribute vec2 offset;
 uniform vec3 cameraRight;
-uniform vec3 cameraUp;`,
+uniform vec3 cameraUp;
+uniform vec3 sunDir;
+uniform float sunFacingMix;`,
       )
       .replace(
         '#include <beginnormal_vertex>',
-        `vec3 objectNormal = normalize(cross(cameraRight, cameraUp));`,
+        `vec3 faceCamNormal = normalize(cross(cameraRight, cameraUp));
+vec3 faceSunNormal = normalize(sunDir);
+vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingMix, 0.0, 1.0)));`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -73,6 +84,9 @@ uniform vec3 cameraUp;`,
       transparent: false,
       side: THREE.DoubleSide,
     });
+    // Helps reduce alpha-test edge shimmer/fizz on moving camera.
+    mat.alphaToCoverage = true;
+    mat.dithering = true;
     mat.userData.baseMap = texture;
     mat.onBeforeCompile = (shader) => {
       patchBillboardVertexShader(shader);
@@ -90,6 +104,8 @@ uniform vec3 cameraUp;`,
       alphaTest: 0.2,
       side: THREE.DoubleSide,
     });
+    mat.alphaToCoverage = true;
+    mat.dithering = true;
     mat.onBeforeCompile = (shader) => {
       patchBillboardVertexShader(shader);
       mat.userData.shader = shader;
@@ -157,6 +173,7 @@ uniform vec3 cameraUp;`,
     const alphaCut = Math.min(1, Math.max(0, Number(settings.billboardAlphaTest) || 0));
     const castShadow = settings.billboardCastShadow !== false;
     const receiveShadow = !!settings.billboardReceiveShadow;
+    const sunFacing = !!settings.billboardSunFacing;
     for (const mat of vegetationMaterials) {
       if (!mat) continue;
       if (!wireframeActive) mat.color.copy(tint);
@@ -173,7 +190,9 @@ uniform vec3 cameraUp;`,
     for (const mesh of billboardMeshes) {
       if (!mesh) continue;
       mesh.castShadow = castShadow;
-      mesh.receiveShadow = receiveShadow;
+      // Receiving shadows on alpha-test camera-facing quads tends to produce
+      // crawling/pixel artifacts while rotating camera; keep cast, disable unstable receive path.
+      mesh.receiveShadow = receiveShadow && !sunFacing;
     }
   }
 
@@ -348,6 +367,20 @@ uniform vec3 cameraUp;`,
     return textureBatches.get(key);
   }
 
+  function isTreeLikeScatterItemKey(itemKey) {
+    const k = String(itemKey || '').toLowerCase();
+    if (!k) return false;
+    if (k.includes('berry-tree')) return false;
+    return (
+      k.includes('-tree') ||
+      k.includes(' tree') ||
+      k.includes('broadleaf') ||
+      k.includes('pine') ||
+      k.includes('palm') ||
+      k.includes('savannah-tree')
+    );
+  }
+
   async function buildVegetationBillboards({ cells, span, half, worldSeed, currentWorld, detailGroup }) {
     vegetationGroup = new THREE.Group();
     detailGroup.add(vegetationGroup);
@@ -362,7 +395,8 @@ uniform vec3 cameraUp;`,
     const seedInt = seedToInt(worldSeed);
     const microW = currentWorld.width * MACRO_TILE_STRIDE;
     const microH = currentWorld.height * MACRO_TILE_STRIDE;
-    const detailLift = settings.detailsYOffset ?? 0;
+    const treeLift = Number(settings.vegetationTreeYOffset ?? settings.detailsYOffset ?? 0);
+    const detailLift = Number(settings.vegetationDetailYOffset ?? settings.detailsYOffset ?? 0);
     const originMemo = new Map();
     const getTile = (mx, my) => getMicroTile(mx, my, currentWorld);
 
@@ -385,7 +419,7 @@ uniform vec3 cameraUp;`,
         const batch = getBatch(textureBatches, tex);
         const px = x - half + 1.0;
         const pz = y - half + 0.5;
-        const py = c.h * settings.stepHeight + detailLift + 0.05;
+        const py = c.h * settings.stepHeight + treeLift + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
         pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
         treeRoots.add(`${c.mx},${c.my}`);
@@ -410,7 +444,10 @@ uniform vec3 cameraUp;`,
               const batch = getBatch(textureBatches, texInfo.texture);
               const w = Math.max(0.9, texInfo.tilesW * 0.92);
               const h = Math.max(1.1, texInfo.tilesH * 0.92);
-              pushQuad(batch, px, py, pz, w, h);
+              const itemPy = c.h * settings.stepHeight
+                + (isTreeLikeScatterItemKey(itemKey) ? treeLift : detailLift)
+                + 0.05;
+              pushQuad(batch, px, itemPy, pz, w, h);
               continue;
             }
           }
@@ -472,7 +509,8 @@ uniform vec3 cameraUp;`,
     const seedInt = seedToInt(worldSeed);
     const microW = currentWorld.width * MACRO_TILE_STRIDE;
     const microH = currentWorld.height * MACRO_TILE_STRIDE;
-    const detailLift = settings.detailsYOffset ?? 0;
+    const treeLift = Number(settings.vegetationTreeYOffset ?? settings.detailsYOffset ?? 0);
+    const detailLift = Number(settings.vegetationDetailYOffset ?? settings.detailsYOffset ?? 0);
     const originMemo = new Map();
     const getTile = (mx, my) => getMicroTile(mx, my, currentWorld);
     const x0 = chunk.x0;
@@ -506,7 +544,7 @@ uniform vec3 cameraUp;`,
         const batch = getBatch(textureBatches, tex);
         const px = c.mx - offsetX + 1.0;
         const pz = c.my - offsetY + 0.5;
-        const py = c.h * settings.stepHeight + detailLift + 0.05;
+        const py = c.h * settings.stepHeight + treeLift + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
         pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
         treeRoots.add(`${c.mx},${c.my}`);
@@ -539,7 +577,10 @@ uniform vec3 cameraUp;`,
               const batch = getBatch(textureBatches, texInfo.texture);
               const w = Math.max(0.9, texInfo.tilesW * 0.92);
               const h = Math.max(1.1, texInfo.tilesH * 0.92);
-              pushQuad(batch, px, py, pz, w, h);
+              const itemPy = c.h * settings.stepHeight
+                + (isTreeLikeScatterItemKey(itemKey) ? treeLift : detailLift)
+                + 0.05;
+              pushQuad(batch, px, itemPy, pz, w, h);
               continue;
             }
           }
@@ -604,18 +645,43 @@ uniform vec3 cameraUp;`,
   function faceCamera(camera) {
     camRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     camUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    const sunFacingMix = settings.billboardSunFacing
+      ? 1.0
+      : Math.min(1, Math.max(0, Number(settings.billboardSunFacingMix) || 0));
+
+    // Build a stable light-oriented basis for shadow/depth pass so shadow casters
+    // do not rotate with the main camera.
+    sunForward.copy(sunDir).normalize();
+    sunRight.copy(worldUp).cross(sunForward);
+    if (sunRight.lengthSq() < 1e-8) sunRight.set(1, 0, 0);
+    else sunRight.normalize();
+    sunUp.copy(sunForward).cross(sunRight);
+    if (sunUp.lengthSq() < 1e-8) sunUp.set(0, 1, 0);
+    else sunUp.normalize();
+
     for (const mat of litMats) {
       const shader = mat.userData.shader;
       if (!shader) continue;
       shader.uniforms.cameraRight.value.copy(camRight);
       shader.uniforms.cameraUp.value.copy(camUp);
+      shader.uniforms.sunDir.value.copy(sunDir);
+      shader.uniforms.sunFacingMix.value = sunFacingMix;
     }
     for (const mat of depthMats) {
       const shader = mat.userData.shader;
       if (!shader) continue;
-      shader.uniforms.cameraRight.value.copy(camRight);
-      shader.uniforms.cameraUp.value.copy(camUp);
+      shader.uniforms.cameraRight.value.copy(sunRight);
+      shader.uniforms.cameraUp.value.copy(sunUp);
+      shader.uniforms.sunDir.value.copy(sunDir);
+      shader.uniforms.sunFacingMix.value = sunFacingMix;
     }
+  }
+
+  function setSunDirection(worldDir) {
+    if (!worldDir) return;
+    sunDir.set(Number(worldDir.x) || 0, Number(worldDir.y) || 0, Number(worldDir.z) || 0);
+    if (sunDir.lengthSq() < 1e-8) return;
+    sunDir.normalize();
   }
 
   function setVisible(visible) {
@@ -628,6 +694,7 @@ uniform vec3 cameraUp;`,
     buildChunkVegetation,
     applyWireframeMode,
     applyLightingTuning,
+    setSunDirection,
     faceCamera,
     setVisible,
   };
