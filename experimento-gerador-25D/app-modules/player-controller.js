@@ -17,7 +17,7 @@ const DIR_TO_ROW = {
 
 /** Flight tuning (3D): tweak these two values to change fly speed. */
 const FLIGHT_HORIZONTAL_SPEED_MULT = 6.0;
-const FLIGHT_VERTICAL_SPEED = 6.8;
+const FLIGHT_VERTICAL_SPEED = 16.8;
 
 function padDex3(dex) {
   return String(Math.max(1, Math.floor(Number(dex) || 1))).padStart(3, '0');
@@ -86,7 +86,7 @@ export function createPlayerController({
     } catch {
       /* noop */
     }
-    return 25;
+    return 150;
   })();
 
   const state = {
@@ -142,7 +142,7 @@ export function createPlayerController({
   }
 
   async function ensureSprites(dexId = state.dexId) {
-    state.dexId = Math.max(1, Math.floor(Number(dexId) || 25));
+    state.dexId = Math.max(1, Math.floor(Number(dexId) || 150));
     const id = padDex3(state.dexId);
     const walkPath = `tilesets/pokemon/${id}_walk.png`;
     const idlePath = `tilesets/pokemon/${id}_idle.png`;

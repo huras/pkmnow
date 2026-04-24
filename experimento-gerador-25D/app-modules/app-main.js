@@ -45,11 +45,13 @@ export function startApp() {
   const ui = renderLayout();
   const settings = {
     microSpan: 64,
-    stepHeight: 0.55,
+    stepHeight: 0.75,
     wallShade: 0.72,
     worldHeightScale: 10,
     detailsYOffset: -0.15,
     timeOfDay: 12,
+    timeFlowEnabled: true,
+    dayLengthMinutes: 20,
     showVegetation: true,
     vegetationDensity: 1.0,
     followPlayerCamera: true,
@@ -151,6 +153,13 @@ export function startApp() {
     skySystem.update(h, sceneBits.sunLight.position);
   }
 
+  function updateTimeOfDayFlow(dtSec) {
+    if (!settings.timeFlowEnabled) return;
+    const dayLengthSec = Math.max(1, Number(settings.dayLengthMinutes) * 60);
+    const hoursPerSecond = 24 / dayLengthSec;
+    applyTimeOfDay(settings.timeOfDay + (dtSec * hoursPerSecond));
+  }
+
   const vegetationSystem = createVegetationSystem({
     THREE,
     OBJECT_SETS,
@@ -227,8 +236,9 @@ export function startApp() {
       sceneBits.controls.target.set(0, 0, 0);
     } else {
       ui.pickInfo.textContent = 'Detail mode (micro tiles). Click to inspect.';
-      sceneBits.camera.position.set(80, 90, 80);
+      sceneBits.camera.position.set(0, 7.216, 8.304);
       sceneBits.controls.target.set(0, 0, 0);
+      sceneBits.camera.rotation.set(THREE.MathUtils.degToRad(-41), 0, 0);
     }
   }
 
@@ -491,11 +501,11 @@ export function startApp() {
     detailFloorMesh = result.detailFloorMesh;
     detailStream.runtime = result.chunkRuntime || null;
     playerController.setContext(currentWorld, currentBounds);
-    if (!playerController.isActive() && currentBounds) {
-      const spawnMx = Math.floor(currentBounds.width * 0.5);
-      const spawnMy = Math.floor(currentBounds.height * 0.5);
+    if (currentBounds) {
+      const spawnMx = clamp(Math.floor(centerMicroX), 0, currentBounds.width - 1);
+      const spawnMy = clamp(Math.floor(centerMicroY), 0, currentBounds.height - 1);
       playerController.placeAt(spawnMx, spawnMy);
-      ui.pickInfo.textContent = `Player auto-spawned at mx:${spawnMx} my:${spawnMy}. Use WASD/Arrows to move, Space to jump, F to fly.`;
+      ui.pickInfo.textContent = `Player spawned at selected macro center mx:${spawnMx} my:${spawnMy}. Use WASD/Arrows to move, Space to jump, F to fly.`;
     }
     refreshMeshingHud();
     updateChunkStreaming(true);
@@ -620,6 +630,7 @@ export function startApp() {
     perf.frameDurationsMs.push(dt);
     if (perf.frameDurationsMs.length > perf.FRAME_MS_WINDOW) perf.frameDurationsMs.shift();
     sceneBits.controls.update();
+    updateTimeOfDayFlow(dtSec);
     updateFollowCamera();
     updateChunkStreaming(false);
     void pumpChunkBuildQueue();
@@ -659,7 +670,9 @@ export function startApp() {
     });
     await rebuildCurrentDetail();
   });
-  gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').onChange(applyTimeOfDay);
+  gui.add(settings, 'timeFlowEnabled').name('Time Flow');
+  gui.add(settings, 'dayLengthMinutes', 1, 180, 1).name('Day Length (min)');
+  gui.add(settings, 'timeOfDay', 0, 24, 0.01).name('Time of Day').listen().onChange(applyTimeOfDay);
   gui.add(settings, 'showVegetation').name('Show Vegetation').onChange((v) => vegetationSystem.setVisible(!!v));
   gui.add(settings, 'followPlayerCamera').name('Camera Follow Player');
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
