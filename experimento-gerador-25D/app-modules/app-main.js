@@ -54,7 +54,12 @@ export function startApp() {
     vegetationDensity: 1.0,
     followPlayerCamera: true,
   };
-  const debugSettings = { showAxes: true, axesSize: 24, wireframeOnly: false };
+  const debugSettings = {
+    showAxes: true,
+    axesSize: 24,
+    wireframeOnly: false,
+    showLodColors: false,
+  };
   const halfStride = Math.floor(MACRO_TILE_STRIDE / 2);
   const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, new THREE.Color(b.color)]));
   const atlasTextures = new Map();
@@ -186,6 +191,13 @@ export function startApp() {
         mat.vertexColors = false;
         mat.color.set('#ffffff');
         mat.transparent = false;
+      } else if (debugSettings.showLodColors) {
+        const lod = Number(mesh.userData?.lod) || 0;
+        mat.wireframe = false;
+        mat.map = null;
+        mat.vertexColors = false;
+        mat.color.set(lod === 0 ? '#66ff88' : '#66aaff');
+        mat.transparent = false;
       } else {
         mat.wireframe = false;
         mat.map = mat.userData.baseMap || null;
@@ -231,6 +243,7 @@ export function startApp() {
   function addChunkMeshesToScene(record) {
     if (!record || record.attached || !Array.isArray(record.meshes)) return;
     for (const mesh of record.meshes) {
+      mesh.userData.lod = record.lod || 0;
       sceneBits.detailGroup.add(mesh);
       pickMeshes.push(mesh);
     }
@@ -255,12 +268,16 @@ export function startApp() {
 
   function refreshMeshingHud() {
     let chunksRendered = 0;
+    let lod0Chunks = 0;
+    let lod1Chunks = 0;
     let mergedFaces = 0;
     let preTri = 0;
     let postTri = 0;
     for (const record of detailStream.cache.values()) {
       if (!record?.attached) continue;
       chunksRendered++;
+      if ((record.lod || 0) === 0) lod0Chunks++;
+      else lod1Chunks++;
       mergedFaces += record.mergedFaceCount || 0;
       preTri += record.preTriEstimate || 0;
       postTri += record.triCount || 0;
@@ -268,6 +285,10 @@ export function startApp() {
     ui.triCountEl.textContent = postTri.toLocaleString('en-US');
     if (ui.meshingStatsEl) {
       ui.meshingStatsEl.textContent = `chunks:${chunksRendered} | merged:${mergedFaces} | tri pre/post:${preTri}/${postTri}`;
+    }
+    if (ui.lodStatsEl) {
+      const center = computeStreamCenterChunk();
+      ui.lodStatsEl.textContent = `center:${center.cx},${center.cy}=LOD0 | active L0/L1:${lod0Chunks}/${lod1Chunks} | ring:${detailStream.radiusNear}/${detailStream.radiusFar}`;
     }
   }
 
@@ -423,6 +444,12 @@ export function startApp() {
     refreshMeshingHud();
     updateChunkStreaming(true);
     playerController.setContext(currentWorld, currentBounds);
+    if (!playerController.isActive() && currentBounds) {
+      const spawnMx = Math.floor(currentBounds.startX + currentBounds.span * 0.5);
+      const spawnMy = Math.floor(currentBounds.startY + currentBounds.span * 0.5);
+      playerController.placeAt(spawnMx, spawnMy);
+      ui.pickInfo.textContent = `Player auto-spawned at mx:${spawnMx} my:${spawnMy}. Use WASD/Arrows to move, Space to jump, F to fly.`;
+    }
   }
 
   async function rebuildCurrentDetail() {
@@ -607,6 +634,7 @@ export function startApp() {
   dbg.add(debugSettings, 'showAxes').name('Show XYZ Axes').onChange((v) => { sceneBits.axesHelper.visible = !!v; });
   dbg.add(debugSettings, 'axesSize', 4, 120, 1).name('Axes Size').onChange((v) => sceneBits.axesHelper.scale.setScalar(Math.max(0.05, Number(v) / 24)));
   dbg.add(debugSettings, 'wireframeOnly').name('Wireframe Only').onChange(applyWireframeMode);
+  dbg.add(debugSettings, 'showLodColors').name('Show LOD Colors').onChange(applyWireframeMode);
 
   sceneBits.renderer.domElement.addEventListener('pointermove', (e) => {
     if (viewMode !== 'world' || rendering) return;
@@ -654,7 +682,7 @@ export function startApp() {
       pendingDetailDown = null;
       if (!isSameTile) return;
       playerController.placeAt(picked.mx, picked.my);
-      ui.pickInfo.textContent = `Player spawned at mx:${picked.mx} my:${picked.my}. Use WASD/Arrows to move, Space to jump.`;
+      ui.pickInfo.textContent = `Player spawned at mx:${picked.mx} my:${picked.my}. Use WASD/Arrows to move, Space to jump, F to fly.`;
     }
   });
 
@@ -675,9 +703,12 @@ export function startApp() {
     const isMoveKey = e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD'
       || e.code === 'ArrowUp' || e.code === 'ArrowLeft' || e.code === 'ArrowDown' || e.code === 'ArrowRight';
     if (viewMode !== 'detail') return;
-    if (isMoveKey || e.code === 'Space') e.preventDefault();
+    const isFlightVerticalKey = e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
+    if (isMoveKey || isFlightVerticalKey || e.code === 'KeyF') e.preventDefault();
     if (isMoveKey) playerController.onKeyDown(e.code);
-    if (e.code === 'Space' && !e.repeat) playerController.jump();
+    if (isFlightVerticalKey) playerController.onKeyDown(e.code);
+    if (e.code === 'KeyF' && !e.repeat) playerController.toggleFlight();
+    if (e.code === 'Space' && !e.repeat && !playerController.isFlightActive()) playerController.jump();
   });
   window.addEventListener('keyup', (e) => {
     if (viewMode !== 'detail') return;

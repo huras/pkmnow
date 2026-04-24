@@ -1,6 +1,7 @@
 import { getDexAnimMeta } from '../../js/pokemon/pmd-anim-metadata.js';
 import { PMD_DEFAULT_MON_ANIMS, PMD_MON_SHEET } from '../../js/pokemon/pmd-default-timing.js';
 import { canWalkMicroTile, pivotCellHeightTraversalOk, isCliffDrop, okHeightStepTransition } from '../../js/walkability.js';
+import { speciesHasFlyingType } from '../../js/pokemon/pokemon-type-helpers.js';
 
 const DIR_TO_ROW = {
   down: 0,
@@ -12,6 +13,10 @@ const DIR_TO_ROW = {
   left: 6,
   'down-left': 7,
 };
+
+/** Flight tuning (3D): tweak these two values to change fly speed. */
+const FLIGHT_HORIZONTAL_SPEED_MULT = 9.0;
+const FLIGHT_VERTICAL_SPEED = 3.8;
 
 function padDex3(dex) {
   return String(Math.max(1, Math.floor(Number(dex) || 1))).padStart(3, '0');
@@ -95,6 +100,7 @@ export function createPlayerController({
     grounded: true,
     jumpsUsed: 0,
     maxAirJumps: 2,
+    flightActive: false,
     facing: 'down',
     animRow: 0,
     animFrame: 0,
@@ -357,10 +363,10 @@ export function createPlayerController({
     const ox = state.x;
     const oy = state.y;
     const prevGroundY = groundYAtWorldXY(ox, oy);
-    const speed = state.walkSpeed;
+    const speed = state.walkSpeed * (state.flightActive ? FLIGHT_HORIZONTAL_SPEED_MULT : 1);
     const ax = input.x * speed * dt;
     const ay = input.y * speed * dt;
-    const isAirborne = !state.grounded;
+    const isAirborne = !state.grounded || state.flightActive;
     let nx = ox;
     let ny = oy;
 
@@ -428,7 +434,13 @@ export function createPlayerController({
       }
     }
 
-    if (state.grounded) {
+    if (state.flightActive) {
+      const up = state.keys.has('Space') ? FLIGHT_VERTICAL_SPEED : 0;
+      const down = (state.keys.has('ShiftLeft') || state.keys.has('ShiftRight')) ? FLIGHT_VERTICAL_SPEED : 0;
+      state.vz = 0;
+      state.worldY = Math.max(groundY, state.worldY + (up - down) * dt);
+      state.grounded = state.worldY <= groundY + 1e-5;
+    } else if (state.grounded) {
       state.worldY = groundY;
       state.vz = 0;
     } else {
@@ -469,6 +481,7 @@ export function createPlayerController({
     state.vz = 0;
     state.grounded = true;
     state.jumpsUsed = 0;
+    state.flightActive = false;
     state.worldY = groundYAtWorldXY(state.x, state.y);
     state.active = true;
     state.mesh.visible = !!state.visible;
@@ -504,6 +517,7 @@ export function createPlayerController({
     placeAt,
     jump() {
       if (!state.active) return false;
+      if (state.flightActive) return false;
       if (state.grounded) state.jumpsUsed = 0;
       if (state.jumpsUsed >= state.maxAirJumps) return false;
       state.vz = state.jumpImpulse;
@@ -519,6 +533,20 @@ export function createPlayerController({
     },
     isActive() {
       return !!state.active;
+    },
+    toggleFlight() {
+      if (!state.active) return false;
+      if (!speciesHasFlyingType(state.dexId)) return false;
+      state.flightActive = !state.flightActive;
+      if (state.flightActive) {
+        state.vz = 0;
+        state.grounded = false;
+        state.jumpsUsed = 0;
+      }
+      return state.flightActive;
+    },
+    isFlightActive() {
+      return !!state.flightActive;
     },
     getAnchorPosition() {
       if (!state.active || !state.mesh) return null;

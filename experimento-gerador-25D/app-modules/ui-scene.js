@@ -22,6 +22,7 @@ export function renderLayout() {
         <div><span>Cam Rot Z</span><strong id="cam-rot-z">--</strong></div>
         <div><span>Triangles</span><strong id="tri-count">--</strong></div>
         <div><span>Meshing</span><strong id="meshing-stats">--</strong></div>
+        <div><span>LOD</span><strong id="lod-stats">--</strong></div>
         <div><span>Macro</span><strong id="macro-coord">--</strong></div>
       </div>
     </aside>
@@ -44,6 +45,7 @@ export function renderLayout() {
     camRotZEl: document.getElementById('cam-rot-z'),
     triCountEl: document.getElementById('tri-count'),
     meshingStatsEl: document.getElementById('meshing-stats'),
+    lodStatsEl: document.getElementById('lod-stats'),
     macroCoordEl: document.getElementById('macro-coord'),
   };
 }
