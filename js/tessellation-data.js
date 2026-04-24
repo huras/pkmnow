@@ -1659,6 +1659,11 @@ export const OBJECT_SETS = {
     "shape": "1x1",
     "parts": [{ "role": "base", "ids": [478], "walkable": false, "abovePlayer": false }]
   },
+  "berry-tree-lapapa [1x1]": {
+    "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
+    "shape": "1x1",
+    "parts": [{ "role": "base", "ids": [484], "walkable": false, "abovePlayer": false }]
+  },
   "berry-tree-iapapa [1x1]": {
     "file": "tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.tsx",
     "shape": "1x1",

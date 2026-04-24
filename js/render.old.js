@@ -1,7 +1,7 @@
 import { BIOMES } from './biomes.js';
 import { TERRAIN_SETS, OBJECT_SETS } from './tessellation-data.js';
 import { TessellationEngine } from './tessellation-engine.js';
-import { getRoleForCell, seededHash, parseShape } from './tessellation-logic.js';
+import { getRoleForCell, parseShape } from './tessellation-logic.js';
 import { AnimationRenderer } from './animation-renderer.js';
 import {
 	BIOME_TO_TERRAIN,
@@ -15,7 +15,10 @@ import {
 	TREE_NOISE_SCALE,
 	scatterHasWindSway,
 	isSortableScatter,
-	tileSurfaceAllowsScatterVegetation
+	tileSurfaceAllowsScatterVegetation,
+	SCATTER_NOISE_SEED_OFFSET,
+	SCATTER_NOISE_SCALE,
+	SCATTER_NOISE_THRESHOLD
 } from './biome-tiles.js';
 import { getMicroTile, MACRO_TILE_STRIDE, foliageDensity, foliageType } from './chunking.js';
 import {
@@ -57,7 +60,8 @@ import {
 import { isGhostPhaseShiftBurrowEligibleDex } from './wild-pokemon/ghost-phase-shift.js';
 import { playInputState } from './main/play-input-state.js';
 import { aimAtCursor } from './main/play-mouse-combat.js';
-import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/scatter-item-override.js';
+import { hasScatterItemKeyOverride } from './main/scatter-item-override.js';
+import { resolveScatterVegetationItemKey } from './vegetation-channels.js';
 import {
 	activeCrystalDrops,
 	activeCrystalShards,
@@ -799,12 +803,15 @@ export function render(canvas, data, options = {}) {
 				}
 
 				// 2. Scatter / Decoration
-				if (foliageDensity(mxScan, myScan, data.seed + 111, 2.5) > 0.82 && !t.isRoad && !t.urbanBuilding) {
+				if (
+					foliageDensity(mxScan, myScan, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD &&
+					!t.isRoad &&
+					!t.urbanBuilding
+				) {
 					const items = BIOME_VEGETATION[t.biomeId] || [];
 					if (items.length > 0) {
-						const itemKey =
-							getScatterItemKeyOverride(mxScan, myScan) ||
-							items[Math.floor(seededHash(mxScan, myScan, data.seed + 222) * items.length)];
+						const itemKey = resolveScatterVegetationItemKey(mxScan, myScan, t, data.seed);
+						if (!itemKey) continue;
 						const isSortable = isSortableScatter(itemKey);
 						// Even if not "sortable" (like grass), we check for "tops" that need sorting
 						const objSet = OBJECT_SETS[itemKey];

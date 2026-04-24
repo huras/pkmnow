@@ -1546,6 +1546,272 @@ button.btn-secondary.is-active {
   position: relative;
   width: 230px;
   height: 192px;
+  /* Cry-learn stack is positioned with `bottom: 100%` so it sits above the canvas; must not clip it */
+  overflow: visible;
+}
+
+/* Wild cry ID stack: bottom edge = top edge of minimap canvas (`bottom: 100%` of map-wrap); grows upward */
+.minimap-panel__far-cry-id-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  top: auto;
+  z-index: 3;
+  max-height: 268px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px 4px 4px;
+  border-radius: 0 0 6px 6px;
+  box-sizing: border-box;
+  background: rgba(4, 10, 18, 0.94);
+  border: 1px solid rgba(120, 170, 255, 0.22);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  scrollbar-width: thin;
+}
+
+.minimap-panel__far-cry-id-stack[hidden] {
+  display: none !important;
+}
+
+/* Motion wrapper: FLIP translateY when rows reorder or one is removed */
+.minimap-panel__far-cry-id-row-shell {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.minimap-panel__far-cry-id-row {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.minimap-panel__far-cry-id-row--known {
+  background: linear-gradient(180deg, rgba(58, 94, 54, 0.28), rgba(26, 54, 32, 0.28));
+  border: 1px solid rgba(150, 232, 164, 0.3);
+}
+
+.minimap-panel__far-cry-id-row--known .minimap-panel__far-cry-id-row-label {
+  color: rgba(214, 255, 222, 0.95);
+}
+
+.minimap-panel__far-cry-id-portrait {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin-top: 0;
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: center top;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 18, 28, 0.9);
+}
+
+.minimap-panel__far-cry-id-row-mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.minimap-panel__far-cry-id-row-label {
+  display: block;
+  font-size: 9px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: rgba(230, 240, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* One discrete “pip” per required cry (not a single continuous bar) */
+.minimap-panel__far-cry-id-slots {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+
+.minimap-panel__far-cry-id-slot {
+  flex: 1 1 0;
+  min-width: 6px;
+  height: 8px;
+  border-radius: 3px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition:
+    background 0.24s ease,
+    border-color 0.24s ease,
+    box-shadow 0.24s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.minimap-panel__far-cry-id-slot--on {
+  background: linear-gradient(180deg, rgba(110, 200, 255, 0.75), rgba(60, 130, 230, 0.88));
+  border-color: rgba(170, 220, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(120, 200, 255, 0.2),
+    0 1px 6px rgba(80, 160, 255, 0.35);
+  transform: scaleY(1.08);
+}
+
+.minimap-panel__far-cry-id-row--known .minimap-panel__far-cry-id-slot--on {
+  background: linear-gradient(180deg, rgba(128, 236, 154, 0.78), rgba(72, 186, 102, 0.9));
+  border-color: rgba(188, 246, 198, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(140, 225, 164, 0.25),
+    0 1px 6px rgba(70, 170, 90, 0.38);
+}
+
+/* Cry-learn row: completion — quick pop, then ~3s slow fade while glint loops (sync CRY_ID_COMPLETE_FX_MS in JS) */
+.minimap-panel__far-cry-id-row--complete {
+  z-index: 6;
+  pointer-events: none;
+  animation: cryIdRowCompleteFade 3s linear forwards;
+}
+
+.minimap-panel__far-cry-id-row--complete::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 255, 255, 0.88) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 260% 100%;
+  background-position: 120% 0;
+  mix-blend-mode: overlay;
+  animation: cryIdRowGlintLoop 0.58s linear infinite;
+  pointer-events: none;
+}
+
+.minimap-panel__far-cry-id-row--complete .minimap-panel__far-cry-id-portrait {
+  animation: cryIdPortraitFlash 0.4s ease-out forwards;
+}
+
+.minimap-panel__far-cry-id-row--complete .minimap-panel__far-cry-id-slot--on {
+  animation: cryIdSlotPulse 0.38s ease-out forwards;
+}
+
+@keyframes cryIdRowCompleteFade {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 248, 200, 0);
+  }
+  2.5% {
+    filter: brightness(1.42) saturate(1.18);
+    transform: scale(1.045);
+    box-shadow:
+      0 0 0 4px rgba(255, 248, 210, 0.52),
+      0 0 22px rgba(120, 210, 255, 0.48);
+  }
+  7% {
+    filter: brightness(1.08);
+    transform: scale(1.015);
+    box-shadow:
+      0 0 0 12px rgba(255, 230, 160, 0.14),
+      0 0 26px rgba(160, 220, 255, 0.22);
+  }
+  11% {
+    filter: brightness(1);
+    transform: scale(1);
+    box-shadow: 0 0 0 20px rgba(120, 200, 255, 0);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(1);
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+@keyframes cryIdRowGlintLoop {
+  0% {
+    background-position: 115% 0;
+  }
+  100% {
+    background-position: -115% 0;
+  }
+}
+
+@keyframes cryIdPortraitFlash {
+  0% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  22% {
+    filter: brightness(1.65) drop-shadow(0 0 10px rgba(255, 255, 255, 0.75));
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+}
+
+@keyframes cryIdSlotPulse {
+  0% {
+    filter: brightness(1);
+  }
+  30% {
+    filter: brightness(1.45) saturate(1.15);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.minimap-panel__far-cry-id-stack-more {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(200, 220, 255, 0.88);
+  background: rgba(30, 50, 80, 0.85);
+  border-radius: 4px;
+  border: 1px solid rgba(140, 180, 255, 0.25);
+}
+
+.minimap-panel__far-cry-id-stack-more[hidden] {
+  display: none !important;
+}
+
+.minimap-panel__macro-grid-toggle {
+  right: 32px;
+}
+
+.minimap-panel__macro-grid-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.minimap-panel__macro-grid-toggle[aria-pressed='true'] {
+  background: rgba(154, 216, 255, 0.18);
+  border-color: rgba(154, 216, 255, 0.5);
+  color: #fff;
 }
 
 .minimap-panel__show-spawned-btn {
@@ -1577,6 +1843,22 @@ button.btn-secondary.is-active {
   background: rgba(255, 222, 120, 0.2);
   border-color: rgba(255, 222, 120, 0.62);
   color: rgba(255, 245, 206, 0.98);
+}
+
+.minimap-panel__pokeradar-corner-toggle {
+  left: 6px;
+  right: auto;
+}
+
+.minimap-panel__macro-grid-toggle {
+  right: 32px;
+  left: auto;
+}
+
+.minimap-panel__pokeradar-corner-toggle[aria-pressed="true"] {
+  background: rgba(154, 216, 255, 0.2);
+  border-color: rgba(154, 216, 255, 0.62);
+  color: rgba(230, 245, 255, 0.98);
 }
 
 .minimap-panel__show-spawned-btn:focus-visible {
@@ -1611,6 +1893,7 @@ button.btn-secondary.is-active {
 .minimap-panel__groups-btn,
 .minimap-panel__help-btn,
 .minimap-panel__save-btn,
+.minimap-panel__pokeradar-btn,
 .minimap-panel__time-btn,
 .minimap-panel__weather-btn,
 .minimap-panel__berries-btn,
@@ -1642,6 +1925,7 @@ button.btn-secondary.is-active {
 .minimap-panel__groups-btn:hover,
 .minimap-panel__help-btn:hover,
 .minimap-panel__save-btn:hover,
+.minimap-panel__pokeradar-btn:hover,
 .minimap-panel__time-btn:hover,
 .minimap-panel__weather-btn:hover,
 .minimap-panel__berries-btn:hover,
@@ -1662,6 +1946,7 @@ button.btn-secondary.is-active {
 .minimap-panel__language-btn[aria-pressed="true"],
 .minimap-panel__berries-btn[aria-pressed="true"],
 .minimap-panel__groups-btn[aria-pressed="true"],
+.minimap-panel__pokeradar-btn[aria-pressed="true"],
 .minimap-panel__screen-grid-cam-btn[aria-pressed="true"],
 .minimap-panel__adaptive-perf-btn[aria-pressed="true"],
 .minimap-panel__event-log-btn[aria-pressed="true"] {
@@ -1678,6 +1963,7 @@ button.btn-secondary.is-active {
 .minimap-panel__groups-btn:focus-visible,
 .minimap-panel__help-btn:focus-visible,
 .minimap-panel__save-btn:focus-visible,
+.minimap-panel__pokeradar-btn:focus-visible,
 .minimap-panel__time-btn:focus-visible,
 .minimap-panel__weather-btn:focus-visible,
 .minimap-panel__berries-btn:focus-visible,
@@ -1697,6 +1983,7 @@ button.btn-secondary.is-active {
 .minimap-panel__groups-icon,
 .minimap-panel__help-icon,
 .minimap-panel__save-icon,
+.minimap-panel__pokeradar-icon,
 .minimap-panel__time-icon,
 .minimap-panel__weather-icon,
 .minimap-panel__berries-icon,
@@ -3522,6 +3809,17 @@ html[lang="ja-JP"] .play-help-wiki__title {
   justify-content: center;
   font-size: 1.1rem;
   box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.05);
+}
+
+.berry-item__icon-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.berry-item__icon-fallback {
+  line-height: 1;
 }
 
 .berry-item__info {

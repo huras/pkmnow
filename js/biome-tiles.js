@@ -49,7 +49,7 @@ const _BIOME_VEGETATION = {
     'large-green-broadleaf-1 [4x3]',
     'green-broadleaf-1 [3x2]',
     'grass [1x1]',
-    'red-flower [1x1]',
+    'red-lily [1x1]',
     'berry-tree-cheri [1x1]',
     'berry-tree-chesto [1x1]',
     'berry-tree-pecha [1x1]',
@@ -138,7 +138,7 @@ const _BIOME_VEGETATION = {
   [BIOMES.FLOWER_FIELDS.id]: [
     'small-grass [1x1]',
     'grass [1x1]',
-    'red-flower [1x1]',
+    'red-lily [1x1]',
     'yellow-lily [1x1]',
     'pink-lily [1x1]',
     'orange-lily [1x1]',
@@ -391,6 +391,10 @@ export function getGrassParams(biomeId) {
 export const TREE_DENSITY_THRESHOLD = 0.55;   // 45% de cobertura (nos blobs)
 export const FOLIAGE_DENSITY_THRESHOLD = 0.45; // Threshold para a Forragem
 export const BERRY_PATCH_THRESHOLD = 0.72;    // Threshold for dense berry clusters
+/** Scatter noise knobs (shared by bake/debug/minimap/hit probes) for object-origin eligibility. */
+export const SCATTER_NOISE_SEED_OFFSET = 111;
+export const SCATTER_NOISE_SCALE = 2.2;
+export const SCATTER_NOISE_THRESHOLD = 0.76;
 
 /** Skins de lagoa doce (roxa): grama animada = lótus; só no CENTER do pool, não nas bordas (mesma lógica que folhagem 1.2). */
 export function isLakeLotusFoliageTerrainSet(name) {

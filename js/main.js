@@ -11,6 +11,7 @@ import { ensurePokemonSheetsLoaded, getResolvedSheets } from './pokemon/pokemon-
 import { resolvePmdFrameSpecForSlice } from './pokemon/pmd-layout-metrics.js';
 import { ensureEffectAssetsLoaded } from './pokemon/effect-asset-loader.js';
 import { CharacterSelector } from './ui/character-selector.js';
+import { installPokeradarModal } from './ui/pokeradar-modal.js';
 import { imageCache } from './image-cache.js';
 import { BIOMES } from './biomes.js';
 import {
@@ -46,6 +47,7 @@ import {
   flushPlaySessionSave,
   peekPlaySessionSaveForMap,
   getPlayResumeMacroTileFromSave,
+  getReconcilableSeedFromStoredPlaySave,
   parseMapFingerprint
 } from './main/play-session-persist.js';
 import { getWindDirectionRad, getWindFeltIntensity } from './main/wind-state.js';
@@ -139,6 +141,11 @@ import {
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
 import { initMods } from './core/mod-loader.js';
 import { resetFarCrySystem } from './main/far-cry-system.js';
+import { syncCryIdentificationFromPeekSave } from './wild-pokemon/cry-identification-progress.js';
+import {
+  pruneWildCryHearCountsForAlreadyIdentifiedDexes,
+  setFarCryIdentificationHintLocale
+} from './main/far-cry-identification-challenge.js';
 import {
   applyI18nDom,
   formatNumber,
@@ -212,17 +219,22 @@ const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const btnMinimapMacroGridToggle = document.getElementById('minimap-macro-grid-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
+const btnMinimapPokeradarCornerToggle = document.getElementById('minimap-pokeradar-corner-toggle');
 const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
 const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
 const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
+const btnMinimapPokeradarToggle = document.getElementById('minimap-pokeradar-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
+const LS_MINIMAP_MACRO_GRID_OVERLAY = 'pkmn_minimap_macro_tile_grid';
 const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
 const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
 const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
+let minimapMacroGridOverlay = false;
 let minimapShowAllSpawnedDebug = false;
 let minimapEventLogVisibleDebug = false;
 let minimapEventLogUi = null;
@@ -312,6 +324,21 @@ function onMinimapToolbarPointerCancel(ev) {
   stopMinimapToolbarDrag(ev.pointerId, false);
 }
 
+function syncMinimapMacroGridToggleUi() {
+  btnMinimapMacroGridToggle?.setAttribute('aria-pressed', minimapMacroGridOverlay ? 'true' : 'false');
+}
+
+function setMinimapMacroGridOverlay(next) {
+  minimapMacroGridOverlay = !!next;
+  syncMinimapMacroGridToggleUi();
+  try {
+    localStorage.setItem(LS_MINIMAP_MACRO_GRID_OVERLAY, minimapMacroGridOverlay ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+  updateView();
+}
+
 function syncMinimapShowSpawnedToggleUi() {
   btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
 }
@@ -377,6 +404,15 @@ function setMinimapEventLogVisibleDebug(next, persist = true) {
   }
 }
 
+try {
+  minimapMacroGridOverlay = localStorage.getItem(LS_MINIMAP_MACRO_GRID_OVERLAY) === '1';
+} catch {
+  minimapMacroGridOverlay = false;
+}
+syncMinimapMacroGridToggleUi();
+btnMinimapMacroGridToggle?.addEventListener('click', () => {
+  setMinimapMacroGridOverlay(!minimapMacroGridOverlay);
+});
 try {
   minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
 } catch {
@@ -1192,8 +1228,26 @@ installPlayHelpWikiModal({
     minimapSaveModal.forceClose();
   }
 });
+const pokeradarModal = installPokeradarModal({
+  onOpenChange: (isOpen) => {
+    btnMinimapPokeradarToggle?.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+    btnMinimapPokeradarCornerToggle?.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+  }
+});
+btnMinimapPokeradarToggle?.addEventListener('click', () => {
+  if (pokeradarModal.isOpen()) pokeradarModal.close();
+  else pokeradarModal.open();
+});
+btnMinimapPokeradarCornerToggle?.addEventListener('click', () => {
+  if (pokeradarModal.isOpen()) pokeradarModal.close();
+  else pokeradarModal.open();
+});
 
 function escapeFromPlayOrCloseOverlays() {
+  if (pokeradarModal.isOpen()) {
+    pokeradarModal.close();
+    return;
+  }
   if (minimapSaveModal.isOpen()) {
     minimapSaveModal.forceClose();
     return;
@@ -1588,6 +1642,12 @@ function syncMapContinueButtonVisibility() {
 
 function continueFromMapToPlay() {
   if (!currentData || appMode !== 'map') return;
+  const saved = peekPlaySessionSaveForMap(currentData);
+  const sx = Number(saved?.player?.x);
+  const sy = Number(saved?.player?.y);
+  /** Same as cold resume from autosave: apply exact micro-tile position from storage, not macro center only. */
+  const resumeFromSave =
+    !!saved && Number.isFinite(sx) && Number.isFinite(sy);
   const px = Number(player.visualX ?? player.x);
   const py = Number(player.visualY ?? player.y);
   if (!Number.isFinite(px) || !Number.isFinite(py)) return;
@@ -1597,7 +1657,7 @@ function continueFromMapToPlay() {
   const clampedY = Math.max(0, Math.min(mapMicroH - 1, py));
   const gx = Math.floor(clampedX / MACRO_TILE_STRIDE);
   const gy = Math.floor(clampedY / MACRO_TILE_STRIDE);
-  enterPlayMode(gx, gy, { resumePosition: false });
+  enterPlayMode(gx, gy, { resumePosition: resumeFromSave });
 }
 
 /**
@@ -1760,7 +1820,8 @@ function getSettings() {
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
     visionFogEnabled: playVisionFogToggleEl?.checked ?? false,
-    minimapShowAllSpawnedDebug
+    minimapShowAllSpawnedDebug,
+    minimapMacroGridOverlay
   };
 }
 
@@ -1937,6 +1998,16 @@ function run() {
   resizeCanvas();
   updateView();
   startWorldMapRenderLoop();
+}
+
+/** One or two `run()` passes so `currentData` matches a browser save slot when width×height×seed align (incl. legacy fingerprints). */
+function runMapAfterSeedHintThenReconcileStoredPlaySave() {
+  run();
+  const reconcileSeed = getReconcilableSeedFromStoredPlaySave(currentData);
+  if (reconcileSeed != null && seedInput) {
+    seedInput.value = String(reconcileSeed >>> 0);
+    run();
+  }
 }
 
 function downloadJsonFile(filename, payload) {
@@ -2171,7 +2242,7 @@ window.addEventListener('pkmn-map-overview-noise-progress', () => {
 /**
  * @param {number} gx
  * @param {number} gy
- * @param {{ resumePosition?: boolean }} [opts] — `resumePosition: true` only for cold resume on load; map click omits it so the clicked tile wins.
+ * @param {{ resumePosition?: boolean }} [opts] — `resumePosition: true` restores stored micro position (and env) from `peekPlaySessionSaveForMap`: cold autosave resume, **and** map “Continue” when a matching save exists. Map click omits it so the clicked tile wins.
  */
 function enterPlayMode(gx, gy, opts = {}) {
   const resumePosition = opts.resumePosition === true;
@@ -2196,6 +2267,8 @@ function enterPlayMode(gx, gy, opts = {}) {
     playCharacterSelector?.invalidatePlayItemsHudSignature?.();
     playCharacterSelector?.updatePlayItemsHud?.();
   }
+  syncCryIdentificationFromPeekSave(currentData ? peekPlaySessionSaveForMap(currentData) : null);
+  pruneWildCryHearCountsForAlreadyIdentifiedDexes();
   resetPlayAutosaveSchedule();
   sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
@@ -2468,10 +2541,24 @@ if (btnExport) {
   });
 }
 
-btnGenerate.addEventListener('click', run);
-seedInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') run();
-});
+if (isPlayShell()) {
+  btnGenerate?.addEventListener('click', () => {
+    didAutoResumePlayOnInitialLoad = false;
+    runMapAfterSeedHintThenReconcileStoredPlaySave();
+    queueTryAutoResumePlayFromSave();
+  });
+  seedInput?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    didAutoResumePlayOnInitialLoad = false;
+    runMapAfterSeedHintThenReconcileStoredPlaySave();
+    queueTryAutoResumePlayFromSave();
+  });
+} else {
+  btnGenerate?.addEventListener('click', run);
+  seedInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') run();
+  });
+}
 
 playWorldTimeSlider?.addEventListener('input', () => {
   const v = parseFloat(playWorldTimeSlider.value);
@@ -2540,6 +2627,7 @@ onLocaleChanged(() => {
   applyI18nDom(document);
   syncMinimapLanguageSelect();
   syncMinimapZoomReadout();
+  setFarCryIdentificationHintLocale(t);
   syncWeatherUi();
   syncPlayWorldTimePanel();
   syncPlayBgmNowPlayingPanel();
@@ -2590,7 +2678,7 @@ loadTilesetImages().then(async () => {
   });
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
-  run();
+  runMapAfterSeedHintThenReconcileStoredPlaySave();
   queueTryAutoResumePlayFromSave();
 });
 

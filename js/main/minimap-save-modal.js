@@ -5,8 +5,10 @@ import {
   estimatePlaySessionSaveUtf8Bytes,
   downloadPlaySessionSaveJsonFile,
   tryImportPlaySessionSavePayload,
-  buildPlayMapFingerprint
+  savedMapFingerprintMatchesData
 } from './play-session-persist.js';
+import { syncCryIdentificationFromPeekSave } from '../wild-pokemon/cry-identification-progress.js';
+import { pruneWildCryHearCountsForAlreadyIdentifiedDexes } from './far-cry-identification-challenge.js';
 import { onLocaleChanged, t } from '../i18n/index.js';
 
 function formatSaveSizeSuffix(bytes) {
@@ -128,7 +130,9 @@ export function installMinimapSaveModal(opts) {
         const fp = typeof parsed.mapFingerprint === 'string' ? parsed.mapFingerprint : '';
         onImportedSaveNeedRegenerate?.(fp);
         const data = getData?.();
-        if (data && fp && buildPlayMapFingerprint(data) === fp) {
+        if (data && fp && savedMapFingerprintMatchesData(data, fp)) {
+          syncCryIdentificationFromPeekSave(peekPlaySessionSaveForMap(data));
+          pruneWildCryHearCountsForAlreadyIdentifiedDexes();
           if (statusEl) statusEl.textContent = t('play.saveImportOkSameMap');
         } else if (statusEl) {
           statusEl.textContent = t('play.saveImportOkNeedGenerate');
@@ -145,6 +149,8 @@ export function installMinimapSaveModal(opts) {
 
   btnClear?.addEventListener('click', () => {
     clearPlaySessionSave();
+    syncCryIdentificationFromPeekSave(getData?.() ? peekPlaySessionSaveForMap(getData()) : null);
+    pruneWildCryHearCountsForAlreadyIdentifiedDexes();
     syncStatus();
   });
   const unlistenLocale = onLocaleChanged(() => {

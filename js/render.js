@@ -31,8 +31,6 @@ import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { resolveMapGlobalPlayerMicroForMarker } from './main/play-session-persist.js';
 import { renderMinimap } from './render/render-minimap.js';
-import { getFormalTreeCanopyComposite, getScatterTopCanopyComposite } from './render/canopy-sway-cache.js';
-import { getDetailHitShake01 } from './main/play-crystal-tackle.js';
 import {
   FIRE_FRAME_W,
   FIRE_FRAME_H,
@@ -164,7 +162,7 @@ import { playInputState, isPlayGroundDigShiftHeld, isPlaySpaceAscendHeld } from 
 import { applyPlayPointerWithPlayCam } from './main/play-pointer-world.js';
 import { getEarthquakeShakePx, getEarthquakeActiveIntensity01 } from './main/earthquake-layer.js';
 import { PLAYER_FLIGHT_MAX_Z_TILES, PLAYER_LEVEL_UP_GLOW_SEC } from './player.js';
-import { aimAtCursor } from './main/play-mouse-combat.js';
+import { aimAtCursor, getPlayerFlashHoldVisual } from './main/play-mouse-combat.js';
 import { getStrengthGrabPromptInfo } from './main/play-strength-carry.js';
 import { getHoveredWildGroupEntityKey } from './main/wild-groups-hover-state.js';
 import { PMD_MON_SHEET } from './pokemon/pmd-default-timing.js';
@@ -180,6 +178,39 @@ import {
   finalizeRenderFrameProfile,
   clearRenderFrameBreakdown
 } from './render/render-frame-phases.js';
+import {
+  mapFingerprintForTrail,
+  resetWorldMapPlayerWaveTick,
+  resetWorldMapPlayerWavesIfMapChanged,
+  tickWorldMapPlayerWaves,
+  drawWorldMapPlayerWaves,
+  loadPersistedGlobalMapTrail,
+  persistGlobalMapTrailIfNeeded,
+  recordGlobalMapTrailPoint,
+  drawGlobalMapPlayerTrail,
+  pruneRecentGlobalMapTrail,
+  getGlobalMapTrailFingerprint,
+  getGlobalMapPlayerTrailMicro,
+  getGlobalMapPlayerTrailRecentMicro
+} from './render/render-global-map-trail.js';
+import { renderItemVisibleInPlayerVision, renderItemSortX } from './render/render-item-visibility.js';
+import {
+  BUILDING_GROUND_SHADOW_TUNING,
+  POKEMON_ELLIPSE_SHADOW_TUNING,
+  ensurePlayerCanopySilScratch,
+  resetMotionStutterHistory,
+  applyMotionStutterMask,
+  ensurePlayerCanopyMaskScratch,
+  appendFormalTreeCanopyToPlayerMask,
+  appendScatterTreeCanopyToPlayerMask,
+  drawGroundSilhouetteShadow,
+  resolveDynamicShadowDynamics,
+  shadowPolicyByType,
+  getBuildingGroundShadowMeta,
+  drawPlayerFlashHoldAura,
+  drawVegetationHybridShadow,
+  drawScatterGroundDetailSilhouetteShadow
+} from './render/render-play-shadow-canopy.js';
 import { getActiveFarCryScreenWaves } from './main/far-cry-system.js';
 
 export {
@@ -206,315 +237,7 @@ const _tileCachePool = new Map();
  * @param {number} mx @param {number} my @returns {number}
  */
 const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
-
-/** Scratch for canopy read-through: multiply on world ctx tints the whole bbox over trees. */
-let _playerCanopySilScratch = /** @type {HTMLCanvasElement | null} */ (null);
-let _motionStutterHistoryScratch = /** @type {HTMLCanvasElement | null} */ (null);
-let _motionStutterPrevCameraPx = { x: 0, y: 0, valid: false };
-
-const MOTION_STUTTER_MASK_TUNING = {
-  enabled: true,
-  speedStart: 8.5,
-  speedFull: 22,
-  alphaMax: 0.18,
-  maxSamples: 3
-};
-
-/**
- * @param {number} iw
- * @param {number} ih
- * @returns {HTMLCanvasElement}
- */
-function ensurePlayerCanopySilScratch(iw, ih) {
-  const w = Math.max(1, Math.ceil(iw));
-  const h = Math.max(1, Math.ceil(ih));
-  if (!_playerCanopySilScratch) {
-    _playerCanopySilScratch = document.createElement('canvas');
-  }
-  if (_playerCanopySilScratch.width !== w || _playerCanopySilScratch.height !== h) {
-    _playerCanopySilScratch.width = w;
-    _playerCanopySilScratch.height = h;
-  }
-  return _playerCanopySilScratch;
-}
-
-/**
- * @param {number} iw
- * @param {number} ih
- * @returns {HTMLCanvasElement}
- */
-function ensureMotionStutterHistoryScratch(iw, ih) {
-  const w = Math.max(1, Math.ceil(iw));
-  const h = Math.max(1, Math.ceil(ih));
-  if (!_motionStutterHistoryScratch) {
-    _motionStutterHistoryScratch = document.createElement('canvas');
-  }
-  if (_motionStutterHistoryScratch.width !== w || _motionStutterHistoryScratch.height !== h) {
-    _motionStutterHistoryScratch.width = w;
-    _motionStutterHistoryScratch.height = h;
-    _motionStutterPrevCameraPx.valid = false;
-  }
-  return _motionStutterHistoryScratch;
-}
-
-function resetMotionStutterHistory() {
-  _motionStutterPrevCameraPx.valid = false;
-}
-
-/**
- * Directional temporal blend that masks hitch perception during fast movement.
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} cw
- * @param {number} ch
- * @param {import('./player.js').player | null | undefined} player
- * @param {{ x: number, y: number } | null} camNoShakePx
- */
-function applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx) {
-  if (!MOTION_STUTTER_MASK_TUNING.enabled || !camNoShakePx) {
-    resetMotionStutterHistory();
-    return;
-  }
-  const history = ensureMotionStutterHistoryScratch(cw, ch);
-  const hctx = history.getContext('2d');
-  if (!hctx) return;
-
-  const speed = Math.hypot(Number(player?.vx) || 0, Number(player?.vy) || 0);
-  const speedSpan = Math.max(0.001, MOTION_STUTTER_MASK_TUNING.speedFull - MOTION_STUTTER_MASK_TUNING.speedStart);
-  const speed01 = Math.max(
-    0,
-    Math.min(1, (speed - MOTION_STUTTER_MASK_TUNING.speedStart) / speedSpan)
-  );
-
-  if (_motionStutterPrevCameraPx.valid && speed01 > 0.001) {
-    const dCamX = camNoShakePx.x - _motionStutterPrevCameraPx.x;
-    const dCamY = camNoShakePx.y - _motionStutterPrevCameraPx.y;
-    const camStep = Math.hypot(dCamX, dCamY);
-    if (camStep > 0.01) {
-      const taps = 1 + Math.floor(MOTION_STUTTER_MASK_TUNING.maxSamples * speed01);
-      const alphaBase = MOTION_STUTTER_MASK_TUNING.alphaMax * speed01;
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.imageSmoothingEnabled = true;
-      for (let i = 1; i <= taps; i++) {
-        const t = i / (taps + 1);
-        ctx.globalAlpha = alphaBase * (1 - t) * 0.92;
-        ctx.drawImage(history, dCamX * t, dCamY * t, cw, ch);
-      }
-      ctx.restore();
-    }
-  }
-
-  hctx.setTransform(1, 0, 0, 1, 0, 0);
-  hctx.clearRect(0, 0, history.width, history.height);
-  hctx.drawImage(ctx.canvas, 0, 0);
-  _motionStutterPrevCameraPx.x = camNoShakePx.x;
-  _motionStutterPrevCameraPx.y = camNoShakePx.y;
-  _motionStutterPrevCameraPx.valid = true;
-}
-
-/** Union of non-transparent canopy texels (player-local px) for Pokémon ∩ tree read-through. */
-let _playerCanopyMaskScratch = /** @type {HTMLCanvasElement | null} */ (null);
-
-/**
- * @param {number} iw
- * @param {number} ih
- */
-function ensurePlayerCanopyMaskScratch(iw, ih) {
-  const w = Math.max(1, Math.ceil(iw));
-  const h = Math.max(1, Math.ceil(ih));
-  if (!_playerCanopyMaskScratch) {
-    _playerCanopyMaskScratch = document.createElement('canvas');
-  }
-  if (_playerCanopyMaskScratch.width !== w || _playerCanopyMaskScratch.height !== h) {
-    _playerCanopyMaskScratch.width = w;
-    _playerCanopyMaskScratch.height = h;
-  }
-  return _playerCanopyMaskScratch;
-}
-
-function rectsOverlap2D(ax, ay, aw, ah, bx, by, bw, bh) {
-  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
-}
-
-/**
- * @param {any} item
- * @param {number} tileW
- * @param {number} tileH
- * @param {(n: number) => number} snapPx
- * @param {HTMLImageElement | null | undefined} natureImg
- * @param {number} canopyAnimTime
- */
-function getFormalCanopyMaskMeta(item, tileW, tileH, snapPx, natureImg, canopyAnimTime) {
-  if (!item || item.isDestroyed) return null;
-  const ids = TREE_TILES[item.treeType];
-  if (!ids?.top || !natureImg) return null;
-  const { canvas, ox, oy, flipX } = getFormalTreeCanopyComposite(
-    canopyAnimTime,
-    item.treeType,
-    item.originX,
-    item.originY,
-    ids.top,
-    natureImg,
-    TCOLS_NATURE,
-    tileW,
-    tileH
-  );
-  if (!canvas?.width) return null;
-  const px = snapPx(item.originX * tileW + tileW);
-  const py = snapPx(item.originY * tileH + tileH);
-  const left = snapPx(px - ox);
-  const top = snapPx(py - oy);
-  return {
-    canvas,
-    left,
-    top,
-    w: canvas.width,
-    h: canvas.height,
-    flipX: !!flipX,
-    anchorX: px
-  };
-}
-
-/**
- * @param {any} item
- * @param {number} tileW
- * @param {number} tileH
- * @param {(n: number) => number} snapPx
- * @param {Map<string, HTMLImageElement>} imageCache
- * @param {number} canopyAnimTime
- */
-function getScatterCanopyMaskMeta(item, tileW, tileH, snapPx, imageCache, canopyAnimTime) {
-  if (!item || !scatterItemKeyIsTree(item.itemKey) || item.isCharred) return null;
-  const objSet = item.objSet;
-  if (!objSet) return null;
-  const topPart = objSet.parts?.find((p) => p.role === 'top' || p.role === 'tops');
-  if (!topPart) return null;
-  const { img, cols: atlasCols } = atlasFromObjectSet(objSet, imageCache);
-  if (!img) return null;
-  const cols = Math.max(1, item.cols || 1);
-  const { canvas, ox, oy, flipX } = getScatterTopCanopyComposite(
-    canopyAnimTime,
-    item.itemKey,
-    item.originX,
-    item.originY,
-    topPart,
-    cols,
-    img,
-    atlasCols,
-    tileW,
-    tileH,
-    item.windSway
-  );
-  if (!canvas?.width) return null;
-  const px = snapPx(item.originX * tileW + (cols * tileW) / 2);
-  const py = snapPx(item.originY * tileH + tileH);
-  const left = snapPx(px - ox);
-  const top = snapPx(py - oy);
-  return {
-    canvas,
-    left,
-    top,
-    w: canvas.width,
-    h: canvas.height,
-    flipX: !!flipX,
-    anchorX: px
-  };
-}
-
-/**
- * @param {CanvasRenderingContext2D} mctx
- * @param {{ canvas: HTMLCanvasElement, left: number, top: number, flipX: boolean, anchorX: number }} meta
- * @param {number} pxL
- * @param {number} pxT0
- * @param {(n: number) => number} snapPx
- */
-function drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx) {
-  const dx = meta.left - pxL;
-  const dy = meta.top - pxT0;
-  mctx.save();
-  mctx.imageSmoothingEnabled = false;
-  mctx.globalAlpha = 1;
-  mctx.globalCompositeOperation = 'source-over';
-  if (!meta.flipX) {
-    mctx.drawImage(meta.canvas, dx, dy);
-  } else {
-    const pivotX = snapPx(meta.anchorX) - pxL;
-    mctx.translate(pivotX, 0);
-    mctx.scale(-1, 1);
-    mctx.translate(-pivotX, 0);
-    mctx.drawImage(meta.canvas, dx, dy);
-  }
-  mctx.restore();
-}
-
-/**
- * @returns {boolean} true if any canopy pixels were stamped into the mask
- */
-function appendFormalTreeCanopyToPlayerMask(
-  mctx,
-  item,
-  pxL,
-  pxT0,
-  pxW,
-  pxH,
-  tileW,
-  tileH,
-  snapPx,
-  natureImg,
-  canopyAnimTime,
-  time
-) {
-  const meta = getFormalCanopyMaskMeta(item, tileW, tileH, snapPx, natureImg, canopyAnimTime);
-  if (!meta) return false;
-  if (!rectsOverlap2D(meta.left, meta.top, meta.w, meta.h, pxL, pxT0, pxW, pxH)) return false;
-  const { originX, originY } = item;
-  const bump01 = getDetailHitShake01(`treeBump:${originX},${originY}`);
-  mctx.save();
-  if (bump01 > 0) {
-    const a = tileW * 0.07 * bump01;
-    const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
-    const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
-    mctx.translate(sx, sy);
-  }
-  drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx);
-  mctx.restore();
-  return true;
-}
-
-/**
- * @returns {boolean} true if any canopy pixels were stamped into the mask
- */
-function appendScatterTreeCanopyToPlayerMask(
-  mctx,
-  item,
-  pxL,
-  pxT0,
-  pxW,
-  pxH,
-  tileW,
-  tileH,
-  snapPx,
-  imageCache,
-  canopyAnimTime,
-  time
-) {
-  const meta = getScatterCanopyMaskMeta(item, tileW, tileH, snapPx, imageCache, canopyAnimTime);
-  if (!meta) return false;
-  if (!rectsOverlap2D(meta.left, meta.top, meta.w, meta.h, pxL, pxT0, pxW, pxH)) return false;
-  const { originX, originY, itemKey } = item;
-  const bump01 = scatterItemKeyIsTree(itemKey) ? getDetailHitShake01(`treeBump:${originX},${originY}`) : 0;
-  const shake01 = Math.max(getDetailHitShake01(`${originX},${originY}`), bump01);
-  mctx.save();
-  if (shake01 > 0) {
-    const a = tileW * 0.07 * shake01;
-    const sx = Math.sin(time * 95 + originX * 11.9 + originY * 7.3) * a;
-    const sy = Math.cos(time * 120 + originX * 3.7 + originY * 9.1) * a * 0.35;
-    mctx.translate(sx, sy);
-  }
-  drawCanopyMaskMetaOnScratch(mctx, meta, pxL, pxT0, snapPx);
-  mctx.restore();
-  return true;
-}
+const ENTITY_COLLECTION_SHADOW_PAD_TILES = 5;
 
 /**
  * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
@@ -522,373 +245,9 @@ function appendScatterTreeCanopyToPlayerMask(
  */
 let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
 
-const GLOBAL_MAP_TRAIL_MAX_POINTS = 9000;
-const GLOBAL_MAP_TRAIL_MIN_STEP_MICRO = 2.2;
-const GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO = 22;
-const GLOBAL_MAP_TRAIL_RECENT_WINDOW_MS = 30_000;
-const GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS = 512;
-const GLOBAL_MAP_TRAIL_STORAGE_KEY = 'pkmn_global_map_player_trail_v1';
-const GLOBAL_MAP_TRAIL_PERSIST_MIN_MS = 1200;
-const WORLD_MAP_PLAYER_WAVE_SPAWN_MS = 520;
-const WORLD_MAP_PLAYER_WAVE_MAX_AGE_MS = 1450;
-const WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE = 10;
-let globalMapTrailFingerprint = '';
-/** @type {Array<{ x: number, y: number }>} */
-let globalMapPlayerTrailMicro = [];
-/** @type {Array<{ x: number, y: number, tMs: number }>} */
-let globalMapPlayerTrailRecentMicro = [];
-let globalMapTrailDirty = false;
-let globalMapTrailLastPersistAtMs = 0;
-/** @type {Array<{ gx: number, gy: number, ageMs: number, maxAgeMs: number }>} */
-let worldMapPlayerWaves = [];
-let worldMapPlayerWaveLastTickMs = 0;
-let worldMapPlayerWaveNextSpawnAtMs = 0;
-let worldMapPlayerWaveFingerprint = '';
-
-function mapFingerprintForTrail(data) {
-  if (!data) return '';
-  const w = Math.max(0, Math.floor(Number(data.width) || 0));
-  const h = Math.max(0, Math.floor(Number(data.height) || 0));
-  const seed = Number.isFinite(Number(data.seed)) ? Number(data.seed) : 0;
-  return `${w}x${h}@${seed}`;
-}
-
-function resetWorldMapPlayerWaves(nowMs, mapFp) {
-  worldMapPlayerWaves = [];
-  worldMapPlayerWaveLastTickMs = Number.isFinite(nowMs) ? nowMs : 0;
-  worldMapPlayerWaveNextSpawnAtMs = Number.isFinite(nowMs) ? nowMs : 0;
-  worldMapPlayerWaveFingerprint = String(mapFp || '');
-}
-
-/**
- * @param {number} nowMs
- * @param {{ x: number, y: number } | null} mapPlayerMicro
- * @param {string} mapFp
- */
-function tickWorldMapPlayerWaves(nowMs, mapPlayerMicro, mapFp) {
-  const now = Number.isFinite(nowMs) ? nowMs : 0;
-  if (worldMapPlayerWaveFingerprint !== mapFp) {
-    resetWorldMapPlayerWaves(now, mapFp);
-  }
-  if (!Number.isFinite(worldMapPlayerWaveLastTickMs) || worldMapPlayerWaveLastTickMs <= 0) {
-    worldMapPlayerWaveLastTickMs = now;
-  }
-  const dtMs = Math.max(0, Math.min(160, now - worldMapPlayerWaveLastTickMs));
-  worldMapPlayerWaveLastTickMs = now;
-  if (dtMs > 0) {
-    for (let i = worldMapPlayerWaves.length - 1; i >= 0; i--) {
-      const fx = worldMapPlayerWaves[i];
-      fx.ageMs += dtMs;
-      if (fx.ageMs >= fx.maxAgeMs) worldMapPlayerWaves.splice(i, 1);
-    }
-  }
-  if (!mapPlayerMicro) return;
-  const mx = Number(mapPlayerMicro.x);
-  const my = Number(mapPlayerMicro.y);
-  if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
-  if (!Number.isFinite(worldMapPlayerWaveNextSpawnAtMs) || worldMapPlayerWaveNextSpawnAtMs <= 0) {
-    worldMapPlayerWaveNextSpawnAtMs = now;
-  }
-  if (now < worldMapPlayerWaveNextSpawnAtMs) return;
-  worldMapPlayerWaves.push({
-    gx: mx / MACRO_TILE_STRIDE,
-    gy: my / MACRO_TILE_STRIDE,
-    ageMs: 0,
-    maxAgeMs: WORLD_MAP_PLAYER_WAVE_MAX_AGE_MS
-  });
-  if (worldMapPlayerWaves.length > WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE) {
-    worldMapPlayerWaves.splice(0, worldMapPlayerWaves.length - WORLD_MAP_PLAYER_WAVE_MAX_ACTIVE);
-  }
-  worldMapPlayerWaveNextSpawnAtMs = now + WORLD_MAP_PLAYER_WAVE_SPAWN_MS;
-}
-
-/**
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} cw
- * @param {number} ch
- * @param {object} data
- * @param {{ scale: number, ox: number, oy: number } | null} worldMapCamera
- */
-function drawWorldMapPlayerWaves(ctx, cw, ch, data, worldMapCamera) {
-  if (!worldMapPlayerWaves.length) return;
-  const tileW = worldMapCamera?.scale ? worldMapCamera.scale : cw / data.width;
-  const tileH = worldMapCamera?.scale ? worldMapCamera.scale : ch / data.height;
-  const ox = Number(worldMapCamera?.ox) || 0;
-  const oy = Number(worldMapCamera?.oy) || 0;
-  const unit = Math.max(1, Math.min(tileW, tileH));
-  ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  for (const fx of worldMapPlayerWaves) {
-    const maxAge = Math.max(1, Number(fx.maxAgeMs) || 1);
-    const t = Math.max(0, Math.min(1, (Number(fx.ageMs) || 0) / maxAge));
-    const fade = 1 - t;
-    if (fade <= 0.01) continue;
-    const px = (Number(fx.gx) - ox + 0.5) * tileW;
-    const py = (Number(fx.gy) - oy + 0.5) * tileH;
-    if (px < -40 || py < -40 || px > cw + 40 || py > ch + 40) continue;
-    const radius = Math.max(4, unit * (0.55 + t * 3.3));
-    ctx.strokeStyle = `rgba(120, 235, 255, ${(0.82 * fade).toFixed(4)})`;
-    ctx.lineWidth = Math.max(1.2, unit * (0.16 - t * 0.08));
-    ctx.beginPath();
-    ctx.arc(px, py, radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/**
- * @param {string} fp
- */
-function loadPersistedGlobalMapTrail(fp) {
-  globalMapTrailFingerprint = fp;
-  globalMapPlayerTrailMicro = [];
-  globalMapPlayerTrailRecentMicro = [];
-  if (!fp) return;
-  try {
-    const raw = localStorage.getItem(GLOBAL_MAP_TRAIL_STORAGE_KEY);
-    if (!raw) return;
-    const payload = JSON.parse(raw);
-    if (!payload || payload.fingerprint !== fp || !Array.isArray(payload.points)) return;
-    const kept = [];
-    for (const row of payload.points) {
-      const x = Number(row?.x);
-      const y = Number(row?.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      kept.push({ x, y });
-      if (kept.length >= GLOBAL_MAP_TRAIL_MAX_POINTS) break;
-    }
-    globalMapPlayerTrailMicro = kept;
-  } catch {}
-}
-
-/**
- * @param {boolean} force
- */
-function persistGlobalMapTrailIfNeeded(force = false) {
-  if (!globalMapTrailDirty || !globalMapTrailFingerprint) return;
-  const nowMs = typeof performance !== 'undefined' && typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now();
-  if (!force && nowMs - globalMapTrailLastPersistAtMs < GLOBAL_MAP_TRAIL_PERSIST_MIN_MS) return;
-  try {
-    localStorage.setItem(
-      GLOBAL_MAP_TRAIL_STORAGE_KEY,
-      JSON.stringify({
-        fingerprint: globalMapTrailFingerprint,
-        points: globalMapPlayerTrailMicro
-      })
-    );
-    globalMapTrailDirty = false;
-    globalMapTrailLastPersistAtMs = nowMs;
-  } catch {}
-}
-
-/**
- * @param {number} x
- * @param {number} y
- * @param {object} data
- */
-function clampMicroToMapBounds(x, y, data) {
-  const gw = Math.max(1, Number(data.width) * MACRO_TILE_STRIDE);
-  const gh = Math.max(1, Number(data.height) * MACRO_TILE_STRIDE);
-  const pad = 0.51;
-  return {
-    x: Math.max(pad, Math.min(gw - pad, Number(x) || 0)),
-    y: Math.max(pad, Math.min(gh - pad, Number(y) || 0))
-  };
-}
-
-/**
- * @param {object} data
- * @param {import('./player.js').player | null | undefined} playerRef
- * @param {'map' | 'play'} appMode
- */
-function recordGlobalMapTrailPoint(data, playerRef, appMode) {
-  if (appMode !== 'play' || !data || !playerRef) return;
-  const fp = mapFingerprintForTrail(data);
-  if (!fp) return;
-  if (globalMapTrailFingerprint !== fp) {
-    loadPersistedGlobalMapTrail(fp);
-  }
-  const px = Number(playerRef.visualX ?? playerRef.x);
-  const py = Number(playerRef.visualY ?? playerRef.y);
-  if (!Number.isFinite(px) || !Number.isFinite(py)) return;
-  const clamped = clampMicroToMapBounds(px, py, data);
-  const nowMs =
-    typeof performance !== 'undefined' && typeof performance.now === 'function'
-      ? performance.now()
-      : Date.now();
-  pruneRecentGlobalMapTrail(nowMs);
-  const recentLast = globalMapPlayerTrailRecentMicro[globalMapPlayerTrailRecentMicro.length - 1];
-  if (recentLast) {
-    const rdx = clamped.x - recentLast.x;
-    const rdy = clamped.y - recentLast.y;
-    if (rdx * rdx + rdy * rdy >= GLOBAL_MAP_TRAIL_MIN_STEP_MICRO * GLOBAL_MAP_TRAIL_MIN_STEP_MICRO) {
-      globalMapPlayerTrailRecentMicro.push({ x: clamped.x, y: clamped.y, tMs: nowMs });
-    }
-  } else {
-    globalMapPlayerTrailRecentMicro.push({ x: clamped.x, y: clamped.y, tMs: nowMs });
-  }
-  pruneRecentGlobalMapTrail(nowMs);
-  const last = globalMapPlayerTrailMicro[globalMapPlayerTrailMicro.length - 1];
-  if (last) {
-    const dx = clamped.x - last.x;
-    const dy = clamped.y - last.y;
-    if (dx * dx + dy * dy < GLOBAL_MAP_TRAIL_MIN_STEP_MICRO * GLOBAL_MAP_TRAIL_MIN_STEP_MICRO) return;
-  }
-  globalMapPlayerTrailMicro.push(clamped);
-  if (globalMapPlayerTrailMicro.length > GLOBAL_MAP_TRAIL_MAX_POINTS) {
-    globalMapPlayerTrailMicro.splice(0, globalMapPlayerTrailMicro.length - GLOBAL_MAP_TRAIL_MAX_POINTS);
-  }
-  globalMapTrailDirty = true;
-  persistGlobalMapTrailIfNeeded(false);
-}
-
-/**
- * @param {CanvasRenderingContext2D} ctx
- * @param {Array<{ x: number, y: number }>} trailMicro
- * @param {object} data
- * @param {number} cw
- * @param {number} ch
- * @param {{ scale: number, ox: number, oy: number } | null} [mapCamera]
- */
-function drawGlobalMapPlayerTrail(ctx, trailMicro, data, cw, ch, mapCamera = null) {
-  if (!Array.isArray(trailMicro) || trailMicro.length < 2 || !data?.width || !data?.height) return;
-  const tileW = mapCamera?.scale ? mapCamera.scale : cw / data.width;
-  const tileH = mapCamera?.scale ? mapCamera.scale : ch / data.height;
-  const ox = mapCamera?.ox || 0;
-  const oy = mapCamera?.oy || 0;
-  const lineW = Math.max(1.3, Math.min(3.2, Math.min(tileW, tileH) * 0.2));
-  const teleportJumpSq = GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO * GLOBAL_MAP_TRAIL_TELEPORT_JUMP_MICRO;
-  const pts = [];
-  for (let i = 0; i < trailMicro.length; i++) {
-    const p = trailMicro[i];
-    const mx = Number(p?.x);
-    const my = Number(p?.y);
-    if (!Number.isFinite(mx) || !Number.isFinite(my)) continue;
-    const gx = mx / MACRO_TILE_STRIDE;
-    const gy = my / MACRO_TILE_STRIDE;
-    pts.push({
-      mx,
-      my,
-      px: (gx - ox + 0.5) * tileW,
-      py: (gy - oy + 0.5) * tileH
-    });
-  }
-  if (pts.length < 2) return;
-
-  const strokeMainSegment = (startIdx, endIdx) => {
-    if (endIdx - startIdx < 1) return;
-    ctx.beginPath();
-    for (let i = startIdx; i <= endIdx; i++) {
-      const p = pts[i];
-      if (i === startIdx) ctx.moveTo(p.px, p.py);
-      else ctx.lineTo(p.px, p.py);
-    }
-    ctx.strokeStyle = 'rgba(36, 178, 255, 0.9)';
-    ctx.lineWidth = lineW + 1.6;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(176, 238, 255, 0.78)';
-    ctx.lineWidth = lineW;
-    ctx.stroke();
-  };
-
-  const strokeTeleportJump = (a, b) => {
-    ctx.save();
-    ctx.setLineDash([Math.max(4, lineW * 2.4), Math.max(3, lineW * 1.7)]);
-    ctx.lineDashOffset = 0;
-    ctx.strokeStyle = 'rgba(176, 238, 255, 0.5)';
-    ctx.lineWidth = lineW;
-    ctx.beginPath();
-    ctx.moveTo(a.px, a.py);
-    ctx.lineTo(b.px, b.py);
-    ctx.stroke();
-    ctx.restore();
-  };
-
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.globalCompositeOperation = 'screen';
-  let segStart = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1];
-    const curr = pts[i];
-    const dx = curr.mx - prev.mx;
-    const dy = curr.my - prev.my;
-    const isTeleportJump = dx * dx + dy * dy > teleportJumpSq;
-    if (!isTeleportJump) continue;
-    strokeMainSegment(segStart, i - 1);
-    strokeTeleportJump(prev, curr);
-    segStart = i;
-  }
-  strokeMainSegment(segStart, pts.length - 1);
-  ctx.restore();
-}
-
-/**
- * @param {number} nowMs
- */
-function pruneRecentGlobalMapTrail(nowMs) {
-  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
-  const cutoff = now - GLOBAL_MAP_TRAIL_RECENT_WINDOW_MS;
-  while (globalMapPlayerTrailRecentMicro.length > 0 && globalMapPlayerTrailRecentMicro[0].tMs < cutoff) {
-    globalMapPlayerTrailRecentMicro.shift();
-  }
-  if (globalMapPlayerTrailRecentMicro.length > GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS) {
-    globalMapPlayerTrailRecentMicro.splice(
-      0,
-      globalMapPlayerTrailRecentMicro.length - GLOBAL_MAP_TRAIL_RECENT_MAX_POINTS
-    );
-  }
-}
-
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
 }
-
-function renderItemVisibleInPlayerVision(item, vision) {
-  if (!vision?.enabled) return true;
-  if (!item || typeof item !== 'object') return true;
-  if (item.type === 'player') return true;
-
-  let mx = null;
-  let my = null;
-  if (Number.isFinite(item.originX) && Number.isFinite(item.originY)) {
-    if (item.type === 'tree') {
-      mx = Math.floor(item.originX);
-      my = Math.floor(item.originY);
-    } else if (item.type === 'scatter') {
-      mx = Math.floor(Number(item.originX) + Math.max(0, ((Number(item.cols) || 1) - 1) * 0.5));
-      my = Math.floor(Number(item.y) || Number(item.originY));
-    } else if (item.type === 'building') {
-      const cols = Number(item.bData?.cols) || 1;
-      const rows = Number(item.bData?.rows) || 1;
-      mx = Math.floor(Number(item.originX) + (cols - 1) * 0.5);
-      my = Math.floor(Number(item.originY) + rows - 1);
-    } else {
-      mx = Math.floor(item.originX);
-      my = Math.floor(item.originY);
-    }
-  } else if (Number.isFinite(item.x) && Number.isFinite(item.y)) {
-    mx = Math.floor(item.x);
-    my = Math.floor(item.y);
-  } else if (Number.isFinite(item.cx) && Number.isFinite(item.cy) && Number.isFinite(item.dw) && Number.isFinite(item.dh)) {
-    // Fallback from pixel-space center/pivot back to micro tile estimate is not reliable here.
-    return true;
-  }
-  if (!Number.isFinite(mx) || !Number.isFinite(my)) return true;
-  return vision.isVisible(mx, my);
-}
-
-function renderItemSortX(item) {
-  if (Number.isFinite(item?.originX)) return Number(item.originX);
-  if (Number.isFinite(item?.x)) return Number(item.x);
-  if (Number.isFinite(item?.cx)) return Number(item.cx);
-  return 0;
-}
-
-
 
 export function render(canvas, data, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -926,12 +285,10 @@ export function render(canvas, data, options = {}) {
       : Date.now();
   pruneRecentGlobalMapTrail(frameNowMs);
   const mapFp = mapFingerprintForTrail(data);
-  if (mapFp && globalMapTrailFingerprint !== mapFp) {
+  if (mapFp && getGlobalMapTrailFingerprint() !== mapFp) {
     loadPersistedGlobalMapTrail(mapFp);
   }
-  if (worldMapPlayerWaveFingerprint && worldMapPlayerWaveFingerprint !== mapFp) {
-    resetWorldMapPlayerWaves(frameNowMs, mapFp);
-  }
+  resetWorldMapPlayerWavesIfMapChanged(frameNowMs, mapFp);
   recordGlobalMapTrailPoint(data, player, appMode);
   persistGlobalMapTrailIfNeeded(false);
   if (appMode !== 'play') {
@@ -1010,8 +367,9 @@ export function render(canvas, data, options = {}) {
     );
     if (mapPlayerMicro && data.width > 0 && data.height > 0) {
       tickWorldMapPlayerWaves(frameNowMs, mapPlayerMicro, mapFp);
-      if (globalMapTrailFingerprint === mapFp && globalMapPlayerTrailMicro.length > 1) {
-        drawGlobalMapPlayerTrail(ctx, globalMapPlayerTrailMicro, data, cw, ch, worldMapCamera);
+      const globalTrailMicro = getGlobalMapPlayerTrailMicro();
+      if (getGlobalMapTrailFingerprint() === mapFp && globalTrailMicro.length > 1) {
+        drawGlobalMapPlayerTrail(ctx, globalTrailMicro, data, cw, ch, worldMapCamera);
       }
       drawWorldMapPlayerWaves(ctx, cw, ch, data, worldMapCamera);
       const gx = mapPlayerMicro.x / MACRO_TILE_STRIDE;
@@ -1036,7 +394,7 @@ export function render(canvas, data, options = {}) {
     persistGlobalMapTrailIfNeeded(false);
     addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
-    worldMapPlayerWaveLastTickMs = 0;
+    resetWorldMapPlayerWaveTick();
     const tCam0 = performance.now();
     const snapPx = (n) => Math.round(n);
     const vx = player.visualX ?? player.x;
@@ -1294,8 +652,14 @@ export function render(canvas, data, options = {}) {
 
     // PASS 3.5: Entity Collection & Drawing
     const tCollect0 = performance.now();
+    const worldMicroW = width * MACRO_TILE_STRIDE;
+    const worldMicroH = height * MACRO_TILE_STRIDE;
+    const collectStartX = Math.max(0, Math.floor(startX - ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectStartY = Math.max(0, Math.floor(startY - ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectEndX = Math.min(worldMicroW, Math.ceil(endX + ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    const collectEndY = Math.min(worldMicroH, Math.ceil(endY + ENTITY_COLLECTION_SHADOW_PAD_TILES));
     const renderItems = collectRenderItems({ 
-      data, player, startX, startY, endX, endY, lodDetail, width, height, getCached, time, 
+      data, player, startX: collectStartX, startY: collectStartY, endX: collectEndX, endY: collectEndY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
       imageCache, tileW, tileH, isPlayerWalkingAnim, latchGround, snapPx, playVision
     });
@@ -1435,7 +799,7 @@ export function render(canvas, data, options = {}) {
               if (it.type === 'tree') {
                 if (appendFormalTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, natureImg, canopyAnimTime, time)) drewMask = true;
               } else if (it.type === 'scatter') {
-                if (appendScatterTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, imageCache, canopyAnimTime, time)) drewMask = true;
+                if (appendScatterTreeCanopyToPlayerMask(mctx, it, pxL, pxT0, pxW, pxH, tileW, tileH, snapPx, imageCache, canopyAnimTime, time, data)) drewMask = true;
               }
             }
             if (drewMask) {
@@ -1515,6 +879,12 @@ export function render(canvas, data, options = {}) {
     const _playerSortY = _playerOnCanopy ? Number(_pItemForCanopy.sortY ?? _pItemForCanopy.y ?? 0) : 0;
     const _deferredCanopies = _playerOnCanopy ? [] : null;
     let _deferredCanopiesFlushed = false;
+    const frameShadowBudget = {
+      buildingSilhouetteBuilds: 0,
+      vegetationSilhouetteDraws: 0
+    };
+    const shadowDynamics = resolveDynamicShadowDynamics(options.settings);
+    const playerFlashHoldVisual = getPlayerFlashHoldVisual();
 
     for (const item of visibleRenderItems) {
       // Flush deferred canopies right before the player is drawn.
@@ -1553,13 +923,31 @@ export function render(canvas, data, options = {}) {
           drawStrengthGrabTargetOutlineHalf(ctx, hoveredWildGroupPrompt, 'north', tileW, tileH, snapPx, time);
         }
 
-        // Shadow — projects onto canopy when player is above a tree.
+        const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
+        const tackleOx = item.type === 'player' ? (item.tackleOffPx || 0) : 0;
+        const tackleOy = item.type === 'player' ? (item.tackleOffPy || 0) : 0;
+        const pxL = snapPx(item.cx - item.pivotX + tackleOx);
+        const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset + tackleOy);
+        const pxW = snapPx(item.dw);
+        const pxH = snapPx(item.dh);
+
+        // Shadow — normal circular blob for pokemon.
         const _shadowGroundZ = (item.type === 'player' ? (item.groundZ || 0) : 0);
         const _shadowBaseY = snapPx((item.y + 0.5) * tileH - _shadowGroundZ * tileH) + spawnYOffset;
-        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        const blobAlpha = Math.max(
+          POKEMON_ELLIPSE_SHADOW_TUNING.alphaMin,
+          Math.min(
+            POKEMON_ELLIPSE_SHADOW_TUNING.alphaMax,
+            POKEMON_ELLIPSE_SHADOW_TUNING.alphaBase * (shadowDynamics?.alphaMul ?? 1)
+          )
+        );
+        ctx.fillStyle = `rgba(0,0,0,${blobAlpha})`;
         ctx.beginPath();
-        const shadowW = tileW * 0.4 * (item.targetHeightTiles / 3.5 + 0.5);
-        ctx.ellipse(item.cx, _shadowBaseY, shadowW, tileH * 0.1, 0, 0, Math.PI * 2);
+        const shadowW =
+          tileW *
+          POKEMON_ELLIPSE_SHADOW_TUNING.widthMul *
+          (item.targetHeightTiles / POKEMON_ELLIPSE_SHADOW_TUNING.widthHeightDiv + POKEMON_ELLIPSE_SHADOW_TUNING.widthHeightBias);
+        ctx.ellipse(item.cx, _shadowBaseY, shadowW, tileH * POKEMON_ELLIPSE_SHADOW_TUNING.radiusYTiles, 0, 0, Math.PI * 2);
         ctx.fill();
 
         if (item.type === 'player' && (item.levelUpGlowSec ?? 0) > 0.001) {
@@ -1572,14 +960,6 @@ export function render(canvas, data, options = {}) {
             alphaMul: alpha
           });
         }
-
-        const bury = item.type === 'player' ? (item.digBuryVisual ?? 0) : 0;
-        const tackleOx = item.type === 'player' ? (item.tackleOffPx || 0) : 0;
-        const tackleOy = item.type === 'player' ? (item.tackleOffPy || 0) : 0;
-        const pxL = snapPx(item.cx - item.pivotX + tackleOx);
-        const pxT0 = snapPx(item.cy - item.pivotY + spawnYOffset + tackleOy);
-        const pxW = snapPx(item.dw);
-        const pxH = snapPx(item.dh);
 
         // Draw canopy shadow BEFORE the player sprite so it sits behind.
         // Two images: (1) the shadow, (2) the pokemon — shadow is behind.
@@ -1625,6 +1005,9 @@ export function render(canvas, data, options = {}) {
             alphaMul: alpha,
             clip: levelUpSpriteClip
           });
+        }
+        if (item.type === 'player' && playerFlashHoldVisual) {
+          drawPlayerFlashHoldAura(ctx, item, playerFlashHoldVisual, tileW, pxT0, pxH);
         }
 
         if (item.type === 'player') {
@@ -1809,6 +1192,8 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'scatter') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        drawScatterGroundDetailSilhouetteShadow(ctx, item, tileW, tileH, snapPx, imageCache, shadowDynamics, time);
+        drawVegetationHybridShadow(ctx, item, { tileW, tileH, snapPx, lodDetail, canopyAnimTime, imageCache, natureImg, data, time, frameShadowBudget, shadowDynamics });
         if (isStrengthGrabTargetItem(item)) {
           drewSplitStrengthGrabOutline = true;
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
@@ -1830,6 +1215,7 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'tree') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
+        drawVegetationHybridShadow(ctx, item, { tileW, tileH, snapPx, lodDetail, canopyAnimTime, imageCache, natureImg, data, time, frameShadowBudget, shadowDynamics });
         const tVegTree0 = performance.now();
         const _treeItemSortY = Number(item.sortY ?? item.y ?? 0);
         if (_deferredCanopies && _treeItemSortY <= _playerSortY) {
@@ -1842,7 +1228,15 @@ export function render(canvas, data, options = {}) {
         vegTreeMsAcc += performance.now() - tVegTree0;
         ctx.restore();
       } else if (item.type === 'building') {
-        ctx.save(); drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
+        ctx.save();
+        if (shadowPolicyByType(item) === 'buildingSilhouette') {
+          const bMeta = getBuildingGroundShadowMeta(item, imageCache, tileW, tileH, snapPx, frameShadowBudget);
+          if (bMeta) {
+            drawGroundSilhouetteShadow(ctx, bMeta, snapPx, tileW, tileH, BUILDING_GROUND_SHADOW_TUNING, shadowDynamics);
+          }
+        }
+        drawBuilding(ctx, item, { tileW, tileH, snapPx, imageCache });
+        ctx.restore();
       } else if (item.type === 'crystalDrop') {
         ctx.save(); drawCrystalDrop(ctx, item, { tileW, tileH, snapPx, imageCache }); ctx.restore();
       } else if (item.type === 'crystalShard') {
@@ -2148,9 +1542,10 @@ export function render(canvas, data, options = {}) {
     const minimapCanvas = document.getElementById('minimap');
     if (minimapCanvas) {
       renderMinimap(minimapCanvas, data, player, {
-        recentTrailMicro: globalMapPlayerTrailRecentMicro,
+        recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
         playVision,
-        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug
+        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug,
+        showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay
       });
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);

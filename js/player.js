@@ -32,7 +32,13 @@ import {
 } from './main/play-strength-carry.js';
 import { strengthDropCarriedAsPickup } from './main/play-crystal-tackle.js';
 import { clampPlayerToPlayColliderBoundsIfActive } from './main/play-collider-overlay-cache.js';
-import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from './world-movement-constants.js';
+import {
+  WORLD_MAX_WALK_SPEED_TILES_PER_SEC,
+  ENTITY_GRAVITY,
+  ENTITY_JUMP_IMPULSE,
+  ENTITY_AIR_JUMP_MAX_GROUND,
+  ENTITY_AIR_JUMP_MAX_FLYING
+} from './world-movement-constants.js';
 import {
   ENTITY_STAMINA_MAX,
   ensureEntityStamina,
@@ -58,11 +64,7 @@ import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.j
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 const ACCEL = 32.0;
 const FRICTION = 20.0;
-const GRAVITY = 9.8;
-const JUMP_IMPULSE = 4.5;
 const GROUND_R = 0.32; // Raio de colisão
-const PLAYER_BASE_MAX_JUMPS = 2;
-const PLAYER_FLYING_MAX_JUMPS = 6;
 /** Player stamina is intentionally higher than generic entity default. */
 const PLAYER_STAMINA_MAX = ENTITY_STAMINA_MAX * 2;
 const PLAYER_HIT_KNOCKBACK_SPEED = 4.4;
@@ -831,7 +833,7 @@ export function tryJumpPlayer(_data, opts = {}) {
   if ((player.cutThirdHitLockoutSec || 0) > 0) return false;
   const canFly = speciesHasFlyingType(player.dexId ?? 0);
   if (canFly && player.flightActive) return false;
-  const maxJumps = canFly ? PLAYER_FLYING_MAX_JUMPS : PLAYER_BASE_MAX_JUMPS;
+  const maxJumps = canFly ? ENTITY_AIR_JUMP_MAX_FLYING : ENTITY_AIR_JUMP_MAX_GROUND;
   if (player.grounded || player.z <= 0.001) player.jumpsUsed = 0;
   if ((player.jumpsUsed || 0) >= maxJumps) return false;
   if (isGroundDigLatchEligible()) {
@@ -839,7 +841,7 @@ export function tryJumpPlayer(_data, opts = {}) {
     player.digCharge01 = 0;
   }
   const vzScale = Math.max(0.35, Math.min(2.5, Number(opts?.vzScale) || 1));
-  player.vz = JUMP_IMPULSE * vzScale;
+  player.vz = ENTITY_JUMP_IMPULSE * vzScale;
   player.grounded = false;
   player.jumping = true;
   player.jumpsUsed = (player.jumpsUsed || 0) + 1;
@@ -1239,7 +1241,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     }
   } else if (!player.grounded) {
     const zJumpPrev = player.z;
-    player.vz -= GRAVITY * dt;
+    player.vz -= ENTITY_GRAVITY * dt;
     /** Used by Earthquake: high falls can cross z=0 in one step from z < 0.04 (tunneling). */
     const vzBeforePositionStep = player.vz;
     player.z += player.vz * dt;

@@ -203,6 +203,7 @@ function getMoveTypeClass(moveId) {
     case 'thunder':
     case 'thunderShock':
     case 'thunderbolt':
+    case 'flash':
       return 'type-electric';
     case 'confusion':
     case 'psychic':
@@ -300,6 +301,9 @@ let prevGamepadFieldMmbHeld = false;
 let prevGamepadThrowHeld = false;
 /** Highest reached charge bar level this hold (per gamepad slot) for lock-click edges. */
 const gamepadChargeLevelBySlot = { l: 0, r: 0, m: 0 };
+let flashHoldPulseSec = 0;
+/** @type {{ strength01: number, pulse01: number } | null} */
+let playerFlashHoldVisual = null;
 
 /** 0..4 = Digit1..Digit5 slot being edited, or -1. */
 let bindingWheelSlotIdx = -1;
@@ -328,6 +332,11 @@ export function syncSelectedFieldSkillForDex(dexId) {
 
 export function getSelectedSpecialAttackMoveForDex(dexId) {
   return /** @type {MoveId} */ (getPlayerInputBindings(dexId).rmb);
+}
+
+/** Lightweight visual payload for render-only Flash hold aura. */
+export function getPlayerFlashHoldVisual() {
+  return playerFlashHoldVisual;
 }
 
 export function syncSelectedSpecialAttackForDex(dexId) {
@@ -889,6 +898,7 @@ function isHoldStreamMoveId(moveId) {
     moveId === 'hyperBeam' ||
     moveId === 'triAttack' ||
     moveId === 'thunderShock' ||
+    moveId === 'flash' ||
     moveId === 'absorb' ||
     moveId === 'megaDrain'
   );
@@ -1221,6 +1231,10 @@ function finishMoveButtonUp(moveId, pl, data, heldMs, charge01, which) {
     } else {
       castEarthquakeCharged(sx, sy, tx, ty, pl, charge01 || 0);
     }
+    return;
+  }
+  if (moveId === 'flash') {
+    // Hold-only utility move: visual aura is handled per-frame while the button is held.
     return;
   }
   const flame = which === 'l' ? leftFlameStreamedThisPress : which === 'm' ? middleFlameStreamedThisPress : rightFlameStreamedThisPress;
@@ -1570,6 +1584,22 @@ export function updatePlayPointerCombat(dt, player, data) {
     !!(virtRight && !mod && rmb === 'waterCannon') ||
     !!(virtMiddle && !mod && mmb === 'waterCannon');
   updatePlayerWaterCannonMergedBeamVisual(waterCannonStreamHeld, sx, sy, tx, ty, player);
+
+  const flashHeld =
+    !!(virtLeft && !mod && !player._strengthCarry && lmb === 'flash') ||
+    !!(virtRight && !mod && rmb === 'flash') ||
+    !!(virtMiddle && !mod && mmb === 'flash');
+  if (flashHeld) {
+    flashHoldPulseSec += dt;
+    const p = 0.5 + 0.5 * Math.sin(flashHoldPulseSec * 11.5);
+    playerFlashHoldVisual = {
+      strength01: 0.76 + p * 0.24,
+      pulse01: p
+    };
+  } else {
+    flashHoldPulseSec = 0;
+    playerFlashHoldVisual = null;
+  }
 
   /** First held slot L→R→M with a charge-tiered field move (4-bar meter on canvas; Earthquake uses 5). */
   let fieldChargeUiActive = null;

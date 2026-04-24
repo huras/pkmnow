@@ -16,15 +16,13 @@ import {
 } from './scatter-pass2-debug.js';
 import {
   BIOME_TO_TERRAIN,
-  BIOME_VEGETATION,
   BIOME_TO_FOLIAGE,
   FOLIAGE_DENSITY_THRESHOLD,
   isLakeLotusFoliageTerrainSet,
   usesPoolAutotileMaskForFoliage,
   getTreeType,
   TREE_DENSITY_THRESHOLD,
-  TREE_NOISE_SCALE,
-  BERRY_PATCH_THRESHOLD
+  TREE_NOISE_SCALE
 } from './biome-tiles.js';
 import {
   TRUNK_STRIP_WIDTH_FRAC,
@@ -35,7 +33,12 @@ import {
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
 import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
-import { getScatterItemKeyOverride, hasScatterItemKeyOverride } from './main/scatter-item-override.js';
+import {
+  hasScatterItemKeyOverride,
+  getScatterItemKeyOverride,
+  SCATTER_ITEM_KEY_OVERRIDE_EMPTY
+} from './main/scatter-item-override.js';
+import { resolveScatterVegetationItemKey } from './vegetation-channels.js';
 
 /** When non-null, `canWalkMicroTile(..., ignoreTreeTrunks: true)` results are memoized for this batch (player movement probes). */
 let walkProbeCache = null;
@@ -602,21 +605,12 @@ export function scatterPhysicsCircleAtOrigin(ox0, oy0, data, originMemo = null, 
   const nTile = getT(ox0, oy0);
   if (!nTile) return null;
   const hasForcedItemKey = hasScatterItemKeyOverride(ox0, oy0);
+  const forcedItemKey = hasForcedItemKey ? getScatterItemKeyOverride(ox0, oy0) : null;
+  if (forcedItemKey === SCATTER_ITEM_KEY_OVERRIDE_EMPTY) return null;
   if (!hasForcedItemKey && !validScatterOriginMicro(ox0, oy0, seed, microW, microH, getT, originMemo)) return null;
 
-  const itemsO = BIOME_VEGETATION[nTile.biomeId] || [];
-  if (!itemsO.length) return null;
-
-  const isBerryPatchO = nTile.berryPatchDensity >= BERRY_PATCH_THRESHOLD;
-  const filteredO = itemsO.filter(ik => {
-    const isB = ik.includes('berry-tree-');
-    return isBerryPatchO ? isB : !isB;
-  });
-  if (!filteredO.length) return null;
-
-  const forcedItemKey = getScatterItemKeyOverride(ox0, oy0);
-  const itemKey =
-    forcedItemKey || filteredO[Math.floor(seededHash(ox0, oy0, seed + 222) * filteredO.length)];
+  const itemKey = hasForcedItemKey ? forcedItemKey : resolveScatterVegetationItemKey(ox0, oy0, nTile, seed);
+  if (!itemKey) return null;
 
   const isTree = scatterItemKeyIsTree(itemKey);
   const isSolid = scatterItemKeyIsSolid(itemKey);

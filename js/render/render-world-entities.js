@@ -25,6 +25,10 @@ import {
 } from '../pokemon/pmd-layout-metrics.js';
 import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-config.js';
+import {
+  leaderRoamCurveLegRenderable,
+  sampleLeaderRoamBezierWorldPoints
+} from '../wild-pokemon/wild-leader-roam-curve.js';
 
 /** Copas assadas: espelha o tilt +θ para o bin esquerdo (eixo em px/py). */
 function drawCanopyWithWindFlip(ctx, canvas, px, py, ox, oy, flipX, snapPx) {
@@ -900,20 +904,52 @@ export function drawWildLeaderRoamTarget(ctx, item, options) {
   const ringR = Math.max(5, tileW * (0.24 + pulse * 0.06));
 
   ctx.save();
-  // 1. Dashed Line (High Contrast: Black outline + White inner)
+  // 1. Planned path: quadratic Bezier (leader ROAM) or straight fallback
+  const curvePts = leaderRoamCurveLegRenderable(item) ? sampleLeaderRoamBezierWorldPoints(item) : null;
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.lineTo(cx, cy);
-  
+  if (curvePts && curvePts.length >= 2) {
+    const p0 = curvePts[0];
+    ctx.moveTo(snapPx((p0.x + 0.5) * tileW), snapPx((p0.y + 0.5) * tileH));
+    for (let i = 1; i < curvePts.length; i++) {
+      const p = curvePts[i];
+      ctx.lineTo(snapPx((p.x + 0.5) * tileW), snapPx((p.y + 0.5) * tileH));
+    }
+  } else {
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(cx, cy);
+  }
+
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.lineWidth = 3.2;
   ctx.stroke();
-  
+
   ctx.strokeStyle = 'white';
   ctx.lineWidth = 1.4;
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Leader → first curve sample (or chord start) — short hint if curve starts behind the sprite
+  if (curvePts && curvePts.length >= 2) {
+    const p0px = snapPx((curvePts[0].x + 0.5) * tileW);
+    const p0py = snapPx((curvePts[0].y + 0.5) * tileH);
+    const d0 = Math.hypot(sx - p0px, sy - p0py);
+    if (d0 > tileW * 0.2) {
+      ctx.setLineDash([2, 6]);
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(p0px, p0py);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(200, 230, 255, 0.95)';
+      ctx.lineWidth = 1.0;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+  }
 
   // 2. Pulse Background
   ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';

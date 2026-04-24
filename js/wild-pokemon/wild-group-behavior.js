@@ -64,6 +64,21 @@ export function ensureGroupBehaviorState(entity) {
 }
 
 /**
+ * Wild-on-wild damage should not apply between members of the same `groupId` pack.
+ *
+ * @param {object | null | undefined} attacker
+ * @param {object | null | undefined} victim
+ * @returns {boolean}
+ */
+export function wildAttackerAndVictimSameGroup(attacker, victim) {
+  if (!attacker || !victim || typeof attacker !== 'object' || typeof victim !== 'object') return false;
+  const ag = String(attacker.groupId || '');
+  const vg = String(victim.groupId || '');
+  if (!ag || !vg) return false;
+  return ag === vg;
+}
+
+/**
  * @param {any} attacker
  * @returns {{ kind: 'player' | 'entity', key: string | null }}
  */

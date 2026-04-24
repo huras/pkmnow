@@ -1,6 +1,11 @@
 import { playPokemonCry } from '../pokemon/pokemon-cries.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
-import { markWildFarCryMinimapIntroduced } from '../wild-pokemon/wild-minimap-species-known.js';
+import {
+  markWildFarCryMinimapIntroduced,
+  markWildMinimapSpeciesKnown
+} from '../wild-pokemon/wild-minimap-species-known.js';
+import { isDexCryIdentified } from '../wild-pokemon/cry-identification-progress.js';
+import { cancelFarCryIdentificationChallenge } from './far-cry-identification-challenge.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { pushPlayEventLog } from './play-event-log-state.js';
 
@@ -221,7 +226,11 @@ function triggerFarCryFromEntity(entity, playerX, playerY) {
   const dir = normalize2(dx, dy);
   const waveSeed = ((ex * 0.173 + ey * 0.289) % 1 + 1) % 1;
   const introducedNow = !entity?.minimapFarCryIntroduced;
+  const dexId = Math.floor(Number(entity?.dexId) || 0) || 1;
   markWildFarCryMinimapIntroduced(entity);
+  if (isDexCryIdentified(dexId)) {
+    markWildMinimapSpeciesKnown(entity);
+  }
   logFarCryEvent(entity, playerX, playerY, dir.x, dir.y, introducedNow);
   playPokemonCry(entity?.dexId ?? 1, {
     lane: 'emotion',
@@ -326,6 +335,7 @@ function ageFarCryEffects(dt) {
 }
 
 export function resetFarCrySystem() {
+  cancelFarCryIdentificationChallenge();
   activeFarCryScreenWaves.length = 0;
   pendingFarCryScreenWaves.length = 0;
   activeFarCryMinimapEchoes.length = 0;

@@ -1,6 +1,6 @@
 import { POKEMON_CONFIG } from '../pokemon/pokemon-config.js';
 
-/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'cut'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychoCut'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'tackle'|'waterCannon'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'vineWhip'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
+/** @typedef {'absorb'|'acid'|'auroraBeam'|'blizzard'|'bubble'|'bubbleBeam'|'confusion'|'cut'|'dragonRage'|'dreamEater'|'earthquake'|'ember'|'fireBlast'|'fireSpin'|'flameCharge'|'flamethrower'|'flash'|'gust'|'hydroPump'|'hyperBeam'|'iceBeam'|'megaDrain'|'nightShade'|'petalDance'|'psybeam'|'psychoCut'|'psychic'|'psywave'|'rainDance'|'razorWind'|'sludge'|'smog'|'solarBeam'|'sonicBoom'|'steelBeam'|'tackle'|'waterCannon'|'sunnyDay'|'surf'|'swift'|'thunder'|'thunderShock'|'thunderbolt'|'triAttack'|'vineWhip'|'waterGun'|'waterBurst'|'prismaticLaser'|'poisonSting'|'poisonPowder'|'incinerate'|'silkShoot'|'ultimate'} MoveId */
 
 /** Human-readable labels used by UI chips in Character Selector. */
 export const MOVE_LABELS = Object.freeze({
@@ -16,6 +16,7 @@ export const MOVE_LABELS = Object.freeze({
   fireSpin: 'Fire Spin',
   flameCharge: 'Flame Charge',
   flamethrower: 'Flamethrower',
+  flash: 'Flash',
   gust: 'Gust',
   hydroPump: 'Hydro Pump',
   waterCannon: 'Water Cannon',
@@ -95,6 +96,7 @@ export const PLAYER_PROJECTILE_MOVE_IDS = Object.freeze(
     'thunder',
     'thunderShock',
     'thunderbolt',
+    'flash',
     'triAttack',
     'confusion',
     'bubble',
@@ -126,7 +128,7 @@ const TYPE_PRESETS = Object.freeze({
   bug: /** @type {MoveId[]} */ (['silkShoot', 'poisonPowder', 'poisonSting', 'bubble']),
   normal: /** @type {MoveId[]} */ (['ember', 'waterBurst', 'poisonSting', 'confusion']),
   flying: /** @type {MoveId[]} */ (['flamethrower', 'psybeam', 'waterGun', 'prismaticLaser']),
-  electric: /** @type {MoveId[]} */ (['psybeam', 'confusion', 'prismaticLaser', 'waterGun']),
+  electric: /** @type {MoveId[]} */ (['flash', 'psybeam', 'confusion', 'prismaticLaser']),
   ground: /** @type {MoveId[]} */ (['earthquake', 'incinerate', 'poisonSting', 'silkShoot']),
   rock: /** @type {MoveId[]} */ (['incinerate', 'waterBurst', 'psybeam', 'poisonPowder']),
   fighting: /** @type {MoveId[]} */ (['incinerate', 'silkShoot', 'poisonSting', 'confusion']),
@@ -151,7 +153,7 @@ export const POKEMON_MOVESET_OVERRIDES = {
   7: ['waterBurst', 'bubble', 'waterGun', 'silkShoot'],
   9: ['waterGun', 'waterBurst', 'bubble', 'confusion'],
   12: ['silkShoot', 'poisonPowder', 'psybeam', 'confusion'],
-  25: ['confusion', 'psybeam', 'prismaticLaser', 'waterGun'],
+  25: ['flash', 'confusion', 'psybeam', 'prismaticLaser'],
   65: ['confusion', 'psybeam', 'prismaticLaser', 'poisonPowder'],
   94: ['confusion', 'prismaticLaser', 'poisonSting', 'poisonPowder'],
   126: ['incinerate', 'flamethrower', 'ember', 'confusion'],

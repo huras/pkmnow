@@ -5,6 +5,7 @@ import {
   setSpatialSourceWorldPosition,
   centerSpatialSourceOnListener
 } from '../audio/spatial-audio.js';
+import { tryRegisterWildNaturalCryForIdentification } from '../main/far-cry-identification-challenge.js';
 /** Two slots per dex so overlapping wild cries do not cancel each other. */
 const POOL_SIZE = 2;
 
@@ -318,6 +319,7 @@ function playPokemonCryImpl(dex, opts, warmRetry) {
     if (entity) bindActiveCryToEntity(entity, a);
 
     noteLane(entity, lane, minGap);
+    tryRegisterWildNaturalCryForIdentification(entity);
 
     if (env || v0 !== v1 || r0 !== r1) {
       attachCryEnvelope(a, {
@@ -423,6 +425,7 @@ export function playWildDamageHurtCry(entity) {
     const p = a.play();
     if (p !== undefined && typeof p.catch === 'function') p.catch(() => {});
     bindActiveCryToEntity(entity, a);
+    tryRegisterWildNaturalCryForIdentification(entity);
     const remain =
       d && Number.isFinite(d) && d > hurtStart + 0.04 ? d - hurtStart : fallbackHalf;
     attachHurtTailEnvelope(a, hurtStart, remain);

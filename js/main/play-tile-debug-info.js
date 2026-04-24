@@ -8,13 +8,15 @@ import {
   getGrassVariant,
   getTreeType,
   TREE_DENSITY_THRESHOLD,
-  TREE_NOISE_SCALE
+  TREE_NOISE_SCALE,
+  SCATTER_NOISE_SEED_OFFSET,
+  SCATTER_NOISE_SCALE,
+  SCATTER_NOISE_THRESHOLD
 } from '../biome-tiles.js';
 import { MACRO_TILE_STRIDE, getMicroTile, foliageDensity, foliageType } from '../chunking.js';
 import { TERRAIN_SETS, OBJECT_SETS } from '../tessellation-data.js';
 import {
   getRoleForCell,
-  seededHash,
   parseShape,
   proceduralEntityIdHex,
   PROC_SALT_GRASS_CELL,
@@ -25,6 +27,7 @@ import {
   PROC_SALT_ROCK,
   PROC_SALT_CRYSTAL
 } from '../tessellation-logic.js';
+import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 import {
   analyzeScatterPass2Base,
   validScatterOriginMicro,
@@ -51,7 +54,7 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
 
   const seed = data.seed;
   const fdTrees = foliageDensity(mx, my, seed + 5555, TREE_NOISE_SCALE);
-  const fdScatter = foliageDensity(mx, my, seed + 111, 2.5);
+  const fdScatter = foliageDensity(mx, my, seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE);
   const fdGrass = foliageDensity(mx, my, seed, 3);
   const ft = foliageType(mx, my, seed);
   const foliageOverlayIdDbg = getFoliageOverlayTileId(mx, my, data);
@@ -87,13 +90,13 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
       const t = getMicroTile(nx, ny, data) || { heightStep: 0, biomeId: 0 };
       const bEnv = Object.values(BIOMES).find((b) => b.id === t.biomeId);
       const fTrees = foliageDensity(nx, ny, seed + 5555, TREE_NOISE_SCALE);
-      const fScat = foliageDensity(nx, ny, seed + 111, 2.5);
+      const fScat = foliageDensity(nx, ny, seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE);
       const treeType = getTreeType(t.biomeId, nx, ny, seed);
 
       surroundings.heightStep[dy + 1][dx + 1] = t.heightStep;
       surroundings.biome[dy + 1][dx + 1] = bEnv ? bEnv.name : '???';
       surroundings.formals[dy + 1][dx + 1] = !!treeType && (nx + ny) % 3 === 0 && fTrees >= TREE_DENSITY_THRESHOLD;
-      surroundings.scatter[dy + 1][dx + 1] = fScat > 0.82;
+      surroundings.scatter[dy + 1][dx + 1] = fScat > SCATTER_NOISE_THRESHOLD;
     }
   }
 
@@ -243,13 +246,13 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
           const nTile = getMicroTile(ox, oy, data);
           if (
             nTile &&
-            foliageDensity(ox, oy, seed + 111, 2.5) > 0.82 &&
+            foliageDensity(ox, oy, seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD &&
             !nTile.isRoad &&
             validScatterOriginMicro(ox, oy, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
           ) {
-            const itemsAtO = BIOME_VEGETATION[nTile.biomeId] || [];
-            if (itemsAtO.length === 0) continue;
-            const nItemKey = itemsAtO[Math.floor(seededHash(ox, oy, seed + 222) * itemsAtO.length)];
+            if ((BIOME_VEGETATION[nTile.biomeId] || []).length === 0) continue;
+            const nItemKey = resolveScatterVegetationItemKey(ox, oy, nTile, seed);
+            if (!nItemKey) continue;
             const nObjSet = OBJECT_SETS[nItemKey];
             if (nObjSet) {
               const { rows, cols } = parseShape(nObjSet.shape);
@@ -278,11 +281,11 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
         scatterItems.length > 0 &&
         !isFormalOccupied &&
         !occupiedByScatter &&
-        fdScatter > 0.82 &&
+        fdScatter > SCATTER_NOISE_THRESHOLD &&
         validScatterOriginMicro(mx, my, seed, microWDbg, microHDbg, getTdbg, validOriginMemoDbg)
       ) {
-        const itemKey = scatterItems[Math.floor(seededHash(mx, my, seed + 222) * scatterItems.length)];
-        const objSet = OBJECT_SETS[itemKey];
+        const itemKey = resolveScatterVegetationItemKey(mx, my, tile, seed);
+        const objSet = itemKey ? OBJECT_SETS[itemKey] : null;
         if (objSet) {
           const { cols } = parseShape(objSet.shape);
           const treeTypeChk = getTreeType(tile.biomeId, mx, my, seed);
@@ -318,7 +321,7 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
         !tile.isRoad &&
         !tile.isCity &&
         !isFormalOccupied &&
-        foliageDensity(mx, my, seed + 111, 2.5) > 0.82);
+        foliageDensity(mx, my, seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD);
 
     if (!isFormalOccupied && !occupiedByScatter && fdGrass >= 0.45 && !suppressGrassLikeRender) {
       const variant = getGrassVariant(tile.biomeId);
@@ -514,7 +517,7 @@ export function buildPlayModeTileDebugInfo(mx, my, data) {
       overlayHints.push(`Fase raiz mas noiseTrees ${fdTrees.toFixed(3)} < ${TREE_DENSITY_THRESHOLD}.`);
     }
     if (fdGrass < 0.45) overlayHints.push(`noiseGrass ${fdGrass.toFixed(3)} < 0.45.`);
-    if (fdScatter <= 0.82 && !scatterContinuation) {
+    if (fdScatter <= SCATTER_NOISE_THRESHOLD && !scatterContinuation) {
       overlayHints.push(`noiseScatter ${fdScatter.toFixed(3)} ≤ 0.82 e sem continuação a partir do Oeste.`);
     }
   }

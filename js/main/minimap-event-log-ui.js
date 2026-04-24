@@ -32,6 +32,8 @@ export function installMinimapEventLogUi() {
   if (!(root instanceof HTMLElement) || !(list instanceof HTMLElement)) {
     return {
       syncPlayEventLogHud: () => {},
+      setPlayEventLogVisible: () => {},
+      isPlayEventLogVisible: () => false,
       clearPlayEventLogHudEngaged: () => {},
       destroy: () => {}
     };
