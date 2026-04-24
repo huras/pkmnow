@@ -1,10 +1,6 @@
 const TILE_PX = 16;
-
 let dataset = null;
-
-function idx(w, x, y) {
-  return y * w + x;
-}
+const idx = (w, x, y) => y * w + x;
 
 function pushFace(builder, a, b, c, d, uv, tint) {
   builder.p.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
@@ -58,8 +54,10 @@ function uvRect(imageW, imageH, tileId, cols) {
 function buildChunk(payload) {
   if (!dataset || dataset.version !== payload.version) return null;
   const {
-    span,
-    half,
+    width,
+    height,
+    offsetX,
+    offsetY,
     floorY,
     stepHeight,
     wallShade,
@@ -78,35 +76,35 @@ function buildChunk(payload) {
     if (!builders.has(fileId)) builders.set(fileId, { p: [], u: [], c: [] });
     return builders.get(fileId);
   };
-  const visitedTop = new Uint8Array(span * span);
-  const visitedWallRight = new Uint8Array(span * span);
-  const visitedWallDown = new Uint8Array(span * span);
+  const visitedTop = new Uint8Array(width * height);
+  const visitedWallRight = new Uint8Array(width * height);
+  const visitedWallDown = new Uint8Array(width * height);
   const inChunk = (x, y) => x >= chunk.x0 && x < chunk.x1 && y >= chunk.y0 && y < chunk.y1;
   const topKeyAt = (x, y) => {
     if (!inChunk(x, y)) return -1;
-    const i = idx(span, x, y);
+    const i = idx(width, x, y);
     const fileId = fileIdByCell[i];
     if (fileId < 0) return -1;
     return `${fileId}|${spriteByCell[i]}|${colsByCell[i]}|${heightByCell[i]}`;
   };
   const rightWallKeyAt = (x, y) => {
     if (!inChunk(x, y)) return -1;
-    const i = idx(span, x, y);
+    const i = idx(width, x, y);
     const fileId = fileIdByCell[i];
     if (fileId < 0) return -1;
     const py0 = heightByCell[i] * stepHeight;
-    const rightI = x + 1 < span ? idx(span, x + 1, y) : -1;
+    const rightI = x + 1 < width ? idx(width, x + 1, y) : -1;
     const rightH = rightI >= 0 ? heightByCell[rightI] * stepHeight : floorY;
     if (Math.abs(py0 - rightH) <= eps) return -1;
     return `${fileId}|${spriteByCell[i]}|${colsByCell[i]}|${Math.min(py0, rightH)}|${Math.max(py0, rightH)}`;
   };
   const downWallKeyAt = (x, y) => {
     if (!inChunk(x, y)) return -1;
-    const i = idx(span, x, y);
+    const i = idx(width, x, y);
     const fileId = fileIdByCell[i];
     if (fileId < 0) return -1;
     const py0 = heightByCell[i] * stepHeight;
-    const downI = y + 1 < span ? idx(span, x, y + 1) : -1;
+    const downI = y + 1 < height ? idx(width, x, y + 1) : -1;
     const downH = downI >= 0 ? heightByCell[downI] * stepHeight : floorY;
     if (Math.abs(py0 - downH) <= eps) return -1;
     return `${fileId}|${spriteByCell[i]}|${colsByCell[i]}|${Math.min(py0, downH)}|${Math.max(py0, downH)}`;
@@ -117,13 +115,13 @@ function buildChunk(payload) {
 
   for (let y = chunk.y0; y < chunk.y1; y++) {
     for (let x = chunk.x0; x < chunk.x1; x++) {
-      const i = idx(span, x, y);
+      const i = idx(width, x, y);
       const fileId = fileIdByCell[i];
       if (fileId < 0) continue;
       preFaceEstimate++;
       const py0 = heightByCell[i] * stepHeight;
-      const rightI = x + 1 < span ? idx(span, x + 1, y) : -1;
-      const downI = y + 1 < span ? idx(span, x, y + 1) : -1;
+      const rightI = x + 1 < width ? idx(width, x + 1, y) : -1;
+      const downI = y + 1 < height ? idx(width, x, y + 1) : -1;
       const rightH = rightI >= 0 ? heightByCell[rightI] * stepHeight : floorY;
       const downH = downI >= 0 ? heightByCell[downI] * stepHeight : floorY;
       if (Math.abs(py0 - rightH) > eps) preFaceEstimate++;
@@ -133,7 +131,7 @@ function buildChunk(payload) {
 
   for (let y = chunk.y0; y < chunk.y1; y++) {
     for (let x = chunk.x0; x < chunk.x1; x++) {
-      const i = idx(span, x, y);
+      const i = idx(width, x, y);
       if (visitedTop[i]) continue;
       const key = topKeyAt(x, y);
       if (key === -1) continue;
@@ -142,12 +140,12 @@ function buildChunk(payload) {
       if (!meta) continue;
       const uv = uvRect(meta.w, meta.h, spriteByCell[i], colsByCell[i]);
       let runW = 1;
-      while (x + runW < chunk.x1 && !visitedTop[idx(span, x + runW, y)] && topKeyAt(x + runW, y) === key) runW++;
+      while (x + runW < chunk.x1 && !visitedTop[idx(width, x + runW, y)] && topKeyAt(x + runW, y) === key) runW++;
       let runH = 1;
       while (y + runH < chunk.y1) {
         let rowOk = true;
         for (let xx = x; xx < x + runW; xx++) {
-          const ri = idx(span, xx, y + runH);
+          const ri = idx(width, xx, y + runH);
           if (visitedTop[ri] || topKeyAt(xx, y + runH) !== key) {
             rowOk = false;
             break;
@@ -156,11 +154,11 @@ function buildChunk(payload) {
         if (!rowOk) break;
         runH++;
       }
-      for (let yy = y; yy < y + runH; yy++) for (let xx = x; xx < x + runW; xx++) visitedTop[idx(span, xx, yy)] = 1;
+      for (let yy = y; yy < y + runH; yy++) for (let xx = x; xx < x + runW; xx++) visitedTop[idx(width, xx, yy)] = 1;
       const b = getBuilder(fileId);
-      const px0 = x - half;
+      const px0 = x - offsetX;
       const px1 = px0 + runW;
-      const pz0 = y - half;
+      const pz0 = y - offsetY;
       const pz1 = pz0 + runH;
       const py0 = heightByCell[i] * stepHeight;
       pushFaceTiled(
@@ -181,7 +179,7 @@ function buildChunk(payload) {
   if (lod === 0) {
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const i = idx(span, x, y);
+        const i = idx(width, x, y);
         if (visitedWallRight[i]) continue;
         const key = rightWallKeyAt(x, y);
         if (key === -1) continue;
@@ -190,16 +188,16 @@ function buildChunk(payload) {
         if (!meta) continue;
         const uv = uvRect(meta.w, meta.h, spriteByCell[i], colsByCell[i]);
         const py0 = heightByCell[i] * stepHeight;
-        const rightI = x + 1 < span ? idx(span, x + 1, y) : -1;
+        const rightI = x + 1 < width ? idx(width, x + 1, y) : -1;
         const rightH = rightI >= 0 ? heightByCell[rightI] * stepHeight : floorY;
         const minY = Math.min(py0, rightH);
         const maxY = Math.max(py0, rightH);
         let runH = 1;
-        while (y + runH < chunk.y1 && !visitedWallRight[idx(span, x, y + runH)] && rightWallKeyAt(x, y + runH) === key) runH++;
-        for (let yy = y; yy < y + runH; yy++) visitedWallRight[idx(span, x, yy)] = 1;
+        while (y + runH < chunk.y1 && !visitedWallRight[idx(width, x, y + runH)] && rightWallKeyAt(x, y + runH) === key) runH++;
+        for (let yy = y; yy < y + runH; yy++) visitedWallRight[idx(width, x, yy)] = 1;
         const b = getBuilder(fileId);
-        const px = x - half + 1;
-        const pz0 = y - half;
+        const px = x - offsetX + 1;
+        const pz0 = y - offsetY;
         const pz1 = pz0 + runH;
         const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(eps, stepHeight)));
         pushFaceTiled(
@@ -221,7 +219,7 @@ function buildChunk(payload) {
   if (lod === 0) {
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const i = idx(span, x, y);
+        const i = idx(width, x, y);
         if (visitedWallDown[i]) continue;
         const key = downWallKeyAt(x, y);
         if (key === -1) continue;
@@ -230,17 +228,17 @@ function buildChunk(payload) {
         if (!meta) continue;
         const uv = uvRect(meta.w, meta.h, spriteByCell[i], colsByCell[i]);
         const py0 = heightByCell[i] * stepHeight;
-        const downI = y + 1 < span ? idx(span, x, y + 1) : -1;
+        const downI = y + 1 < height ? idx(width, x, y + 1) : -1;
         const downH = downI >= 0 ? heightByCell[downI] * stepHeight : floorY;
         const minY = Math.min(py0, downH);
         const maxY = Math.max(py0, downH);
         let runW = 1;
-        while (x + runW < chunk.x1 && !visitedWallDown[idx(span, x + runW, y)] && downWallKeyAt(x + runW, y) === key) runW++;
-        for (let xx = x; xx < x + runW; xx++) visitedWallDown[idx(span, xx, y)] = 1;
+        while (x + runW < chunk.x1 && !visitedWallDown[idx(width, x + runW, y)] && downWallKeyAt(x + runW, y) === key) runW++;
+        for (let xx = x; xx < x + runW; xx++) visitedWallDown[idx(width, xx, y)] = 1;
         const b = getBuilder(fileId);
-        const px0 = x - half;
+        const px0 = x - offsetX;
         const px1 = px0 + runW;
-        const pz = y - half + 1;
+        const pz = y - offsetY + 1;
         const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(eps, stepHeight)));
         pushFaceTiled(
           b,

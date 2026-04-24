@@ -225,76 +225,31 @@ export async function buildDetailTerrain({
   clearGroup(detailGroup);
   const microW = world.width * MACRO_TILE_STRIDE;
   const microH = world.height * MACRO_TILE_STRIDE;
-  const span = clamp(Math.floor(settings.microSpan), 64, Math.min(microW, microH));
-  const startX = clamp(Math.floor(centerMicroX - span * 0.5), 0, microW - span);
-  const startY = clamp(Math.floor(centerMicroY - span * 0.5), 0, microH - span);
-  const runtimeVersion = `${world.seed}:${startX}:${startY}:${span}:${settings.stepHeight}:${settings.wallShade}`;
-  const currentBounds = { span, startX, startY };
-
-  const cells = new Array(span * span);
-  const needed = new Set();
-  for (let y = 0; y < span; y++) for (let x = 0; x < span; x++) {
-    const mx = startX + x;
-    const my = startY + y;
-    const t = getMicroTile(mx, my, world);
-    const role = computeTerrainRoleAndSprite(mx, my, world, t.heightStep);
-    const set = role.set;
-    const file = set?.file ? TessellationEngine.getImagePath(set.file).replace(/\\/g, '/') : null;
-    if (file) needed.add(file);
-    cells[idx(span, x, y)] = {
-      h: t.heightStep,
-      heightStep: t.heightStep,
-      file,
-      cols: TessellationEngine.getTerrainSheetCols(set),
-      sprite: role.spriteId ?? set?.centerId ?? 0,
-      biomeId: t.biomeId,
-      isRoad: t.isRoad,
-      isCity: t.isCity,
-      foliageDensity: t.foliageDensity ?? 0,
-      berryPatchDensity: t.berryPatchDensity ?? 0,
-      mx,
-      my,
-    };
-    if (x === span - 1 && y % 8 === 0) await nextFrame();
-  }
-  await Promise.all([...needed].map(textureFor));
-  const fileById = [...needed];
-  const fileIdByPath = new Map(fileById.map((f, i) => [f, i]));
-
+  const width = microW;
+  const height = microH;
+  const offsetX = width * 0.5;
+  const offsetY = height * 0.5;
+  const currentBounds = { width, height, offsetX, offsetY, startX: 0, startY: 0 };
   let minH = Infinity;
-  for (const c of cells) minH = Math.min(minH, c.h);
-  const floorY = (minH - 2) * settings.stepHeight;
-  const half = span * 0.5;
-  const fileIdByCell = new Int16Array(span * span);
-  const spriteByCell = new Uint16Array(span * span);
-  const colsByCell = new Uint16Array(span * span);
-  const heightByCell = new Float32Array(span * span);
-  for (let y = 0; y < span; y++) {
-    for (let x = 0; x < span; x++) {
-      const i = idx(span, x, y);
-      const cell = cells[i];
-      fileIdByCell[i] = cell.file ? fileIdByPath.get(cell.file) : -1;
-      spriteByCell[i] = cell.sprite || 0;
-      colsByCell[i] = cell.cols || 1;
-      heightByCell[i] = Number(cell.h) || 0;
+  for (let my = 0; my < height; my += MACRO_TILE_STRIDE) {
+    for (let mx = 0; mx < width; mx += MACRO_TILE_STRIDE) {
+      const t = getMicroTile(mx, my, world);
+      minH = Math.min(minH, t?.heightStep ?? 0);
     }
+    if (my % (MACRO_TILE_STRIDE * 6) === 0) await nextFrame();
   }
-  const atlasMetaByFileId = fileById.map((file) => {
-    const tex = atlasTextures.get(file);
-    const w = tex?.image?.width || 1;
-    const h = tex?.image?.height || 1;
-    return { w, h };
-  });
-  const chunkCols = Math.ceil(span / DETAIL_CHUNK_SIZE);
-  const chunkRows = Math.ceil(span / DETAIL_CHUNK_SIZE);
+  if (!Number.isFinite(minH)) minH = 0;
+  const floorY = (minH - 2) * settings.stepHeight;
+  const chunkCols = Math.ceil(width / DETAIL_CHUNK_SIZE);
+  const chunkRows = Math.ceil(height / DETAIL_CHUNK_SIZE);
   const chunkModels = [];
 
   for (let chunkY = 0; chunkY < chunkRows; chunkY++) {
     for (let chunkX = 0; chunkX < chunkCols; chunkX++) {
       const x0 = chunkX * DETAIL_CHUNK_SIZE;
       const y0 = chunkY * DETAIL_CHUNK_SIZE;
-      const x1 = Math.min(span, x0 + DETAIL_CHUNK_SIZE);
-      const y1 = Math.min(span, y0 + DETAIL_CHUNK_SIZE);
+      const x1 = Math.min(width, x0 + DETAIL_CHUNK_SIZE);
+      const y1 = Math.min(height, y0 + DETAIL_CHUNK_SIZE);
       chunkModels.push({ key: `${chunkX},${chunkY}`, chunkX, chunkY, x0, y0, x1, y1 });
     }
   }
@@ -307,23 +262,45 @@ export async function buildDetailTerrain({
       if (!builders.has(file)) builders.set(file, { p: [], u: [], c: [] });
       return builders.get(file);
     };
-    const visitedTop = new Uint8Array(span * span);
-    const visitedWallRight = new Uint8Array(span * span);
-    const visitedWallDown = new Uint8Array(span * span);
+    const chunkW = chunk.x1 - chunk.x0;
+    const chunkH = chunk.y1 - chunk.y0;
+    const visitedTop = new Uint8Array(chunkW * chunkH);
+    const visitedWallRight = new Uint8Array(chunkW * chunkH);
+    const visitedWallDown = new Uint8Array(chunkW * chunkH);
+    const localIdx = (x, y) => (y - chunk.y0) * chunkW + (x - chunk.x0);
     const inChunk = (x, y) => x >= chunk.x0 && x < chunk.x1 && y >= chunk.y0 && y < chunk.y1;
+    const cellMemo = new Map();
+    const getCell = (x, y) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return null;
+      const key = `${x},${y}`;
+      if (cellMemo.has(key)) return cellMemo.get(key);
+      const t = getMicroTile(x, y, world);
+      const role = computeTerrainRoleAndSprite(x, y, world, t.heightStep);
+      const set = role.set;
+      const file = set?.file ? TessellationEngine.getImagePath(set.file).replace(/\\/g, '/') : null;
+      const cell = {
+        h: t.heightStep,
+        file,
+        cols: TessellationEngine.getTerrainSheetCols(set),
+        sprite: role.spriteId ?? set?.centerId ?? 0,
+      };
+      cellMemo.set(key, cell);
+      return cell;
+    };
+    const neededTextures = new Set();
     const topKeyAt = (x, y) => {
       if (!inChunk(x, y)) return null;
-      const cell = cells[idx(span, x, y)];
+      const cell = getCell(x, y);
       if (!cell?.file) return null;
       return `${cell.file}|${cell.sprite}|${cell.cols}|${cell.h}`;
     };
     const rightWallKeyAt = (x, y) => {
       if (lod > 0) return null;
       if (!inChunk(x, y)) return null;
-      const cell = cells[idx(span, x, y)];
+      const cell = getCell(x, y);
       if (!cell?.file) return null;
       const py0 = cell.h * settings.stepHeight;
-      const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
+      const right = getCell(x + 1, y);
       const rightH = right ? right.h * settings.stepHeight : floorY;
       if (Math.abs(py0 - rightH) <= EPS) return null;
       return `${cell.file}|${cell.sprite}|${cell.cols}|${Math.min(py0, rightH)}|${Math.max(py0, rightH)}`;
@@ -331,10 +308,10 @@ export async function buildDetailTerrain({
     const downWallKeyAt = (x, y) => {
       if (lod > 0) return null;
       if (!inChunk(x, y)) return null;
-      const cell = cells[idx(span, x, y)];
+      const cell = getCell(x, y);
       if (!cell?.file) return null;
       const py0 = cell.h * settings.stepHeight;
-      const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+      const down = getCell(x, y + 1);
       const downH = down ? down.h * settings.stepHeight : floorY;
       if (Math.abs(py0 - downH) <= EPS) return null;
       return `${cell.file}|${cell.sprite}|${cell.cols}|${Math.min(py0, downH)}|${Math.max(py0, downH)}`;
@@ -346,36 +323,40 @@ export async function buildDetailTerrain({
 
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const cell = cells[idx(span, x, y)];
+        const cell = getCell(x, y);
         if (!cell?.file) continue;
+        neededTextures.add(cell.file);
         chunkPreFaceEstimate++;
         const py0 = cell.h * settings.stepHeight;
-        const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
-        const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+        const right = getCell(x + 1, y);
+        const down = getCell(x, y + 1);
         const rightH = right ? right.h * settings.stepHeight : floorY;
         const downH = down ? down.h * settings.stepHeight : floorY;
         if (Math.abs(py0 - rightH) > EPS) chunkPreFaceEstimate++;
         if (Math.abs(py0 - downH) > EPS) chunkPreFaceEstimate++;
       }
     }
+    if (neededTextures.size > 0) {
+      await Promise.all([...neededTextures].map(textureFor));
+    }
 
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const flatI = idx(span, x, y);
+        const flatI = localIdx(x, y);
         if (visitedTop[flatI]) continue;
         const key = topKeyAt(x, y);
         if (!key) continue;
-        const cell = cells[flatI];
+        const cell = getCell(x, y);
         const tex = atlasTextures.get(cell.file);
         if (!tex) continue;
         const uv = uvRect(tex, cell.sprite, cell.cols);
         let runW = 1;
-        while (x + runW < chunk.x1 && !visitedTop[idx(span, x + runW, y)] && topKeyAt(x + runW, y) === key) runW++;
+        while (x + runW < chunk.x1 && !visitedTop[localIdx(x + runW, y)] && topKeyAt(x + runW, y) === key) runW++;
         let runH = 1;
         while (y + runH < chunk.y1) {
           let rowOk = true;
           for (let xx = x; xx < x + runW; xx++) {
-            const rowI = idx(span, xx, y + runH);
+            const rowI = localIdx(xx, y + runH);
             if (visitedTop[rowI] || topKeyAt(xx, y + runH) !== key) {
               rowOk = false;
               break;
@@ -385,12 +366,13 @@ export async function buildDetailTerrain({
           runH++;
         }
         for (let yy = y; yy < y + runH; yy++) {
-          for (let xx = x; xx < x + runW; xx++) visitedTop[idx(span, xx, yy)] = 1;
+          for (let xx = x; xx < x + runW; xx++) visitedTop[localIdx(xx, yy)] = 1;
         }
+        neededTextures.add(cell.file);
         const b = getBuilder(cell.file);
-        const px0 = x - half;
+        const px0 = x - offsetX;
         const px1 = px0 + runW;
-        const pz0 = y - half;
+        const pz0 = y - offsetY;
         const pz1 = pz0 + runH;
         const py0 = cell.h * settings.stepHeight;
         pushFaceTiled(
@@ -410,25 +392,25 @@ export async function buildDetailTerrain({
 
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const flatI = idx(span, x, y);
+        const flatI = localIdx(x, y);
         if (visitedWallRight[flatI]) continue;
         const key = rightWallKeyAt(x, y);
         if (!key) continue;
-        const cell = cells[flatI];
+        const cell = getCell(x, y);
         const tex = atlasTextures.get(cell.file);
         if (!tex) continue;
         const uv = uvRect(tex, cell.sprite, cell.cols);
         const py0 = cell.h * settings.stepHeight;
-        const right = x + 1 < span ? cells[idx(span, x + 1, y)] : null;
+        const right = getCell(x + 1, y);
         const rightH = right ? right.h * settings.stepHeight : floorY;
         const minY = Math.min(py0, rightH);
         const maxY = Math.max(py0, rightH);
         let runH = 1;
-        while (y + runH < chunk.y1 && !visitedWallRight[idx(span, x, y + runH)] && rightWallKeyAt(x, y + runH) === key) runH++;
-        for (let yy = y; yy < y + runH; yy++) visitedWallRight[idx(span, x, yy)] = 1;
+        while (y + runH < chunk.y1 && !visitedWallRight[localIdx(x, y + runH)] && rightWallKeyAt(x, y + runH) === key) runH++;
+        for (let yy = y; yy < y + runH; yy++) visitedWallRight[localIdx(x, yy)] = 1;
         const b = getBuilder(cell.file);
-        const px = x - half + 1;
-        const pz0 = y - half;
+        const px = x - offsetX + 1;
+        const pz0 = y - offsetY;
         const pz1 = pz0 + runH;
         const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(EPS, settings.stepHeight)));
         pushFaceTiled(
@@ -448,26 +430,26 @@ export async function buildDetailTerrain({
 
     for (let y = chunk.y0; y < chunk.y1; y++) {
       for (let x = chunk.x0; x < chunk.x1; x++) {
-        const flatI = idx(span, x, y);
+        const flatI = localIdx(x, y);
         if (visitedWallDown[flatI]) continue;
         const key = downWallKeyAt(x, y);
         if (!key) continue;
-        const cell = cells[flatI];
+        const cell = getCell(x, y);
         const tex = atlasTextures.get(cell.file);
         if (!tex) continue;
         const uv = uvRect(tex, cell.sprite, cell.cols);
         const py0 = cell.h * settings.stepHeight;
-        const down = y + 1 < span ? cells[idx(span, x, y + 1)] : null;
+        const down = getCell(x, y + 1);
         const downH = down ? down.h * settings.stepHeight : floorY;
         const minY = Math.min(py0, downH);
         const maxY = Math.max(py0, downH);
         let runW = 1;
-        while (x + runW < chunk.x1 && !visitedWallDown[idx(span, x + runW, y)] && downWallKeyAt(x + runW, y) === key) runW++;
-        for (let xx = x; xx < x + runW; xx++) visitedWallDown[idx(span, xx, y)] = 1;
+        while (x + runW < chunk.x1 && !visitedWallDown[localIdx(x + runW, y)] && downWallKeyAt(x + runW, y) === key) runW++;
+        for (let xx = x; xx < x + runW; xx++) visitedWallDown[localIdx(xx, y)] = 1;
         const b = getBuilder(cell.file);
-        const px0 = x - half;
+        const px0 = x - offsetX;
         const px1 = px0 + runW;
-        const pz = y - half + 1;
+        const pz = y - offsetY + 1;
         const wallSteps = Math.max(1, Math.round((maxY - minY) / Math.max(EPS, settings.stepHeight)));
         pushFaceTiled(
           b,
@@ -505,6 +487,7 @@ export async function buildDetailTerrain({
     }
     return {
       key: chunk.key,
+      chunk,
       chunkX: chunk.chunkX,
       chunkY: chunk.chunkY,
       lod,
@@ -515,69 +498,16 @@ export async function buildDetailTerrain({
     };
   }
 
-  async function initWorkerDataset() {
-    try {
-      const worker = getChunkMesherWorker();
-      if (workerState.activeVersion === runtimeVersion) return true;
-      const payload = {
-        version: runtimeVersion,
-        span,
-        half,
-        floorY,
-        stepHeight: settings.stepHeight,
-        wallShade: settings.wallShade,
-        eps: EPS,
-        atlasMetaByFileId,
-        fileById,
-        fileIdByCell,
-        spriteByCell,
-        colsByCell,
-        heightByCell,
-      };
-      await requestWorker(worker, 'init-dataset', payload);
-      workerState.activeVersion = runtimeVersion;
-      return true;
-    } catch (err) {
-      console.error('Failed to initialize chunk worker dataset, using fallback.', err);
-      return false;
-    }
-  }
-
-  function buildMeshesFromWorkerPayload(payload) {
-    const meshes = [];
-    if (!payload?.builders?.length) return meshes;
-    for (const entry of payload.builders) {
-      const file = payload.fileById?.[entry.fileId];
-      if (!file) continue;
-      const tex = atlasTextures.get(file);
-      if (!tex) continue;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(entry.p), 3));
-      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(entry.u), 2));
-      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(entry.c), 3));
-      g.computeVertexNormals();
-      const m = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide });
-      m.userData.baseMap = tex;
-      const mesh = new THREE.Mesh(g, m);
-      mesh.castShadow = false;
-      mesh.receiveShadow = true;
-      mesh.userData.detailChunk = { chunkX: payload.chunkX, chunkY: payload.chunkY };
-      meshes.push(mesh);
-    }
-    return meshes;
-  }
-
   const detailFloorMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(span + 20, span + 20).rotateX(-Math.PI / 2),
+    new THREE.PlaneGeometry(width + 20, height + 20).rotateX(-Math.PI / 2),
     new THREE.MeshLambertMaterial({ color: '#2d3a2f' }),
   );
-  detailFloorMesh.position.y = floorY - 0.02;
+  detailFloorMesh.position.set((width * 0.5) - offsetX, floorY - 0.02, (height * 0.5) - offsetY);
   detailFloorMesh.receiveShadow = true;
   detailGroup.add(detailFloorMesh);
-  await buildVegetationBillboards({ cells, span, half, worldSeed: world.seed, currentWorld: world, detailGroup });
+  // Vegetation now needs a chunk lifecycle as well; skip global bake to keep detail view responsive.
   triCountEl.textContent = '0';
   applyWireframeMode();
-  const workerReady = await initWorkerDataset();
 
   return {
     currentBounds,
@@ -590,25 +520,6 @@ export async function buildDetailTerrain({
       async buildChunkByKey(chunkKey, lod = 0) {
         const chunk = chunkModels.find((c) => c.key === chunkKey);
         if (!chunk) return null;
-        if (workerReady) {
-          try {
-            const payload = await requestWorker(getChunkMesherWorker(), 'build-chunk', { version: runtimeVersion, chunk, lod });
-            if (payload) {
-              return {
-                key: payload.key,
-                chunkX: payload.chunkX,
-                chunkY: payload.chunkY,
-                lod: payload.lod ?? lod,
-                meshes: buildMeshesFromWorkerPayload(payload),
-                triCount: payload.triCount || 0,
-                mergedFaceCount: payload.mergedFaceCount || 0,
-                preTriEstimate: payload.preTriEstimate || 0,
-              };
-            }
-          } catch (err) {
-            console.error('Worker chunk build failed, fallback to main thread.', err);
-          }
-        }
         return buildChunkMesh(chunk, lod);
       },
     },

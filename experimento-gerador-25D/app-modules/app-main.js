@@ -44,7 +44,7 @@ import { createPlayerController } from './player-controller.js';
 export function startApp() {
   const ui = renderLayout();
   const settings = {
-    microSpan: 250,
+    microSpan: 64,
     stepHeight: 0.55,
     wallShade: 0.72,
     worldHeightScale: 10,
@@ -84,8 +84,10 @@ export function startApp() {
     version: 0,
     radiusNear: 3,
     radiusFar: 5,
+    radiusCull: 7,
     unloadMargin: 1,
     lastUpdateTs: 0,
+    buildBudgetMs: 6,
   };
 
   const perf = {
@@ -196,7 +198,7 @@ export function startApp() {
         mat.wireframe = false;
         mat.map = null;
         mat.vertexColors = false;
-        mat.color.set(lod === 0 ? '#66ff88' : '#66aaff');
+        mat.color.set(lod === 0 ? '#66ff88' : lod === 1 ? '#66aaff' : '#c58cff');
         mat.transparent = false;
       } else {
         mat.wireframe = false;
@@ -231,21 +233,30 @@ export function startApp() {
   }
 
   function removeChunkMeshesFromScene(record) {
-    if (!record?.attached || !Array.isArray(record.meshes)) return;
-    for (const mesh of record.meshes) {
+    if (!record?.attached) return;
+    const terrainMeshes = Array.isArray(record.meshes) ? record.meshes : [];
+    const vegetationMeshes = Array.isArray(record.vegetationMeshes) ? record.vegetationMeshes : [];
+    for (const mesh of terrainMeshes) {
       sceneBits.detailGroup.remove(mesh);
       const pickIdx = pickMeshes.indexOf(mesh);
       if (pickIdx >= 0) pickMeshes.splice(pickIdx, 1);
     }
+    for (const veg of vegetationMeshes) sceneBits.detailGroup.remove(veg);
     record.attached = false;
   }
 
   function addChunkMeshesToScene(record) {
-    if (!record || record.attached || !Array.isArray(record.meshes)) return;
-    for (const mesh of record.meshes) {
+    if (!record || record.attached) return;
+    const terrainMeshes = Array.isArray(record.meshes) ? record.meshes : [];
+    const vegetationMeshes = Array.isArray(record.vegetationMeshes) ? record.vegetationMeshes : [];
+    for (const mesh of terrainMeshes) {
       mesh.userData.lod = record.lod || 0;
       sceneBits.detailGroup.add(mesh);
       pickMeshes.push(mesh);
+    }
+    for (const veg of vegetationMeshes) {
+      veg.userData.lod = record.lod || 0;
+      sceneBits.detailGroup.add(veg);
     }
     record.attached = true;
   }
@@ -259,6 +270,15 @@ export function startApp() {
           if (mesh.material && !Array.isArray(mesh.material)) mesh.material.dispose?.();
         }
       }
+      if (Array.isArray(record.vegetationMeshes)) {
+        for (const veg of record.vegetationMeshes) {
+          if (!veg?.children) continue;
+          for (const mesh of veg.children) {
+            mesh.geometry?.dispose?.();
+            if (mesh.material && !Array.isArray(mesh.material)) mesh.material.dispose?.();
+          }
+        }
+      }
     }
     detailStream.cache.clear();
     detailStream.wanted.clear();
@@ -270,6 +290,7 @@ export function startApp() {
     let chunksRendered = 0;
     let lod0Chunks = 0;
     let lod1Chunks = 0;
+    let lod2Chunks = 0;
     let mergedFaces = 0;
     let preTri = 0;
     let postTri = 0;
@@ -277,7 +298,8 @@ export function startApp() {
       if (!record?.attached) continue;
       chunksRendered++;
       if ((record.lod || 0) === 0) lod0Chunks++;
-      else lod1Chunks++;
+      else if ((record.lod || 0) === 1) lod1Chunks++;
+      else lod2Chunks++;
       mergedFaces += record.mergedFaceCount || 0;
       preTri += record.preTriEstimate || 0;
       postTri += record.triCount || 0;
@@ -288,16 +310,15 @@ export function startApp() {
     }
     if (ui.lodStatsEl) {
       const center = computeStreamCenterChunk();
-      ui.lodStatsEl.textContent = `center:${center.cx},${center.cy}=LOD0 | active L0/L1:${lod0Chunks}/${lod1Chunks} | ring:${detailStream.radiusNear}/${detailStream.radiusFar}`;
+      ui.lodStatsEl.textContent = `center:${center.cx},${center.cy}=LOD0 | active L0/L1/L2:${lod0Chunks}/${lod1Chunks}/${lod2Chunks} | ring:${detailStream.radiusNear}/${detailStream.radiusFar}/${detailStream.radiusCull}`;
     }
   }
 
   function computeStreamCenterChunk() {
     if (!currentBounds || !detailStream.runtime) return { cx: 0, cy: 0 };
-    const half = currentBounds.span * 0.5;
-    const anchor = playerController.isActive() ? playerController.getAnchorPosition() : null;
-    const localX = (anchor ? anchor.x : sceneBits.controls.target.x) + half;
-    const localY = (anchor ? anchor.z : sceneBits.controls.target.z) + half;
+    const worldPos = playerController.getWorldMicroPosition();
+    const localX = worldPos ? worldPos.x : (sceneBits.controls.target.x + currentBounds.offsetX);
+    const localY = worldPos ? worldPos.y : (sceneBits.controls.target.z + currentBounds.offsetY);
     const cx = clamp(
       Math.floor(localX / detailStream.runtime.chunkSize),
       0,
@@ -318,12 +339,19 @@ export function startApp() {
   function enqueueChunkBuild(chunkKey, lod) {
     const cacheKey = makeCacheKey(chunkKey, lod);
     if (!chunkKey || detailStream.queue.some((q) => q.cacheKey === cacheKey)) return;
-    detailStream.queue.push({ chunkKey, lod, cacheKey });
+    const center = computeStreamCenterChunk();
+    const [cx, cy] = String(chunkKey).split(',').map((v) => Number(v));
+    const dist = Math.max(Math.abs(cx - center.cx), Math.abs(cy - center.cy));
+    const priority = (lod * 1000) + dist;
+    detailStream.queue.push({ chunkKey, lod, cacheKey, priority });
+    detailStream.queue.sort((a, b) => a.priority - b.priority);
   }
 
   async function pumpChunkBuildQueue() {
     if (!detailStream.runtime || detailStream.building) return;
+    const budgetStart = performance.now();
     while (detailStream.queue.length > 0) {
+      if (performance.now() - budgetStart > detailStream.buildBudgetMs) return;
       const next = detailStream.queue.shift();
       if (!next) return;
       const { chunkKey, lod, cacheKey } = next;
@@ -332,29 +360,50 @@ export function startApp() {
         if (detailStream.wanted.has(cacheKey)) addChunkMeshesToScene(existing);
         continue;
       }
-      if (existing?.state === 'building') return;
+      if (existing?.state === 'building') continue;
       detailStream.cache.set(cacheKey, { state: 'building', attached: false, chunkKey, lod });
       detailStream.building = true;
       const runVersion = detailStream.version;
       try {
         const built = await detailStream.runtime.buildChunkByKey(chunkKey, lod);
-        if (runVersion !== detailStream.version) return;
-        detailStream.building = false;
+        if (runVersion !== detailStream.version) {
+          detailStream.cache.delete(cacheKey);
+          continue;
+        }
         if (!built) {
           detailStream.cache.delete(cacheKey);
           continue;
         }
-        const record = { ...built, state: 'ready', attached: false, chunkKey, lod };
+        const chunkVegetation = await vegetationSystem.buildChunkVegetation({
+          chunk: built.chunk || null,
+          lod,
+          worldSeed: ui.seedInput.value,
+          currentWorld,
+          offsetX: currentBounds?.offsetX ?? 0,
+          offsetY: currentBounds?.offsetY ?? 0,
+        });
+        if (runVersion !== detailStream.version) {
+          detailStream.cache.delete(cacheKey);
+          continue;
+        }
+        const record = {
+          ...built,
+          vegetationMeshes: chunkVegetation || [],
+          state: 'ready',
+          attached: false,
+          chunkKey,
+          lod,
+        };
         detailStream.cache.set(cacheKey, record);
         if (detailStream.wanted.has(cacheKey)) addChunkMeshesToScene(record);
         refreshMeshingHud();
         applyWireframeMode();
-        return;
+        continue;
       } catch (err) {
-        detailStream.building = false;
         detailStream.cache.delete(cacheKey);
         console.error('Chunk build failed:', cacheKey, err);
-        return;
+      } finally {
+        detailStream.building = false;
       }
     }
   }
@@ -368,14 +417,14 @@ export function startApp() {
     const center = computeStreamCenterChunk();
     const nextWanted = new Set();
     const wantedLodByChunk = new Map();
-    for (let y = center.cy - detailStream.radiusFar; y <= center.cy + detailStream.radiusFar; y++) {
+    for (let y = center.cy - detailStream.radiusCull; y <= center.cy + detailStream.radiusCull; y++) {
       if (y < 0 || y >= detailStream.runtime.chunkRows) continue;
-      for (let x = center.cx - detailStream.radiusFar; x <= center.cx + detailStream.radiusFar; x++) {
+      for (let x = center.cx - detailStream.radiusCull; x <= center.cx + detailStream.radiusCull; x++) {
         if (x < 0 || x >= detailStream.runtime.chunkCols) continue;
         const dx = Math.abs(x - center.cx);
         const dy = Math.abs(y - center.cy);
         const dist = Math.max(dx, dy);
-        const lod = dist <= detailStream.radiusNear ? 0 : 1;
+        const lod = dist <= detailStream.radiusNear ? 0 : dist <= detailStream.radiusFar ? 1 : 2;
         const chunkKey = `${x},${y}`;
         wantedLodByChunk.set(chunkKey, lod);
         nextWanted.add(makeCacheKey(chunkKey, lod));
@@ -387,7 +436,7 @@ export function startApp() {
       const [sx, sy] = String(record.chunkKey || '').split(',').map((v) => Number(v));
       const dx = Math.abs(sx - center.cx);
       const dy = Math.abs(sy - center.cy);
-      const withinDetach = Math.max(dx, dy) <= detailStream.radiusFar + detailStream.unloadMargin;
+      const withinDetach = Math.max(dx, dy) <= detailStream.radiusCull + detailStream.unloadMargin;
       const wantedLod = wantedLodByChunk.get(record.chunkKey);
       const lodMismatch = Number.isFinite(wantedLod) && wantedLod !== record.lod;
       if (!nextWanted.has(cacheKey) && !withinDetach) {
@@ -441,15 +490,15 @@ export function startApp() {
     currentBounds = result.currentBounds;
     detailFloorMesh = result.detailFloorMesh;
     detailStream.runtime = result.chunkRuntime || null;
-    refreshMeshingHud();
-    updateChunkStreaming(true);
     playerController.setContext(currentWorld, currentBounds);
     if (!playerController.isActive() && currentBounds) {
-      const spawnMx = Math.floor(currentBounds.startX + currentBounds.span * 0.5);
-      const spawnMy = Math.floor(currentBounds.startY + currentBounds.span * 0.5);
+      const spawnMx = Math.floor(currentBounds.width * 0.5);
+      const spawnMy = Math.floor(currentBounds.height * 0.5);
       playerController.placeAt(spawnMx, spawnMy);
       ui.pickInfo.textContent = `Player auto-spawned at mx:${spawnMx} my:${spawnMy}. Use WASD/Arrows to move, Space to jump, F to fly.`;
     }
+    refreshMeshingHud();
+    updateChunkStreaming(true);
   }
 
   async function rebuildCurrentDetail() {
@@ -512,11 +561,9 @@ export function startApp() {
     sceneBits.raycaster.setFromCamera(sceneBits.pointer, sceneBits.camera);
     const hits = sceneBits.raycaster.intersectObjects(pickMeshes, false);
     if (!hits.length) return;
-    const lx = Math.floor(hits[0].point.x + currentBounds.span * 0.5);
-    const ly = Math.floor(hits[0].point.z + currentBounds.span * 0.5);
-    if (lx < 0 || ly < 0 || lx >= currentBounds.span || ly >= currentBounds.span) return;
-    const mx = currentBounds.startX + lx;
-    const my = currentBounds.startY + ly;
+    const mx = Math.floor(hits[0].point.x + currentBounds.offsetX);
+    const my = Math.floor(hits[0].point.z + currentBounds.offsetY);
+    if (mx < 0 || my < 0 || mx >= currentBounds.width || my >= currentBounds.height) return;
     const t = getMicroTile(mx, my, currentWorld);
     const role = computeTerrainRoleAndSprite(mx, my, currentWorld, t.heightStep);
     ui.pickInfo.textContent = `detail mx:${mx} my:${my} | h:${t.heightStep} | biome:${t.biomeId} | set:${role.setName ?? '-'} | sprite:${role.spriteId ?? '-'}`;
@@ -618,6 +665,7 @@ export function startApp() {
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
     if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
   });
+  gui.add(detailStream, 'buildBudgetMs', 2, 14, 1).name('Build Budget (ms)');
   gui.add(settings, 'worldHeightScale', 2, 80, 1).name('World Height Scale').onFinishChange(() => {
     if (!currentWorld) return;
     worldMesh = buildWorldMacroMesh({

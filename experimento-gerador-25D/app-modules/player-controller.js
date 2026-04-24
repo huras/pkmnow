@@ -16,7 +16,7 @@ const DIR_TO_ROW = {
 };
 
 /** Flight tuning (3D): tweak these two values to change fly speed. */
-const FLIGHT_HORIZONTAL_SPEED_MULT = 9.0;
+const FLIGHT_HORIZONTAL_SPEED_MULT = 6.0;
 const FLIGHT_VERTICAL_SPEED = 6.8;
 
 function padDex3(dex) {
@@ -403,10 +403,10 @@ export function createPlayerController({
     }
 
     if (state.bounds) {
-      const minX = state.bounds.startX + 0.05;
-      const minY = state.bounds.startY + 0.05;
-      const maxX = state.bounds.startX + state.bounds.span - 0.05;
-      const maxY = state.bounds.startY + state.bounds.span - 0.05;
+      const minX = 0.05;
+      const minY = 0.05;
+      const maxX = state.bounds.width - 0.05;
+      const maxY = state.bounds.height - 0.05;
       state.x = Math.max(minX, Math.min(maxX, nx));
       state.y = Math.max(minY, Math.min(maxY, ny));
     } else {
@@ -469,18 +469,15 @@ export function createPlayerController({
 
   function syncMeshTransform() {
     if (!state.mesh || !state.bounds || !state.active) return;
-    const lx = state.x - state.bounds.startX;
-    const ly = state.y - state.bounds.startY;
-    const half = state.bounds.span * 0.5;
     const tileMx = Math.floor(state.x);
     const tileMy = Math.floor(state.y);
     const hStep = sampleGroundStep(tileMx, tileMy);
     const groundY = hStep * settings.stepHeight + (settings.detailsYOffset ?? 0);
     state.logicalGroundY = groundY;
     state.mesh.position.set(
-      lx - half,
+      state.x - state.bounds.offsetX,
       state.worldY - state.frameGroundLiftWorld,
-      ly - half,
+      state.y - state.bounds.offsetY,
     );
   }
 
@@ -556,6 +553,10 @@ export function createPlayerController({
     },
     isFlightActive() {
       return !!state.flightActive;
+    },
+    getWorldMicroPosition() {
+      if (!state.active) return null;
+      return { x: state.x, y: state.y };
     },
     getAnchorPosition() {
       if (!state.active || !state.mesh) return null;

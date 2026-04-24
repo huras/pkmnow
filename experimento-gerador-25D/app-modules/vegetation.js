@@ -32,6 +32,7 @@ export function createVegetationSystem(deps) {
   } = deps;
 
   let vegetationGroup = null;
+  const chunkVegetationGroups = new Set();
   const treeBillboardTextureCache = new Map();
   const objectBillboardTextureCache = new Map();
   const vegetationMaterials = [];
@@ -121,7 +122,8 @@ uniform vec3 cameraUp;`,
     }
   }
 
-  function flushBatches(textureBatches) {
+  function buildMeshesFromBatches(textureBatches) {
+    const meshes = [];
     for (const batch of textureBatches.values()) {
       if (batch.center.length === 0) continue;
       const g = new THREE.BufferGeometry();
@@ -137,8 +139,15 @@ uniform vec3 cameraUp;`,
       mesh.castShadow = true;
       mesh.receiveShadow = false;
       mesh.customDepthMaterial = makeBillboardDepthMaterial(batch.texture);
-      vegetationGroup.add(mesh);
+      meshes.push(mesh);
     }
+    return meshes;
+  }
+
+  function flushBatches(textureBatches) {
+    if (!vegetationGroup) return;
+    const meshes = buildMeshesFromBatches(textureBatches);
+    for (const mesh of meshes) vegetationGroup.add(mesh);
   }
 
   async function getTreeBillboardTexture(treeType) {
@@ -413,6 +422,138 @@ uniform vec3 cameraUp;`,
     flushBatches(textureBatches);
   }
 
+  async function buildChunkVegetation({
+    chunk,
+    worldSeed,
+    currentWorld,
+    offsetX,
+    offsetY,
+    lod = 0,
+  }) {
+    if (!settings.showVegetation || !chunk || !currentWorld) return [];
+    // Keep far rings cheap: only render vegetation in near/mid rings.
+    if (lod > 1) return [];
+
+    const textureBatches = new Map();
+    const treeRoots = new Set();
+    const seedInt = seedToInt(worldSeed);
+    const microW = currentWorld.width * MACRO_TILE_STRIDE;
+    const microH = currentWorld.height * MACRO_TILE_STRIDE;
+    const detailLift = settings.detailsYOffset ?? 0;
+    const originMemo = new Map();
+    const getTile = (mx, my) => getMicroTile(mx, my, currentWorld);
+    const x0 = chunk.x0;
+    const x1 = chunk.x1;
+    const y0 = chunk.y0;
+    const y1 = chunk.y1;
+
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const t = getMicroTile(x, y, currentWorld);
+        const c = {
+          ...t,
+          mx: x,
+          my: y,
+          h: t.heightStep,
+          heightStep: t.heightStep,
+          biomeId: t.biomeId,
+          foliageDensity: foliageDensity(x, y, seedInt + 1117, TREE_NOISE_SCALE),
+        };
+        if (!tileSurfaceAllowsScatterVegetation(c)) continue;
+        if ((c.mx + c.my) % 3 !== 0) continue;
+        const treeNoise = foliageDensity(c.mx, c.my, seedInt + 5555, TREE_NOISE_SCALE);
+        if (treeNoise < TREE_DENSITY_THRESHOLD) continue;
+        const rightT = getMicroTile(c.mx + 1, c.my, currentWorld);
+        if (!rightT || rightT.heightStep !== c.h) continue;
+        const treeType = getTreeType(c.biomeId, c.mx, c.my, seedInt);
+        if (!treeType || c.h <= 0) continue;
+        if (deterministic01(c.mx, c.my, seedInt + 9001) > settings.vegetationDensity) continue;
+        const tex = await getTreeBillboardTexture(treeType);
+        if (!tex) continue;
+        const batch = getBatch(textureBatches, tex);
+        const px = c.mx - offsetX + 1.0;
+        const pz = c.my - offsetY + 0.5;
+        const py = c.h * settings.stepHeight + detailLift + 0.05;
+        const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
+        pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
+        treeRoots.add(`${c.mx},${c.my}`);
+      }
+      if ((y - y0) % 10 === 0) await nextFrame();
+    }
+
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const t = getMicroTile(x, y, currentWorld);
+        const c = {
+          ...t,
+          mx: x,
+          my: y,
+          h: t.heightStep,
+          heightStep: t.heightStep,
+          biomeId: t.biomeId,
+          foliageDensity: foliageDensity(x, y, seedInt + 2221, TREE_NOISE_SCALE),
+        };
+        if (!tileSurfaceAllowsScatterVegetation(c)) continue;
+        if (treeRoots.has(`${c.mx},${c.my}`)) continue;
+        const px = c.mx - offsetX + 0.5;
+        const pz = c.my - offsetY + 0.5;
+        const py = c.h * settings.stepHeight + detailLift + 0.05;
+        if (validScatterOriginMicro(c.mx, c.my, seedInt, microW, microH, getTile, originMemo)) {
+          const itemKey = resolveScatterVegetationItemKey(c.mx, c.my, c, seedInt);
+          if (itemKey && deterministic01(c.mx, c.my, seedInt + 7011) <= settings.vegetationDensity) {
+            const texInfo = await getObjectBillboardTexture(itemKey);
+            if (texInfo?.texture) {
+              const batch = getBatch(textureBatches, texInfo.texture);
+              const w = Math.max(0.9, texInfo.tilesW * 0.92);
+              const h = Math.max(1.1, texInfo.tilesH * 0.92);
+              pushQuad(batch, px, py, pz, w, h);
+              continue;
+            }
+          }
+        }
+        const grassVariant = getGrassVariant(c.biomeId);
+        const grassTiles = grassVariant ? GRASS_TILES[grassVariant] : null;
+        const grassTileId = grassTiles?.original ?? grassTiles?.small ?? grassTiles?.grass2;
+        if (!grassTileId || c.foliageDensity < FOLIAGE_DENSITY_THRESHOLD) continue;
+        if (deterministic01(c.mx, c.my, seedInt + 9123) > settings.vegetationDensity) continue;
+        const grassKey = `grass:${grassVariant}:${grassTileId}`;
+        let grassMeta = objectBillboardTextureCache.get(grassKey);
+        if (!grassMeta) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 16;
+          canvas.height = 16;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          ctx.imageSmoothingEnabled = false;
+          const naturePath = 'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png';
+          const natureTex = await textureFor(naturePath);
+          if (!natureTex?.image) continue;
+          const cols = 57;
+          const sx = (grassTileId % cols) * 16;
+          const sy = Math.floor(grassTileId / cols) * 16;
+          ctx.drawImage(natureTex.image, sx, sy, 16, 16, 0, 0, 16, 16);
+          const out = new THREE.CanvasTexture(canvas);
+          out.colorSpace = THREE.SRGBColorSpace;
+          out.magFilter = THREE.NearestFilter;
+          out.minFilter = THREE.NearestFilter;
+          out.generateMipmaps = false;
+          grassMeta = { texture: out, tilesW: 1, tilesH: 1 };
+          objectBillboardTextureCache.set(grassKey, grassMeta);
+        }
+        const batch = getBatch(textureBatches, grassMeta.texture);
+        pushQuad(batch, px, py, pz, 0.9, 1.0);
+      }
+      if ((y - y0) % 10 === 0) await nextFrame();
+    }
+
+    const meshes = buildMeshesFromBatches(textureBatches);
+    const group = new THREE.Group();
+    group.visible = !!settings.showVegetation;
+    for (const mesh of meshes) group.add(mesh);
+    chunkVegetationGroups.add(group);
+    return [group];
+  }
+
   function applyWireframeMode(wireframeOnly) {
     for (const mat of vegetationMaterials) {
       if (!mat) continue;
@@ -444,10 +585,12 @@ uniform vec3 cameraUp;`,
 
   function setVisible(visible) {
     if (vegetationGroup) vegetationGroup.visible = !!visible;
+    for (const group of chunkVegetationGroups) group.visible = !!visible;
   }
 
   return {
     buildVegetationBillboards,
+    buildChunkVegetation,
     applyWireframeMode,
     faceCamera,
     setVisible,
