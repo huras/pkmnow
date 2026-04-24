@@ -141,11 +141,11 @@ export function startApp() {
     sceneBits.sunLight.position.set(sx, sy, sz);
 
     // Brighter stylized curve (Nintendo-ish readability), especially around noon.
-    sceneBits.sunLight.intensity = 0.35 + sunElev01 * 1.25;
-    sceneBits.ambientLight.intensity = 0.34 + sunElev01 * 0.46;
-    sceneBits.hemiLight.intensity = 0.26 + sunElev01 * 0.52;
-    // Keep soft edges, but restore stronger contact/readability on terrain/details.
-    sceneBits.sunLight.shadow.intensity = 0.72 + sunElev01 * 0.18;
+    sceneBits.sunLight.intensity = 0.5 + sunElev01 * 1.45;
+    sceneBits.ambientLight.intensity = 0.14 + sunElev01 * 0.24;
+    sceneBits.hemiLight.intensity = 0.1 + sunElev01 * 0.22;
+    // Stronger readable contact shadows on terrain/details.
+    sceneBits.sunLight.shadow.intensity = 0.9 + sunElev01 * 0.1;
     skySystem.update(h, sceneBits.sunLight.position);
   }
 

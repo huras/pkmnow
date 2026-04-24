@@ -59,7 +59,7 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
   // Softer filtered shadows to avoid blocky stair-step edges.
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   viewport.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -85,23 +85,23 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   scene.add(detailGroup);
   scene.add(playerGroup);
 
-  const ambientLight = new THREE.AmbientLight('#ffffff', 0.62);
+  const ambientLight = new THREE.AmbientLight('#ffffff', 0.38);
   scene.add(ambientLight);
-  const hemiLight = new THREE.HemisphereLight('#cfe6ff', '#5a6a80', 0.5);
+  const hemiLight = new THREE.HemisphereLight('#cfe6ff', '#5a6a80', 0.26);
   scene.add(hemiLight);
   const sunLight = new THREE.DirectionalLight('#fff4d4', 0.85);
   sunLight.position.set(180, 260, 120);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.mapSize.set(4096, 4096);
   sunLight.shadow.camera.near = 10;
   sunLight.shadow.camera.far = 800;
   sunLight.shadow.camera.left = -320;
   sunLight.shadow.camera.right = 320;
   sunLight.shadow.camera.top = 320;
   sunLight.shadow.camera.bottom = -320;
-  sunLight.shadow.bias = -0.00015;
-  sunLight.shadow.normalBias = 0.02;
-  sunLight.shadow.intensity = 0.55;
+  sunLight.shadow.bias = -0.00008;
+  sunLight.shadow.normalBias = 0.008;
+  sunLight.shadow.intensity = 0.9;
   scene.add(sunLight);
 
   const axesHelper = new THREE.AxesHelper(debugSettings.axesSize);
