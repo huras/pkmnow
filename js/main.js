@@ -1665,14 +1665,37 @@ function continueFromMapToPlay() {
  * @returns {{ gx: number, gy: number }}
  */
 function pickRandomCityMacroForPlayStart(data) {
+  const w = Math.max(1, data?.width | 0);
+  const h = Math.max(1, data?.height | 0);
+  const biomes = Array.isArray(data?.biomes) ? data.biomes : null;
+  const jungleId = Number(BIOMES?.JUNGLE?.id);
+  if (biomes && Number.isFinite(jungleId)) {
+    const cx = (w - 1) * 0.5;
+    const cy = (h - 1) * 0.5;
+    let best = null;
+    let bestDistSq = Infinity;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (Number(biomes[i]) !== jungleId) continue;
+        const dx = x - cx;
+        const dy = y - cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDistSq) {
+          bestDistSq = d2;
+          best = { gx: x, gy: y };
+        }
+      }
+    }
+    if (best) return best;
+  }
+
   const nodes = data?.graph?.nodes;
   if (nodes?.length) {
     const u = (Number(data.seed) >>> 0) ^ 0x243f6a88;
     const n = nodes[u % nodes.length];
     return { gx: n.x, gy: n.y };
   }
-  const w = Math.max(1, data.width | 0);
-  const h = Math.max(1, data.height | 0);
   return { gx: Math.floor(w / 2), gy: Math.floor(h / 2) };
 }
 
