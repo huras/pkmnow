@@ -62,7 +62,7 @@ export function startApp() {
     followPlayerCamera: true,
     cameraFocusStrength: 0.22,
     cameraLookAhead: 1.6,
-    playerFocusBlur: true,
+    playerFocusBlur: false,
     playerFocusBlurStrength: 0.25,
     playerFocusBlurRadius: 1.3,
     playerFocusBlurMoveBoost: 1.2,
@@ -874,7 +874,7 @@ export function startApp() {
   }
 
   const gui = new GUI({ title: 'Render Params' });
-  gui.add(settings, 'microSpan', 64, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
+  gui.add(settings, 'microSpan', 32, 220, 1).name('Visible Tiles').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
   gui.add(settings, 'stepHeight', 0.25, 20, 0.01).name('Step Height').onFinishChange(() => currentWorld && selectedMacro && rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride));
   gui.add(settings, 'detailsYOffset', -5.0, 5.0, 0.01).name('Terrain Y Offset').onChange(async () => {
     if (!currentWorld) return;
