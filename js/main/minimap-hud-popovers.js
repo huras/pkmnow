@@ -53,6 +53,8 @@ export function installMinimapHudPopovers(options = {}) {
   const inspectorTriggerBtn = document.getElementById('social-inspector-trigger-btn');
   const screenGridToggle = document.getElementById('minimap-screen-grid-cam-toggle');
   const cameraPop = document.getElementById('minimap-camera-popover');
+  const debugToolsToggle = document.getElementById('minimap-debug-tools-toggle');
+  const debugToolsPop = document.getElementById('minimap-debug-tools-popover');
   const cameraEnableToggle = document.getElementById('minimap-camera-enable-toggle');
   const cameraAllowOtherScreensToggle = document.getElementById('minimap-camera-allow-other-screens-toggle');
   const cameraScrollRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-scroll-duration'));
@@ -120,7 +122,8 @@ export function installMinimapHudPopovers(options = {}) {
     ...(inspectorToggle && inspectorPop ? [{ toggle: inspectorToggle, pop: inspectorPop, name: 'inspector' }] : []),
     ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : []),
-    ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : [])
+    ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : []),
+    ...(debugToolsToggle && debugToolsPop ? [{ toggle: debugToolsToggle, pop: debugToolsPop, name: 'debugTools' }] : [])
   ];
 
   function closeAllExcept(activeName) {
@@ -287,6 +290,10 @@ export function installMinimapHudPopovers(options = {}) {
   screenGridToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('camera');
+  });
+  debugToolsToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('debugTools');
   });
   cameraEnableToggle?.addEventListener('click', (e) => {
     e.stopPropagation();

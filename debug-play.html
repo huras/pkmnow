@@ -295,7 +295,7 @@
               aria-live="polite"
               aria-label="Cry learning"
             ></div>
-            <canvas id="minimap" width="230" height="192" data-zoom="close" aria-label="Minimapa da região"></canvas>
+            <canvas id="minimap" width="230" height="192" data-zoom="closer" aria-label="Minimapa da região"></canvas>
           </div>
           <footer
             class="minimap-panel__footer minimap-panel__footer--biome"
@@ -349,6 +349,44 @@
                 </svg>
               </button>
             </div>
+            <button
+              type="button"
+              id="minimap-render-toggle"
+              class="minimap-panel__back-btn minimap-panel__render-toggle-btn"
+              title="Minimap render: ON (click to disable)"
+              aria-label="Minimap render toggle"
+              aria-pressed="true"
+            >
+              <svg
+                class="minimap-panel__render-toggle-icon minimap-panel__render-toggle-icon--on"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg
+                class="minimap-panel__render-toggle-icon minimap-panel__render-toggle-icon--off"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+                <line x1="3" y1="21" x2="21" y2="3" />
+              </svg>
+            </button>
             <button
               type="button"
               id="minimap-back-to-map"

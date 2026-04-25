@@ -105,6 +105,13 @@ import {
   invalidatePlayPointerHover
 } from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
+import {
+  cyclePlayCameraOffsetPreset,
+  getPlayCameraOffsetPreset,
+  getPlayCameraOffsetStrength,
+  setPlayCameraOffsetStrength
+} from './render/play-camera-offset.js';
+import { isPlayStrictCullingEnabled, togglePlayStrictCulling } from './render/play-strict-culling.js';
 import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
@@ -167,6 +174,9 @@ initI18n();
 
 const canvas = document.getElementById('map');
 const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementById('map-overlay-svg'));
+if (typeof window !== 'undefined' && typeof window.disableTreeCanopyAnimation === 'undefined') {
+  window.disableTreeCanopyAnimation = true;
+}
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
 const WORLD_MAP_USE_SVG_OVERLAY = false;
 
@@ -220,21 +230,28 @@ const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
 const btnMinimapMacroGridToggle = document.getElementById('minimap-macro-grid-toggle');
+const btnMinimapRenderToggle = document.getElementById('minimap-render-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
 const btnMinimapPokeradarCornerToggle = document.getElementById('minimap-pokeradar-corner-toggle');
 const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
 const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
+const btnMinimapCameraOffsetToggle = document.getElementById('minimap-camera-offset-toggle');
+const rangeMinimapCameraOffsetStrength = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-offset-strength'));
+const spanMinimapCameraOffsetStrengthReadout = document.getElementById('minimap-camera-offset-strength-readout');
+const btnMinimapStrictCullingToggle = document.getElementById('minimap-strict-culling-toggle');
 const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
 const btnMinimapPokeradarToggle = document.getElementById('minimap-pokeradar-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
 const LS_MINIMAP_MACRO_GRID_OVERLAY = 'pkmn_minimap_macro_tile_grid';
+const LS_MINIMAP_RENDER_ENABLED = 'pkmn_minimap_render_enabled';
 const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
 const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
 const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
 let minimapMacroGridOverlay = false;
+let minimapRenderEnabled = true;
 let minimapShowAllSpawnedDebug = false;
 let minimapEventLogVisibleDebug = false;
 let minimapEventLogUi = null;
@@ -343,6 +360,31 @@ function syncMinimapShowSpawnedToggleUi() {
   btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
 }
 
+function syncMinimapRenderToggleUi() {
+  if (!(btnMinimapRenderToggle instanceof HTMLButtonElement)) return;
+  btnMinimapRenderToggle.setAttribute('aria-pressed', minimapRenderEnabled ? 'true' : 'false');
+  const title = minimapRenderEnabled
+    ? 'Minimap render: ON (click to disable)'
+    : 'Minimap render: OFF (click to enable)';
+  btnMinimapRenderToggle.title = title;
+  btnMinimapRenderToggle.setAttribute('aria-label', title);
+}
+
+function setMinimapRenderEnabled(next) {
+  minimapRenderEnabled = !!next;
+  syncMinimapRenderToggleUi();
+  try {
+    localStorage.setItem(LS_MINIMAP_RENDER_ENABLED, minimapRenderEnabled ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+  if (!minimapRenderEnabled && minimap instanceof HTMLCanvasElement) {
+    const ctx = minimap.getContext('2d');
+    ctx?.clearRect(0, 0, minimap.width, minimap.height);
+  }
+  updateView();
+}
+
 function setMinimapShowSpawnedDebug(next) {
   minimapShowAllSpawnedDebug = !!next;
   syncMinimapShowSpawnedToggleUi();
@@ -364,6 +406,33 @@ function isColliderDebugEnabled() {
 
 function syncMinimapColliderToggleUi() {
   btnMinimapColliderToggle?.setAttribute('aria-pressed', isColliderDebugEnabled() ? 'true' : 'false');
+}
+
+function syncMinimapCameraOffsetToggleUi() {
+  if (!(btnMinimapCameraOffsetToggle instanceof HTMLButtonElement)) return;
+  const preset = getPlayCameraOffsetPreset();
+  const strengthPct = Math.round(getPlayCameraOffsetStrength() * 100);
+  const title = `Camera offset: ${preset.toUpperCase()} (${strengthPct}%)`;
+  btnMinimapCameraOffsetToggle.textContent = title;
+  btnMinimapCameraOffsetToggle.setAttribute('aria-pressed', preset !== 'off' ? 'true' : 'false');
+  btnMinimapCameraOffsetToggle.title = title;
+  btnMinimapCameraOffsetToggle.setAttribute('aria-label', title);
+  if (rangeMinimapCameraOffsetStrength) {
+    rangeMinimapCameraOffsetStrength.value = String(strengthPct);
+  }
+  if (spanMinimapCameraOffsetStrengthReadout) {
+    spanMinimapCameraOffsetStrengthReadout.textContent = `${strengthPct}%`;
+  }
+}
+
+function syncMinimapStrictCullingToggleUi() {
+  if (!(btnMinimapStrictCullingToggle instanceof HTMLButtonElement)) return;
+  const on = isPlayStrictCullingEnabled();
+  btnMinimapStrictCullingToggle.textContent = on ? 'Strict culling: ON' : 'Strict culling: OFF';
+  btnMinimapStrictCullingToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  const title = on ? 'Strict culling: ON' : 'Strict culling: OFF';
+  btnMinimapStrictCullingToggle.title = title;
+  btnMinimapStrictCullingToggle.setAttribute('aria-label', title);
 }
 
 function syncMinimapRmbPointerModeUi() {
@@ -414,6 +483,16 @@ btnMinimapMacroGridToggle?.addEventListener('click', () => {
   setMinimapMacroGridOverlay(!minimapMacroGridOverlay);
 });
 try {
+  const storedMinimapRenderEnabled = localStorage.getItem(LS_MINIMAP_RENDER_ENABLED);
+  minimapRenderEnabled = storedMinimapRenderEnabled == null ? true : storedMinimapRenderEnabled === '1';
+} catch {
+  minimapRenderEnabled = true;
+}
+syncMinimapRenderToggleUi();
+btnMinimapRenderToggle?.addEventListener('click', () => {
+  setMinimapRenderEnabled(!minimapRenderEnabled);
+});
+try {
   minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
 } catch {
   minimapShowAllSpawnedDebug = false;
@@ -446,6 +525,24 @@ window.addEventListener('resize', () => {
 syncMinimapColliderToggleUi();
 btnMinimapColliderToggle?.addEventListener('click', () => {
   toggleColliderDebugFromMinimapToolbar();
+});
+syncMinimapCameraOffsetToggleUi();
+btnMinimapCameraOffsetToggle?.addEventListener('click', () => {
+  cyclePlayCameraOffsetPreset();
+  syncMinimapCameraOffsetToggleUi();
+  updateView();
+});
+rangeMinimapCameraOffsetStrength?.addEventListener('input', () => {
+  const pct = Number(rangeMinimapCameraOffsetStrength.value);
+  setPlayCameraOffsetStrength(pct / 100);
+  syncMinimapCameraOffsetToggleUi();
+  updateView();
+});
+syncMinimapStrictCullingToggleUi();
+btnMinimapStrictCullingToggle?.addEventListener('click', () => {
+  togglePlayStrictCulling();
+  syncMinimapStrictCullingToggleUi();
+  updateView();
 });
 try {
   minimapEventLogVisibleDebug = localStorage.getItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE) === '1';
@@ -518,6 +615,7 @@ syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const btnInfiniteLifeToggle = document.getElementById('btnInfiniteLifeToggle');
+const btnGo25D = document.getElementById('btnGo25D');
 const infoBar = document.getElementById('hud-info');
 const btnExport = document.getElementById('exportBtn');
 const btnImport = document.getElementById('importBtn');
@@ -578,6 +676,33 @@ if (btnInfiniteLifeToggle instanceof HTMLButtonElement) {
   });
 }
 syncInfiniteLifeToggleUi();
+if (btnGo25D instanceof HTMLButtonElement) {
+  btnGo25D.addEventListener('click', () => {
+    if (appMode !== 'play' || !currentData) {
+      if (infoBar) infoBar.textContent = 'Enter play mode first to transfer to 25D at your position.';
+      return;
+    }
+    const px = Number(player.visualX ?? player.x);
+    const py = Number(player.visualY ?? player.y);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+    const payload = {
+      seed: String(seedInput?.value ?? currentData.seed ?? ''),
+      mx: px,
+      my: py,
+      ts: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(SESSION_KEY_BRIDGE_TO_25D, JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+    const next = new URL('./experimento-gerador-25D/index.html', window.location.href);
+    next.searchParams.set('seed', payload.seed);
+    next.searchParams.set('mx', String(payload.mx));
+    next.searchParams.set('my', String(payload.my));
+    window.location.href = next.toString();
+  });
+}
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -627,6 +752,8 @@ let mapDragMovedPx = 0;
 let mapDragLastClientX = 0;
 let mapDragLastClientY = 0;
 let suppressNextMapClick = false;
+const SESSION_KEY_BRIDGE_FROM_25D = 'pkmn_bridge_25d_to_2d';
+const SESSION_KEY_BRIDGE_TO_25D = 'pkmn_bridge_2d_to_25d';
 
 const PLAY_BGM_TOAST_MS = 4600;
 
@@ -1779,6 +1906,7 @@ function getSettings() {
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
+  const treeCanopyAnimationEnabled = window.disableTreeCanopyAnimation !== true;
   const worldMapCamera =
     appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
       ? getWorldMapCamera()
@@ -1840,9 +1968,11 @@ function getSettings() {
     weatherVolumetricTurbulence: weather.volumetricTurbulence,
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
+    treeCanopyAnimationEnabled,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
     visionFogEnabled: playVisionFogToggleEl?.checked ?? false,
+    minimapRenderEnabled,
     minimapShowAllSpawnedDebug,
     minimapMacroGridOverlay
   };
@@ -2008,6 +2138,13 @@ function run() {
   } catch {
     /* ignore */
   }
+  try {
+    if (pendingBridgeFrom25D?.seed != null && seedInput) {
+      seedInput.value = String(pendingBridgeFrom25D.seed);
+    }
+  } catch {
+    /* ignore */
+  }
   currentData = generate(seedInput.value, currentConfig);
   playSessionSeconds = 0;
   clearScatterSolidBlockCache();
@@ -2027,10 +2164,69 @@ function run() {
 function runMapAfterSeedHintThenReconcileStoredPlaySave() {
   run();
   const reconcileSeed = getReconcilableSeedFromStoredPlaySave(currentData);
+  if (pendingBridgeFrom25D) return;
   if (reconcileSeed != null && seedInput) {
     seedInput.value = String(reconcileSeed >>> 0);
     run();
   }
+}
+
+function consumeBridgeFrom25D() {
+  /** @type {{ seed: string, mx: number, my: number } | null} */
+  let fromSession = null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY_BRIDGE_FROM_25D);
+    if (raw) {
+      sessionStorage.removeItem(SESSION_KEY_BRIDGE_FROM_25D);
+      const parsed = JSON.parse(raw);
+      const mx = Number(parsed?.mx);
+      const my = Number(parsed?.my);
+      if (Number.isFinite(mx) && Number.isFinite(my)) {
+        fromSession = {
+          seed: String(parsed?.seed ?? ''),
+          mx,
+          my,
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const seed = params.get('seed');
+    const mx = Number(params.get('mx'));
+    const my = Number(params.get('my'));
+    if (seed != null && Number.isFinite(mx) && Number.isFinite(my)) {
+      params.delete('seed');
+      params.delete('mx');
+      params.delete('my');
+      params.delete('mode');
+      const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', nextUrl);
+      return { seed: String(seed), mx, my };
+    }
+  } catch {
+    /* ignore */
+  }
+  return fromSession;
+}
+
+let pendingBridgeFrom25D = consumeBridgeFrom25D();
+
+function applyBridgeFrom25DIfPresent() {
+  if (!pendingBridgeFrom25D || !currentData) return false;
+  const mapMicroW = Math.max(1, Number(currentData.width) * MACRO_TILE_STRIDE);
+  const mapMicroH = Math.max(1, Number(currentData.height) * MACRO_TILE_STRIDE);
+  const clampedX = Math.max(0, Math.min(mapMicroW - 1, Number(pendingBridgeFrom25D.mx)));
+  const clampedY = Math.max(0, Math.min(mapMicroH - 1, Number(pendingBridgeFrom25D.my)));
+  const gx = Math.floor(clampedX / MACRO_TILE_STRIDE);
+  const gy = Math.floor(clampedY / MACRO_TILE_STRIDE);
+  didAutoResumePlayOnInitialLoad = true;
+  enterPlayMode(gx, gy, { resumePosition: false });
+  setPlayerPos(clampedX, clampedY);
+  pendingBridgeFrom25D = null;
+  return true;
 }
 
 function downloadJsonFile(filename, payload) {
@@ -2702,7 +2898,9 @@ loadTilesetImages().then(async () => {
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   runMapAfterSeedHintThenReconcileStoredPlaySave();
-  queueTryAutoResumePlayFromSave();
+  if (!applyBridgeFrom25DIfPresent()) {
+    queueTryAutoResumePlayFromSave();
+  }
 });
 
 function queueTryAutoResumePlayFromSave() {

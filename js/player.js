@@ -134,7 +134,7 @@ const initialDex =
   Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
     ? _savedDex
     : DEFAULT_PLAYER_DEX_ID;
-const initialInfiniteLife = _savedInfiniteLife == null ? true : _savedInfiniteLife !== '0';
+const initialInfiniteLife = _savedInfiniteLife == null ? false : _savedInfiniteLife !== '0';
 
 export const player = {
   x: 0,

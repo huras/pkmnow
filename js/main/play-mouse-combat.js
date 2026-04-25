@@ -4,7 +4,8 @@ import {
   setPlayerFacingFromWorldAimDelta,
   triggerPlayerLmbAttack,
   player,
-  getTackleDirUnitFromFacing
+  getTackleDirUnitFromFacing,
+  canWalk
 } from '../player.js';
 import {
   castMoveById,
@@ -93,14 +94,15 @@ const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 3;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_CUT_CHARGE_MAX_RADIUS_MUL = 3.0;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
-/** Tap Cut hits 1–2: small step forward along aim. */
-const FIELD_CUT_HIT_ADVANCE_TILES = 0.25;
+/** Tap Cut hits 1–2: forward step along aim. */
+const FIELD_CUT_HIT_ADVANCE_TILES = 0.5;
 /** Tap Cut third hit: stronger step. */
 const FIELD_CUT_THIRD_HIT_ADVANCE_TILES = 0.5;
 /** After third Cut combo hit: no movement (punishment). */
 const FIELD_CUT_THIRD_HIT_LOCKOUT_SEC = 0.45;
 /** Charged spin Cut / tackle lunge tile scale (unchanged). */
 const FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES = 0.5;
+const FIELD_CUT_REAL_ADVANCE_TILES = 0.5;
 const FIELD_SKILL_LABEL = {
   tackle: 'Tackle',
   cut: 'Cut',
@@ -633,6 +635,26 @@ function resolveCutComboStep(player, charged) {
   return fieldCutComboStep;
 }
 
+function applyRealCutAdvance(player, data) {
+  if (!player || !data) return;
+  const nx = Number(player.tackleDirNx) || 0;
+  const ny = Number(player.tackleDirNy) || 0;
+  const len = Math.hypot(nx, ny);
+  if (len < 1e-6) return;
+  const dirX = nx / len;
+  const dirY = ny / len;
+  const ox = Number(player.x) || 0;
+  const oy = Number(player.y) || 0;
+  const tx = ox + dirX * FIELD_CUT_REAL_ADVANCE_TILES;
+  const ty = oy + dirY * FIELD_CUT_REAL_ADVANCE_TILES;
+  const isAirborne = !player.grounded || (player.z || 0) > 0.05;
+  if (!canWalk(tx, ty, data, ox, oy, isAirborne, false)) return;
+  player.x = tx;
+  player.y = ty;
+  player.visualX = tx;
+  player.visualY = ty;
+}
+
 function castPlayerCut(player, data, charged = false, meleeId = 'cut') {
   if (!player || !data) return;
   const { sx, sy, tx, ty } = aimAtCursor(player);
@@ -692,6 +714,7 @@ function castPlayerCut(player, data, charged = false, meleeId = 'cut') {
     gamepadRumblePlayer: true
   });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
+  if (meleeId === 'cut') applyRealCutAdvance(player, data);
 }
 
 /** Charged Cut release before the first bar is full: one slash, slightly stronger than tap 1. */
@@ -752,6 +775,7 @@ function castWeakPartialChargedCut(player, data, charge01, meleeId = 'cut') {
     gamepadRumblePlayer: true
   });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
+  if (meleeId === 'cut') applyRealCutAdvance(player, data);
 }
 
 function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
@@ -804,6 +828,7 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   });
   if (meleeId === 'cut') {
     cutGrassInCircle(centerX, centerY, radius, data, player.z ?? 0);
+    applyRealCutAdvance(player, data);
   }
 }
 

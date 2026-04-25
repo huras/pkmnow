@@ -16,10 +16,10 @@ export const WATER_ANIM_SRC_H = 16;
 export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
 
 /** Camada estática no modo play organizada em blocos (chunks) de 8×8 tiles. */
-export const PLAY_CHUNK_SIZE = 4;
+export const PLAY_CHUNK_SIZE = 16;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
-export const PLAY_BAKE_TILE_PX = 42;
+export const PLAY_BAKE_TILE_PX = 64;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
 export const PLAY_CAMERA_Z_REF = 58;

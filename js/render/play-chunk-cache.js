@@ -57,7 +57,12 @@ export function getPlayChunk(key) {
 
 /**
  * @param {string} key
- * @param {{ canvas: HTMLCanvasElement, suppressedSet: Set<number> }} chunk
+ * @param {{ canvas: HTMLCanvasElement, suppressedSet: Set<number>, metrics?: {
+ *   metadataTileHits?: number,
+ *   metadataTileMisses?: number,
+ *   rolePrecomputeHits?: number,
+ *   rolePrecomputeMisses?: number
+ * } }} chunk
  */
 export function setPlayChunk(key, chunk) {
   // Parse cx/cy once here so prunePlayChunkCache never needs to split strings.

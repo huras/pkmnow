@@ -43,9 +43,12 @@ import { createVegetationSystem } from './vegetation.js';
 import { buildWorldMacroMesh, buildDetailTerrain, updateHoverMarker } from './terrain.js';
 import { createProceduralSkySystem } from './sky.js';
 import { createPlayerController } from './player-controller.js';
+import { createWildPokemonSystem } from './wild-pokemon-system.js';
 
 export function startApp() {
   const ui = renderLayout();
+  const SESSION_KEY_BRIDGE_FROM_2D = 'pkmn_bridge_2d_to_25d';
+  const SESSION_KEY_BRIDGE_TO_2D = 'pkmn_bridge_25d_to_2d';
   const settings = {
     microSpan: 64,
     stepHeight: 0.75,
@@ -59,6 +62,12 @@ export function startApp() {
     dayLengthMinutes: 20,
     showVegetation: true,
     vegetationDensity: 1.0,
+    wildEnabled: true,
+    wildMaxCount: 10,
+    wildSpawnRadius: 28,
+    wildDespawnRadius: 52,
+    wildMoveSpeed: 2.1,
+    wildRespawnIntervalSec: 0.6,
     followPlayerCamera: true,
     cameraFocusStrength: 0.22,
     cameraLookAhead: 1.6,
@@ -147,6 +156,49 @@ export function startApp() {
   let blurAnchorReady = false;
   let blurMotion01 = 0;
   let followPrevWorldPos = null;
+  /** @type {{ seed: string, mx: number, my: number } | null} */
+  let pendingBridgeFrom2D = null;
+
+  function consumeBridgeFrom2D() {
+    /** @type {{ seed: string, mx: number, my: number } | null} */
+    let fromSession = null;
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY_BRIDGE_FROM_2D);
+      if (raw) {
+        sessionStorage.removeItem(SESSION_KEY_BRIDGE_FROM_2D);
+        const parsed = JSON.parse(raw);
+        const mx = Number(parsed?.mx);
+        const my = Number(parsed?.my);
+        if (Number.isFinite(mx) && Number.isFinite(my)) {
+          fromSession = { seed: String(parsed?.seed ?? ''), mx, my };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const seed = params.get('seed');
+      const mx = Number(params.get('mx'));
+      const my = Number(params.get('my'));
+      if (seed != null && Number.isFinite(mx) && Number.isFinite(my)) {
+        params.delete('seed');
+        params.delete('mx');
+        params.delete('my');
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, '', nextUrl);
+        return { seed: String(seed), mx, my };
+      }
+    } catch {
+      /* ignore */
+    }
+    return fromSession;
+  }
+
+  pendingBridgeFrom2D = consumeBridgeFrom2D();
+  if (pendingBridgeFrom2D?.seed && ui.seedInput) {
+    ui.seedInput.value = pendingBridgeFrom2D.seed;
+  }
 
   function updateFollowCamera(dtSec) {
     if (viewMode !== 'detail' || !settings.followPlayerCamera || !playerController.isActive()) {
@@ -270,6 +322,13 @@ export function startApp() {
     playerGroup: sceneBits.playerGroup,
     camera: sceneBits.camera,
     controls: sceneBits.controls,
+    settings,
+    textureFor: textureForLocal,
+    getMicroTile,
+  });
+  const wildPokemonSystem = createWildPokemonSystem({
+    THREE,
+    wildGroup: sceneBits.playerGroup,
     settings,
     textureFor: textureForLocal,
     getMicroTile,
@@ -454,6 +513,7 @@ export function startApp() {
     sceneBits.detailGroup.visible = mode === 'detail';
     sceneBits.playerGroup.visible = mode === 'detail';
     playerController.setVisible(mode === 'detail');
+    wildPokemonSystem.setVisible(mode === 'detail');
     ui.worldBtn.disabled = mode === 'world';
     ui.detailBtn.disabled = mode === 'detail';
     if (mode === 'world') {
@@ -729,10 +789,12 @@ export function startApp() {
     detailStream.runtime = result.chunkRuntime || null;
     applyTerrainLightingTuning();
     playerController.setContext(currentWorld, currentBounds);
+    wildPokemonSystem.setContext(currentWorld, currentBounds);
     if (currentBounds) {
       const spawnMx = clamp(Math.floor(centerMicroX), 0, currentBounds.width - 1);
       const spawnMy = clamp(Math.floor(centerMicroY), 0, currentBounds.height - 1);
       playerController.placeAt(spawnMx, spawnMy);
+      wildPokemonSystem.resetAround(spawnMx, spawnMy);
       ui.pickInfo.textContent = `Player spawned at selected macro center mx:${spawnMx} my:${spawnMy}. Use WASD/Arrows to move, Space to jump, F to fly.`;
     }
     refreshMeshingHud();
@@ -767,17 +829,40 @@ export function startApp() {
         idx,
       });
       applyTerrainLightingTuning();
+      const hasBridgeSpawn =
+        !!pendingBridgeFrom2D
+        && Number.isFinite(Number(pendingBridgeFrom2D.mx))
+        && Number.isFinite(Number(pendingBridgeFrom2D.my));
+      let forcedSpawnMx = null;
+      let forcedSpawnMy = null;
+      if (hasBridgeSpawn) {
+        const maxMicroX = Math.max(1, Number(currentWorld.width) * MACRO_TILE_STRIDE) - 1;
+        const maxMicroY = Math.max(1, Number(currentWorld.height) * MACRO_TILE_STRIDE) - 1;
+        forcedSpawnMx = clamp(Math.floor(Number(pendingBridgeFrom2D.mx)), 0, maxMicroX);
+        forcedSpawnMy = clamp(Math.floor(Number(pendingBridgeFrom2D.my)), 0, maxMicroY);
+        selectedMacro = {
+          x: clamp(Math.floor(forcedSpawnMx / MACRO_TILE_STRIDE), 0, Math.max(0, Number(currentWorld.width) - 1)),
+          y: clamp(Math.floor(forcedSpawnMy / MACRO_TILE_STRIDE), 0, Math.max(0, Number(currentWorld.height) - 1)),
+        };
+      }
       const centerMacroX = selectedMacro?.x ?? Math.floor(currentWorld.width * 0.5);
       const centerMacroY = selectedMacro?.y ?? Math.floor(currentWorld.height * 0.5);
       // Lazy detail build: only rebuild immediately if user is already in Detail mode.
-      if (viewMode === 'detail') {
+      if (viewMode === 'detail' || hasBridgeSpawn) {
         await rebuildDetail(
-          centerMacroX * MACRO_TILE_STRIDE + halfStride,
-          centerMacroY * MACRO_TILE_STRIDE + halfStride,
+          forcedSpawnMx ?? (centerMacroX * MACRO_TILE_STRIDE + halfStride),
+          forcedSpawnMy ?? (centerMacroY * MACRO_TILE_STRIDE + halfStride),
         );
+        if (hasBridgeSpawn && Number.isFinite(forcedSpawnMx) && Number.isFinite(forcedSpawnMy)) {
+          playerController.placeAt(forcedSpawnMx, forcedSpawnMy);
+          wildPokemonSystem.resetAround(forcedSpawnMx, forcedSpawnMy);
+          pendingBridgeFrom2D = null;
+          setViewMode('detail');
+        }
       } else {
         detailStream.version++;
         clearDetailStream();
+        wildPokemonSystem.clear();
         currentBounds = null;
         detailFloorMesh = null;
         if (ui.triCountEl) ui.triCountEl.textContent = '--';
@@ -866,6 +951,8 @@ export function startApp() {
     void pumpChunkBuildQueue();
     playerController.tick(dtSec);
     playerController.faceCamera();
+    void wildPokemonSystem.tick(dtSec, playerController.getWorldMicroPosition());
+    wildPokemonSystem.faceCamera(sceneBits.camera);
     vegetationSystem.faceCamera(sceneBits.camera);
     skySystem.tick(nowTs * 0.001);
     composer.render();
@@ -941,13 +1028,20 @@ export function startApp() {
   billFx.add(settings, 'billboardSunFacing').name('Sun Facing Lighting');
   billFx.add(settings, 'billboardSunFacingMix', 0, 1, 0.01).name('Sun Facing Mix');
   const entityFx = lightingFx.addFolder('Pokemon/Entity Lighting');
-  entityFx.addColor(settings, 'entityTint').name('Tint').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityBrightness', 0, 10, 0.01).name('Brightness').onChange(() => playerController.applyLightingTuning());
-  entityFx.addColor(settings, 'entityEmissive').name('Emissive').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityCastShadow').name('Cast Shadow').onChange(() => playerController.applyLightingTuning());
-  entityFx.add(settings, 'entityReceiveShadow').name('Receive Shadow').onChange(() => playerController.applyLightingTuning());
+  entityFx.addColor(settings, 'entityTint').name('Tint').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.add(settings, 'entityBrightness', 0, 10, 0.01).name('Brightness').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.addColor(settings, 'entityEmissive').name('Emissive').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.add(settings, 'entityEmissiveIntensity', 0, 3.0, 0.01).name('Emissive Intensity').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.add(settings, 'entityAlphaTest', 0, 0.8, 0.01).name('Alpha Cut').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.add(settings, 'entityCastShadow').name('Cast Shadow').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  entityFx.add(settings, 'entityReceiveShadow').name('Receive Shadow').onChange(() => { playerController.applyLightingTuning(); wildPokemonSystem.applyLightingTuning(); });
+  const wildFx = gui.addFolder('Wild Pokemon');
+  wildFx.add(settings, 'wildEnabled').name('Enabled');
+  wildFx.add(settings, 'wildMaxCount', 0, 40, 1).name('Max Count');
+  wildFx.add(settings, 'wildSpawnRadius', 8, 80, 1).name('Spawn Radius');
+  wildFx.add(settings, 'wildDespawnRadius', 12, 120, 1).name('Despawn Radius');
+  wildFx.add(settings, 'wildMoveSpeed', 0.2, 6.0, 0.05).name('Move Speed');
+  wildFx.add(settings, 'wildRespawnIntervalSec', 0.1, 3.0, 0.05).name('Respawn Interval');
   gui.add(settings, 'vegetationDensity', 0.25, 1.0, 0.01).name('Vegetation Density').onFinishChange(() => {
     if (currentWorld && selectedMacro) rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
   });
@@ -1039,6 +1133,28 @@ export function startApp() {
       await rebuildDetail(selectedMacro.x * MACRO_TILE_STRIDE + halfStride, selectedMacro.y * MACRO_TILE_STRIDE + halfStride);
     }
     setViewMode('detail');
+  });
+  ui.to2dBtn?.addEventListener('click', () => {
+    const worldPos = playerController.getWorldMicroPosition();
+    const fallbackX = selectedMacro ? (selectedMacro.x * MACRO_TILE_STRIDE + halfStride) : halfStride;
+    const fallbackY = selectedMacro ? (selectedMacro.y * MACRO_TILE_STRIDE + halfStride) : halfStride;
+    const payload = {
+      seed: String(ui.seedInput?.value ?? ''),
+      mx: Number.isFinite(Number(worldPos?.x)) ? Number(worldPos.x) : fallbackX,
+      my: Number.isFinite(Number(worldPos?.y)) ? Number(worldPos.y) : fallbackY,
+      ts: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(SESSION_KEY_BRIDGE_TO_2D, JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+    const next = new URL('../play.html', window.location.href);
+    next.searchParams.set('seed', payload.seed);
+    next.searchParams.set('mx', String(payload.mx));
+    next.searchParams.set('my', String(payload.my));
+    next.searchParams.set('mode', 'play');
+    window.location.href = next.toString();
   });
   ui.regenBtn.addEventListener('click', () => regenerate().catch((e) => { console.error(e); ui.pickInfo.textContent = `Error: ${e?.message || e}`; rendering = false; }));
   ui.seedInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') regenerate().catch((e2) => { console.error(e2); ui.pickInfo.textContent = `Error: ${e2?.message || e2}`; rendering = false; }); });

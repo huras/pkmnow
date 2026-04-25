@@ -20,6 +20,7 @@ import {
   prunePlayChunkCache
 } from './render/play-chunk-cache.js';
 import { getPlayAnimatedGrassLayers } from './play-grass-eligibility.js';
+import { isPlayStrictCullingEnabled } from './render/play-strict-culling.js';
 import {
   clearGrassFireStateForNewMap,
   grassFireVisualPhaseAt,
@@ -27,6 +28,13 @@ import {
 } from './play-grass-fire.js';
 import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from './play-grass-cut.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
+import {
+  syncPlayChunkMetadataPool,
+  enqueuePlayChunkMetadata,
+  pumpPlayChunkMetadataWorkers,
+  takeReadyPlayChunkMetadata,
+  consumePlayChunkMetadataIngestMs
+} from './render/play-chunk-metadata-pool.js';
 import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import { drawCachedMapOverview } from './render/map-overview-cache.js';
 import { resolveMapGlobalPlayerMicroForMarker } from './main/play-session-persist.js';
@@ -238,6 +246,14 @@ const _tileCachePool = new Map();
  */
 const _tileKeyInt = (mx, my) => (mx << 16) | (my & 0xffff);
 const ENTITY_COLLECTION_SHADOW_PAD_TILES = 5;
+const MINIMAP_RENDER_MIN_MS = 250;
+let _lastMinimapRenderAtMs = 0;
+let _lastMinimapPlayerTileX = Number.NaN;
+let _lastMinimapPlayerTileY = Number.NaN;
+let _lastMinimapAppMode = '';
+const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_STILL = 3.8;
+const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_MOVE = 1.1;
+const PLAY_CHUNK_BAKE_FAST_MOVE_SPEED = 2.4;
 
 /**
  * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
@@ -301,7 +317,20 @@ export function render(canvas, data, options = {}) {
       bakedThisFrame: 0,
       bakeBudget: 0,
       bakeBoost: 0,
-      queueSize: 0
+      queueSize: 0,
+      metadataTileHits: 0,
+      metadataTileMisses: 0,
+      metadataHitRate: 0,
+      rolePrecomputeHits: 0,
+      rolePrecomputeMisses: 0,
+      rolePrecomputeHitRate: 0,
+      scatterPrecomputeHits: 0,
+      scatterPrecomputeMisses: 0,
+      scatterPrecomputeHitRate: 0,
+      suppressionPrecomputeHits: 0,
+      suppressionPrecomputeMisses: 0,
+      suppressionPrecomputeHitRate: 0,
+      workerIngestMs: 0
     });
   }
 
@@ -337,6 +366,7 @@ export function render(canvas, data, options = {}) {
     // Clear static entity descriptors so the new map is scanned fresh.
     invalidateStaticEntityCache();
   }
+  syncPlayChunkMetadataPool(data, appMode);
 
   addRenderFramePhaseMs('rndPrepMs', performance.now() - tPrep0);
 
@@ -483,6 +513,7 @@ export function render(canvas, data, options = {}) {
         else {
           missingVisibleChunks++;
           enqueuePlayChunkBake(cx, cy, false, true);
+          enqueuePlayChunkMetadata(cx, cy, true);
         }
       }
     }
@@ -490,16 +521,21 @@ export function render(canvas, data, options = {}) {
     // --- PRE-BAKE NEARBY CHUNKS (PREDICTIVE CACHING) ---
     // If the visible area is mostly baked, use some of the budget to bake nearby chunks
     // that the player might move into soon. This reduces FPS drops during discovery.
-    const prebakeRadius = 1; 
-    for (let cy = cStartY - prebakeRadius; cy <= cEndY + prebakeRadius; cy++) {
-      for (let cx = cStartX - prebakeRadius; cx <= cEndX + prebakeRadius; cx++) {
-        if (cx < 0 || cy < 0 || cx > maxChunkXi || cy > maxChunkYi) continue;
-        const key = `${cx},${cy}`;
-        if (!visibleChunkKeys.has(key) && !hasPlayChunk(key)) {
-          enqueuePlayChunkBake(cx, cy);
+    const strictCulling = isPlayStrictCullingEnabled();
+    const prebakeRadius = strictCulling ? 0 : 1; 
+    if (prebakeRadius > 0) {
+      for (let cy = cStartY - prebakeRadius; cy <= cEndY + prebakeRadius; cy++) {
+        for (let cx = cStartX - prebakeRadius; cx <= cEndX + prebakeRadius; cx++) {
+          if (cx < 0 || cy < 0 || cx > maxChunkXi || cy > maxChunkYi) continue;
+          const key = `${cx},${cy}`;
+          if (!visibleChunkKeys.has(key) && !hasPlayChunk(key)) {
+            enqueuePlayChunkBake(cx, cy);
+            enqueuePlayChunkMetadata(cx, cy, false);
+          }
         }
       }
     }
+    pumpPlayChunkMetadataWorkers();
     addRenderFramePhaseMs('rndChunkQMs', performance.now() - tChunkQ0);
 
     const chunkBakeBudget = getAdaptivePlayChunkBakeBudget({
@@ -510,10 +546,50 @@ export function render(canvas, data, options = {}) {
 
     const tChunkBake0 = performance.now();
     const bakeRequests = dequeuePlayChunkBakes(chunkBakeBudget);
+    const playerSpeedTilesPerSec = Math.hypot(Number(player?.vx) || 0, Number(player?.vy) || 0);
+    const bakeFrameBudgetMs =
+      playerSpeedTilesPerSec >= PLAY_CHUNK_BAKE_FAST_MOVE_SPEED
+        ? PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_MOVE
+        : PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_STILL;
+    let frameMetadataTileHits = 0;
+    let frameMetadataTileMisses = 0;
+    let frameRolePrecomputeHits = 0;
+    let frameRolePrecomputeMisses = 0;
+    let frameScatterPrecomputeHits = 0;
+    let frameScatterPrecomputeMisses = 0;
+    let frameSuppressionPrecomputeHits = 0;
+    let frameSuppressionPrecomputeMisses = 0;
+    let bakedThisFrame = 0;
     for (const req of bakeRequests) {
+      if (performance.now() - tChunkBake0 >= bakeFrameBudgetMs) break;
       if (hasPlayChunk(req.key) && !req.forceRebake) continue;
-      setPlayChunk(req.key, bakeChunk(req.cx, req.cy, data, PLAY_BAKE_TILE_PX, PLAY_BAKE_TILE_PX));
+      const metadata = takeReadyPlayChunkMetadata(req.key);
+      const bakedChunk = bakeChunk(
+        req.cx,
+        req.cy,
+        data,
+        PLAY_BAKE_TILE_PX,
+        PLAY_BAKE_TILE_PX,
+        metadata
+      );
+      const m = bakedChunk?.metrics;
+      if (m) {
+        frameMetadataTileHits += Number(m.metadataTileHits) || 0;
+        frameMetadataTileMisses += Number(m.metadataTileMisses) || 0;
+        frameRolePrecomputeHits += Number(m.rolePrecomputeHits) || 0;
+        frameRolePrecomputeMisses += Number(m.rolePrecomputeMisses) || 0;
+        frameScatterPrecomputeHits += Number(m.scatterPrecomputeHits) || 0;
+        frameScatterPrecomputeMisses += Number(m.scatterPrecomputeMisses) || 0;
+        frameSuppressionPrecomputeHits += Number(m.suppressionPrecomputeHits) || 0;
+        frameSuppressionPrecomputeMisses += Number(m.suppressionPrecomputeMisses) || 0;
+      }
+      setPlayChunk(
+        req.key,
+        bakedChunk
+      );
+      bakedThisFrame++;
     }
+    pumpPlayChunkMetadataWorkers();
     addRenderFramePhaseMs('rndChunkBakeMs', performance.now() - tChunkBake0);
 
     const tChunkDraw0 = performance.now();
@@ -544,10 +620,31 @@ export function render(canvas, data, options = {}) {
       totalVisible: visibleChunkCoords.length,
       drawnVisible: drawnVisibleChunks,
       missingVisible: Math.max(0, visibleChunkCoords.length - drawnVisibleChunks),
-      bakedThisFrame: bakeRequests.length,
+      bakedThisFrame,
       bakeBudget: chunkBakeBudget,
       bakeBoost: getPlayChunkBakeBoost(),
-      queueSize: getPlayChunkBakeQueueSize()
+      queueSize: getPlayChunkBakeQueueSize(),
+      metadataTileHits: frameMetadataTileHits,
+      metadataTileMisses: frameMetadataTileMisses,
+      metadataHitRate: (frameMetadataTileHits + frameMetadataTileMisses) > 0
+        ? frameMetadataTileHits / (frameMetadataTileHits + frameMetadataTileMisses)
+        : 0,
+      rolePrecomputeHits: frameRolePrecomputeHits,
+      rolePrecomputeMisses: frameRolePrecomputeMisses,
+      rolePrecomputeHitRate: (frameRolePrecomputeHits + frameRolePrecomputeMisses) > 0
+        ? frameRolePrecomputeHits / (frameRolePrecomputeHits + frameRolePrecomputeMisses)
+        : 0,
+      scatterPrecomputeHits: frameScatterPrecomputeHits,
+      scatterPrecomputeMisses: frameScatterPrecomputeMisses,
+      scatterPrecomputeHitRate: (frameScatterPrecomputeHits + frameScatterPrecomputeMisses) > 0
+        ? frameScatterPrecomputeHits / (frameScatterPrecomputeHits + frameScatterPrecomputeMisses)
+        : 0,
+      suppressionPrecomputeHits: frameSuppressionPrecomputeHits,
+      suppressionPrecomputeMisses: frameSuppressionPrecomputeMisses,
+      suppressionPrecomputeHitRate: (frameSuppressionPrecomputeHits + frameSuppressionPrecomputeMisses) > 0
+        ? frameSuppressionPrecomputeHits / (frameSuppressionPrecomputeHits + frameSuppressionPrecomputeMisses)
+        : 0,
+      workerIngestMs: consumePlayChunkMetadataIngestMs()
     });
     prunePlayChunkCache({
       keepKeys: visibleChunkKeys,
@@ -582,7 +679,7 @@ export function render(canvas, data, options = {}) {
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const vegAnimTime = time;
-    const canopyAnimTime = vegAnimTime;
+    const canopyAnimTime = options.settings?.treeCanopyAnimationEnabled === false ? 0 : vegAnimTime;
 
     // Pre-compute the set of grass-eligible tiles ONCE per frame.
     // Eliminates per-tile getRoleForCell calls inside forEachAbovePlayerTile
@@ -843,33 +940,50 @@ export function render(canvas, data, options = {}) {
       };
     };
 
-    // Precompute NORTH-facing cliff edge tiles for per-entity depth overlay.
-    // These tiles (EDGE_N, OUT_NW, OUT_NE) must appear IN FRONT of entities at a lower heightStep
-    // but BEHIND entities at the same/higher heightStep.
+    // Resolve NORTH-facing cliff edge tiles lazily (per queried tile).
+    // Previous full-viewport precompute scanned all tiles each frame.
     const _cliffEdgeMap = new Map();
-    {
-      const _microW = data.width * MACRO_TILE_STRIDE;
-      const _microH = data.height * MACRO_TILE_STRIDE;
-      for (let my = startY; my < endY; my++) {
-        for (let mx = startX; mx < endX; mx++) {
-          const tile = getCached(mx, my);
-          if (!tile || tile.heightStep < 1) continue;
-          const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-          const biomeSet = TERRAIN_SETS[biomeSetName];
-          if (!biomeSet) continue;
-          const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-          const role = getRoleForCell(my, mx, _microH, _microW, isAtOrAbove, biomeSet.type);
-          if (!NORTH_CLIFF_EDGE_ROLES.has(role)) continue;
-          const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
-          const imgPath = TessellationEngine.getImagePath(biomeSet.file);
-          const img = imageCache.get(imgPath);
-          if (!img) continue;
-          const spec = getConcConvATerrainTileSpec(biomeSet, role);
-          if (spec.tileId == null) continue;
-          _cliffEdgeMap.set(_tileKeyInt(mx, my), { mx, my, heightStep: tile.heightStep, img, cols, spec });
-        }
+    const _cliffEdgeMiss = Symbol('cliffEdgeMiss');
+    const _microW = data.width * MACRO_TILE_STRIDE;
+    const _microH = data.height * MACRO_TILE_STRIDE;
+    const getCliffEdgeMeta = (mx, my) => {
+      const key = _tileKeyInt(mx, my);
+      const cached = _cliffEdgeMap.get(key);
+      if (cached) return cached === _cliffEdgeMiss ? null : cached;
+
+      const tile = getCached(mx, my);
+      if (!tile || tile.heightStep < 1) {
+        _cliffEdgeMap.set(key, _cliffEdgeMiss);
+        return null;
       }
-    }
+      const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
+      const biomeSet = TERRAIN_SETS[biomeSetName];
+      if (!biomeSet) {
+        _cliffEdgeMap.set(key, _cliffEdgeMiss);
+        return null;
+      }
+      const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
+      const role = getRoleForCell(my, mx, _microH, _microW, isAtOrAbove, biomeSet.type);
+      if (!NORTH_CLIFF_EDGE_ROLES.has(role)) {
+        _cliffEdgeMap.set(key, _cliffEdgeMiss);
+        return null;
+      }
+      const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
+      const imgPath = TessellationEngine.getImagePath(biomeSet.file);
+      const img = imageCache.get(imgPath);
+      if (!img) {
+        _cliffEdgeMap.set(key, _cliffEdgeMiss);
+        return null;
+      }
+      const spec = getConcConvATerrainTileSpec(biomeSet, role);
+      if (spec.tileId == null) {
+        _cliffEdgeMap.set(key, _cliffEdgeMiss);
+        return null;
+      }
+      const value = { mx, my, heightStep: tile.heightStep, img, cols, spec };
+      _cliffEdgeMap.set(key, value);
+      return value;
+    };
 
     // When the player stands on a tree canopy, split tree/scatter drawing:
     // trunks are drawn in sorted order, canopies of trees BEHIND the player are deferred
@@ -1155,27 +1269,25 @@ export function render(canvas, data, options = {}) {
 
         // Per-entity cliff edge overlay: redraw north-facing cliff tiles that are at a
         // HIGHER heightStep on top of this entity so it appears behind the cliff face.
-        if (_cliffEdgeMap.size > 0) {
-          const _entMx = Math.floor(item.x ?? 0);
-          const _entMy = Math.floor(item.y ?? 0);
-          const _entTile = getCached(_entMx, _entMy);
-          const _entH = _entTile?.heightStep ?? 0;
-          const _eLeft = item.cx - item.pivotX;
-          const _eTop = item.cy - item.pivotY;
-          const _tmxS = Math.max(startX, Math.floor(_eLeft / tileW));
-          const _tmyS = Math.max(startY, Math.floor(_eTop / tileH));
-          const _tmxE = Math.min(endX - 1, Math.floor((_eLeft + item.dw) / tileW));
-          const _tmyE = Math.min(endY - 1, Math.floor((_eTop + item.dh) / tileH));
-          for (let _ty = _tmyS; _ty <= _tmyE; _ty++) {
-            for (let _tx = _tmxS; _tx <= _tmxE; _tx++) {
-              const _ce = _cliffEdgeMap.get(_tileKeyInt(_tx, _ty));
-              if (!_ce || _ce.heightStep <= _entH) continue;
-              // Only overlay if entity is at or north of the cliff tile's south edge.
-              if ((item.y ?? 0) >= _ty + 1) continue;
-              const _cpx = snapPx(_tx * tileW);
-              const _cpy = snapPx(_ty * tileH);
-              drawTerrainCellFromSheet(ctx, _ce.img, _ce.cols, 16, _ce.spec.tileId, _cpx, _cpy, tileW, tileH, _ce.spec.flipX);
-            }
+        const _entMx = Math.floor(item.x ?? 0);
+        const _entMy = Math.floor(item.y ?? 0);
+        const _entTile = getCached(_entMx, _entMy);
+        const _entH = _entTile?.heightStep ?? 0;
+        const _eLeft = item.cx - item.pivotX;
+        const _eTop = item.cy - item.pivotY;
+        const _tmxS = Math.max(startX, Math.floor(_eLeft / tileW));
+        const _tmyS = Math.max(startY, Math.floor(_eTop / tileH));
+        const _tmxE = Math.min(endX - 1, Math.floor((_eLeft + item.dw) / tileW));
+        const _tmyE = Math.min(endY - 1, Math.floor((_eTop + item.dh) / tileH));
+        for (let _ty = _tmyS; _ty <= _tmyE; _ty++) {
+          for (let _tx = _tmxS; _tx <= _tmxE; _tx++) {
+            const _ce = getCliffEdgeMeta(_tx, _ty);
+            if (!_ce || _ce.heightStep <= _entH) continue;
+            // Only overlay if entity is at or north of the cliff tile's south edge.
+            if ((item.y ?? 0) >= _ty + 1) continue;
+            const _cpx = snapPx(_tx * tileW);
+            const _cpy = snapPx(_ty * tileH);
+            drawTerrainCellFromSheet(ctx, _ce.img, _ce.cols, 16, _ce.spec.tileId, _cpx, _cpy, tileW, tileH, _ce.spec.flipX);
           }
         }
       } else if (item.type === 'wildSpeechBubble' || item.type === 'playerSpeechBubble') {
@@ -1540,13 +1652,31 @@ export function render(canvas, data, options = {}) {
 
     const tMm0 = performance.now();
     const minimapCanvas = document.getElementById('minimap');
-    if (minimapCanvas) {
-      renderMinimap(minimapCanvas, data, player, {
-        recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
-        playVision,
-        debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug,
-        showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay
-      });
+    const minimapRenderEnabled = options.settings?.minimapRenderEnabled !== false;
+    if (minimapCanvas && minimapRenderEnabled) {
+      const nowMs = performance.now();
+      const playerTileX = Math.floor(Number(player?.x) || 0);
+      const playerTileY = Math.floor(Number(player?.y) || 0);
+      const appModeNow = options.settings?.appMode || 'map';
+      const forceMinimapRender =
+        appModeNow !== _lastMinimapAppMode ||
+        !Number.isFinite(_lastMinimapPlayerTileX) ||
+        !Number.isFinite(_lastMinimapPlayerTileY) ||
+        playerTileX !== _lastMinimapPlayerTileX ||
+        playerTileY !== _lastMinimapPlayerTileY;
+      const canRenderByTime = nowMs - _lastMinimapRenderAtMs >= MINIMAP_RENDER_MIN_MS;
+      if (forceMinimapRender || canRenderByTime) {
+        renderMinimap(minimapCanvas, data, player, {
+          recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
+          playVision,
+          debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug,
+          showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay
+        });
+        _lastMinimapRenderAtMs = nowMs;
+        _lastMinimapPlayerTileX = playerTileX;
+        _lastMinimapPlayerTileY = playerTileY;
+        _lastMinimapAppMode = appModeNow;
+      }
     }
     addRenderFramePhaseMs('rndMinimapMs', performance.now() - tMm0);
   }

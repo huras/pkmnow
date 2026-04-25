@@ -93,6 +93,10 @@ import {
   PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
 } from './moves-player-config.js';
+import { canWildPokemonWalkMicroTile } from '../walkability.js';
+import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
+import { imageCache } from '../image-cache.js';
+import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
 
 /** Cooldown after Earthquake, by charge level (5-bar meter on play HUD). */
 const PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL = Object.freeze({
@@ -1214,12 +1218,29 @@ export function tryCastWildMove(entity, targetX, targetY, dt, targetEntity = nul
 
   // Temporary test mode: all wild aggro uses melee Cut only.
   const ang = Math.atan2(targetY - entity.y, targetX - entity.x);
+  const cutAdvanceTiles = 0.5;
+  const nx = Math.cos(ang);
+  const ny = Math.sin(ang);
+  const advX = (Number(entity.x) || 0) + nx * cutAdvanceTiles;
+  const advY = (Number(entity.y) || 0) + ny * cutAdvanceTiles;
+  if (lastMovesTickData) {
+    const ft = worldFeetFromPivotCell(advX, advY, imageCache, entity.dexId ?? 1, !!entity.animMoving);
+    if (canWildPokemonWalkMicroTile(ft.x, ft.y, lastMovesTickData, undefined, undefined, false, false)) {
+      entity.x = advX;
+      entity.y = advY;
+    }
+  } else {
+    entity.x = advX;
+    entity.y = advY;
+  }
+  entity.vx = nx * (WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.55);
+  entity.vy = ny * (WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.55);
   spawnFieldCutSlashFx(entity.x, entity.y, ang, { radiusTiles: 1.28, lifeSec: 0.24, z: 0.06 });
   if (distP <= 1.7) {
     if (targetEntity && typeof targetEntity.takeDamage === 'function') {
       targetEntity.takeDamage(8, entity);
     } else {
-      tryDamagePlayerFromProjectile(8, false, null);
+      tryDamagePlayerFromProjectile(8, false, null, { sourceEntity: entity, x: entity.x, y: entity.y });
       const fx = Math.cos(ang);
       const fy = Math.sin(ang);
       let bestOtherWild = null;
