@@ -21,7 +21,7 @@ import {
   isPlayerInfiniteLifeEnabled,
   setPlayerInfiniteLifeEnabled
 } from './player.js';
-import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile, getLandStepCurveExponent, setLandStepCurveExponent } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
   configureTileDebugModal,
@@ -107,6 +107,8 @@ import {
   invalidatePlayPointerHover
 } from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
+import { clearPlayChunkCache } from './render/play-chunk-cache.js';
+import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
 import {
   cyclePlayCameraOffsetPreset,
   getPlayCameraOffsetPreset,
@@ -246,6 +248,9 @@ const btnMinimapCameraOffsetToggle = document.getElementById('minimap-camera-off
 const rangeMinimapCameraOffsetStrength = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-offset-strength'));
 const spanMinimapCameraOffsetStrengthReadout = document.getElementById('minimap-camera-offset-strength-readout');
 const btnMinimapStrictCullingToggle = document.getElementById('minimap-strict-culling-toggle');
+const rangeMinimapLandStepCurve = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-land-step-curve-range'));
+const spanMinimapLandStepCurveReadout = document.getElementById('minimap-land-step-curve-readout');
+const canvasMinimapLandStepCurvePreview = /** @type {HTMLCanvasElement | null} */ (document.getElementById('minimap-land-step-curve-preview'));
 const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
 const btnMinimapPokeradarToggle = document.getElementById('minimap-pokeradar-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
@@ -258,6 +263,7 @@ const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible
 const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
 const LS_PLAY_FPS_CAP = 'pkmn_play_fps_cap';
+const LS_PLAY_LAND_STEP_CURVE = 'pkmn_play_land_step_curve';
 let minimapMacroGridOverlay = false;
 let minimapRenderEnabled = true;
 let minimapShowAllSpawnedDebug = false;
@@ -444,6 +450,99 @@ function syncMinimapStrictCullingToggleUi() {
   btnMinimapStrictCullingToggle.setAttribute('aria-label', title);
 }
 
+function syncMinimapLandStepCurveUi() {
+  const exp = Math.max(0.15, Math.min(15, Number(getLandStepCurveExponent()) || 3));
+  if (rangeMinimapLandStepCurve) rangeMinimapLandStepCurve.value = String(exp);
+  if (spanMinimapLandStepCurveReadout) spanMinimapLandStepCurveReadout.textContent = `${exp.toFixed(2)}x`;
+  drawMinimapLandStepCurvePreview(exp);
+}
+
+function drawMinimapLandStepCurvePreview(exp) {
+  if (!(canvasMinimapLandStepCurvePreview instanceof HTMLCanvasElement)) return;
+  const ctx = canvasMinimapLandStepCurvePreview.getContext('2d');
+  if (!ctx) return;
+  const w = canvasMinimapLandStepCurvePreview.width | 0;
+  const h = canvasMinimapLandStepCurvePreview.height | 0;
+  if (w <= 2 || h <= 2) return;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0c1322';
+  ctx.fillRect(0, 0, w, h);
+
+  const padX = 10;
+  const padY = 8;
+  const iw = Math.max(1, w - padX * 2);
+  const ih = Math.max(1, h - padY * 2);
+  const x0 = padX;
+  const y0 = h - padY;
+  const x1 = x0 + iw;
+  const y1 = y0 - ih;
+
+  ctx.strokeStyle = 'rgba(160,180,220,0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y0);
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x0, y1);
+  ctx.stroke();
+
+  const stepCount = 6;
+  ctx.strokeStyle = 'rgba(130,150,190,0.22)';
+  for (let i = 1; i < stepCount; i++) {
+    const gx = x0 + (iw * i) / stepCount;
+    const gy = y0 - (ih * i) / stepCount;
+    ctx.beginPath();
+    ctx.moveTo(gx, y0);
+    ctx.lineTo(gx, y1);
+    ctx.moveTo(x0, gy);
+    ctx.lineTo(x1, gy);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = '#71d4ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const samples = Math.max(32, iw);
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const curved = Math.pow(t, exp);
+    const px = x0 + t * iw;
+    const py = y0 - curved * ih;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(220,235,255,0.9)';
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillText('input elev', x1 - 52, y0 - 2);
+  ctx.save();
+  ctx.translate(x0 + 3, y1 + 34);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('curved', 0, 0);
+  ctx.restore();
+}
+
+function setLandStepCurveAndRefresh(next, persist = true) {
+  const exp = setLandStepCurveExponent(next);
+  syncMinimapLandStepCurveUi();
+  clearPlayChunkCache();
+  invalidateStaticEntityCache();
+  clearScatterSolidBlockCache();
+  try {
+    updateView();
+  } catch (err) {
+    // Early bootstrap can call this before appMode/current view wiring exists.
+    if (!(err instanceof ReferenceError)) throw err;
+  }
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_PLAY_LAND_STEP_CURVE, String(exp));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
 function syncMinimapFpsCapToggleUi() {
   if (!(btnMinimapFpsCapToggle instanceof HTMLButtonElement)) return;
   const cap = Math.max(0, Number(getPlayFpsCap()) || 0);
@@ -573,6 +672,17 @@ btnMinimapStrictCullingToggle?.addEventListener('click', () => {
   togglePlayStrictCulling();
   syncMinimapStrictCullingToggleUi();
   updateView();
+});
+try {
+  const storedLandStepCurve = Number(localStorage.getItem(LS_PLAY_LAND_STEP_CURVE));
+  setLandStepCurveAndRefresh(Number.isFinite(storedLandStepCurve) ? storedLandStepCurve : 3, false);
+} catch {
+  setLandStepCurveAndRefresh(3, false);
+}
+syncMinimapLandStepCurveUi();
+rangeMinimapLandStepCurve?.addEventListener('input', () => {
+  const next = Number(rangeMinimapLandStepCurve.value);
+  setLandStepCurveAndRefresh(next, true);
 });
 try {
   const storedFpsCap = Number(localStorage.getItem(LS_PLAY_FPS_CAP));
