@@ -3,6 +3,7 @@ import { invalidatePlayPointerHover } from './play-pointer-world.js';
 import {
   setPlayerFacingFromWorldAimDelta,
   triggerPlayerLmbAttack,
+  queuePlayerCutAdvance,
   player,
   getTackleDirUnitFromFacing
 } from '../player.js';
@@ -93,8 +94,10 @@ const FIELD_TACKLE_CHARGE_MAX_REACH_TILES = 3;
 const FIELD_SKILL_CUT_RADIUS = 1.5;
 const FIELD_CUT_CHARGE_MAX_RADIUS_MUL = 3.0;
 const FIELD_SKILL_CUT_CENTER_OFFSET = 1.1;
-/** Tap Cut hits 1–2: small step forward along aim. */
-const FIELD_CUT_HIT_ADVANCE_TILES = 0.25;
+/** Tap Cut hits 1–2: forward step along aim. */
+const FIELD_CUT_HIT_ADVANCE_TILES = 0.5;
+/** On connect, keep only 25% of cut lunge (reduce remaining by 3/4). */
+const FIELD_CUT_CONNECT_ADVANCE_MUL = 0.25;
 /** Tap Cut third hit: stronger step. */
 const FIELD_CUT_THIRD_HIT_ADVANCE_TILES = 0.5;
 /** After third Cut combo hit: no movement (punishment). */
@@ -640,7 +643,9 @@ function castPlayerCut(player, data, charged = false, meleeId = 'cut') {
   const styleId = resolveCutStyle(meleeId, player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
   const comboStep = resolveCutComboStep(player, charged);
-  player._tackleReachTiles = comboStep >= 3 ? FIELD_CUT_THIRD_HIT_ADVANCE_TILES : FIELD_CUT_HIT_ADVANCE_TILES;
+  player._tackleReachTiles = meleeId === 'cut'
+    ? 0
+    : (comboStep >= 3 ? FIELD_CUT_THIRD_HIT_ADVANCE_TILES : FIELD_CUT_HIT_ADVANCE_TILES);
   playCutComboSwordSwishSfx(player, comboStep);
   if (comboStep === 3) {
     player.cutThirdHitLockoutSec = FIELD_CUT_THIRD_HIT_LOCKOUT_SEC;
@@ -681,17 +686,22 @@ function castPlayerCut(player, data, charged = false, meleeId = 'cut') {
       lifeSec: variant.lifeSec
     });
   }
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, useRadius, {
+  const wildHit = tryPlayerCutHitWildCircle(player, data, centerX, centerY, useRadius, {
     damage: useDamage,
     knockback: useKnockback,
     cutWildHitSound: true
   });
-  tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
+  const detailHit = tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
     hitSource: 'cut',
     pz: player.z ?? 0,
     gamepadRumblePlayer: true
   });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
+  if (meleeId === 'cut') {
+    const didConnect = !!(wildHit?.hit || detailHit?.hit);
+    const advanceTiles = FIELD_CUT_HIT_ADVANCE_TILES * (didConnect ? FIELD_CUT_CONNECT_ADVANCE_MUL : 1);
+    queuePlayerCutAdvance(player, player.tackleDirNx || 0, player.tackleDirNy || 0, advanceTiles);
+  }
 }
 
 /** Charged Cut release before the first bar is full: one slash, slightly stronger than tap 1. */
@@ -700,7 +710,7 @@ function castWeakPartialChargedCut(player, data, charge01, meleeId = 'cut') {
   const weakT = getWeakPartialChargeT(charge01);
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
-  player._tackleReachTiles = FIELD_CUT_HIT_ADVANCE_TILES;
+  player._tackleReachTiles = meleeId === 'cut' ? 0 : FIELD_CUT_HIT_ADVANCE_TILES;
   playCutComboSwordSwishSfx(player, 1);
   const styleId = resolveCutStyle(meleeId, player.dexId ?? 1);
   const profile = resolveCutProfile(styleId);
@@ -741,17 +751,22 @@ function castWeakPartialChargedCut(player, data, charge01, meleeId = 'cut') {
       lifeSec: variant.lifeSec + 0.04 * weakT
     });
   }
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, useRadius, {
+  const wildHit = tryPlayerCutHitWildCircle(player, data, centerX, centerY, useRadius, {
     damage: useDamage,
     knockback: useKnockback,
     cutWildHitSound: true
   });
-  tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
+  const detailHit = tryBreakDetailsInCircle(centerX, centerY, useRadius, data, {
     hitSource: 'cut',
     pz: player.z ?? 0,
     gamepadRumblePlayer: true
   });
   cutGrassInCircle(centerX, centerY, useRadius, data, player.z ?? 0);
+  if (meleeId === 'cut') {
+    const didConnect = !!(wildHit?.hit || detailHit?.hit);
+    const advanceTiles = FIELD_CUT_HIT_ADVANCE_TILES * (didConnect ? FIELD_CUT_CONNECT_ADVANCE_MUL : 1);
+    queuePlayerCutAdvance(player, player.tackleDirNx || 0, player.tackleDirNy || 0, advanceTiles);
+  }
 }
 
 function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
@@ -759,7 +774,7 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   const { sx, sy, tx, ty } = aimAtCursor(player);
   triggerPlayerLmbAttack(player, tx - sx, ty - sy);
   player._tackleReachTiles =
-    meleeId === 'tackle' ? FIELD_TACKLE_CHARGE_MIN_REACH_TILES : FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES;
+    meleeId === 'tackle' ? FIELD_TACKLE_CHARGE_MIN_REACH_TILES : (meleeId === 'cut' ? 0 : FIELD_SKILL_SPIN_OR_TACKLE_CUT_ADVANCE_TILES);
   const nx = Number(player.tackleDirNx) || 0;
   const ny = Number(player.tackleDirNy) || 1;
   const headingRad = Math.atan2(ny, nx || 1e-6);
@@ -790,13 +805,13 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
     lifeSec: fxLifeSec,
     windTex: meleeId === 'cut'
   });
-  tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius, {
+  const wildHit = tryPlayerCutHitWildCircle(player, data, centerX, centerY, radius, {
     damage,
     knockback,
     cutWildHitSound: meleeId === 'cut'
   });
   const spinHitSource = meleeId === 'cut' ? 'cut' : 'tackle';
-  tryBreakDetailsInCircle(centerX, centerY, radius, data, {
+  const detailHit = tryBreakDetailsInCircle(centerX, centerY, radius, data, {
     hitSource: spinHitSource,
     pz: player.z ?? 0,
     detailCharge01: charge01,
@@ -804,6 +819,9 @@ function castChargedFieldSpinAttack(player, data, meleeId, charge01 = 1) {
   });
   if (meleeId === 'cut') {
     cutGrassInCircle(centerX, centerY, radius, data, player.z ?? 0);
+    const didConnect = !!(wildHit?.hit || detailHit?.hit);
+    const advanceTiles = FIELD_CUT_HIT_ADVANCE_TILES * (didConnect ? FIELD_CUT_CONNECT_ADVANCE_MUL : 1);
+    queuePlayerCutAdvance(player, player.tackleDirNx || 0, player.tackleDirNy || 0, advanceTiles);
   }
 }
 

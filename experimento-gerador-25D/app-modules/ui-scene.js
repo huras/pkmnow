@@ -9,6 +9,7 @@ export function renderLayout() {
         <button id="regen-btn" type="button">Regenerar</button>
         <button id="world-btn" type="button">World Map</button>
         <button id="detail-btn" type="button">Detail View</button>
+        <button id="to-2d-btn" type="button">Go 2D</button>
       </div>
       <p id="pick-info" class="hint">Hover macro tiles in World mode, click to open Detail.</p>
       <div class="perf-panel">
@@ -34,6 +35,7 @@ export function renderLayout() {
     regenBtn: document.getElementById('regen-btn'),
     worldBtn: document.getElementById('world-btn'),
     detailBtn: document.getElementById('detail-btn'),
+    to2dBtn: document.getElementById('to-2d-btn'),
     pickInfo: document.getElementById('pick-info'),
     fpsNowEl: document.getElementById('fps-now'),
     fps1sEl: document.getElementById('fps-1s'),
@@ -91,8 +93,8 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   scene.add(hemiLight);
   const sunLight = new THREE.DirectionalLight('#fff4d4', 0.85);
   sunLight.position.set(180, 260, 120);
-  sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(4096*4, 4096*4);
+  sunLight.castShadow = false;
+  sunLight.shadow.mapSize.set(1024, 1024);
   sunLight.shadow.camera.near = 10;
   sunLight.shadow.camera.far = 800;
   sunLight.shadow.camera.left = -320;
@@ -100,8 +102,8 @@ export function createSceneGraph(THREE, OrbitControls, viewport, debugSettings) 
   sunLight.shadow.camera.top = 320;
   sunLight.shadow.camera.bottom = -320;
   // Reduce moving "zebra" acne on terrain when sun angle changes over time.
-  sunLight.shadow.bias = -0.00002;
-  sunLight.shadow.normalBias = 0.02;
+  sunLight.shadow.bias = -0.00062;
+  sunLight.shadow.normalBias = 0.62;
   sunLight.shadow.intensity = 0.9;
   scene.add(sunLight);
   scene.add(sunLight.target);

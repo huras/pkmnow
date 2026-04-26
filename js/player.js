@@ -134,7 +134,7 @@ const initialDex =
   Number.isFinite(_savedDex) && _savedDex >= 1 && _savedDex <= NATIONAL_DEX_MAX
     ? _savedDex
     : DEFAULT_PLAYER_DEX_ID;
-const initialInfiniteLife = _savedInfiniteLife == null ? true : _savedInfiniteLife !== '0';
+const initialInfiniteLife = _savedInfiniteLife == null ? false : _savedInfiniteLife !== '0';
 
 export const player = {
   x: 0,
@@ -207,6 +207,11 @@ export const player = {
   /** Visual lunge offset in tile units (sprite only; collision uses x,y). */
   _tackleLungeDx: 0,
   _tackleLungeDy: 0,
+  /** Continuous Cut advance (real world displacement, no lunge-back visual). */
+  cutAdvanceRemaining: 0,
+  cutAdvanceNx: 0,
+  cutAdvanceNy: 0,
+  cutAdvanceSpeedTilesPerSec: 6,
   /** Classic emotion balloon (when not using Sims-style `speechBubble`). */
   socialEmotionType: null,
   socialEmotionAge: 0,
@@ -283,6 +288,9 @@ export function setPlayerSpecies(dexId) {
   player._tackleReachTiles = TACKLE_REACH_TILES;
   player._tackleLungeDx = 0;
   player._tackleLungeDy = 0;
+  player.cutAdvanceRemaining = 0;
+  player.cutAdvanceNx = 0;
+  player.cutAdvanceNy = 0;
   player.socialEmotionType = null;
   player.socialEmotionAge = 0;
   player.socialEmotionPortraitSlug = null;
@@ -398,6 +406,9 @@ export function setPlayerPos(x, y) {
   player._tackleReachTiles = TACKLE_REACH_TILES;
   player._tackleLungeDx = 0;
   player._tackleLungeDy = 0;
+  player.cutAdvanceRemaining = 0;
+  player.cutAdvanceNx = 0;
+  player.cutAdvanceNy = 0;
   player.cutThirdHitLockoutSec = 0;
   player.flameChargeDashSec = 0;
   player.flameChargeTier = 1;
@@ -791,6 +802,25 @@ export function triggerPlayerLmbAttack(p, dirNx, dirNy) {
   }
 }
 
+/**
+ * Queue a continuous forward Cut step (real movement, collision-checked in update loop).
+ * @param {{ cutAdvanceRemaining?: number, cutAdvanceNx?: number, cutAdvanceNy?: number, cutAdvanceSpeedTilesPerSec?: number } | null | undefined} p
+ * @param {number} dirNx
+ * @param {number} dirNy
+ * @param {number} [distanceTiles=0.5]
+ */
+export function queuePlayerCutAdvance(p, dirNx, dirNy, distanceTiles = 0.5) {
+  if (!p) return;
+  const nx = Number(dirNx) || 0;
+  const ny = Number(dirNy) || 0;
+  const nLen = Math.hypot(nx, ny);
+  if (nLen < 1e-6) return;
+  p.cutAdvanceNx = nx / nLen;
+  p.cutAdvanceNy = ny / nLen;
+  p.cutAdvanceRemaining = Math.max(0, Number(distanceTiles) || 0);
+  p.cutAdvanceSpeedTilesPerSec = Math.max(1.5, Number(p.cutAdvanceSpeedTilesPerSec) || 6);
+}
+
 function pickPmdSeqFrame(seq, tickInLoop) {
   let acc = 0;
   for (let i = 0; i < seq.length; i++) {
@@ -1070,8 +1100,17 @@ export function updatePlayer(dt, data, gameTimeSec) {
   // 2. Tile / prop movement (ignore tree trunk circles here; trunks resolved like 25D demo: separate + slide on normal).
   const ox = player.x;
   const oy = player.y;
-  const ax = player.vx * dt;
-  const ay = player.vy * dt;
+  let ax = player.vx * dt;
+  let ay = player.vy * dt;
+  if ((player.cutAdvanceRemaining || 0) > 1e-6) {
+    const step = Math.min(
+      player.cutAdvanceRemaining,
+      Math.max(0.01, (Number(player.cutAdvanceSpeedTilesPerSec) || 6) * dt)
+    );
+    ax += (Number(player.cutAdvanceNx) || 0) * step;
+    ay += (Number(player.cutAdvanceNy) || 0) * step;
+    player.cutAdvanceRemaining = Math.max(0, player.cutAdvanceRemaining - step);
+  }
   const stepMag2 = ax * ax + ay * ay;
   const ig = true;
 

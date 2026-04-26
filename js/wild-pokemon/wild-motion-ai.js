@@ -807,7 +807,8 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
       entity.targetX = null;
     } else if (beh.archetype === 'aggressive') {
       entity.aiState = 'approach';
-      if (distP > stopDist) {
+      const chaseDist = Math.max(0.9, stopDist * 0.62);
+      if (distP > chaseDist) {
         const approachAng = Math.atan2(-dyThreat, -dxThreat);
         // Match normal wild wander walk speed (same cap as player-aligned roaming).
         steerTowardAngle(
@@ -819,9 +820,19 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
           false
         );
       } else {
-        entity.vx = 0;
-        entity.vy = 0;
         tryCastWildMove(entity, threatX, threatY, dt, null);
+        // Keep pressure while waiting for move cooldown so packs do not stall in place.
+        if ((entity.wildMoveCd ?? 0) > 0.05 && distP > 0.55) {
+          const closeAng = Math.atan2(-dyThreat, -dxThreat);
+          steerTowardAngle(
+            entity,
+            closeAng,
+            WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.52,
+            data,
+            wildIsAirborne(entity),
+            false
+          );
+        }
       }
       entity.wanderTimer = 0;
       entity.idlePauseTimer = 0;

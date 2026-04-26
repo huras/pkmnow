@@ -182,11 +182,23 @@ function endChunkRebakeBatch() {
 
 function queuePlayChunkRebake(cx, cy, forceRebake = true) {
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
-  if (chunkRebakeBatchDepth > 0) {
-    chunkRebakeBatchKeys.add(`${Math.floor(cx)},${Math.floor(cy)}`);
-    return;
+  const qx = Math.floor(cx);
+  const qy = Math.floor(cy);
+  // Keep a 1-chunk neighborhood coherent with deterministic edge sampling:
+  // rebaking only one chunk can temporarily show border mismatch that looks like
+  // "biome swap" until adjacent chunks refresh.
+  const radius = forceRebake ? 1 : 0;
+  for (let oy = -radius; oy <= radius; oy++) {
+    for (let ox = -radius; ox <= radius; ox++) {
+      const nx = qx + ox;
+      const ny = qy + oy;
+      if (chunkRebakeBatchDepth > 0) {
+        chunkRebakeBatchKeys.add(`${nx},${ny}`);
+      } else {
+        enqueuePlayChunkBake(nx, ny, forceRebake);
+      }
+    }
   }
-  enqueuePlayChunkBake(Math.floor(cx), Math.floor(cy), forceRebake);
 }
 
 /** Hit probe is slightly inside the peak lunge to avoid edge jitter exactly on tile borders. */
@@ -2045,25 +2057,28 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
  * @param {Parameters<typeof tryBreakDetailsAlongSegment>[5]} [opts]
  */
 export function tryBreakDetailsInCircle(cx, cy, radiusTiles, data, opts = {}) {
-  if (!data) return;
+  if (!data) return { hit: false, hitCount: 0 };
   const px = Number(cx);
   const py = Number(cy);
   const R = Math.max(0.08, Number(radiusTiles) || 0);
-  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(R)) return;
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(R)) return { hit: false, hitCount: 0 };
   const pz = Number(opts.pz) || 0;
-  if (Math.abs(pz) > 2.0) return;
+  if (Math.abs(pz) > 2.0) return { hit: false, hitCount: 0 };
   const consumedWorld = new Set();
   const consumedSpawned = new Set();
+  let hitCount = 0;
   beginChunkRebakeBatch();
   try {
     const hits = collectDetailHitsInDisk(px, py, R, data, opts);
-    if (hits.length === 0) return;
+    if (hits.length === 0) return { hit: false, hitCount: 0 };
+    hitCount = hits.length;
     hits.sort((a, b) => a.t - b.t);
     const nowSec = performance.now() * 0.001;
     applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumedSpawned);
   } finally {
     endChunkRebakeBatch();
   }
+  return { hit: hitCount > 0, hitCount };
 }
 
 /**

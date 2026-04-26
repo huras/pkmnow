@@ -128,6 +128,9 @@ function queueUnknownPokemonMinimapIconLoad() {
   });
 }
 const LOCAL_MINIMAP_REBUILD_MIN_MS = 80;
+const MINIMAP_WILD_MARKERS_REBUILD_MIN_MS = 220;
+const MINIMAP_DYNAMIC_LAYER_REBUILD_MIN_MS = 140;
+const MINIMAP_MARKERS_MAX = 24;
 
 /**
  * Close minimap: outline each 8×8 micro play-chunk region.
@@ -155,13 +158,30 @@ let localMinimapCacheZoom = '';
 let localMinimapCacheChunkRevision = -1;
 let localMinimapCacheLastRebuildAtMs = 0;
 let localMinimapCacheFogRevision = -1;
+/** @type {HTMLCanvasElement | null} */
+let minimapDynamicLayerCanvas = null;
+let minimapDynamicLayerW = 0;
+let minimapDynamicLayerH = 0;
+let minimapDynamicLayerLastDrawAtMs = 0;
+let minimapDynamicLayerLastZoom = '';
+let minimapDynamicLayerLastTfScale = -1;
+let minimapDynamicLayerLastTfOx = Number.NaN;
+let minimapDynamicLayerLastTfOy = Number.NaN;
+let minimapDynamicLayerLastPlayerMicroX = Number.NaN;
+let minimapDynamicLayerLastPlayerMicroY = Number.NaN;
+let minimapDynamicLayerLastTrailRef = null;
+let minimapDynamicLayerLastShowAllSpawned = false;
+/** @type {Array<{ ent: any, mx: number, my: number, distSq: number }>} */
+let minimapWildMarkerCandidatesCache = [];
+let minimapWildMarkerCandidatesBuiltAtMs = 0;
+let minimapWildMarkerCandidatesShowAll = false;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function getZoom(canvas) {
   const z = canvas.dataset.zoom;
-  return ZOOM_RADIUS.hasOwnProperty(z) ? z : 'close';
+  return ZOOM_RADIUS.hasOwnProperty(z) ? z : 'closer';
 }
 
 /**
@@ -784,21 +804,34 @@ function drawRecentPlayerTrailOnMinimap(ctx, tf, recentTrailMicro) {
  * @param {boolean} showAllSpawnedDebug
  */
 function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllSpawnedDebug = false) {
-  const markers = [];
-  for (const ent of entitiesByKey.values()) {
-    if (!ent || ent.isDespawning || ent.deadState) continue;
-    if (!Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(ent.dexId)) continue;
-    // Unknown species: no minimap marker until Far Cry “introduces” them (reduces ? spam).
-    if (!showAllSpawnedDebug && !ent.minimapSpeciesKnown && !ent.minimapFarCryIntroduced) continue;
-    const mx = ent.x / MACRO_TILE_STRIDE;
-    const my = ent.y / MACRO_TILE_STRIDE;
-    const distSq = (mx - playerMacro.x) ** 2 + (my - playerMacro.y) ** 2;
-    markers.push({ ent, mx, my, distSq });
+  const nowMs = performance.now();
+  const shouldRebuildCandidates =
+    nowMs - minimapWildMarkerCandidatesBuiltAtMs >= MINIMAP_WILD_MARKERS_REBUILD_MIN_MS ||
+    minimapWildMarkerCandidatesShowAll !== !!showAllSpawnedDebug;
+  if (shouldRebuildCandidates) {
+    const markers = [];
+    for (const ent of entitiesByKey.values()) {
+      if (!ent || ent.isDespawning || ent.deadState) continue;
+      if (!Number.isFinite(ent.x) || !Number.isFinite(ent.y) || !Number.isFinite(ent.dexId)) continue;
+      // Unknown species: no minimap marker until Far Cry “introduces” them (reduces ? spam).
+      if (!showAllSpawnedDebug && !ent.minimapSpeciesKnown && !ent.minimapFarCryIntroduced) continue;
+      const mx = ent.x / MACRO_TILE_STRIDE;
+      const my = ent.y / MACRO_TILE_STRIDE;
+      const distSq = (mx - playerMacro.x) ** 2 + (my - playerMacro.y) ** 2;
+      markers.push({ ent, mx, my, distSq });
+    }
+    markers.sort((a, b) => a.distSq - b.distSq);
+    minimapWildMarkerCandidatesCache = markers;
+    minimapWildMarkerCandidatesBuiltAtMs = nowMs;
+    minimapWildMarkerCandidatesShowAll = !!showAllSpawnedDebug;
   }
-  markers.sort((a, b) => a.distSq - b.distSq);
-  const visibleMax = 24;
+  const markers = minimapWildMarkerCandidatesCache;
+  const visibleMax = MINIMAP_MARKERS_MAX;
   const markerR = Math.max(4, Math.min(8, tf.scale * 0.52));
   const screenPad = markerR + 2;
+  // Local minimap can still use portraits for discovered species; keep dots only for unknowns
+  // to preserve readability/perf while honoring discovery feedback.
+  const useSimpleDots = tf.scale >= MACRO_TILE_STRIDE;
 
   for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
     const m = markers[i];
@@ -811,20 +844,6 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
     if (sx < -screenPad || sy < -screenPad || sx > canvasSize.w + screenPad || sy > canvasSize.h + screenPad) {
       continue;
     }
-    const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
-    if (speciesHidden) {
-      queueUnknownPokemonMinimapIconLoad();
-    }
-    const unknownImg = speciesHidden ? imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH) : null;
-    const img = speciesHidden ? null : getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
-    if (!speciesHidden && (!img || !img.naturalWidth)) {
-      const reqKey = `${dexId}:${portraitSlug}`;
-      if (!minimapPortraitRequests.has(reqKey)) {
-        minimapPortraitRequests.add(reqKey);
-        ensureSpriteCollabPortraitLoaded(imageCache, dexId, portraitSlug).catch(() => {});
-      }
-    }
-
     const mutedRing = speciesHidden || isDistanceEstimate;
     ctx.save();
     ctx.beginPath();
@@ -886,19 +905,40 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
       if (prevQ !== undefined) ctx.imageSmoothingQuality = prevQ;
     };
 
-    if (unknownImg?.naturalWidth && speciesHidden) {
-      drawClippedRoundPortrait(unknownImg);
-    } else if (img && img.naturalWidth) {
-      drawClippedRoundPortrait(img);
-      if (isDistanceEstimate) {
-        ctx.fillStyle = 'rgba(0,0,0,0.42)';
-        ctx.fillRect(sx - markerR, sy - markerR, markerR * 2, markerR * 2);
-      }
-    } else {
+    let unknownImg = null;
+    if (useSimpleDots && speciesHidden) {
       ctx.fillStyle = speciesHidden ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
       ctx.beginPath();
       ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);
       ctx.fill();
+    } else {
+      const portraitSlug = m.ent.emotionPortraitSlug || defaultPortraitSlugForBalloon(m.ent.emotionType ?? 9);
+      if (speciesHidden) {
+        queueUnknownPokemonMinimapIconLoad();
+      }
+      unknownImg = speciesHidden ? imageCache.get(UNKNOWN_POKEMON_MINIMAP_PATH) : null;
+      const img = speciesHidden ? null : getSpriteCollabPortraitImage(imageCache, dexId, portraitSlug);
+      if (!speciesHidden && (!img || !img.naturalWidth)) {
+        const reqKey = `${dexId}:${portraitSlug}`;
+        if (!minimapPortraitRequests.has(reqKey)) {
+          minimapPortraitRequests.add(reqKey);
+          ensureSpriteCollabPortraitLoaded(imageCache, dexId, portraitSlug).catch(() => {});
+        }
+      }
+      if (unknownImg?.naturalWidth && speciesHidden) {
+        drawClippedRoundPortrait(unknownImg);
+      } else if (img && img.naturalWidth) {
+        drawClippedRoundPortrait(img);
+        if (isDistanceEstimate) {
+          ctx.fillStyle = 'rgba(0,0,0,0.42)';
+          ctx.fillRect(sx - markerR, sy - markerR, markerR * 2, markerR * 2);
+        }
+      } else {
+        ctx.fillStyle = speciesHidden ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
+        ctx.beginPath();
+        ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     if (speciesHidden && !unknownImg?.naturalWidth) {
@@ -1005,6 +1045,8 @@ export function renderMinimap(canvas, data, player, options = {}) {
   // Player position in macro-tile space
   const playerMacroX = player.x / MACRO_TILE_STRIDE;
   const playerMacroY = player.y / MACRO_TILE_STRIDE;
+  const playerMicroX = Math.floor(Number(player?.x) || 0);
+  const playerMicroY = Math.floor(Number(player?.y) || 0);
 
   const { scale, ox, oy } = computeTransform(
     w, h, data.width, data.height, playerMacroX, playerMacroY, zoom
@@ -1081,22 +1123,61 @@ export function renderMinimap(canvas, data, player, options = {}) {
   // --- Player marker (always screen-centred for mid/close zoom) ---
   const playerScreenX = (playerMacroX - tfOx + 0.5) * tfScale;
   const playerScreenY = (playerMacroY - tfOy + 0.5) * tfScale;
-  drawRecentPlayerTrailOnMinimap(ctx, { scale: tfScale, ox: tfOx, oy: tfOy }, options.recentTrailMicro || []);
-
-  drawWildSpawnPortraitMarkers(
-    ctx,
-    { scale: tfScale, ox: tfOx, oy: tfOy },
-    { x: playerMacroX, y: playerMacroY },
-    { w, h },
-    !!options.debugShowAllSpawned
-  );
-  drawFarCryMinimapEchoes(
-    ctx,
-    getActiveFarCryMinimapEchoes(),
-    { scale: tfScale, ox: tfOx, oy: tfOy },
-    { w, h }
-  );
-  drawMinimapPlayerMarker(ctx, playerScreenX, playerScreenY, tfScale);
+  const nowMs = performance.now();
+  const activeFarCryEchoes = getActiveFarCryMinimapEchoes();
+  const hasActiveFarCryEchoes = Array.isArray(activeFarCryEchoes) && activeFarCryEchoes.length > 0;
+  const rebuildDynamicLayer =
+    !minimapDynamicLayerCanvas ||
+    minimapDynamicLayerW !== w ||
+    minimapDynamicLayerH !== h ||
+    minimapDynamicLayerLastZoom !== zoom ||
+    minimapDynamicLayerLastTfScale !== tfScale ||
+    minimapDynamicLayerLastTfOx !== tfOx ||
+    minimapDynamicLayerLastTfOy !== tfOy ||
+    minimapDynamicLayerLastPlayerMicroX !== playerMicroX ||
+    minimapDynamicLayerLastPlayerMicroY !== playerMicroY ||
+    minimapDynamicLayerLastTrailRef !== (options.recentTrailMicro || null) ||
+    minimapDynamicLayerLastShowAllSpawned !== !!options.debugShowAllSpawned ||
+    hasActiveFarCryEchoes ||
+    nowMs - minimapDynamicLayerLastDrawAtMs >= MINIMAP_DYNAMIC_LAYER_REBUILD_MIN_MS;
+  if (rebuildDynamicLayer) {
+    if (!minimapDynamicLayerCanvas) minimapDynamicLayerCanvas = document.createElement('canvas');
+    minimapDynamicLayerCanvas.width = w;
+    minimapDynamicLayerCanvas.height = h;
+    const dctx = minimapDynamicLayerCanvas.getContext('2d');
+    if (dctx) {
+      dctx.clearRect(0, 0, w, h);
+      drawRecentPlayerTrailOnMinimap(dctx, { scale: tfScale, ox: tfOx, oy: tfOy }, options.recentTrailMicro || []);
+      drawWildSpawnPortraitMarkers(
+        dctx,
+        { scale: tfScale, ox: tfOx, oy: tfOy },
+        { x: playerMacroX, y: playerMacroY },
+        { w, h },
+        !!options.debugShowAllSpawned
+      );
+      drawFarCryMinimapEchoes(
+        dctx,
+        activeFarCryEchoes,
+        { scale: tfScale, ox: tfOx, oy: tfOy },
+        { w, h }
+      );
+      drawMinimapPlayerMarker(dctx, playerScreenX, playerScreenY, tfScale);
+    }
+    minimapDynamicLayerW = w;
+    minimapDynamicLayerH = h;
+    minimapDynamicLayerLastDrawAtMs = nowMs;
+    minimapDynamicLayerLastZoom = zoom;
+    minimapDynamicLayerLastTfScale = tfScale;
+    minimapDynamicLayerLastTfOx = tfOx;
+    minimapDynamicLayerLastTfOy = tfOy;
+    minimapDynamicLayerLastPlayerMicroX = playerMicroX;
+    minimapDynamicLayerLastPlayerMicroY = playerMicroY;
+    minimapDynamicLayerLastTrailRef = options.recentTrailMicro || null;
+    minimapDynamicLayerLastShowAllSpawned = !!options.debugShowAllSpawned;
+  }
+  if (minimapDynamicLayerCanvas) {
+    ctx.drawImage(minimapDynamicLayerCanvas, 0, 0);
+  }
 
   // --- City labels for mid/close (re-render on top so they survive clipping) ---
   // Already in the base cache; visible automatically once tileW is large enough.
@@ -1113,7 +1194,7 @@ export function renderMinimap(canvas, data, player, options = {}) {
 export function stepMinimapZoom(canvas, delta) {
   const current = getZoom(canvas);
   let idx = ZOOM_ORDER.indexOf(current);
-  if (idx < 0) idx = ZOOM_ORDER.indexOf('close');
+  if (idx < 0) idx = ZOOM_ORDER.indexOf('closer');
   const n = ZOOM_ORDER.length;
   const step = Number(delta) || 0;
   const next = ZOOM_ORDER[(idx + step + n * 16) % n];

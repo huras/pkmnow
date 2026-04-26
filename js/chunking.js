@@ -9,8 +9,9 @@ import { seededHash } from './tessellation-logic.js';
 
 /** Play (micro) tiles per generator macro cell: terrain sampling, world bounds, minimap grid. */
 export const MACRO_TILE_STRIDE = 41;
-export const LAND_STEPS = 29;  // 14 degraus acima do nível do mar
+export const LAND_STEPS = 30;  // 14 degraus acima do nível do mar
 export const WATER_STEPS = 20;  // 5 degraus abaixo do nível do mar
+let landStepCurveExponent = 4;
 
 function lerp(a, b, t) {
     return a * (1 - t) + b * t;
@@ -44,7 +45,19 @@ export function elevationToStep(e, waterLevel) {
     const denom = 1.0 - landLo;
     if (denom <= 1e-6) return LAND_STEPS;
     const t = (e - landLo) / denom;
-    return Math.min(LAND_STEPS, 1 + Math.floor(t * LAND_STEPS));
+    const exp = Math.max(0.15, Math.min(15, Number(landStepCurveExponent) || 3));
+    const curvedT = Math.pow(Math.max(0, Math.min(1, t)), exp);
+    return Math.min(LAND_STEPS, 1 + Math.floor(curvedT * LAND_STEPS));
+}
+
+export function getLandStepCurveExponent() {
+    return Math.max(0.15, Math.min(15, Number(landStepCurveExponent) || 3));
+}
+
+export function setLandStepCurveExponent(next) {
+    const n = Number(next);
+    landStepCurveExponent = Number.isFinite(n) ? Math.max(0.15, Math.min(15, n)) : 3;
+    return landStepCurveExponent;
 }
 
 /**

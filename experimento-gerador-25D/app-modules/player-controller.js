@@ -129,7 +129,26 @@ export function createPlayerController({
     frameGroundLiftWorld: 0,
     logicalGroundY: 0,
     speciesHeightTiles: null,
+    shadowMesh: null,
+    standIndicatorMesh: null,
+    standIndicatorPulse: 0,
   };
+
+  function createBlobShadowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+    grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.35)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
 
   function createFrameTextureFromCanvas() {
     if (!state.frameCanvas) return null;
@@ -194,11 +213,50 @@ export function createPlayerController({
       alphaTest: 0.25,
       side: THREE.DoubleSide,
     });
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
+        // Player base is at 0,0,0 in local space
+        vec4 mvCenter = modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
+        mvPosition.z = mvCenter.z;
+        gl_Position = projectionMatrix * mvPosition;
+        gl_Position.z -= 0.0006 * gl_Position.w;`
+      );
+    };
     state.mesh = new THREE.Mesh(geo, mat);
-    state.mesh.castShadow = true;
+    state.mesh.castShadow = false; // Using blob shadows instead
     state.mesh.receiveShadow = false;
     state.mesh.renderOrder = 15;
     playerGroup.add(state.mesh);
+
+    const shadowGeo = new THREE.PlaneGeometry(1, 1);
+    shadowGeo.rotateX(-Math.PI / 2);
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: createBlobShadowTexture(),
+      transparent: true,
+      depthWrite: false,
+      color: '#000000',
+      opacity: 0.5,
+    });
+    state.shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+    state.shadowMesh.renderOrder = 1;
+    playerGroup.add(state.shadowMesh);
+
+    // Ground marker to clearly indicate player standing tile.
+    const markerGeo = new THREE.RingGeometry(0.34, 0.46, 48);
+    markerGeo.rotateX(-Math.PI / 2);
+    const markerMat = new THREE.MeshBasicMaterial({
+      color: '#7de2ff',
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    state.standIndicatorMesh = new THREE.Mesh(markerGeo, markerMat);
+    state.standIndicatorMesh.renderOrder = 3;
+    playerGroup.add(state.standIndicatorMesh);
+
     drawCurrentFrame(true);
     updateMeshScale(frameW, frameH);
     state.mesh.visible = false;
@@ -214,6 +272,10 @@ export function createPlayerController({
     const h = targetHeightTiles ?? ((frameH / 16) * PMD_MON_SHEET.scale);
     const w = (frameW / Math.max(1, frameH)) * h;
     state.mesh.scale.set(w, h, 1);
+    if (state.shadowMesh) {
+      const shadowSize = w * 0.82;
+      state.shadowMesh.scale.set(shadowSize, shadowSize, 1);
+    }
   }
 
   function drawCurrentFrame(force = false) {
@@ -479,6 +541,27 @@ export function createPlayerController({
       state.worldY - state.frameGroundLiftWorld,
       state.y - state.bounds.offsetY,
     );
+    if (state.shadowMesh) {
+      state.shadowMesh.position.set(
+        state.x - state.bounds.offsetX,
+        state.logicalGroundY + 0.015,
+        state.y - state.bounds.offsetY
+      );
+      state.shadowMesh.visible = state.mesh.visible;
+    }
+    if (state.standIndicatorMesh) {
+      state.standIndicatorMesh.position.set(
+        state.x - state.bounds.offsetX,
+        state.logicalGroundY + 0.022,
+        state.y - state.bounds.offsetY
+      );
+      const pulse = 1 + Math.sin(state.standIndicatorPulse) * 0.08;
+      state.standIndicatorMesh.scale.set(pulse, pulse, pulse);
+      if (state.standIndicatorMesh.material) {
+        state.standIndicatorMesh.material.opacity = 0.6 + (Math.sin(state.standIndicatorPulse * 1.4) * 0.5 + 0.5) * 0.25;
+      }
+      state.standIndicatorMesh.visible = state.mesh.visible;
+    }
   }
 
   function placeAt(mx, my) {
@@ -496,6 +579,7 @@ export function createPlayerController({
 
   function tick(dt) {
     if (!state.active || !state.mesh || !state.world || !state.bounds) return;
+    state.standIndicatorPulse += Math.max(0, Number(dt) || 0) * 3.4;
     updatePosition(dt);
     drawCurrentFrame();
     syncMeshTransform();
@@ -535,6 +619,7 @@ export function createPlayerController({
     setVisible(v) {
       state.visible = !!v;
       if (state.mesh) state.mesh.visible = !!v && state.active;
+      if (state.standIndicatorMesh) state.standIndicatorMesh.visible = !!v && state.active;
     },
     placeAt,
     jump() {

@@ -1,6 +1,8 @@
 import { PLAY_BAKE_TILE_PX, PLAY_CAMERA_Z_REF } from './render-constants.js';
 import { isScreenGridCameraOn, applyScreenGridCamera, getScreenGridBlend } from './play-deadzone-camera.js';
 import { getEncounterZoomMul } from '../encounter/encounter-cinematic.js';
+import { getPlayCameraOffsetPx } from './play-camera-offset.js';
+import { isPlayStrictCullingEnabled } from './play-strict-culling.js';
 
 /** Hard floor on zoom (world units shrink below this scale). */
 const VIEW_SCALE_MIN = 0.48;
@@ -147,7 +149,10 @@ export function computePlayViewState(p) {
   const screenGrid = isScreenGridCameraOn();
   const gridBlend = getScreenGridBlend();
   const z = Math.max(0, Number(playerZ) || 0);
-  const zNorm = Math.min(1, z / PLAY_CAMERA_Z_REF);
+  // Jumping can raise `z`, but should not trigger flight-style terrain resizing.
+  // Only use altitude-driven zoom/framing span for actual flight mode.
+  const zForResize = flightActive ? z : 0;
+  const zNorm = Math.min(1, zForResize / PLAY_CAMERA_Z_REF);
   const t = zNorm * zNorm * (3 - 2 * zNorm);
   const flightTighten = flightActive && zNorm > 0.02 ? 0.04 * (1 - zNorm) : 0;
   const scaleFeel = Math.max(
@@ -159,15 +164,15 @@ export function computePlayViewState(p) {
     Math.min(1, VIEW_SCALE_MIN + (1 - VIEW_SCALE_MIN) * (1 - t))
   );
 
-  const wantFlightZoom = flightActive && z > FLIGHT_CAM_Z_EPS;
+  const wantFlightZoom = flightActive && zForResize > FLIGHT_CAM_Z_EPS;
   if (wantFlightZoom) {
     flightZoomBlend = Math.min(1, flightZoomBlend + dt * FLIGHT_ZOOM_BLEND_RISE_PER_S);
   } else {
     flightZoomBlend = Math.max(0, flightZoomBlend - dt * FLIGHT_ZOOM_BLEND_FALL_PER_S);
   }
 
-  const kGround = verticalFramingSpanCoeff(z, framingHeightTiles, vy);
-  const kFlight = verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy);
+  const kGround = verticalFramingSpanCoeff(zForResize, framingHeightTiles, vy);
+  const kFlight = verticalFramingSpanCoeffFlightZoom(zForResize, framingHeightTiles, vy);
   const b = flightZoomBlend * flightZoomBlend * (3 - 2 * flightZoomBlend);
   const K = kGround * (1 - b) + kFlight * b;
 
@@ -200,17 +205,9 @@ export function computePlayViewState(p) {
 
   if (forceLod0Always) lodDetail = 0;
 
+  const strictCulling = isPlayStrictCullingEnabled();
   /** Far LOD: fewer offscreen chunks + slightly tighter tile margin (big win when zoomed out). */
-  const chunkPad = lodDetail >= 2 ? 1 : sLod < 0.92 ? 2 : sLod < 0.99 ? 1 : 0;
-
-  const viewW = cw / effTileW;
-  const viewH = ch / effTileH;
-  const marginBase = 4 + Math.min(36, Math.ceil(16 * (1 / Math.max(0.5, smoothedViewScale) - 1)));
-  const margin = lodDetail >= 2 ? Math.max(2, marginBase - 8) : marginBase;
-  const startXTiles = Math.floor(vx - viewW / 2) - margin;
-  const startYTiles = Math.floor(vy - viewH / 2) - margin;
-  const endXTiles = Math.ceil(vx + viewW / 2) + margin;
-  const endYTiles = Math.ceil(vy + viewH / 2) + margin;
+  const chunkPad = strictCulling ? 0 : (lodDetail >= 2 ? 1 : sLod < 0.92 ? 2 : sLod < 0.99 ? 1 : 0);
 
   const { yLo, yHi } = verticalFramingWorldYBounds(effTileH, z, framingHeightTiles, vy);
   const midY = (yLo + yHi) * 0.5;
@@ -228,6 +225,22 @@ export function computePlayViewState(p) {
 
   /* ── Screen-grid camera (SNES ALTTP-style, toggle: G / minimap icon) ── */
   const _dz = applyScreenGridCamera(currentTransX, currentTransY, vx, vy, effTileW, effTileH, cw, ch);
+  const baseTransX = _dz ? _dz.tx : currentTransX;
+  const baseTransY = _dz ? _dz.ty : currentTransY;
+  const baseCenterX = _dz ? _dz.ax : vx;
+  const baseCenterY = _dz ? _dz.ay : vy;
+  const offset = getPlayCameraOffsetPx(cw, ch);
+  const offsetCenterX = baseCenterX - offset.x / Math.max(1e-6, effTileW);
+  const offsetCenterY = baseCenterY - offset.y / Math.max(1e-6, effTileH);
+
+  const viewW = cw / effTileW;
+  const viewH = ch / effTileH;
+  const marginBase = 4 + Math.min(36, Math.ceil(16 * (1 / Math.max(0.5, smoothedViewScale) - 1)));
+  const margin = strictCulling ? 0 : (lodDetail >= 2 ? Math.max(2, marginBase - 8) : marginBase);
+  const startXTiles = Math.floor(offsetCenterX - viewW / 2) - margin;
+  const startYTiles = Math.floor(offsetCenterY - viewH / 2) - margin;
+  const endXTiles = Math.ceil(offsetCenterX + viewW / 2) + margin;
+  const endYTiles = Math.ceil(offsetCenterY + viewH / 2) + margin;
 
   return {
     bakeTilePx: PLAY_BAKE_TILE_PX,
@@ -235,12 +248,12 @@ export function computePlayViewState(p) {
     effTileH,
     viewScale: smoothedViewScale,
     lodDetail,
-    startXTiles: _dz ? Math.floor(_dz.ax - viewW / 2) - margin : startXTiles,
-    startYTiles: _dz ? Math.floor(_dz.ay - viewH / 2) - margin : startYTiles,
-    endXTiles:   _dz ? Math.ceil(_dz.ax + viewW / 2) + margin  : endXTiles,
-    endYTiles:   _dz ? Math.ceil(_dz.ay + viewH / 2) + margin  : endYTiles,
-    currentTransX: _dz ? _dz.tx : currentTransX,
-    currentTransY: _dz ? _dz.ty : currentTransY,
+    startXTiles,
+    startYTiles,
+    endXTiles,
+    endYTiles,
+    currentTransX: baseTransX + offset.x,
+    currentTransY: baseTransY + offset.y,
     chunkPad
   };
 }

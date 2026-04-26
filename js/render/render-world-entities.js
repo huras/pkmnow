@@ -12,7 +12,11 @@ import {
 } from './render-utils-internal.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { getBerryTreeState, BERRY_TREE_TILES } from '../main/berry-tree-system.js';
-import { getDetailHitShake01, isBerryTreeKey } from '../main/play-crystal-tackle.js';
+import {
+  getDetailHitShake01,
+  isBerryTreeKey,
+  isPlayFormalTreeRootDestroyed
+} from '../main/play-crystal-tackle.js';
 import { lootSlugForItemKey } from '../social/play-item-inventory-icon.js';
 import { getPokemondbItemIconPathSync } from '../social/pokemondb-item-icon-paths.js';
 import { OBJECT_SETS } from '../tessellation-data.js';
@@ -316,6 +320,9 @@ export function drawTree(ctx, item, options) {
   const canopyAnimTime = lodDetail >= 2 ? 0 : rawCanopyAnimTime;
 
   const { treeType, originX, originY, isDestroyed, isCharred, isBurning } = item;
+  // Use live destruction state to avoid one-frame stale canopy snapshots
+  // during cut/burn transitions (can leave canopy fragments behind trunk).
+  const treeDestroyed = !!(isDestroyed || isPlayFormalTreeRootDestroyed(originX, originY));
   const ids = TREE_TILES[treeType];
   if (!ids) return;
 
@@ -333,12 +340,12 @@ export function drawTree(ctx, item, options) {
 
   if (drawTrunk) {
     const stumpBase = TREE_TILES.palm?.base || ids.base;
-    const baseIds = isDestroyed ? stumpBase : ids.base;
+    const baseIds = treeDestroyed ? stumpBase : ids.base;
     
     drawTile16(ctx, baseIds[0], originX * tileW, originY * tileH, natureImg, tileW, tileH, snapPx);
     drawTile16(ctx, baseIds[1], (originX + 1) * tileW - VEG_MULTITILE_OVERLAP_PX, originY * tileH, natureImg, tileW, tileH, snapPx);
 
-    if (isDestroyed && isCharred) {
+    if (treeDestroyed && isCharred) {
       const prevFilter = ctx.filter;
       ctx.filter = 'brightness(0.2) saturate(0.05)';
       ctx.globalAlpha = 0.96;
@@ -349,7 +356,7 @@ export function drawTree(ctx, item, options) {
     }
   }
 
-  if (drawCanopy && !isDestroyed && ids.top) {
+  if (drawCanopy && !treeDestroyed && ids.top) {
     const { canvas: ftCan, ox: ftOx, oy: ftOy, flipX: ftFlip } = getFormalTreeCanopyComposite(
       canopyAnimTime,
       treeType,

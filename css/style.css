@@ -960,6 +960,39 @@ button.btn-secondary.is-active {
   display: block;
 }
 
+.minimap-panel__render-toggle-btn {
+  color: rgba(170, 226, 255, 0.92);
+}
+
+.minimap-panel__render-toggle-btn:hover {
+  background: rgba(42, 132, 168, 0.22);
+  border-color: rgba(72, 180, 220, 0.44);
+}
+
+.minimap-panel__render-toggle-icon {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.minimap-panel__render-toggle-icon--off {
+  display: none;
+}
+
+.minimap-panel__render-toggle-btn[aria-pressed="false"] {
+  color: rgba(160, 168, 182, 0.86);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.minimap-panel__render-toggle-btn[aria-pressed="false"] .minimap-panel__render-toggle-icon--on {
+  display: none;
+}
+
+.minimap-panel__render-toggle-btn[aria-pressed="false"] .minimap-panel__render-toggle-icon--off {
+  display: block;
+}
+
 .minimap-panel__music-btn {
   display: inline-flex;
   align-items: center;

@@ -21,7 +21,7 @@ import {
   isPlayerInfiniteLifeEnabled,
   setPlayerInfiniteLifeEnabled
 } from './player.js';
-import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile, getLandStepCurveExponent, setLandStepCurveExponent } from './chunking.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
   configureTileDebugModal,
@@ -36,6 +36,8 @@ import {
   createGameLoop,
   registerPlayKeyboard,
   playFpsSampleTimes,
+  getPlayFpsCap,
+  setPlayFpsCap,
   getPlayAdaptivePerfConfig,
   patchPlayAdaptivePerfConfig,
   resetPlayAdaptivePerfConfig
@@ -105,6 +107,15 @@ import {
   invalidatePlayPointerHover
 } from './main/play-pointer-world.js';
 import { setPlayForceLod0Always } from './render/play-view-camera.js';
+import { clearPlayChunkCache } from './render/play-chunk-cache.js';
+import { invalidateStaticEntityCache } from './render/static-entity-cache.js';
+import {
+  cyclePlayCameraOffsetPreset,
+  getPlayCameraOffsetPreset,
+  getPlayCameraOffsetStrength,
+  setPlayCameraOffsetStrength
+} from './render/play-camera-offset.js';
+import { isPlayStrictCullingEnabled, togglePlayStrictCulling } from './render/play-strict-culling.js';
 import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
@@ -167,6 +178,13 @@ initI18n();
 
 const canvas = document.getElementById('map');
 const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementById('map-overlay-svg'));
+if (typeof window !== 'undefined' && typeof window.disableTreeCanopyAnimation === 'undefined') {
+  window.disableTreeCanopyAnimation = true;
+}
+if (typeof window !== 'undefined' && typeof window.treeCanopyAnimationFps === 'undefined') {
+  // Runtime-tunable canopy wind update rate (FPS). 0.2 = one update every 5 seconds.
+  window.treeCanopyAnimationFps = 0.2;
+}
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
 const WORLD_MAP_USE_SVG_OVERLAY = false;
 
@@ -219,24 +237,38 @@ const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const btnMinimapFpsCapToggle = document.getElementById('minimap-fps-cap-toggle');
 const btnMinimapMacroGridToggle = document.getElementById('minimap-macro-grid-toggle');
+const btnMinimapRenderToggle = document.getElementById('minimap-render-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
 const btnMinimapPokeradarCornerToggle = document.getElementById('minimap-pokeradar-corner-toggle');
 const btnMinimapEventLogToggle = document.getElementById('minimap-event-log-toggle');
 const btnMinimapColliderToggle = document.getElementById('minimap-collider-toggle');
+const btnMinimapCameraOffsetToggle = document.getElementById('minimap-camera-offset-toggle');
+const rangeMinimapCameraOffsetStrength = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-offset-strength'));
+const spanMinimapCameraOffsetStrengthReadout = document.getElementById('minimap-camera-offset-strength-readout');
+const btnMinimapStrictCullingToggle = document.getElementById('minimap-strict-culling-toggle');
+const rangeMinimapLandStepCurve = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-land-step-curve-range'));
+const spanMinimapLandStepCurveReadout = document.getElementById('minimap-land-step-curve-readout');
+const canvasMinimapLandStepCurvePreview = /** @type {HTMLCanvasElement | null} */ (document.getElementById('minimap-land-step-curve-preview'));
 const btnMinimapRmbModeToggle = document.getElementById('minimap-rmb-mode-toggle');
 const btnMinimapPokeradarToggle = document.getElementById('minimap-pokeradar-toggle');
 const minimapLanguageSelect = /** @type {HTMLSelectElement | null} */ (
   document.getElementById('minimap-language-select')
 );
 const LS_MINIMAP_MACRO_GRID_OVERLAY = 'pkmn_minimap_macro_tile_grid';
+const LS_MINIMAP_RENDER_ENABLED = 'pkmn_minimap_render_enabled';
 const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
 const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
 const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
+const LS_PLAY_FPS_CAP = 'pkmn_play_fps_cap';
+const LS_PLAY_LAND_STEP_CURVE = 'pkmn_play_land_step_curve';
 let minimapMacroGridOverlay = false;
+let minimapRenderEnabled = true;
 let minimapShowAllSpawnedDebug = false;
 let minimapEventLogVisibleDebug = false;
+const PLAY_FPS_CAP_SEQUENCE = [0, 120, 60, 30];
 let minimapEventLogUi = null;
 let minimapToolbarDragPointerId = null;
 let minimapToolbarDragStartClientX = 0;
@@ -343,6 +375,31 @@ function syncMinimapShowSpawnedToggleUi() {
   btnMinimapShowSpawnedToggle?.setAttribute('aria-pressed', minimapShowAllSpawnedDebug ? 'true' : 'false');
 }
 
+function syncMinimapRenderToggleUi() {
+  if (!(btnMinimapRenderToggle instanceof HTMLButtonElement)) return;
+  btnMinimapRenderToggle.setAttribute('aria-pressed', minimapRenderEnabled ? 'true' : 'false');
+  const title = minimapRenderEnabled
+    ? 'Minimap render: ON (click to disable)'
+    : 'Minimap render: OFF (click to enable)';
+  btnMinimapRenderToggle.title = title;
+  btnMinimapRenderToggle.setAttribute('aria-label', title);
+}
+
+function setMinimapRenderEnabled(next) {
+  minimapRenderEnabled = !!next;
+  syncMinimapRenderToggleUi();
+  try {
+    localStorage.setItem(LS_MINIMAP_RENDER_ENABLED, minimapRenderEnabled ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
+  if (!minimapRenderEnabled && minimap instanceof HTMLCanvasElement) {
+    const ctx = minimap.getContext('2d');
+    ctx?.clearRect(0, 0, minimap.width, minimap.height);
+  }
+  updateView();
+}
+
 function setMinimapShowSpawnedDebug(next) {
   minimapShowAllSpawnedDebug = !!next;
   syncMinimapShowSpawnedToggleUi();
@@ -364,6 +421,147 @@ function isColliderDebugEnabled() {
 
 function syncMinimapColliderToggleUi() {
   btnMinimapColliderToggle?.setAttribute('aria-pressed', isColliderDebugEnabled() ? 'true' : 'false');
+}
+
+function syncMinimapCameraOffsetToggleUi() {
+  if (!(btnMinimapCameraOffsetToggle instanceof HTMLButtonElement)) return;
+  const preset = getPlayCameraOffsetPreset();
+  const strengthPct = Math.round(getPlayCameraOffsetStrength() * 100);
+  const title = `Camera offset: ${preset.toUpperCase()} (${strengthPct}%)`;
+  btnMinimapCameraOffsetToggle.textContent = title;
+  btnMinimapCameraOffsetToggle.setAttribute('aria-pressed', preset !== 'off' ? 'true' : 'false');
+  btnMinimapCameraOffsetToggle.title = title;
+  btnMinimapCameraOffsetToggle.setAttribute('aria-label', title);
+  if (rangeMinimapCameraOffsetStrength) {
+    rangeMinimapCameraOffsetStrength.value = String(strengthPct);
+  }
+  if (spanMinimapCameraOffsetStrengthReadout) {
+    spanMinimapCameraOffsetStrengthReadout.textContent = `${strengthPct}%`;
+  }
+}
+
+function syncMinimapStrictCullingToggleUi() {
+  if (!(btnMinimapStrictCullingToggle instanceof HTMLButtonElement)) return;
+  const on = isPlayStrictCullingEnabled();
+  btnMinimapStrictCullingToggle.textContent = on ? 'Strict culling: ON' : 'Strict culling: OFF';
+  btnMinimapStrictCullingToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  const title = on ? 'Strict culling: ON' : 'Strict culling: OFF';
+  btnMinimapStrictCullingToggle.title = title;
+  btnMinimapStrictCullingToggle.setAttribute('aria-label', title);
+}
+
+function syncMinimapLandStepCurveUi() {
+  const exp = Math.max(0.15, Math.min(15, Number(getLandStepCurveExponent()) || 3));
+  if (rangeMinimapLandStepCurve) rangeMinimapLandStepCurve.value = String(exp);
+  if (spanMinimapLandStepCurveReadout) spanMinimapLandStepCurveReadout.textContent = `${exp.toFixed(2)}x`;
+  drawMinimapLandStepCurvePreview(exp);
+}
+
+function drawMinimapLandStepCurvePreview(exp) {
+  if (!(canvasMinimapLandStepCurvePreview instanceof HTMLCanvasElement)) return;
+  const ctx = canvasMinimapLandStepCurvePreview.getContext('2d');
+  if (!ctx) return;
+  const w = canvasMinimapLandStepCurvePreview.width | 0;
+  const h = canvasMinimapLandStepCurvePreview.height | 0;
+  if (w <= 2 || h <= 2) return;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0c1322';
+  ctx.fillRect(0, 0, w, h);
+
+  const padX = 10;
+  const padY = 8;
+  const iw = Math.max(1, w - padX * 2);
+  const ih = Math.max(1, h - padY * 2);
+  const x0 = padX;
+  const y0 = h - padY;
+  const x1 = x0 + iw;
+  const y1 = y0 - ih;
+
+  ctx.strokeStyle = 'rgba(160,180,220,0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y0);
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x0, y1);
+  ctx.stroke();
+
+  const stepCount = 6;
+  ctx.strokeStyle = 'rgba(130,150,190,0.22)';
+  for (let i = 1; i < stepCount; i++) {
+    const gx = x0 + (iw * i) / stepCount;
+    const gy = y0 - (ih * i) / stepCount;
+    ctx.beginPath();
+    ctx.moveTo(gx, y0);
+    ctx.lineTo(gx, y1);
+    ctx.moveTo(x0, gy);
+    ctx.lineTo(x1, gy);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = '#71d4ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const samples = Math.max(32, iw);
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const curved = Math.pow(t, exp);
+    const px = x0 + t * iw;
+    const py = y0 - curved * ih;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(220,235,255,0.9)';
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillText('input elev', x1 - 52, y0 - 2);
+  ctx.save();
+  ctx.translate(x0 + 3, y1 + 34);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('curved', 0, 0);
+  ctx.restore();
+}
+
+function setLandStepCurveAndRefresh(next, persist = true) {
+  const exp = setLandStepCurveExponent(next);
+  syncMinimapLandStepCurveUi();
+  clearPlayChunkCache();
+  invalidateStaticEntityCache();
+  clearScatterSolidBlockCache();
+  try {
+    updateView();
+  } catch (err) {
+    // Early bootstrap can call this before appMode/current view wiring exists.
+    if (!(err instanceof ReferenceError)) throw err;
+  }
+  if (!persist) return;
+  try {
+    localStorage.setItem(LS_PLAY_LAND_STEP_CURVE, String(exp));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function syncMinimapFpsCapToggleUi() {
+  if (!(btnMinimapFpsCapToggle instanceof HTMLButtonElement)) return;
+  const cap = Math.max(0, Number(getPlayFpsCap()) || 0);
+  const label = cap > 0 ? `${cap}` : 'UNCAP';
+  const title = cap > 0 ? `FPS cap: ${cap}` : 'FPS cap: UNCAPPED';
+  btnMinimapFpsCapToggle.textContent = `FPS ${label}`;
+  btnMinimapFpsCapToggle.setAttribute('aria-pressed', cap > 0 ? 'true' : 'false');
+  btnMinimapFpsCapToggle.title = title;
+  btnMinimapFpsCapToggle.setAttribute('aria-label', title);
+}
+
+function setPlayFpsCapAndPersist(nextCap) {
+  const cap = setPlayFpsCap(nextCap);
+  syncMinimapFpsCapToggleUi();
+  try {
+    localStorage.setItem(LS_PLAY_FPS_CAP, String(cap));
+  } catch {
+    // ignore localStorage failures
+  }
 }
 
 function syncMinimapRmbPointerModeUi() {
@@ -414,6 +612,16 @@ btnMinimapMacroGridToggle?.addEventListener('click', () => {
   setMinimapMacroGridOverlay(!minimapMacroGridOverlay);
 });
 try {
+  const storedMinimapRenderEnabled = localStorage.getItem(LS_MINIMAP_RENDER_ENABLED);
+  minimapRenderEnabled = storedMinimapRenderEnabled == null ? true : storedMinimapRenderEnabled === '1';
+} catch {
+  minimapRenderEnabled = true;
+}
+syncMinimapRenderToggleUi();
+btnMinimapRenderToggle?.addEventListener('click', () => {
+  setMinimapRenderEnabled(!minimapRenderEnabled);
+});
+try {
   minimapShowAllSpawnedDebug = localStorage.getItem(LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG) === '1';
 } catch {
   minimapShowAllSpawnedDebug = false;
@@ -446,6 +654,48 @@ window.addEventListener('resize', () => {
 syncMinimapColliderToggleUi();
 btnMinimapColliderToggle?.addEventListener('click', () => {
   toggleColliderDebugFromMinimapToolbar();
+});
+syncMinimapCameraOffsetToggleUi();
+btnMinimapCameraOffsetToggle?.addEventListener('click', () => {
+  cyclePlayCameraOffsetPreset();
+  syncMinimapCameraOffsetToggleUi();
+  updateView();
+});
+rangeMinimapCameraOffsetStrength?.addEventListener('input', () => {
+  const pct = Number(rangeMinimapCameraOffsetStrength.value);
+  setPlayCameraOffsetStrength(pct / 100);
+  syncMinimapCameraOffsetToggleUi();
+  updateView();
+});
+syncMinimapStrictCullingToggleUi();
+btnMinimapStrictCullingToggle?.addEventListener('click', () => {
+  togglePlayStrictCulling();
+  syncMinimapStrictCullingToggleUi();
+  updateView();
+});
+try {
+  const storedLandStepCurve = Number(localStorage.getItem(LS_PLAY_LAND_STEP_CURVE));
+  setLandStepCurveAndRefresh(Number.isFinite(storedLandStepCurve) ? storedLandStepCurve : 3, false);
+} catch {
+  setLandStepCurveAndRefresh(3, false);
+}
+syncMinimapLandStepCurveUi();
+rangeMinimapLandStepCurve?.addEventListener('input', () => {
+  const next = Number(rangeMinimapLandStepCurve.value);
+  setLandStepCurveAndRefresh(next, true);
+});
+try {
+  const storedFpsCap = Number(localStorage.getItem(LS_PLAY_FPS_CAP));
+  setPlayFpsCap(Number.isFinite(storedFpsCap) ? Math.max(0, storedFpsCap) : 0);
+} catch {
+  setPlayFpsCap(0);
+}
+syncMinimapFpsCapToggleUi();
+btnMinimapFpsCapToggle?.addEventListener('click', () => {
+  const current = Math.max(0, Number(getPlayFpsCap()) || 0);
+  const idx = PLAY_FPS_CAP_SEQUENCE.findIndex((v) => v === current);
+  const next = PLAY_FPS_CAP_SEQUENCE[(idx + 1 + PLAY_FPS_CAP_SEQUENCE.length) % PLAY_FPS_CAP_SEQUENCE.length];
+  setPlayFpsCapAndPersist(next);
 });
 try {
   minimapEventLogVisibleDebug = localStorage.getItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE) === '1';
@@ -518,6 +768,7 @@ syncMinimapZoomReadout();
 const seedInput = document.getElementById('seed');
 const btnGenerate = document.getElementById('generate');
 const btnInfiniteLifeToggle = document.getElementById('btnInfiniteLifeToggle');
+const btnGo25D = document.getElementById('btnGo25D');
 const infoBar = document.getElementById('hud-info');
 const btnExport = document.getElementById('exportBtn');
 const btnImport = document.getElementById('importBtn');
@@ -578,6 +829,33 @@ if (btnInfiniteLifeToggle instanceof HTMLButtonElement) {
   });
 }
 syncInfiniteLifeToggleUi();
+if (btnGo25D instanceof HTMLButtonElement) {
+  btnGo25D.addEventListener('click', () => {
+    if (appMode !== 'play' || !currentData) {
+      if (infoBar) infoBar.textContent = 'Enter play mode first to transfer to 25D at your position.';
+      return;
+    }
+    const px = Number(player.visualX ?? player.x);
+    const py = Number(player.visualY ?? player.y);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+    const payload = {
+      seed: String(seedInput?.value ?? currentData.seed ?? ''),
+      mx: px,
+      my: py,
+      ts: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(SESSION_KEY_BRIDGE_TO_25D, JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+    const next = new URL('./experimento-gerador-25D/index.html', window.location.href);
+    next.searchParams.set('seed', payload.seed);
+    next.searchParams.set('mx', String(payload.mx));
+    next.searchParams.set('my', String(payload.my));
+    window.location.href = next.toString();
+  });
+}
 const chkPlayColliders = document.getElementById('chkPlayColliders');
 const chkWorldReactionsOverlay = document.getElementById('chkWorldReactionsOverlay');
 const inputViewTypeBiomes = document.querySelector('input[name="viewType"][value="biomes"]');
@@ -627,6 +905,8 @@ let mapDragMovedPx = 0;
 let mapDragLastClientX = 0;
 let mapDragLastClientY = 0;
 let suppressNextMapClick = false;
+const SESSION_KEY_BRIDGE_FROM_25D = 'pkmn_bridge_25d_to_2d';
+const SESSION_KEY_BRIDGE_TO_25D = 'pkmn_bridge_2d_to_25d';
 
 const PLAY_BGM_TOAST_MS = 4600;
 
@@ -1779,6 +2059,10 @@ function getSettings() {
     appMode === 'play' && currentData?.seed != null ? (currentData.seed >>> 0) % 1000003 : 0;
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
+  const treeCanopyAnimationEnabled = window.disableTreeCanopyAnimation !== true;
+  // Runtime knob: `window.treeCanopyAnimationFps` (set <= 0 to disable quantization).
+  const canopyAnimFpsRuntime = Number(window.treeCanopyAnimationFps);
+  const treeCanopyAnimationFps = Number.isFinite(canopyAnimFpsRuntime) ? canopyAnimFpsRuntime : 0.2;
   const worldMapCamera =
     appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
       ? getWorldMapCamera()
@@ -1840,9 +2124,12 @@ function getSettings() {
     weatherVolumetricTurbulence: weather.volumetricTurbulence,
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
+    treeCanopyAnimationEnabled,
+    treeCanopyAnimationFps,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
     visionFogEnabled: playVisionFogToggleEl?.checked ?? false,
+    minimapRenderEnabled,
     minimapShowAllSpawnedDebug,
     minimapMacroGridOverlay
   };
@@ -2008,6 +2295,13 @@ function run() {
   } catch {
     /* ignore */
   }
+  try {
+    if (pendingBridgeFrom25D?.seed != null && seedInput) {
+      seedInput.value = String(pendingBridgeFrom25D.seed);
+    }
+  } catch {
+    /* ignore */
+  }
   currentData = generate(seedInput.value, currentConfig);
   playSessionSeconds = 0;
   clearScatterSolidBlockCache();
@@ -2027,10 +2321,69 @@ function run() {
 function runMapAfterSeedHintThenReconcileStoredPlaySave() {
   run();
   const reconcileSeed = getReconcilableSeedFromStoredPlaySave(currentData);
+  if (pendingBridgeFrom25D) return;
   if (reconcileSeed != null && seedInput) {
     seedInput.value = String(reconcileSeed >>> 0);
     run();
   }
+}
+
+function consumeBridgeFrom25D() {
+  /** @type {{ seed: string, mx: number, my: number } | null} */
+  let fromSession = null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY_BRIDGE_FROM_25D);
+    if (raw) {
+      sessionStorage.removeItem(SESSION_KEY_BRIDGE_FROM_25D);
+      const parsed = JSON.parse(raw);
+      const mx = Number(parsed?.mx);
+      const my = Number(parsed?.my);
+      if (Number.isFinite(mx) && Number.isFinite(my)) {
+        fromSession = {
+          seed: String(parsed?.seed ?? ''),
+          mx,
+          my,
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const seed = params.get('seed');
+    const mx = Number(params.get('mx'));
+    const my = Number(params.get('my'));
+    if (seed != null && Number.isFinite(mx) && Number.isFinite(my)) {
+      params.delete('seed');
+      params.delete('mx');
+      params.delete('my');
+      params.delete('mode');
+      const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', nextUrl);
+      return { seed: String(seed), mx, my };
+    }
+  } catch {
+    /* ignore */
+  }
+  return fromSession;
+}
+
+let pendingBridgeFrom25D = consumeBridgeFrom25D();
+
+function applyBridgeFrom25DIfPresent() {
+  if (!pendingBridgeFrom25D || !currentData) return false;
+  const mapMicroW = Math.max(1, Number(currentData.width) * MACRO_TILE_STRIDE);
+  const mapMicroH = Math.max(1, Number(currentData.height) * MACRO_TILE_STRIDE);
+  const clampedX = Math.max(0, Math.min(mapMicroW - 1, Number(pendingBridgeFrom25D.mx)));
+  const clampedY = Math.max(0, Math.min(mapMicroH - 1, Number(pendingBridgeFrom25D.my)));
+  const gx = Math.floor(clampedX / MACRO_TILE_STRIDE);
+  const gy = Math.floor(clampedY / MACRO_TILE_STRIDE);
+  didAutoResumePlayOnInitialLoad = true;
+  enterPlayMode(gx, gy, { resumePosition: false });
+  setPlayerPos(clampedX, clampedY);
+  pendingBridgeFrom25D = null;
+  return true;
 }
 
 function downloadJsonFile(filename, payload) {
@@ -2702,7 +3055,9 @@ loadTilesetImages().then(async () => {
   await ensurePokemonSheetsLoaded(imageCache, player.dexId);
   await ensureEffectAssetsLoaded(imageCache);
   runMapAfterSeedHintThenReconcileStoredPlaySave();
-  queueTryAutoResumePlayFromSave();
+  if (!applyBridgeFrom25DIfPresent()) {
+    queueTryAutoResumePlayFromSave();
+  }
 });
 
 function queueTryAutoResumePlayFromSave() {

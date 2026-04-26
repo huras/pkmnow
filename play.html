@@ -103,6 +103,40 @@
               <select id="minimap-language-select" class="minimap-language-popover__select" data-i18n-aria-label="play.minimapLanguageLabel" aria-label="言語"></select>
             </div>
           </div>
+          <div id="minimap-debug-tools-popover" class="minimap-camera-popover hidden" role="dialog" aria-label="Debug tools">
+            <div class="minimap-camera-popover__head">Debug tools</div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-collider-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">Collider Debug (C)</button>
+            </div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-camera-offset-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">Camera Offset: OFF</button>
+            </div>
+            <div class="minimap-camera-popover__row">
+              <label class="minimap-camera-popover__label" for="minimap-camera-offset-strength">Offset strength</label>
+              <span id="minimap-camera-offset-strength-readout" class="minimap-camera-popover__value">30%</span>
+              <input type="range" id="minimap-camera-offset-strength" min="30" max="200" step="1" value="30" />
+            </div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-strict-culling-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">Strict Culling: OFF</button>
+            </div>
+            <label class="minimap-camera-popover__row" for="minimap-land-step-curve-range">
+              <span class="minimap-camera-popover__label">Land step curve</span>
+              <input type="range" id="minimap-land-step-curve-range" min="0.2" max="15" step="0.05" value="3" />
+              <span id="minimap-land-step-curve-readout" class="minimap-camera-popover__value">3.00x</span>
+            </label>
+            <div class="minimap-camera-popover__row">
+              <canvas
+                id="minimap-land-step-curve-preview"
+                width="180"
+                height="72"
+                aria-label="Land step curve preview"
+                style="width:100%;height:72px;border-radius:6px;border:1px solid rgba(180,195,235,0.35);background:rgba(10,14,24,0.9);image-rendering:pixelated"
+              ></canvas>
+            </div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-event-log-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">Event Log</button>
+            </div>
+          </div>
           <header class="minimap-panel__header">
             <div id="minimap-toolbar-drag-handle" class="minimap-panel__toolbar-handle" aria-hidden="true">
               <span class="minimap-panel__toolbar-title">Toolbar</span>
@@ -150,52 +184,22 @@
                 </button>
                 <button
                   type="button"
-                  id="minimap-collider-toggle"
-                  class="minimap-panel__collider-btn"
-                  title="Collider Debug (C)"
-                  aria-label="Collider Debug (C)"
+                  id="minimap-debug-tools-toggle"
+                  class="minimap-panel__event-log-btn"
+                  title="Debug tools"
+                  aria-label="Debug tools"
                   aria-pressed="false"
                 >
-                  <svg
-                    class="minimap-panel__collider-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="12" r="8" />
-                    <path d="M12 4v16" />
-                    <path d="M4 12h16" />
-                  </svg>
+                  DBG
                 </button>
                 <button
                   type="button"
-                  id="minimap-event-log-toggle"
+                  id="btnGo25D"
                   class="minimap-panel__event-log-btn"
-                  title="Debug event log"
-                  aria-label="Debug event log"
-                  aria-pressed="false"
+                  title="Open 25D at current player position"
+                  aria-label="Open 25D at current player position"
                 >
-                  <svg
-                    class="minimap-panel__event-log-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M4 4h16v16H4z"/>
-                    <path d="M8 8h8"/>
-                    <path d="M8 12h8"/>
-                    <path d="M8 16h5"/>
-                  </svg>
+                  25D
                 </button>
                 <button
                   type="button"
@@ -266,6 +270,16 @@
                     <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
                     <path d="M3 21h18"/>
                   </svg>
+                </button>
+                <button
+                  type="button"
+                  id="minimap-trees-toggle"
+                  class="minimap-panel__berries-btn"
+                  title="Tree wind animation settings"
+                  aria-label="Tree wind animation settings"
+                  aria-pressed="false"
+                >
+                  TR
                 </button>
               </div>
             </div>
@@ -452,6 +466,16 @@
                     <circle cx="12" cy="14" r="1.3" />
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  id="minimap-fps-cap-toggle"
+                  class="minimap-panel__adaptive-perf-btn"
+                  title="FPS cap: UNCAPPED"
+                  aria-label="FPS cap: UNCAPPED"
+                  aria-pressed="false"
+                >
+                  FPS
+                </button>
               </div>
             </div>
           </header>
@@ -463,7 +487,7 @@
               aria-live="polite"
               aria-label="Cry learning"
             ></div>
-            <canvas id="minimap" width="230" height="192" data-zoom="close" data-i18n-aria-label="play.minimapCanvasLabel" aria-label="リージョンミニマップ"></canvas>
+            <canvas id="minimap" width="230" height="192" data-zoom="closer" data-i18n-aria-label="play.minimapCanvasLabel" aria-label="リージョンミニマップ"></canvas>
             <button
               type="button"
               id="minimap-pokeradar-corner-toggle"
@@ -640,6 +664,44 @@
             </div>
             <button
               type="button"
+              id="minimap-render-toggle"
+              class="minimap-panel__back-btn minimap-panel__render-toggle-btn"
+              title="Minimap render: ON (click to disable)"
+              aria-label="Minimap render toggle"
+              aria-pressed="true"
+            >
+              <svg
+                class="minimap-panel__render-toggle-icon minimap-panel__render-toggle-icon--on"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg
+                class="minimap-panel__render-toggle-icon minimap-panel__render-toggle-icon--off"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+                <line x1="3" y1="21" x2="21" y2="3" />
+              </svg>
+            </button>
+            <button
+              type="button"
               id="minimap-back-to-map"
               class="minimap-panel__back-btn minimap-panel__back-btn--footer"
               data-i18n-title="play.minimapBack"
@@ -756,6 +818,19 @@
               <span>Berry Trees on Map</span>
             </div>
             <div id="minimap-berries-popover-list" class="minimap-berries-popover__list"></div>
+          </div>
+          <div id="minimap-trees-popover" class="minimap-camera-popover hidden" role="dialog" aria-label="Tree animation settings">
+            <div class="minimap-camera-popover__head">Trees</div>
+            <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
+              <button type="button" id="minimap-trees-animation-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="true">
+                Tree wind: ON
+              </button>
+            </div>
+            <label class="minimap-camera-popover__row" for="minimap-trees-fps-range">
+              <span class="minimap-camera-popover__label">Wind update FPS</span>
+              <input type="range" id="minimap-trees-fps-range" min="0" max="4" step="0.1" value="0.2" />
+              <span id="minimap-trees-fps-readout" class="minimap-camera-popover__value">0.2 FPS</span>
+            </label>
           </div>
 
           <!-- Social Inspector panel -->

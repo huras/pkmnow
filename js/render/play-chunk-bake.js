@@ -37,7 +37,7 @@ const BIOME_COLOR_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b.colo
 /**
  * Renderiza um bloco 8x8 de tiles estáticos (Terreno + Bases) em um canvas separado.
  */
-export function bakeChunk(cx, cy, data, tileW, tileH) {
+export function bakeChunk(cx, cy, data, tileW, tileH, metadata = null) {
   const canvas = document.createElement('canvas');
   const size = PLAY_CHUNK_SIZE * tileW;
   canvas.width = Math.ceil(size);
@@ -90,16 +90,70 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
   };
   const getCachedTile = (mx, my) => {
     const key = toTileKey(mx, my); // Chave numérica rápida
-    if (tileCache.has(key)) return tileCache.get(key);
+    if (tileCache.has(key)) {
+      bakeMetrics.metadataTileHits++;
+      return tileCache.get(key);
+    }
+    bakeMetrics.metadataTileMisses++;
     const t = getMicroTile(mx, my, data);
     tileCache.set(key, t);
     return t;
   };
 
-  // Pré-aquecer o cache para a área do chunk + margem de segurança para vizinhos
-  for (let my = startY - 2; my < endY + 2; my++) {
-    for (let mx = startX - 2; mx < endX + 2; mx++) {
-      getCachedTile(mx, my);
+  const metadataEntries = Array.isArray(metadata?.tileEntries) ? metadata.tileEntries : null;
+  const metadataRoleEntries = Array.isArray(metadata?.roleEntries) ? metadata.roleEntries : null;
+  const metadataClumpSuppressionLocalKeys = Array.isArray(metadata?.clumpSuppressionLocalKeys) ? metadata.clumpSuppressionLocalKeys : null;
+  const metadataFormalTreeRootEntries = Array.isArray(metadata?.formalTreeRootEntries) ? metadata.formalTreeRootEntries : null;
+  const metadataScatterCandidateEntries = Array.isArray(metadata?.scatterCandidateEntries) ? metadata.scatterCandidateEntries : null;
+  const metadataRoleMap = new Map();
+  const metadataFormalTreeRootSet = new Set();
+  const metadataScatterCandidateMap = new Map();
+  const bakeMetrics = {
+    metadataTileHits: 0,
+    metadataTileMisses: 0,
+    rolePrecomputeHits: 0,
+    rolePrecomputeMisses: 0,
+    scatterPrecomputeHits: 0,
+    scatterPrecomputeMisses: 0,
+    suppressionPrecomputeHits: 0,
+    suppressionPrecomputeMisses: 0
+  };
+  if (metadataEntries && metadataEntries.length > 0) {
+    for (const entry of metadataEntries) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      tileCache.set(Number(entry[0]), entry[1]);
+    }
+  } else {
+    // Fallback local warm-up when worker metadata is unavailable.
+    for (let my = startY - 2; my < endY + 2; my++) {
+      for (let mx = startX - 2; mx < endX + 2; mx++) {
+        getCachedTile(mx, my);
+      }
+    }
+  }
+  if (metadataRoleEntries && metadataRoleEntries.length > 0) {
+    for (const entry of metadataRoleEntries) {
+      if (!Array.isArray(entry) || entry.length < 4) continue;
+      const setType = String(entry[0] ?? '');
+      const level = Number(entry[1]);
+      const tileKey = Number(entry[2]);
+      const role = entry[3];
+      metadataRoleMap.set(`${setType}|${level}|${tileKey}`, role);
+    }
+  }
+  if (metadataFormalTreeRootEntries && metadataFormalTreeRootEntries.length > 0) {
+    for (const key of metadataFormalTreeRootEntries) {
+      const n = Number(key);
+      if (Number.isFinite(n)) metadataFormalTreeRootSet.add(n);
+    }
+  }
+  if (metadataScatterCandidateEntries && metadataScatterCandidateEntries.length > 0) {
+    for (const entry of metadataScatterCandidateEntries) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const key = Number(entry[0]);
+      const itemKey = String(entry[1] ?? '');
+      if (!Number.isFinite(key) || !itemKey) continue;
+      metadataScatterCandidateMap.set(key, itemKey);
     }
   }
 
@@ -122,6 +176,13 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
   const microWBake = data.width * MACRO_TILE_STRIDE;
   const roleAtOrAboveCacheBySetType = new Map();
   const getRoleAtOrAboveHeight = (mx, my, level, setType) => {
+    const key = toTileKey(mx, my);
+    const precomputed = metadataRoleMap.get(`${setType}|${level}|${key}`);
+    if (precomputed != null) {
+      bakeMetrics.rolePrecomputeHits++;
+      return precomputed;
+    }
+    bakeMetrics.rolePrecomputeMisses++;
     let levelMapByType = roleAtOrAboveCacheBySetType.get(setType);
     if (!levelMapByType) {
       levelMapByType = new Map();
@@ -132,7 +193,6 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       roleByTile = new Map();
       levelMapByType.set(level, roleByTile);
     }
-    const key = toTileKey(mx, my);
     if (roleByTile.has(key)) return roleByTile.get(key);
     const isAtOrAbove = (r, c) => (getCachedTile(c, r)?.heightStep ?? -99) >= level;
     const role = getRoleForCell(my, mx, microHBake, microWBake, isAtOrAbove, setType);
@@ -431,8 +491,11 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
       if (!tileSurfaceAllowsScatterVegetation(tile)) continue;
 
       const treeType = getTreeType(tile.biomeId, mxScan, myScan, data.seed);
-      const isFormalRoot = (tx, ty) =>
-        !!treeType && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+      const hasPrecomputedFormalRoots = Array.isArray(metadataFormalTreeRootEntries);
+      const isFormalRoot = (tx, ty) => {
+        if (hasPrecomputedFormalRoots) return metadataFormalTreeRootSet.has(toTileKey(tx, ty));
+        return !!treeType && (tx + ty) % 3 === 0 && foliageDensity(tx, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
+      };
 
       // 1. Formal Trees (2x1)
       if (isFormalRoot(mxScan, myScan)) {
@@ -474,19 +537,31 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
           !!treeType && (tx + ty) % 3 === 1 && foliageDensity(tx - 1, ty, data.seed + 5555, TREE_NOISE_SCALE) >= TREE_DENSITY_THRESHOLD;
 
         if (!isFormalRoot(mxScan, myScan) && !isFormalNeighbor(mxScan, myScan)) {
-          if (
-            hasScatterItemKeyOverride(mxScan, myScan) ||
-            validScatterOriginMicro(
-              mxScan,
-              myScan,
-              data.seed,
-              data.width * MACRO_TILE_STRIDE,
-              data.height * MACRO_TILE_STRIDE,
-              (c, r) => getCachedTile(c, r),
-              validOriginMemo
-            )
-          ) {
-            const itemKey = resolveScatterVegetationItemKey(mxScan, myScan, tile, data.seed);
+          const hasOverride = hasScatterItemKeyOverride(mxScan, myScan);
+          const scanKey = toTileKey(mxScan, myScan);
+          const hasPrecomputedScatterCandidates = Array.isArray(metadataScatterCandidateEntries);
+          const precomputedItemKey = hasPrecomputedScatterCandidates
+            ? metadataScatterCandidateMap.get(scanKey) || null
+            : null;
+          const precomputedEligible = hasPrecomputedScatterCandidates && !!precomputedItemKey;
+          if (hasPrecomputedScatterCandidates) {
+            bakeMetrics.scatterPrecomputeHits++;
+          } else {
+            bakeMetrics.scatterPrecomputeMisses++;
+          }
+          const fallbackEligible = !hasPrecomputedScatterCandidates && validScatterOriginMicro(
+            mxScan,
+            myScan,
+            data.seed,
+            data.width * MACRO_TILE_STRIDE,
+            data.height * MACRO_TILE_STRIDE,
+            (c, r) => getCachedTile(c, r),
+            validOriginMemo
+          );
+          if (hasOverride || precomputedEligible || fallbackEligible) {
+            const itemKey = hasOverride
+              ? resolveScatterVegetationItemKey(mxScan, myScan, tile, data.seed)
+              : (precomputedItemKey || resolveScatterVegetationItemKey(mxScan, myScan, tile, data.seed));
             if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
             const objSet = OBJECT_SETS[itemKey];
             if (objSet) {
@@ -553,16 +628,25 @@ export function bakeChunk(cx, cy, data, tileW, tileH) {
   }
 
   // PASS 3: CLUMP SUPPRESSION (Suppress grass clumps where noise is high, avoiding dense overlap)
-  for (let my = startY; my < endY; my++) {
-    for (let mx = startX; mx < endX; mx++) {
-      const t = getCachedTile(mx, my);
-      if (!t || t.isRoad || t.isCity) continue;
-      if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
-      if (foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD) {
-        suppressedSet.add(toLocalSuppressionKey(mx, my));
+  if (Array.isArray(metadataClumpSuppressionLocalKeys)) {
+    bakeMetrics.suppressionPrecomputeHits++;
+    for (const key of metadataClumpSuppressionLocalKeys) {
+      const n = Number(key);
+      if (Number.isFinite(n)) suppressedSet.add(n);
+    }
+  } else {
+    bakeMetrics.suppressionPrecomputeMisses++;
+    for (let my = startY; my < endY; my++) {
+      for (let mx = startX; mx < endX; mx++) {
+        const t = getCachedTile(mx, my);
+        if (!t || t.isRoad || t.isCity) continue;
+        if ((BIOME_VEGETATION[t.biomeId] || []).length === 0) continue;
+        if (foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE) > SCATTER_NOISE_THRESHOLD) {
+          suppressedSet.add(toLocalSuppressionKey(mx, my));
+        }
       }
     }
   }
 
-  return { canvas, suppressedSet };
+  return { canvas, suppressedSet, metrics: bakeMetrics };
 }

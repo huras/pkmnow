@@ -10,13 +10,23 @@ const snap = (n) => Math.round(n);
  * @type {Map<string, { canvas: HTMLCanvasElement, ox: number, oy: number }>}
  */
 const compositeCache = new Map();
+/** Static (no-sway) composites shared across all matching tree tops. */
+const staticCompositeCache = new Map();
 
 const MAX_CACHE = 400;
+const MAX_STATIC_CACHE = 1200;
 
 function trimCache() {
   while (compositeCache.size > MAX_CACHE) {
     const k = compositeCache.keys().next().value;
     compositeCache.delete(k);
+  }
+}
+
+function trimStaticCache() {
+  while (staticCompositeCache.size > MAX_STATIC_CACHE) {
+    const k = staticCompositeCache.keys().next().value;
+    staticCompositeCache.delete(k);
   }
 }
 
@@ -105,6 +115,24 @@ function bakeComposite(key, img, atlasCols, tileW, tileH, placements, angleRad) 
 }
 
 /**
+ * Static composite bake (no sway/flip), optimized for maximum sharing.
+ * @param {string} key
+ * @param {CanvasImageSource} img
+ * @param {number} atlasCols
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {Array<{ sx: number, sy: number, lx: number, drawY: number }>} placements
+ * @returns {{ canvas: HTMLCanvasElement, ox: number, oy: number }}
+ */
+function bakeStaticComposite(key, img, atlasCols, tileW, tileH, placements) {
+  if (staticCompositeCache.has(key)) return staticCompositeCache.get(key);
+  const baked = bakeComposite(`st|${key}`, img, atlasCols, tileW, tileH, placements, 0);
+  staticCompositeCache.set(key, baked);
+  trimStaticCache();
+  return baked;
+}
+
+/**
  * @param {number} time
  * @param {string} treeType
  * @param {number} originX
@@ -143,6 +171,12 @@ export function getFormalTreeCanopyComposite(time, treeType, originX, originY, t
       lx,
       drawY
     });
+  }
+  // Static mode: one shared canopy per sprite/tile-size signature.
+  if ((Number(time) || 0) === 0) {
+    const staticKey = `ft|${treeType}|static|${twC}|${thC}|${natureImg.src}|${tops.join(',')}`;
+    const bakedStatic = bakeStaticComposite(staticKey, natureImg, TCOLS_NATURE, tileW, tileH, placements);
+    return { ...bakedStatic, flipX: false };
   }
   const key = `ft|${treeType}|b${bakeSlot}|${twC}|${thC}|${natureImg.src}|${tops.join(',')}`;
   const baked = bakeComposite(key, natureImg, TCOLS_NATURE, tileW, tileH, placements, angle);
@@ -203,6 +237,12 @@ export function getScatterTopCanopyComposite(
     });
   }
   const idsKey = topPart.ids.join(',');
+  // Static mode: share baked canopy across all equal sprite signatures.
+  if (!windSway || (Number(time) || 0) === 0) {
+    const staticKey = `sc|${itemKey}|${cols}|static|${twC}|${thC}|${img.src || ''}|${atlasCols}|${idsKey}`;
+    const bakedStatic = bakeStaticComposite(staticKey, img, atlasCols, tileW, tileH, placements);
+    return { ...bakedStatic, flipX: false };
+  }
   const key = `sc|${itemKey}|${cols}|b${bakeSlot}|${windSway ? 1 : 0}|${twC}|${thC}|${img.src || ''}|${atlasCols}|${idsKey}`;
   const baked = bakeComposite(key, img, atlasCols, tileW, tileH, placements, angle);
   return { ...baked, flipX };

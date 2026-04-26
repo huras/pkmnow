@@ -39,7 +39,26 @@ export function createVegetationSystem(deps) {
   const billboardMeshes = new Set();
   const litMats = [];
   const depthMats = [];
+  let blobShadowTexture = null;
   let wireframeActive = false;
+
+  function createBlobShadowTexture() {
+    if (blobShadowTexture) return blobShadowTexture;
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+    grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.35)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    blobShadowTexture = tex;
+    return tex;
+  }
 
   const camRight = new THREE.Vector3(1, 0, 0);
   const camUp = new THREE.Vector3(0, 1, 0);
@@ -74,6 +93,16 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
       .replace(
         '#include <begin_vertex>',
         `vec3 transformed = center + cameraRight * offset.x + cameraUp * offset.y;`,
+      )
+      .replace(
+        '#include <project_vertex>',
+        `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
+        // Y-sorting depth trick: use the depth of the center (base) for the whole quad
+        vec4 mvCenter = modelViewMatrix * vec4( center, 1.0 );
+        mvPosition.z = mvCenter.z; 
+        gl_Position = projectionMatrix * mvPosition;
+        // Subtle bias to stay in front of terrain at the same spot
+        gl_Position.z -= 0.0006 * gl_Position.w;`,
       );
   }
 
@@ -154,13 +183,45 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
       g.computeBoundingSphere();
       const m = makeBillboardLitMaterial(batch.texture);
       const mesh = new THREE.Mesh(g, m);
-      mesh.castShadow = true;
+      mesh.castShadow = false; // Using blob shadows instead
       mesh.receiveShadow = false;
       mesh.customDepthMaterial = makeBillboardDepthMaterial(batch.texture);
       billboardMeshes.add(mesh);
       meshes.push(mesh);
     }
     return meshes;
+  }
+
+  function buildBlobShadowMesh(batch) {
+    if (!batch || batch.positions.length === 0) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(batch.positions, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(batch.uvs, 2));
+    const m = new THREE.MeshBasicMaterial({
+      map: createBlobShadowTexture(),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      color: '#000000',
+      opacity: 0.5,
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.renderOrder = 1; // Above terrain
+    return mesh;
+  }
+
+  function pushShadowQuad(batch, cx, cy, cz, size) {
+    const s = size * 0.5;
+    const y = cy + 0.015; // Slightly above ground
+    batch.positions.push(
+      cx - s, y, cz - s,
+      cx + s, y, cz - s,
+      cx - s, y, cz + s,
+      cx + s, y, cz - s,
+      cx + s, y, cz + s,
+      cx - s, y, cz + s
+    );
+    batch.uvs.push(0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1);
   }
 
   function applyLightingTuning() {
@@ -390,6 +451,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
     litMats.length = 0;
     depthMats.length = 0;
     const textureBatches = new Map();
+    const shadowBatch = { positions: [], uvs: [] };
     const treeRoots = new Set();
 
     const seedInt = seedToInt(worldSeed);
@@ -422,6 +484,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
         const py = c.h * settings.stepHeight + treeLift + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
         pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
+        pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, baseScale * 0.7);
         treeRoots.add(`${c.mx},${c.my}`);
       }
       if (y % 10 === 0) await nextFrame();
@@ -448,6 +511,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
                 + (isTreeLikeScatterItemKey(itemKey) ? treeLift : detailLift)
                 + 0.05;
               pushQuad(batch, px, itemPy, pz, w, h);
+              pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, w * 0.8);
               continue;
             }
           }
@@ -485,11 +549,14 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
         }
         const batch = getBatch(textureBatches, grassMeta.texture);
         pushQuad(batch, px, py, pz, 0.9, 1.0);
+        pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, 0.6);
       }
       if (y % 10 === 0) await nextFrame();
     }
 
     flushBatches(textureBatches);
+    const shadowMesh = buildBlobShadowMesh(shadowBatch);
+    if (shadowMesh) vegetationGroup.add(shadowMesh);
   }
 
   async function buildChunkVegetation({
@@ -505,6 +572,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
     if (lod > 1) return [];
 
     const textureBatches = new Map();
+    const shadowBatch = { positions: [], uvs: [] };
     const treeRoots = new Set();
     const seedInt = seedToInt(worldSeed);
     const microW = currentWorld.width * MACRO_TILE_STRIDE;
@@ -547,6 +615,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
         const py = c.h * settings.stepHeight + treeLift + 0.05;
         const baseScale = 2.2 + deterministic01(c.mx, c.my, seedInt + 1337) * 0.4;
         pushQuad(batch, px, py, pz, baseScale, baseScale * 1.5);
+        pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, baseScale * 0.7);
         treeRoots.add(`${c.mx},${c.my}`);
       }
       if ((y - y0) % 10 === 0) await nextFrame();
@@ -581,6 +650,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
                 + (isTreeLikeScatterItemKey(itemKey) ? treeLift : detailLift)
                 + 0.05;
               pushQuad(batch, px, itemPy, pz, w, h);
+              pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, w * 0.8);
               continue;
             }
           }
@@ -616,6 +686,7 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
         }
         const batch = getBatch(textureBatches, grassMeta.texture);
         pushQuad(batch, px, py, pz, 0.9, 1.0);
+        pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, 0.6);
       }
       if ((y - y0) % 10 === 0) await nextFrame();
     }
@@ -624,6 +695,8 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
     const group = new THREE.Group();
     group.visible = !!settings.showVegetation;
     for (const mesh of meshes) group.add(mesh);
+    const shadowMesh = buildBlobShadowMesh(shadowBatch);
+    if (shadowMesh) group.add(shadowMesh);
     chunkVegetationGroups.add(group);
     return [group];
   }

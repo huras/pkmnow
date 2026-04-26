@@ -36,6 +36,11 @@ export function installMinimapHudPopovers(options = {}) {
   const berriesToggle = document.getElementById('minimap-berries-toggle');
   const berriesPop = document.getElementById('minimap-berries-popover');
   const berriesList = document.getElementById('minimap-berries-popover-list');
+  const treesToggle = document.getElementById('minimap-trees-toggle');
+  const treesPop = document.getElementById('minimap-trees-popover');
+  const treesAnimToggleBtn = document.getElementById('minimap-trees-animation-toggle');
+  const treesFpsRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-trees-fps-range'));
+  const treesFpsReadout = document.getElementById('minimap-trees-fps-readout');
   const timeToggle = document.getElementById('minimap-time-toggle');
   const timePop = document.getElementById('minimap-time-popover');
   const weatherToggle = document.getElementById('minimap-weather-toggle');
@@ -53,6 +58,8 @@ export function installMinimapHudPopovers(options = {}) {
   const inspectorTriggerBtn = document.getElementById('social-inspector-trigger-btn');
   const screenGridToggle = document.getElementById('minimap-screen-grid-cam-toggle');
   const cameraPop = document.getElementById('minimap-camera-popover');
+  const debugToolsToggle = document.getElementById('minimap-debug-tools-toggle');
+  const debugToolsPop = document.getElementById('minimap-debug-tools-popover');
   const cameraEnableToggle = document.getElementById('minimap-camera-enable-toggle');
   const cameraAllowOtherScreensToggle = document.getElementById('minimap-camera-allow-other-screens-toggle');
   const cameraScrollRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-scroll-duration'));
@@ -114,13 +121,15 @@ export function installMinimapHudPopovers(options = {}) {
   const popovers = [
     ...(groupsToggle && groupsPop ? [{ toggle: groupsToggle, pop: groupsPop, name: 'groups' }] : []),
     ...(berriesToggle && berriesPop ? [{ toggle: berriesToggle, pop: berriesPop, name: 'berries' }] : []),
+    ...(treesToggle && treesPop ? [{ toggle: treesToggle, pop: treesPop, name: 'trees' }] : []),
     { toggle: timeToggle, pop: timePop, name: 'time' },
     { toggle: weatherToggle, pop: weatherPop, name: 'weather' },
     { toggle: socialToggle, pop: socialPop, name: 'social' },
     ...(inspectorToggle && inspectorPop ? [{ toggle: inspectorToggle, pop: inspectorPop, name: 'inspector' }] : []),
     ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : []),
-    ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : [])
+    ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : []),
+    ...(debugToolsToggle && debugToolsPop ? [{ toggle: debugToolsToggle, pop: debugToolsPop, name: 'debugTools' }] : [])
   ];
 
   function closeAllExcept(activeName) {
@@ -166,6 +175,9 @@ export function installMinimapHudPopovers(options = {}) {
       if (name === 'berries') {
         refreshBerriesPanel();
       }
+      if (name === 'trees') {
+        syncTreesPopoverUi();
+      }
       if (name === 'inspector') {
         populateScenarioSelect(inspectorScenarioSelect);
         refreshInspectorPanel();
@@ -178,6 +190,38 @@ export function installMinimapHudPopovers(options = {}) {
   berriesToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('berries');
+  });
+  treesToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('trees');
+  });
+
+  function syncTreesPopoverUi() {
+    const windEnabled = window.disableTreeCanopyAnimation !== true;
+    const fpsRaw = Number(window.treeCanopyAnimationFps);
+    const fps = Number.isFinite(fpsRaw) ? Math.max(0, fpsRaw) : 0.2;
+    treesAnimToggleBtn?.setAttribute('aria-pressed', windEnabled ? 'true' : 'false');
+    if (treesAnimToggleBtn) treesAnimToggleBtn.textContent = `Tree wind: ${windEnabled ? 'ON' : 'OFF'}`;
+    if (treesFpsRange) {
+      treesFpsRange.value = String(Math.max(0, Math.min(4, fps)));
+      treesFpsRange.disabled = !windEnabled;
+    }
+    if (treesFpsReadout) {
+      treesFpsReadout.textContent = fps > 0 ? `${fps.toFixed(1)} FPS` : 'Continuous';
+    }
+  }
+
+  treesAnimToggleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.disableTreeCanopyAnimation = window.disableTreeCanopyAnimation === true ? false : true;
+    syncTreesPopoverUi();
+  });
+
+  treesFpsRange?.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const next = Number(treesFpsRange.value);
+    window.treeCanopyAnimationFps = Number.isFinite(next) ? Math.max(0, next) : 0.2;
+    syncTreesPopoverUi();
   });
 
   inspectorToggle?.addEventListener('click', (e) => {
@@ -253,6 +297,7 @@ export function installMinimapHudPopovers(options = {}) {
 
   // Global click handler to close popovers when clicking outside
   syncTranslatableButtons();
+  syncTreesPopoverUi();
   const unlistenLocale = onLocaleChanged(() => {
     syncTranslatableButtons();
     refreshGroupsPanel();
@@ -287,6 +332,10 @@ export function installMinimapHudPopovers(options = {}) {
   screenGridToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('camera');
+  });
+  debugToolsToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('debugTools');
   });
   cameraEnableToggle?.addEventListener('click', (e) => {
     e.stopPropagation();

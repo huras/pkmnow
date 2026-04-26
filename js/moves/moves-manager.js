@@ -46,7 +46,7 @@ import {
   spawnAlongHypotTowardGround,
   velocityFromToGroundWithHorizontalRangeFrom
 } from './projectile-ground-hypot.js';
-import { updatePlayerCombatTimers, tryDamagePlayerFromProjectile, tryJumpPlayer } from '../player.js';
+import { player, updatePlayerCombatTimers, tryDamagePlayerFromProjectile, tryJumpPlayer } from '../player.js';
 import { strengthCarryBlocksWalk } from '../main/play-strength-carry.js';
 import {
   isChargeStrongAttackEligible,
@@ -93,6 +93,16 @@ import {
   PLAYER_THUNDER_COOLDOWN_BY_LEVEL,
   PLAYER_WEATHER_SWAP_COOLDOWN_SEC
 } from './moves-player-config.js';
+import { WORLD_MAX_WALK_SPEED_TILES_PER_SEC } from '../world-movement-constants.js';
+import { canWildPokemonWalkMicroTile } from '../walkability.js';
+import { worldFeetFromPivotCell } from '../pokemon/pmd-layout-metrics.js';
+import { imageCache } from '../image-cache.js';
+import {
+  getPokemonHurtboxCenterWorldXY,
+  getPokemonHurtboxRadiusTiles
+} from '../pokemon/pokemon-combat-hurtbox.js';
+import { tryBreakDetailsInCircle } from '../main/play-crystal-tackle.js';
+import { cutGrassInCircle } from '../play-grass-cut.js';
 
 /** Cooldown after Earthquake, by charge level (5-bar meter on play HUD). */
 const PLAYER_EARTHQUAKE_COOLDOWN_BY_LEVEL = Object.freeze({
@@ -1212,36 +1222,75 @@ export function tryCastWildMove(entity, targetX, targetY, dt, targetEntity = nul
   entity.wildMoveCd = (entity.wildMoveCd ?? 0) - dt;
   if (entity.wildMoveCd > 0) return;
 
-  // Temporary test mode: all wild aggro uses melee Cut only.
+  // Wild uses the same Cut movement rule as player: advance into attack.
   const ang = Math.atan2(targetY - entity.y, targetX - entity.x);
-  spawnFieldCutSlashFx(entity.x, entity.y, ang, { radiusTiles: 1.28, lifeSec: 0.24, z: 0.06 });
-  if (distP <= 1.7) {
-    if (targetEntity && typeof targetEntity.takeDamage === 'function') {
-      targetEntity.takeDamage(8, entity);
-    } else {
-      tryDamagePlayerFromProjectile(8, false, null);
-      const fx = Math.cos(ang);
-      const fy = Math.sin(ang);
-      let bestOtherWild = null;
-      let bestScore = Infinity;
-      for (const other of entitiesByKey.values()) {
-        if (!other || other === entity) continue;
-        if (other.isDespawning || other.deadState || (other.spawnPhase ?? 1) < 0.5) continue;
-        if (typeof other.takeDamage !== 'function') continue;
-        const ox = (Number(other.x) || 0) - (Number(entity.x) || 0);
-        const oy = (Number(other.y) || 0) - (Number(entity.y) || 0);
-        const d = Math.hypot(ox, oy);
-        if (d < 0.15 || d > 1.9) continue;
-        const dot = (ox * fx + oy * fy) / d;
-        if (dot < 0.18) continue;
-        const score = d + (1 - dot) * 0.6;
-        if (score < bestScore) {
-          bestScore = score;
-          bestOtherWild = other;
-        }
-      }
-      if (bestOtherWild) bestOtherWild.takeDamage(8, entity);
+  const nx = Math.cos(ang);
+  const ny = Math.sin(ang);
+  const cutAdvanceTiles = 0.5;
+  const cutConnectAdvanceMul = 0.25;
+  const preCutX = Number(entity.x) || 0;
+  const preCutY = Number(entity.y) || 0;
+  const advX = (Number(entity.x) || 0) + nx * cutAdvanceTiles;
+  const advY = (Number(entity.y) || 0) + ny * cutAdvanceTiles;
+  if (lastMovesTickData) {
+    const ft = worldFeetFromPivotCell(advX, advY, imageCache, entity.dexId ?? 1, !!entity.animMoving);
+    if (canWildPokemonWalkMicroTile(ft.x, ft.y, lastMovesTickData, undefined, undefined, false, false)) {
+      entity.x = advX;
+      entity.y = advY;
     }
+  } else {
+    entity.x = advX;
+    entity.y = advY;
+  }
+  const fxOffsetTiles = 1.1;
+  const fxX = (Number(entity.x) || 0) + nx * fxOffsetTiles;
+  const fxY = (Number(entity.y) || 0) + ny * fxOffsetTiles;
+  const cutRadiusTiles = 1.5;
+  spawnFieldCutSlashFx(fxX, fxY, ang, { radiusTiles: cutRadiusTiles, lifeSec: 0.24, z: 0.06 });
+  entity.vx = nx * (WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.55);
+  entity.vy = ny * (WORLD_MAX_WALK_SPEED_TILES_PER_SEC * 0.55);
+  const cutCenterOffset = 0.75;
+  const cutCx = (Number(entity.x) || 0) + nx * cutCenterOffset;
+  const cutCy = (Number(entity.y) || 0) + ny * cutCenterOffset;
+  let cutConnected = false;
+  if (targetEntity && typeof targetEntity.takeDamage === 'function') {
+    const tdex = targetEntity.dexId ?? 1;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(targetEntity.x, targetEntity.y, tdex);
+    const rr = cutRadiusTiles + getPokemonHurtboxRadiusTiles(tdex);
+    const hdx = hx - cutCx;
+    const hdy = hy - cutCy;
+    if (hdx * hdx + hdy * hdy <= rr * rr) {
+      targetEntity.takeDamage(8, entity);
+      cutConnected = true;
+    }
+  } else {
+    // Same circular Cut collider style as player, but against the player target.
+    const pdex = player?.dexId ?? 1;
+    const { hx, hy } = getPokemonHurtboxCenterWorldXY(targetX, targetY, pdex);
+    const rr = cutRadiusTiles + getPokemonHurtboxRadiusTiles(pdex);
+    const hdx = hx - cutCx;
+    const hdy = hy - cutCy;
+    if (hdx * hdx + hdy * hdy <= rr * rr) {
+      tryDamagePlayerFromProjectile(8, false, null, { sourceEntity: entity, x: entity.x, y: entity.y });
+      cutConnected = true;
+    }
+  }
+  // Wild Cut affects world details/grass with the same area semantics as player Cut.
+  if (lastMovesTickData) {
+    const detailHit = tryBreakDetailsInCircle(cutCx, cutCy, cutRadiusTiles, lastMovesTickData, {
+      hitSource: 'cut',
+      pz: Number(entity.z) || 0,
+      detailCharge01: 0
+    });
+    if (detailHit?.hit) cutConnected = true;
+    cutGrassInCircle(cutCx, cutCy, cutRadiusTiles, lastMovesTickData, Number(entity.z) || 0);
+  }
+  if (cutConnected) {
+    const partialAdvanceTiles = cutAdvanceTiles * cutConnectAdvanceMul;
+    entity.x = preCutX + nx * partialAdvanceTiles;
+    entity.y = preCutY + ny * partialAdvanceTiles;
+    entity.vx *= cutConnectAdvanceMul;
+    entity.vy *= cutConnectAdvanceMul;
   }
   entity.wildMoveCd = WILD_MOVE_COOLDOWN_DEFAULT * getWildAggressiveMoveCooldownMultiplier(entity);
   playWildAttackCry(entity);

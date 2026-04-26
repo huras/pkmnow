@@ -6,7 +6,20 @@ let lastPlayChunkFrameStats = {
   bakedThisFrame: 0,
   bakeBudget: 0,
   bakeBoost: 0,
-  queueSize: 0
+  queueSize: 0,
+  metadataTileHits: 0,
+  metadataTileMisses: 0,
+  metadataHitRate: 0,
+  rolePrecomputeHits: 0,
+  rolePrecomputeMisses: 0,
+  rolePrecomputeHitRate: 0,
+  scatterPrecomputeHits: 0,
+  scatterPrecomputeMisses: 0,
+  scatterPrecomputeHitRate: 0,
+  suppressionPrecomputeHits: 0,
+  suppressionPrecomputeMisses: 0,
+  suppressionPrecomputeHitRate: 0,
+  workerIngestMs: 0
 };
 let playChunkBakeBoost = 0;
 let playChunkBakeStableFrames = 0;

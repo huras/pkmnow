@@ -218,15 +218,17 @@ export function isCliffDrop(srcX, srcY, destX, destY, data) {
 }
 
 export const WALL_ROLES = new Set([
-  'EDGE_S', 'EDGE_W', 'EDGE_E', 
+  'EDGE_S', 'EDGE_W', 'EDGE_E',
+  'EDGE_N',
   'IN_NW', 'IN_NE', 'IN_SW', 'IN_SE',
   'OUT_SW', 'OUT_SE',
-  'OUT_S', 'OUT_W', 'OUT_E', 
+  'OUT_NW', 'OUT_NE',
+  'OUT_S', 'OUT_W', 'OUT_E',
   'CORNER_S_W', 'CORNER_S_E'
 ]);
 
-/** North-facing cliff edge roles — walkable, but rendered as overlay for altitude-based depth sorting. */
-export const NORTH_CLIFF_EDGE_ROLES = new Set(['EDGE_N', 'OUT_NW', 'OUT_NE']);
+/** Disabled: north-facing edge roles are treated like standard wall roles. */
+export const NORTH_CLIFF_EDGE_ROLES = new Set();
 
 export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   const s = new Set();
