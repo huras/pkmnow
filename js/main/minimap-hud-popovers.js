@@ -20,6 +20,7 @@ import {
   setScreenGridCameraConfig,
   onScreenGridCameraChange
 } from '../render/play-deadzone-camera.js';
+import { DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP } from '../render/render-constants.js';
 
 /**
  * Manages Time, Weather, Social, Groups, and Audio popovers on the minimap header.
@@ -60,6 +61,8 @@ export function installMinimapHudPopovers(options = {}) {
   const cameraPop = document.getElementById('minimap-camera-popover');
   const debugToolsToggle = document.getElementById('minimap-debug-tools-toggle');
   const debugToolsPop = document.getElementById('minimap-debug-tools-popover');
+  const cliffRingsRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-cliff-rings-range'));
+  const cliffRingsReadout = document.getElementById('minimap-cliff-rings-readout');
   const cameraEnableToggle = document.getElementById('minimap-camera-enable-toggle');
   const cameraAllowOtherScreensToggle = document.getElementById('minimap-camera-allow-other-screens-toggle');
   const cameraScrollRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-scroll-duration'));
@@ -184,8 +187,29 @@ export function installMinimapHudPopovers(options = {}) {
         stopInspectorRefresh();
         inspectorRefreshTimer = setInterval(refreshInspectorPanel, 350);
       }
+      if (name === 'debugTools') {
+        syncCliffRingsUi();
+      }
     }
   }
+
+  function syncCliffRingsUi() {
+    const raw = Number(window.cliffRingsPerHeightStep);
+    const value = Number.isFinite(raw)
+      ? Math.max(0, Math.min(10, Math.round(raw)))
+      : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
+    if (cliffRingsRange) cliffRingsRange.value = String(value);
+    if (cliffRingsReadout) cliffRingsReadout.textContent = String(value);
+  }
+
+  cliffRingsRange?.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const next = Number(cliffRingsRange.value);
+    window.cliffRingsPerHeightStep = Number.isFinite(next)
+      ? Math.max(0, Math.min(10, Math.round(next)))
+      : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
+    syncCliffRingsUi();
+  });
 
   berriesToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -298,6 +322,7 @@ export function installMinimapHudPopovers(options = {}) {
   // Global click handler to close popovers when clicking outside
   syncTranslatableButtons();
   syncTreesPopoverUi();
+  syncCliffRingsUi();
   const unlistenLocale = onLocaleChanged(() => {
     syncTranslatableButtons();
     refreshGroupsPanel();

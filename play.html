@@ -105,6 +105,11 @@
           </div>
           <div id="minimap-debug-tools-popover" class="minimap-camera-popover hidden" role="dialog" aria-label="Debug tools">
             <div class="minimap-camera-popover__head">Debug tools</div>
+            <label class="minimap-camera-popover__row" for="minimap-cliff-rings-range">
+              <span class="minimap-camera-popover__label">Cliff rings / step</span>
+              <input type="range" id="minimap-cliff-rings-range" min="0" max="10" step="1" value="2" />
+              <span id="minimap-cliff-rings-readout" class="minimap-camera-popover__value">2</span>
+            </label>
             <div class="minimap-camera-popover__row minimap-camera-popover__row--button">
               <button type="button" id="minimap-collider-toggle" class="minimap-camera-popover__toggle-btn" aria-pressed="false">Collider Debug (C)</button>
             </div>

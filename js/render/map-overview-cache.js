@@ -1,5 +1,6 @@
 import { BIOMES, resolveWaterLevel } from '../biomes.js';
 import { elevationToStep } from '../chunking.js';
+import { DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP } from './render-constants.js';
 
 let mapOverviewCacheCanvas = null;
 let mapOverviewCacheKey = '';
@@ -140,6 +141,7 @@ export function drawCachedMapOverview(ctx, params) {
     overlayPaths,
     overlayGraph,
     overlayContours,
+    cliffRingsPerHeightStep,
     cw,
     ch,
     camera,
@@ -162,7 +164,8 @@ export function drawCachedMapOverview(ctx, params) {
     height,
     cacheTilePx,
     viewType,
-    overlayContours ? 1 : 0
+    overlayContours ? 1 : 0,
+    Math.max(0, Math.min(10, Math.round(Number(cliffRingsPerHeightStep) || DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP)))
   ].join('|');
 
   const dataRefsChanged =
@@ -223,25 +226,42 @@ export function drawCachedMapOverview(ctx, params) {
       if (overlayContours) {
         mctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
         mctx.lineWidth = Math.max(0.08, cacheTilePx * 0.08);
+        const ringsPerStep = Math.max(
+          0,
+          Math.min(10, Math.round(Number(cliffRingsPerHeightStep) || DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP))
+        );
+        const ringSpacingPx = Math.max(0.22, cacheTilePx * 0.16);
         for (let y = startY; y < endY; y++) {
           for (let x = startX; x < endX; x++) {
             const hStep = elevationToStep(cells[y * width + x], wlOverview);
             if (x < width - 1) {
               const hr = elevationToStep(cells[y * width + (x + 1)], wlOverview);
-              if (hStep !== hr) {
-                mctx.beginPath();
-                mctx.moveTo((x + 1) * cacheTilePx, y * cacheTilePx);
-                mctx.lineTo((x + 1) * cacheTilePx, (y + 1) * cacheTilePx);
-                mctx.stroke();
+              const d = Math.abs(hStep - hr);
+              const ringCount = Math.max(0, Math.min(120, d * ringsPerStep));
+              if (ringCount > 0) {
+                const dir = hStep < hr ? -1 : 1;
+                for (let r = 0; r < ringCount; r++) {
+                  const off = dir * r * ringSpacingPx;
+                  mctx.beginPath();
+                  mctx.moveTo((x + 1) * cacheTilePx + off, y * cacheTilePx);
+                  mctx.lineTo((x + 1) * cacheTilePx + off, (y + 1) * cacheTilePx);
+                  mctx.stroke();
+                }
               }
             }
             if (y < height - 1) {
               const hd = elevationToStep(cells[(y + 1) * width + x], wlOverview);
-              if (hStep !== hd) {
-                mctx.beginPath();
-                mctx.moveTo(x * cacheTilePx, (y + 1) * cacheTilePx);
-                mctx.lineTo((x + 1) * cacheTilePx, (y + 1) * cacheTilePx);
-                mctx.stroke();
+              const d = Math.abs(hStep - hd);
+              const ringCount = Math.max(0, Math.min(120, d * ringsPerStep));
+              if (ringCount > 0) {
+                const dir = hStep < hd ? -1 : 1;
+                for (let r = 0; r < ringCount; r++) {
+                  const off = dir * r * ringSpacingPx;
+                  mctx.beginPath();
+                  mctx.moveTo(x * cacheTilePx, (y + 1) * cacheTilePx + off);
+                  mctx.lineTo((x + 1) * cacheTilePx, (y + 1) * cacheTilePx + off);
+                  mctx.stroke();
+                }
               }
             }
           }

@@ -20,6 +20,8 @@ export const PLAY_CHUNK_SIZE = 16;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
 export const PLAY_BAKE_TILE_PX = 48;
+/** Default synthetic cliff ring multiplier (toolbox + render + collision fallback). */
+export const DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP = 4;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
 export const PLAY_CAMERA_Z_REF = 58;

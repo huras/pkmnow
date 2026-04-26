@@ -113,6 +113,7 @@ import {
   getPlayCameraOffsetStrength,
   setPlayCameraOffsetStrength
 } from './render/play-camera-offset.js';
+import { DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP } from './render/render-constants.js';
 import { isPlayStrictCullingEnabled, togglePlayStrictCulling } from './render/play-strict-culling.js';
 import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
@@ -182,6 +183,10 @@ if (typeof window !== 'undefined' && typeof window.disableTreeCanopyAnimation ==
 if (typeof window !== 'undefined' && typeof window.treeCanopyAnimationFps === 'undefined') {
   // Runtime-tunable canopy wind update rate (FPS). 0.2 = one update every 5 seconds.
   window.treeCanopyAnimationFps = 0.2;
+}
+if (typeof window !== 'undefined' && typeof window.cliffRingsPerHeightStep === 'undefined') {
+  // World-map contour multiplier: rings drawn per height-step delta.
+  window.cliffRingsPerHeightStep = DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
 }
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
 const WORLD_MAP_USE_SVG_OVERLAY = false;
@@ -1953,6 +1958,10 @@ function getSettings() {
   // Runtime knob: `window.treeCanopyAnimationFps` (set <= 0 to disable quantization).
   const canopyAnimFpsRuntime = Number(window.treeCanopyAnimationFps);
   const treeCanopyAnimationFps = Number.isFinite(canopyAnimFpsRuntime) ? canopyAnimFpsRuntime : 0.2;
+  const cliffRingsRaw = Number(window.cliffRingsPerHeightStep);
+  const cliffRingsPerHeightStep = Number.isFinite(cliffRingsRaw)
+    ? Math.max(0, Math.min(10, Math.round(cliffRingsRaw)))
+    : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
   const worldMapCamera =
     appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
       ? getWorldMapCamera()
@@ -2016,6 +2025,7 @@ function getSettings() {
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
     treeCanopyAnimationEnabled,
     treeCanopyAnimationFps,
+    cliffRingsPerHeightStep,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
     visionFogEnabled: playVisionFogToggleEl?.checked ?? false,

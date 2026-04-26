@@ -32,6 +32,7 @@ import {
   scatterSolidStemRadiusMultiplier,
   scatterStemPhysicsPivotOffsetMicroTiles
 } from './scatter-collider-config.js';
+import { DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP } from './render/render-constants.js';
 import { isPlayDetailScatterOriginDestroyed, isPlayFormalTreeRootDestroyed } from './main/play-crystal-tackle.js';
 import {
   hasScatterItemKeyOverride,
@@ -976,6 +977,11 @@ export function canWalkMicroTile(
 
   const targetTile = getMicroTile(mx, my, data);
   if (!targetTile) return finish(false);
+  const cliffRingsRaw =
+    typeof globalThis !== 'undefined' ? Number(globalThis.cliffRingsPerHeightStep) : Number.NaN;
+  const cliffRingsPerHeightStep = Number.isFinite(cliffRingsRaw)
+    ? Math.max(0, Math.min(10, Math.round(cliffRingsRaw)))
+    : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
 
   // 1. Height Context Check
   let _isCliffDrop = false;
@@ -997,14 +1003,23 @@ export function canWalkMicroTile(
   // 1.5 Role-Based Wall Block
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) {
+    const shiftedSourceY = my + 1;
+    const shiftedRole =
+      cliffRingsPerHeightStep > 0 &&
+      shiftedSourceY >= 0 &&
+      shiftedSourceY < data.height * MACRO_TILE_STRIDE
+        ? getMicroTileRole(mx, shiftedSourceY, data)
+        : null;
+    const wallBlocked = WALL_ROLES.has(role) || WALL_ROLES.has(shiftedRole);
+    const wallHeightTile = WALL_ROLES.has(shiftedRole) ? getMicroTile(mx, shiftedSourceY, data) : targetTile;
+    if (wallBlocked) {
       // Allow walking through cliff-face tiles when dropping from same/higher height.
       if (!_isCliffDrop) {
         if (srcX !== undefined && srcY !== undefined) {
           const smx = Math.floor(srcX);
           const smy = Math.floor(srcY);
           const sourceTile = getMicroTile(smx, smy, data);
-          if (!sourceTile || sourceTile.heightStep < targetTile.heightStep) {
+          if (!sourceTile || sourceTile.heightStep < (wallHeightTile?.heightStep ?? targetTile.heightStep)) {
             return finish(false);
           }
           // Same height, walking onto cliff edge — allow (cliff drop path).
@@ -1072,6 +1087,11 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   const targetTile = getMicroTile(mx, my, data);
   if (!targetTile) return finish(false);
+  const cliffRingsRaw =
+    typeof globalThis !== 'undefined' ? Number(globalThis.cliffRingsPerHeightStep) : Number.NaN;
+  const cliffRingsPerHeightStep = Number.isFinite(cliffRingsRaw)
+    ? Math.max(0, Math.min(10, Math.round(cliffRingsRaw)))
+    : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
 
   // 1. Height Context Check
   if (!isAirborne && srcX !== undefined && srcY !== undefined) {
@@ -1088,7 +1108,14 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return finish(false);
+    const shiftedSourceY = my + 1;
+    const shiftedRole =
+      cliffRingsPerHeightStep > 0 &&
+      shiftedSourceY >= 0 &&
+      shiftedSourceY < data.height * MACRO_TILE_STRIDE
+        ? getMicroTileRole(mx, shiftedSourceY, data)
+        : null;
+    if (WALL_ROLES.has(role) || WALL_ROLES.has(shiftedRole)) return finish(false);
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
