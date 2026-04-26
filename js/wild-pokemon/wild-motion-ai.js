@@ -15,7 +15,7 @@ import {
   trunkEffectiveRadiusAtZ,
   syncEntityZWithTerrain
 } from '../walkability.js';
-import { resolvePivotWithFeetVsTreeTrunks } from '../circle-tree-trunk-resolve.js';
+import { resolvePivotWithFeetVsTreeTrunks, resolvePivotWithFeetVsCliffCylinders } from '../circle-tree-trunk-resolve.js';
 import {
   WILD_WANDER_RADIUS_TILES,
   WILD_GROUP_LEADER_ROAM_SPATIAL_FREQ_RAD_PER_TILE
@@ -313,9 +313,49 @@ export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTr
       ? worldFeetFromPivotCell(srcX, srcY, imageCache, entity.dexId ?? 1, !!entity.animMoving)
       : null;
   if (
-    !canWildPokemonWalkMicroTile(ft.x, ft.y, data, st ? st.x : undefined, st ? st.y : undefined, air, ignoreTreeTrunks)
+    !canWildPokemonWalkMicroTile(
+      ft.x,
+      ft.y,
+      data,
+      st ? st.x : undefined,
+      st ? st.y : undefined,
+      air,
+      ignoreTreeTrunks,
+      !!ignoreTreeTrunks
+    )
   ) {
     return false;
+  }
+  if (!air) {
+    // Cylinder footprint (constant radius along Z for movement collision): radial samples.
+    const r = WILD_TREE_BODY_R;
+    const d = r * 0.70710678;
+    const ring = [
+      [r, 0],
+      [-r, 0],
+      [0, r],
+      [0, -r],
+      [d, d],
+      [d, -d],
+      [-d, d],
+      [-d, -d]
+    ];
+    for (const [ox, oy] of ring) {
+      if (
+        !canWildPokemonWalkMicroTile(
+          ft.x + ox,
+          ft.y + oy,
+          data,
+          undefined,
+          undefined,
+          false,
+          ignoreTreeTrunks,
+          !!ignoreTreeTrunks
+        )
+      ) {
+        return false;
+      }
+    }
   }
   if (!air && srcX !== undefined && srcY !== undefined && !pivotCellHeightTraversalOk(destX, destY, srcX, srcY, data)) {
     return false;
@@ -329,7 +369,7 @@ export function applyWildTreeTrunkResolution(entity, data) {
   if (!entity.grounded || air || !data) return;
   if (isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) return;
   const fd = getPmdFeetDeltaWorldTiles(imageCache, entity.dexId ?? 1, true);
-  const r = resolvePivotWithFeetVsTreeTrunks(
+  const rTree = resolvePivotWithFeetVsTreeTrunks(
     entity.x,
     entity.y,
     fd.dx,
@@ -340,11 +380,22 @@ export function applyWildTreeTrunkResolution(entity, data) {
     data,
     entity.z || 0
   );
-  syncEntityZWithTerrain(entity, entity.x, entity.y, r.x, r.y, data);
-  entity.x = r.x;
-  entity.y = r.y;
-  entity.vx = r.vx;
-  entity.vy = r.vy;
+  const rCliff = resolvePivotWithFeetVsCliffCylinders(
+    rTree.x,
+    rTree.y,
+    fd.dx,
+    fd.dy,
+    WILD_TREE_BODY_R,
+    rTree.vx,
+    rTree.vy,
+    data,
+    entity.z || 0
+  );
+  syncEntityZWithTerrain(entity, entity.x, entity.y, rCliff.x, rCliff.y, data);
+  entity.x = rCliff.x;
+  entity.y = rCliff.y;
+  entity.vx = rCliff.vx;
+  entity.vy = rCliff.vy;
 }
 
 export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {

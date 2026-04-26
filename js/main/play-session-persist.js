@@ -69,6 +69,7 @@ let autosaveFlushHandle = 0;
 let queuedAutosavePayloadArgs = null;
 let autosaveFlushRunning = false;
 let autosaveFlushNeedsReplay = false;
+let autosaveEnabled = false;
 
 function wallSecNow() {
   return performance.now() * 0.001;
@@ -825,8 +826,29 @@ export function resetPlayAutosaveSchedule() {
   clearAutosaveFlushSchedule();
   queuedAutosavePayloadArgs = null;
   autosaveFlushNeedsReplay = false;
+  if (!autosaveEnabled) {
+    nextAutosaveWallSec = 0;
+    return;
+  }
   const t = wallSecNow();
   nextAutosaveWallSec = t + AUTOSAVE_FIRST_DELAY_SEC;
+}
+
+export function isPlaySessionAutosaveEnabled() {
+  return autosaveEnabled === true;
+}
+
+export function setPlaySessionAutosaveEnabled(next) {
+  autosaveEnabled = next === true;
+  if (autosaveEnabled) {
+    resetPlayAutosaveSchedule();
+  } else {
+    clearAutosaveFlushSchedule();
+    queuedAutosavePayloadArgs = null;
+    autosaveFlushNeedsReplay = false;
+    nextAutosaveWallSec = 0;
+  }
+  return autosaveEnabled;
 }
 
 /**
@@ -836,6 +858,7 @@ export function resetPlayAutosaveSchedule() {
  * @param {PlaySessionPersistExtra | null} [persistExtra]
  */
 export function tickPlaySessionAutosave(wallSec, data, playerRef, persistExtra = null) {
+  if (!autosaveEnabled) return;
   if (!data || !playerRef) return;
   if (!Number.isFinite(wallSec) || nextAutosaveWallSec <= 0) return;
   if (wallSec < nextAutosaveWallSec) return;

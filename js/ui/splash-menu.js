@@ -50,10 +50,90 @@ let lastCycleTime = 0;
 let trackedPokemon = null;
 const CYCLE_INTERVAL = 14000; // 14 seconds for better observation
 
+const SPLASH_BG_IMAGES = [
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (1).jpeg',
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (2).jpeg',
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (3).jpeg',
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (4).jpeg',
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (5).jpeg',
+  '../splash-screen/wide-panoramic-video-game-cover-art-for-pokemon-wi (6).jpeg'
+];
+const SPLASH_BG_CYCLE_INTERVAL_MS = 8000;
+const SPLASH_BG_FADE_MS = 1200;
+let splashBgIndex = -1;
+let splashBgLastSwitchMs = 0;
+let splashBgLayers = /** @type {[HTMLDivElement, HTMLDivElement] | null} */ (null);
+let splashBgFrontLayer = 0;
+
 const CONFIG = {
   ...DEFAULT_CONFIG,
   cityCount: 5 // Simpler map for background
 };
+
+function setSplashBackgroundByIndex(nextIndex) {
+  if (!Array.isArray(SPLASH_BG_IMAGES) || SPLASH_BG_IMAGES.length === 0) return;
+  const count = SPLASH_BG_IMAGES.length;
+  const idx = ((nextIndex % count) + count) % count;
+  const src = SPLASH_BG_IMAGES[idx];
+  // Keep special characters valid in URL while preserving path separators.
+  const safeSrc = encodeURI(src);
+  if (!splashBgLayers) {
+    document.body.style.backgroundImage = `url("${safeSrc}")`;
+    splashBgIndex = idx;
+    return;
+  }
+
+  const activeIdx = splashBgFrontLayer;
+  const nextLayerIdx = 1 - activeIdx;
+  const activeLayer = splashBgLayers[activeIdx];
+  const nextLayer = splashBgLayers[nextLayerIdx];
+
+  nextLayer.style.backgroundImage = `url("${safeSrc}")`;
+  nextLayer.style.transitionDuration = `${SPLASH_BG_FADE_MS}ms`;
+  activeLayer.style.transitionDuration = `${SPLASH_BG_FADE_MS}ms`;
+
+  // Force style flush before opacity transition.
+  void nextLayer.offsetWidth;
+  nextLayer.style.opacity = '1';
+  activeLayer.style.opacity = '0';
+
+  splashBgFrontLayer = nextLayerIdx;
+  splashBgIndex = idx;
+}
+
+function cycleSplashBackground(nowMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
+  if (!Array.isArray(SPLASH_BG_IMAGES) || SPLASH_BG_IMAGES.length === 0) return;
+  if (splashBgIndex < 0) {
+    setSplashBackgroundByIndex(0);
+    splashBgLastSwitchMs = nowMs;
+    return;
+  }
+  if (nowMs - splashBgLastSwitchMs < SPLASH_BG_CYCLE_INTERVAL_MS) return;
+  setSplashBackgroundByIndex(splashBgIndex + 1);
+  splashBgLastSwitchMs = nowMs;
+}
+
+function preloadSplashBackgrounds() {
+  for (const src of SPLASH_BG_IMAGES) {
+    const img = new Image();
+    img.src = encodeURI(src);
+  }
+}
+
+function ensureSplashBackgroundFader() {
+  if (splashBgLayers) return;
+  const layerA = document.createElement('div');
+  const layerB = document.createElement('div');
+  layerA.className = 'splash-bg-layer splash-bg-layer-a';
+  layerB.className = 'splash-bg-layer splash-bg-layer-b';
+  layerA.style.transitionDuration = `${SPLASH_BG_FADE_MS}ms`;
+  layerB.style.transitionDuration = `${SPLASH_BG_FADE_MS}ms`;
+  layerA.style.opacity = '0';
+  layerB.style.opacity = '0';
+  document.body.prepend(layerA, layerB);
+  splashBgLayers = [layerA, layerB];
+  splashBgFrontLayer = 0;
+}
 
 function formatSaveSizeSuffix(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '';
@@ -76,6 +156,7 @@ function syncSplashContinueLabel() {
 
 function refreshCurrentBiomeLabel() {
   if (!currentData || !window.fakePlayer) return;
+  if (!biomeNameEl) return;
   const bx = Math.floor(window.fakePlayer.x / MACRO_TILE_STRIDE);
   const by = Math.floor(window.fakePlayer.y / MACRO_TILE_STRIDE);
   if (bx < 0 || by < 0 || bx >= currentData.width || by >= currentData.height) return;
@@ -160,6 +241,9 @@ function finishSplashToMenu() {
 
 async function init() {
   initI18n();
+  preloadSplashBackgrounds();
+  ensureSplashBackgroundFader();
+  cycleSplashBackground();
   applyI18nDom(document);
   syncSplashLanguageSelect();
   splashLanguageSelect?.addEventListener('change', () => {
@@ -241,9 +325,9 @@ function cycleBiome() {
   // Update biome info UI
   const bio = Object.values(BIOMES).find((b) => b.id === bId);
   if (bio) {
-    biomeNameEl.textContent = getBiomeNameById(bio.id);
-    biomeSwatchEl.style.backgroundColor = bio.color;
-    biomeInfoEl.classList.add('visible');
+    if (biomeNameEl) biomeNameEl.textContent = getBiomeNameById(bio.id);
+    if (biomeSwatchEl) biomeSwatchEl.style.backgroundColor = bio.color;
+    if (biomeInfoEl) biomeInfoEl.classList.add('visible');
   }
 
   // Reset loading bar
@@ -324,6 +408,7 @@ function loop(t) {
   const dt = (t - (window._lastT || t)) / 1000;
   window._lastT = t;
   gameTime += dt;
+  cycleSplashBackground(t);
 
   if (!currentData) {
     requestAnimationFrame(loop);

@@ -285,7 +285,7 @@
             </div>
             <div class="minimap-panel__header-row">
               <span class="minimap-panel__section-title">Progress</span>
-              <div class="minimap-panel__header-actions minimap-panel__header-actions--single">
+              <div class="minimap-panel__header-actions">
                 <button
                   type="button"
                   id="minimap-save-toggle"
@@ -301,6 +301,49 @@
                     <polyline points="7 3 7 8 15 8"/>
                   </svg>
                 </button>
+                <label
+                  for="minimap-autosave-enabled"
+                  class="minimap-panel__event-log-btn"
+                  title="Enable autosave"
+                  aria-label="Enable autosave"
+                  style="display:inline-flex;align-items:center;justify-content:center;padding:0 8px;cursor:pointer;"
+                >
+                  <input type="checkbox" id="minimap-autosave-enabled" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;" />
+                  <svg
+                    id="minimap-autosave-icon-off"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    style="width:16px;height:16px;"
+                  >
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                    <line x1="4" y1="20" x2="20" y2="4"/>
+                  </svg>
+                  <svg
+                    id="minimap-autosave-icon-on"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    style="width:16px;height:16px;display:none;"
+                  >
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                    <polyline points="8 11 11 14 16 9"/>
+                  </svg>
+                </label>
               </div>
             </div>
             <div class="minimap-panel__header-row">

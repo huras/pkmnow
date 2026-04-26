@@ -47,6 +47,8 @@ import {
   tryApplyPlaySessionResumeOnEnter,
   resetPlayAutosaveSchedule,
   flushPlaySessionSave,
+  isPlaySessionAutosaveEnabled,
+  setPlaySessionAutosaveEnabled,
   peekPlaySessionSaveForMap,
   getPlayResumeMacroTileFromSave,
   getReconcilableSeedFromStoredPlaySave,
@@ -248,6 +250,9 @@ const btnMinimapCameraOffsetToggle = document.getElementById('minimap-camera-off
 const rangeMinimapCameraOffsetStrength = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-offset-strength'));
 const spanMinimapCameraOffsetStrengthReadout = document.getElementById('minimap-camera-offset-strength-readout');
 const btnMinimapStrictCullingToggle = document.getElementById('minimap-strict-culling-toggle');
+const chkMinimapAutosaveEnabled = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-autosave-enabled'));
+const iconMinimapAutosaveOff = document.getElementById('minimap-autosave-icon-off');
+const iconMinimapAutosaveOn = document.getElementById('minimap-autosave-icon-on');
 const rangeMinimapLandStepCurve = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-land-step-curve-range'));
 const spanMinimapLandStepCurveReadout = document.getElementById('minimap-land-step-curve-readout');
 const canvasMinimapLandStepCurvePreview = /** @type {HTMLCanvasElement | null} */ (document.getElementById('minimap-land-step-curve-preview'));
@@ -264,6 +269,7 @@ const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
 const LS_PLAY_FPS_CAP = 'pkmn_play_fps_cap';
 const LS_PLAY_LAND_STEP_CURVE = 'pkmn_play_land_step_curve';
+const LS_PLAY_AUTOSAVE_ENABLED = 'pkmn_play_autosave_enabled';
 let minimapMacroGridOverlay = false;
 let minimapRenderEnabled = true;
 let minimapShowAllSpawnedDebug = false;
@@ -448,6 +454,25 @@ function syncMinimapStrictCullingToggleUi() {
   const title = on ? 'Strict culling: ON' : 'Strict culling: OFF';
   btnMinimapStrictCullingToggle.title = title;
   btnMinimapStrictCullingToggle.setAttribute('aria-label', title);
+}
+
+function syncMinimapAutosaveUi() {
+  if (!(chkMinimapAutosaveEnabled instanceof HTMLInputElement)) return;
+  const on = isPlaySessionAutosaveEnabled();
+  chkMinimapAutosaveEnabled.checked = on;
+  chkMinimapAutosaveEnabled.title = on ? 'Autosave enabled' : 'Autosave disabled';
+  if (iconMinimapAutosaveOff instanceof HTMLElement) {
+    iconMinimapAutosaveOff.style.display = on ? 'none' : '';
+  }
+  if (iconMinimapAutosaveOn instanceof HTMLElement) {
+    iconMinimapAutosaveOn.style.display = on ? '' : 'none';
+  }
+  const host = chkMinimapAutosaveEnabled.closest('label');
+  if (host instanceof HTMLElement) {
+    const title = on ? 'Autosave: ON' : 'Autosave: OFF';
+    host.title = title;
+    host.setAttribute('aria-label', title);
+  }
 }
 
 function syncMinimapLandStepCurveUi() {
@@ -683,6 +708,23 @@ syncMinimapLandStepCurveUi();
 rangeMinimapLandStepCurve?.addEventListener('input', () => {
   const next = Number(rangeMinimapLandStepCurve.value);
   setLandStepCurveAndRefresh(next, true);
+});
+try {
+  const storedAutosave = localStorage.getItem(LS_PLAY_AUTOSAVE_ENABLED);
+  setPlaySessionAutosaveEnabled(storedAutosave === '1');
+} catch {
+  setPlaySessionAutosaveEnabled(false);
+}
+syncMinimapAutosaveUi();
+chkMinimapAutosaveEnabled?.addEventListener('change', () => {
+  const on = chkMinimapAutosaveEnabled.checked;
+  setPlaySessionAutosaveEnabled(on);
+  syncMinimapAutosaveUi();
+  try {
+    localStorage.setItem(LS_PLAY_AUTOSAVE_ENABLED, on ? '1' : '0');
+  } catch {
+    // ignore localStorage failures
+  }
 });
 try {
   const storedFpsCap = Number(localStorage.getItem(LS_PLAY_FPS_CAP));
@@ -2234,6 +2276,10 @@ registerPlayKeyboard({
   getCurrentData: () => currentData,
   refreshPlayModeInfoBar,
   onEscapePlay: escapeFromPlayOrCloseOverlays,
+  onQuickSave: () => {
+    if (appMode !== 'play' || !currentData) return;
+    flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
+  },
   onPlaySocialAction: (action) => {
     if (appMode !== 'play') return;
     playSocialOverlay.flashAction(action.id);

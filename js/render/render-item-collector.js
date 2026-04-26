@@ -129,7 +129,7 @@ export function collectRenderItems(options) {
         dw: cdw,
         dh: cdh,
         cx: snapPx(((player.visualX ?? player.x) + 0.92) * tileW),
-        cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - (player.z || 0) * tileH),
+        cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - playerRenderZ * tileH),
         sortY: (player.visualY ?? player.y) + 1.0,
       });
     }
@@ -150,6 +150,7 @@ export function collectRenderItems(options) {
       : null;
 
   const isPlayerMoving = isPlayerWalkingAnim;
+  const playerRenderZ = player.visualZ ?? player.z ?? 0;
   const borrowDiglettArt =
     latchGround && player.digBurrowMode && speciesUsesBorrowedDiglettDigVisual(playerDex);
   const borrowPlaceholderDex = borrowDiglettArt ? phDex : null;
@@ -238,7 +239,7 @@ export function collectRenderItems(options) {
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
-        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        cy: snapPx((finalVY + 0.5) * tileH - playerRenderZ * tileH),
         pivotY: overlayPivotY,
         spawnPhase: 1,
         spawnType: null,
@@ -253,7 +254,7 @@ export function collectRenderItems(options) {
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
-        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        cy: snapPx((finalVY + 0.5) * tileH - playerRenderZ * tileH),
         pivotY: overlayPivotY,
         spawnPhase: 1,
         spawnType: null,
@@ -267,7 +268,7 @@ export function collectRenderItems(options) {
       ...player,
       y: player.visualY ?? player.y,
       x: player.visualX ?? player.x,
-      airZ: player.z ?? 0,
+      airZ: playerRenderZ,
       showAirGroundTether: player.flightGroundTetherVisible,
       sortY: (player.visualY ?? player.y) + 1.0,
       dexId: playerDex,
@@ -277,7 +278,7 @@ export function collectRenderItems(options) {
       tackleOffPx: (player._tackleLungeDx || 0) * tileW,
       tackleOffPy: (player._tackleLungeDy || 0) * tileH,
       cx: snapPx(((player.visualX ?? player.x) + 0.5) * tileW),
-      cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - (player.z || 0) * tileH),
+      cy: snapPx(((player.visualY ?? player.y) + 0.5) * tileH - playerRenderZ * tileH),
       sheet: pSheet,
       sx: ((player.animFrame ?? 0) % animCols) * sw,
       sy: (player.animRow ?? 0) * sh,
@@ -306,7 +307,7 @@ export function collectRenderItems(options) {
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
-        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        cy: snapPx((finalVY + 0.5) * tileH - playerRenderZ * tileH),
         pivotY: overlayPivotY,
         spawnPhase: 1,
         spawnType: null,
@@ -321,7 +322,7 @@ export function collectRenderItems(options) {
         x: finalVX,
         y: finalVY,
         cx: snapPx((finalVX + 0.5) * tileW),
-        cy: snapPx((finalVY + 0.5) * tileH - (player.z || 0) * tileH),
+        cy: snapPx((finalVY + 0.5) * tileH - playerRenderZ * tileH),
         pivotY: overlayPivotY,
         spawnPhase: 1,
         spawnType: null,
@@ -339,6 +340,7 @@ export function collectRenderItems(options) {
       // Early cull: skip render items for fog-hidden wild Pokémon.
       if (playVision?.enabled && !playVision.isVisible(Math.floor(w.x), Math.floor(w.y))) continue;
       const wDex = w.dexId || 1;
+      const wildRenderZ = w.visualZ ?? w.z ?? 0;
       const { walk: wWalk, idle: wIdle, hurt: wHurt, sleep: wSleep, faint: wFaint } = getResolvedSheets(imageCache, wDex);
       if (wWalk && wIdle) {
         const animSlice = w.deadState
@@ -363,6 +365,7 @@ export function collectRenderItems(options) {
         renderItems.push({
           type: 'wild',
           ...w,
+          airZ: wildRenderZ,
           sortY: (w.visualY ?? w.y) + 1.0,
           sheet: wSheet,
           sx: ((w.animFrame ?? 0) % animCols) * sw,
@@ -372,7 +375,7 @@ export function collectRenderItems(options) {
           dw,
           dh,
           cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
-          cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - (w.z || 0) * tileH),
+          cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - wildRenderZ * tileH),
           pivotX: dw * 0.5,
           pivotY: pmdPivotY,
           targetHeightTiles,
@@ -389,7 +392,7 @@ export function collectRenderItems(options) {
             x: w.x,
             y: w.y,
             cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
-            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - (w.z || 0) * tileH),
+            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - wildRenderZ * tileH),
             pivotY: pmdPivotY,
             spawnPhase: w.spawnPhase ?? 1,
             spawnType: w.spawnType,
@@ -419,7 +422,7 @@ export function collectRenderItems(options) {
             x: w.x,
             y: w.y,
             cx: snapPx(((w.visualX ?? w.x) + 0.5) * tileW),
-            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - (w.z || 0) * tileH),
+            cy: snapPx(((w.visualY ?? w.y) + 0.5) * tileH - wildRenderZ * tileH),
             pivotY: pmdPivotY,
             spawnPhase: w.spawnPhase ?? 1,
             spawnType: w.spawnType,
