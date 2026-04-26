@@ -1,0 +1,37 @@
+add run and stamina too, like the 2D version we have, i'm expeting systems to be the same, so they should share code as much as it can as we do things.
+
+I want the HUD of pokebox to change the pokemon I am on the 3D too!
+Done properly adpating heightTiles and so
+
+I want "#character-selector-container" on experimento-gerador-25D/index.html too!
+
+Default Visible Tiles = 150
+please
+experimento-gerador-25D/index.html
+
+it is ok to include rendering the skins of terrain, they are just textures after all.
+by skin I mean
+```<div class="play-help-biomes__terrain-preview-box">
+            <div class="play-help-biomes__terrain-preview-label">Skin</div>
+            <canvas class="play-help-biomes__terrain-preview-canvas" data-terrain-set="jogador light-grass" width="112" height="112" data-rendered="1"></canvas>
+            <div class="play-help-biomes__terrain-preview-footer">jogador light-grass</div>
+          </div>```
+
+✅
+i want to see camera X,Y,Z rotation
+
+I want to toggle colliders visibility on/off
+
+it is ok to render lakes, lava and other base terrain layer skins
+i'm not seeing lakes, only purple terrain on "vale arcano" por exemplo
+
+
+auto spawn pokemon when I enter play mode on 3D please
+
+
+add only flight again, i mean i removed the code and I want it on the 3D game again. açso point wher i acn change speed on code
+
+
+How can it be? When we generate a very large map, It takes a long time to Create. but runs 60fps And with no bugs But when I ask you... To create a process, Where I can... Walk around the map. While it loads It gets slower I've tried asking, chunking four times Two you didn't get The order to I had bugs or slowness. What do we have to do, man?
+
+show memory usage of game 

@@ -52,10 +52,12 @@ export const playFpsSampleTimes = [];
 
 let lastTimestamp = 0;
 let animFrameId = null;
+let frameGateTimeoutId = null;
 let lastBiomeBgmSyncAtMs = 0;
 let lastWeatherAmbientSyncAtMs = 0;
 let lastEarthquakeAmbientSyncAtMs = 0;
 let lastFireLoopSyncAtMs = 0;
+let playFpsCap = 0;
 
 const PLAY_AUDIO_SYNC_BASE_CADENCE_MS = {
   biomeBgm: 120,
@@ -145,6 +147,16 @@ const playAdaptiveConfig = {
 
 let playAdaptivePressure = 0;
 let playAdaptivePressureChangedAtMs = 0;
+
+export function getPlayFpsCap() {
+  return Math.max(0, Number(playFpsCap) || 0);
+}
+
+export function setPlayFpsCap(next) {
+  const n = Number(next);
+  playFpsCap = Number.isFinite(n) && n > 0 ? n : 0;
+  return getPlayFpsCap();
+}
 
 /**
  * @param {ReturnType<typeof ingestPlayPerfSample>} perf
@@ -372,6 +384,7 @@ export function createGameLoop(api) {
   let accHudSec = 0;
   let accFarCrySec = 0;
   let accAutosaveSec = 0;
+  let nextFrameDueAtMs = 0;
 
   function shouldRunCadenced(nowMs, lastRunAtMs, cadenceMs) {
     return nowMs - lastRunAtMs >= cadenceMs;
@@ -785,12 +798,43 @@ export function createGameLoop(api) {
       }
     }
     if (getAppMode() === 'play') {
-      animFrameId = requestAnimationFrame(gameLoop);
+      const fpsCap = getPlayFpsCap();
+      if (fpsCap > 0) {
+        const minFrameMs = 1000 / fpsCap;
+        const nowMs =
+          typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+        if (!(nextFrameDueAtMs > 0)) {
+          nextFrameDueAtMs = nowMs + minFrameMs;
+        } else {
+          nextFrameDueAtMs += minFrameMs;
+          if (nextFrameDueAtMs < nowMs - minFrameMs * 2) {
+            nextFrameDueAtMs = nowMs + minFrameMs;
+          }
+        }
+        const waitMs = Math.max(0, nextFrameDueAtMs - nowMs);
+        if (waitMs <= 1.2) {
+          animFrameId = requestAnimationFrame(gameLoop);
+        } else {
+          frameGateTimeoutId = setTimeout(() => {
+            frameGateTimeoutId = null;
+            animFrameId = requestAnimationFrame(gameLoop);
+          }, waitMs);
+        }
+      } else {
+        nextFrameDueAtMs = 0;
+        animFrameId = requestAnimationFrame(gameLoop);
+      }
     }
   }
 
   function startGameLoop() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
+    if (frameGateTimeoutId != null) {
+      clearTimeout(frameGateTimeoutId);
+      frameGateTimeoutId = null;
+    }
     resetPlayPerfProfiler();
     playFpsSampleTimes.length = 0;
     lastBiomeBgmSyncAtMs = 0;
@@ -807,6 +851,7 @@ export function createGameLoop(api) {
     accHudSec = 0;
     accFarCrySec = 0;
     accAutosaveSec = 0;
+    nextFrameDueAtMs = 0;
     lastTimestamp = performance.now();
     animFrameId = requestAnimationFrame(gameLoop);
   }
@@ -816,6 +861,11 @@ export function createGameLoop(api) {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
     }
+    if (frameGateTimeoutId != null) {
+      clearTimeout(frameGateTimeoutId);
+      frameGateTimeoutId = null;
+    }
+    nextFrameDueAtMs = 0;
   }
 
   return { gameLoop, startGameLoop, stopGameLoop };

@@ -829,7 +829,8 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
   const visibleMax = MINIMAP_MARKERS_MAX;
   const markerR = Math.max(4, Math.min(8, tf.scale * 0.52));
   const screenPad = markerR + 2;
-  // Portrait clipping + filtering is expensive; in local zoom we prefer tactical readability and lower CPU.
+  // Local minimap can still use portraits for discovered species; keep dots only for unknowns
+  // to preserve readability/perf while honoring discovery feedback.
   const useSimpleDots = tf.scale >= MACRO_TILE_STRIDE;
 
   for (let i = 0; i < Math.min(visibleMax, markers.length); i++) {
@@ -905,7 +906,7 @@ function drawWildSpawnPortraitMarkers(ctx, tf, playerMacro, canvasSize, showAllS
     };
 
     let unknownImg = null;
-    if (useSimpleDots) {
+    if (useSimpleDots && speciesHidden) {
       ctx.fillStyle = speciesHidden ? 'rgba(95, 140, 175, 0.9)' : 'rgba(140, 205, 255, 0.95)';
       ctx.beginPath();
       ctx.arc(sx, sy, Math.max(1.8, markerR * 0.38), 0, Math.PI * 2);

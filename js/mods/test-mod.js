@@ -38,7 +38,7 @@ PluginRegistry.registerBiome('CORRUPTED_LANDS', {
   terrain: "Palette base — arcane", // Reutiliza o set visual arcano (escuro)
   foliage: "above dense-bushes", // Camada superior sombria
   vegetation: ['large-purple-crystal [2x2]', 'small-purple-crystal [1x1]', 'mushroom-1 [1x1]'],
-  encounters: ['Gastly', 'Haunter', 'Zubat', 'Misdreavus', 'mod_shadow_pikachu'],
+  encounters: ['Gastly', 'Haunter', 'Zubat', 'Misdreavus', 'Sableye', 'Dusclops', 'Duskull', 'Shuppet', 'Drifloon'],
   bgm: [
     'audio/suno-original-bgm/arcane/3-01. Anistar City.mp3',
     'audio/suno-original-bgm/ghost-woods/120. Old Chateau.mp3',

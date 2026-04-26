@@ -254,12 +254,43 @@ let _lastMinimapAppMode = '';
 const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_STILL = 3.8;
 const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_MOVE = 1.1;
 const PLAY_CHUNK_BAKE_FAST_MOVE_SPEED = 2.4;
+// Temporary safety switch: biome correctness over worker precompute speed.
+// Keep metadata worker disabled until we fully eliminate stale/mismatched biome payloads.
+const PLAY_CHUNK_USE_WORKER_METADATA = false;
 
 /**
  * `getStrengthGrabPromptInfo` runs a 7×7 micro-tile Strength scan — too heavy to repeat every frame
  * when the player is standing still. Invalidate when tile / facing / carry state changes.
  */
 let _strengthGrabPromptCache = { key: '', prompt: /** @type {any} */ (null) };
+let _renderFrameSeq = 0;
+/** @type {{ canvas: HTMLCanvasElement | null, ctx: CanvasRenderingContext2D | null, signature: string, lastBuildFrameSeq: number, builtTransX: number, builtTransY: number }} */
+const _vegetationShadowLayerCache = {
+  canvas: null,
+  ctx: null,
+  signature: '',
+  lastBuildFrameSeq: -1,
+  builtTransX: 0,
+  builtTransY: 0
+};
+
+function ensureVegetationShadowLayerCanvas(width, height) {
+  const w = Math.max(1, Math.ceil(width));
+  const h = Math.max(1, Math.ceil(height));
+  if (!_vegetationShadowLayerCache.canvas) {
+    _vegetationShadowLayerCache.canvas = document.createElement('canvas');
+  }
+  const can = _vegetationShadowLayerCache.canvas;
+  if (can.width !== w || can.height !== h) {
+    can.width = w;
+    can.height = h;
+    _vegetationShadowLayerCache.signature = '';
+  }
+  if (!_vegetationShadowLayerCache.ctx) {
+    _vegetationShadowLayerCache.ctx = can.getContext('2d');
+  }
+  return { canvas: can, ctx: _vegetationShadowLayerCache.ctx };
+}
 
 export function spawnJumpRingAt(x, y) {
   // logic handled in render/render-effects-state.js
@@ -274,6 +305,7 @@ export function render(canvas, data, options = {}) {
 
   // --- Plugin Hooks: preRender ---
   PluginRegistry.executeHooks('preRender', ctx, data, options);
+  const frameSeq = ++_renderFrameSeq;
 
   let tFrame0 = 0;
   try {
@@ -513,7 +545,7 @@ export function render(canvas, data, options = {}) {
         else {
           missingVisibleChunks++;
           enqueuePlayChunkBake(cx, cy, false, true);
-          enqueuePlayChunkMetadata(cx, cy, true);
+          if (PLAY_CHUNK_USE_WORKER_METADATA) enqueuePlayChunkMetadata(cx, cy, true);
         }
       }
     }
@@ -530,12 +562,12 @@ export function render(canvas, data, options = {}) {
           const key = `${cx},${cy}`;
           if (!visibleChunkKeys.has(key) && !hasPlayChunk(key)) {
             enqueuePlayChunkBake(cx, cy);
-            enqueuePlayChunkMetadata(cx, cy, false);
+            if (PLAY_CHUNK_USE_WORKER_METADATA) enqueuePlayChunkMetadata(cx, cy, false);
           }
         }
       }
     }
-    pumpPlayChunkMetadataWorkers();
+    if (PLAY_CHUNK_USE_WORKER_METADATA) pumpPlayChunkMetadataWorkers();
     addRenderFramePhaseMs('rndChunkQMs', performance.now() - tChunkQ0);
 
     const chunkBakeBudget = getAdaptivePlayChunkBakeBudget({
@@ -563,7 +595,9 @@ export function render(canvas, data, options = {}) {
     for (const req of bakeRequests) {
       if (performance.now() - tChunkBake0 >= bakeFrameBudgetMs) break;
       if (hasPlayChunk(req.key) && !req.forceRebake) continue;
-      const metadata = takeReadyPlayChunkMetadata(req.key);
+      const metadata = PLAY_CHUNK_USE_WORKER_METADATA
+        ? (req.forceRebake ? null : takeReadyPlayChunkMetadata(req.key))
+        : null;
       const bakedChunk = bakeChunk(
         req.cx,
         req.cy,
@@ -589,7 +623,7 @@ export function render(canvas, data, options = {}) {
       );
       bakedThisFrame++;
     }
-    pumpPlayChunkMetadataWorkers();
+    if (PLAY_CHUNK_USE_WORKER_METADATA) pumpPlayChunkMetadataWorkers();
     addRenderFramePhaseMs('rndChunkBakeMs', performance.now() - tChunkBake0);
 
     const tChunkDraw0 = performance.now();
@@ -679,7 +713,13 @@ export function render(canvas, data, options = {}) {
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
     const vegAnimTime = time;
-    const canopyAnimTime = options.settings?.treeCanopyAnimationEnabled === false ? 0 : vegAnimTime;
+    const canopyAnimFps = Number(options.settings?.treeCanopyAnimationFps);
+    const useQuantizedCanopyAnim = Number.isFinite(canopyAnimFps) && canopyAnimFps > 0;
+    const canopyAnimTime = options.settings?.treeCanopyAnimationEnabled === false
+      ? 0
+      : (useQuantizedCanopyAnim
+          ? Math.floor(vegAnimTime * canopyAnimFps) / canopyAnimFps
+          : vegAnimTime);
 
     // Pre-compute the set of grass-eligible tiles ONCE per frame.
     // Eliminates per-tile getRoleForCell calls inside forEachAbovePlayerTile
@@ -998,6 +1038,78 @@ export function render(canvas, data, options = {}) {
       vegetationSilhouetteDraws: 0
     };
     const shadowDynamics = resolveDynamicShadowDynamics(options.settings);
+    const treeCanopyAnimationEnabled = options.settings?.treeCanopyAnimationEnabled !== false;
+    const vegetationShadowTime = treeCanopyAnimationEnabled ? time : 0;
+    const playerSpeed = Math.hypot(Number(player?.vx) || 0, Number(player?.vy) || 0);
+    const vegetationShadowCadenceFrames = treeCanopyAnimationEnabled
+      ? (playerSpeed > 0.14 ? 2 : 3)
+      : (playerSpeed > 0.14 ? 3 : 6);
+    const vegetationShadowSignature = [
+      String(data?.seed ?? ''),
+      cw,
+      ch,
+      lodDetail,
+      Math.round(tileW * 1000),
+      Math.round(tileH * 1000),
+      startX,
+      startY,
+      endX,
+      endY,
+      treeCanopyAnimationEnabled ? 1 : 0
+    ].join('|');
+    const vegetationShadowCacheStale =
+      _vegetationShadowLayerCache.signature !== vegetationShadowSignature ||
+      !Number.isFinite(_vegetationShadowLayerCache.lastBuildFrameSeq) ||
+      _vegetationShadowLayerCache.lastBuildFrameSeq < 0 ||
+      (frameSeq - _vegetationShadowLayerCache.lastBuildFrameSeq) >= vegetationShadowCadenceFrames;
+    if (vegetationShadowCacheStale) {
+      const layer = ensureVegetationShadowLayerCanvas(cw, ch);
+      const lctx = layer.ctx;
+      if (lctx) {
+        lctx.save();
+        lctx.setTransform(1, 0, 0, 1, 0, 0);
+        lctx.clearRect(0, 0, cw, ch);
+        lctx.imageSmoothingEnabled = false;
+        lctx.translate(currentTransX, currentTransY);
+        for (const it of visibleRenderItems) {
+          if (it.type !== 'scatter' && it.type !== 'tree') continue;
+          lctx.save();
+          lctx.globalAlpha *= it.regrowFade01 != null ? it.regrowFade01 : 1;
+          if (it.type === 'scatter') {
+            drawScatterGroundDetailSilhouetteShadow(lctx, it, tileW, tileH, snapPx, imageCache, shadowDynamics, vegetationShadowTime);
+          }
+          drawVegetationHybridShadow(lctx, it, {
+            tileW,
+            tileH,
+            snapPx,
+            lodDetail,
+            canopyAnimTime,
+            imageCache,
+            natureImg,
+            data,
+            time: vegetationShadowTime,
+            frameShadowBudget,
+            shadowDynamics
+          });
+          lctx.restore();
+        }
+        lctx.restore();
+        _vegetationShadowLayerCache.signature = vegetationShadowSignature;
+        _vegetationShadowLayerCache.lastBuildFrameSeq = frameSeq;
+        _vegetationShadowLayerCache.builtTransX = currentTransX;
+        _vegetationShadowLayerCache.builtTransY = currentTransY;
+      }
+    }
+    if (_vegetationShadowLayerCache.canvas) {
+      ctx.save();
+      // Main context is translated by current camera; anchor cached screen-space shadows back to world-space.
+      ctx.drawImage(
+        _vegetationShadowLayerCache.canvas,
+        -_vegetationShadowLayerCache.builtTransX,
+        -_vegetationShadowLayerCache.builtTransY
+      );
+      ctx.restore();
+    }
     const playerFlashHoldVisual = getPlayerFlashHoldVisual();
 
     for (const item of visibleRenderItems) {
@@ -1304,8 +1416,6 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'scatter') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
-        drawScatterGroundDetailSilhouetteShadow(ctx, item, tileW, tileH, snapPx, imageCache, shadowDynamics, time);
-        drawVegetationHybridShadow(ctx, item, { tileW, tileH, snapPx, lodDetail, canopyAnimTime, imageCache, natureImg, data, time, frameShadowBudget, shadowDynamics });
         if (isStrengthGrabTargetItem(item)) {
           drewSplitStrengthGrabOutline = true;
           drawStrengthGrabTargetOutlineHalf(ctx, strengthGrabPrompt, 'north', tileW, tileH, snapPx, time);
@@ -1327,7 +1437,6 @@ export function render(canvas, data, options = {}) {
       } else if (item.type === 'tree') {
         ctx.save();
         ctx.globalAlpha *= item.regrowFade01 != null ? item.regrowFade01 : 1;
-        drawVegetationHybridShadow(ctx, item, { tileW, tileH, snapPx, lodDetail, canopyAnimTime, imageCache, natureImg, data, time, frameShadowBudget, shadowDynamics });
         const tVegTree0 = performance.now();
         const _treeItemSortY = Number(item.sortY ?? item.y ?? 0);
         if (_deferredCanopies && _treeItemSortY <= _playerSortY) {

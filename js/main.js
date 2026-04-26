@@ -36,6 +36,8 @@ import {
   createGameLoop,
   registerPlayKeyboard,
   playFpsSampleTimes,
+  getPlayFpsCap,
+  setPlayFpsCap,
   getPlayAdaptivePerfConfig,
   patchPlayAdaptivePerfConfig,
   resetPlayAdaptivePerfConfig
@@ -177,6 +179,10 @@ const mapOverlaySvg = /** @type {SVGSVGElement | null} */ (document.getElementBy
 if (typeof window !== 'undefined' && typeof window.disableTreeCanopyAnimation === 'undefined') {
   window.disableTreeCanopyAnimation = true;
 }
+if (typeof window !== 'undefined' && typeof window.treeCanopyAnimationFps === 'undefined') {
+  // Runtime-tunable canopy wind update rate (FPS). 0.2 = one update every 5 seconds.
+  window.treeCanopyAnimationFps = 0.2;
+}
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
 const WORLD_MAP_USE_SVG_OVERLAY = false;
 
@@ -229,6 +235,7 @@ const btnMinimapBackToMap = document.getElementById('minimap-back-to-map');
 const btnMinimapZoomIn = document.getElementById('minimap-zoom-in-btn');
 const btnMinimapZoomOut = document.getElementById('minimap-zoom-out-btn');
 const btnMinimapAdaptivePerfToggle = document.getElementById('minimap-adaptive-perf-toggle');
+const btnMinimapFpsCapToggle = document.getElementById('minimap-fps-cap-toggle');
 const btnMinimapMacroGridToggle = document.getElementById('minimap-macro-grid-toggle');
 const btnMinimapRenderToggle = document.getElementById('minimap-render-toggle');
 const btnMinimapShowSpawnedToggle = document.getElementById('minimap-show-spawned-toggle');
@@ -250,10 +257,12 @@ const LS_MINIMAP_SHOW_ALL_SPAWNED_DEBUG = 'pkmn_debug_minimap_show_all_spawned';
 const LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE = 'pkmn_debug_minimap_event_log_visible';
 const LS_MINIMAP_TOOLBAR_LEFT = 'pkmn_minimap_toolbar_left';
 const LS_MINIMAP_TOOLBAR_TOP = 'pkmn_minimap_toolbar_top';
+const LS_PLAY_FPS_CAP = 'pkmn_play_fps_cap';
 let minimapMacroGridOverlay = false;
 let minimapRenderEnabled = true;
 let minimapShowAllSpawnedDebug = false;
 let minimapEventLogVisibleDebug = false;
+const PLAY_FPS_CAP_SEQUENCE = [0, 120, 60, 30];
 let minimapEventLogUi = null;
 let minimapToolbarDragPointerId = null;
 let minimapToolbarDragStartClientX = 0;
@@ -435,6 +444,27 @@ function syncMinimapStrictCullingToggleUi() {
   btnMinimapStrictCullingToggle.setAttribute('aria-label', title);
 }
 
+function syncMinimapFpsCapToggleUi() {
+  if (!(btnMinimapFpsCapToggle instanceof HTMLButtonElement)) return;
+  const cap = Math.max(0, Number(getPlayFpsCap()) || 0);
+  const label = cap > 0 ? `${cap}` : 'UNCAP';
+  const title = cap > 0 ? `FPS cap: ${cap}` : 'FPS cap: UNCAPPED';
+  btnMinimapFpsCapToggle.textContent = `FPS ${label}`;
+  btnMinimapFpsCapToggle.setAttribute('aria-pressed', cap > 0 ? 'true' : 'false');
+  btnMinimapFpsCapToggle.title = title;
+  btnMinimapFpsCapToggle.setAttribute('aria-label', title);
+}
+
+function setPlayFpsCapAndPersist(nextCap) {
+  const cap = setPlayFpsCap(nextCap);
+  syncMinimapFpsCapToggleUi();
+  try {
+    localStorage.setItem(LS_PLAY_FPS_CAP, String(cap));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
 function syncMinimapRmbPointerModeUi() {
   const btn = btnMinimapRmbModeToggle;
   if (!(btn instanceof HTMLButtonElement)) return;
@@ -543,6 +573,19 @@ btnMinimapStrictCullingToggle?.addEventListener('click', () => {
   togglePlayStrictCulling();
   syncMinimapStrictCullingToggleUi();
   updateView();
+});
+try {
+  const storedFpsCap = Number(localStorage.getItem(LS_PLAY_FPS_CAP));
+  setPlayFpsCap(Number.isFinite(storedFpsCap) ? Math.max(0, storedFpsCap) : 0);
+} catch {
+  setPlayFpsCap(0);
+}
+syncMinimapFpsCapToggleUi();
+btnMinimapFpsCapToggle?.addEventListener('click', () => {
+  const current = Math.max(0, Number(getPlayFpsCap()) || 0);
+  const idx = PLAY_FPS_CAP_SEQUENCE.findIndex((v) => v === current);
+  const next = PLAY_FPS_CAP_SEQUENCE[(idx + 1 + PLAY_FPS_CAP_SEQUENCE.length) % PLAY_FPS_CAP_SEQUENCE.length];
+  setPlayFpsCapAndPersist(next);
 });
 try {
   minimapEventLogVisibleDebug = localStorage.getItem(LS_MINIMAP_EVENT_LOG_DEBUG_VISIBLE) === '1';
@@ -1907,6 +1950,9 @@ function getSettings() {
   const weather = getActiveWeatherParams();
   const weatherTarget = getWeatherTarget();
   const treeCanopyAnimationEnabled = window.disableTreeCanopyAnimation !== true;
+  // Runtime knob: `window.treeCanopyAnimationFps` (set <= 0 to disable quantization).
+  const canopyAnimFpsRuntime = Number(window.treeCanopyAnimationFps);
+  const treeCanopyAnimationFps = Number.isFinite(canopyAnimFpsRuntime) ? canopyAnimFpsRuntime : 0.2;
   const worldMapCamera =
     appMode === 'map' && WORLD_MAP_CONTINUOUS_ZOOM_ENABLED && currentData
       ? getWorldMapCamera()
@@ -1969,6 +2015,7 @@ function getSettings() {
     weatherVolumetricAbsorptionBias: weather.volumetricAbsorptionBias,
     weatherVolumetricSplashBias: weather.volumetricSplashBias,
     treeCanopyAnimationEnabled,
+    treeCanopyAnimationFps,
     worldMapCamera,
     worldMapUseSvgOverlay: WORLD_MAP_USE_SVG_OVERLAY,
     visionFogEnabled: playVisionFogToggleEl?.checked ?? false,

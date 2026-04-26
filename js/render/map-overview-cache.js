@@ -3,6 +3,9 @@ import { elevationToStep } from '../chunking.js';
 
 let mapOverviewCacheCanvas = null;
 let mapOverviewCacheKey = '';
+let mapOverviewCacheDataRef = null;
+let mapOverviewCacheBiomesRef = null;
+let mapOverviewCacheCellsRef = null;
 const MAP_OVERVIEW_CACHE_MAX_PIXELS = 3_200_000;
 let mapOverviewNoiseWorker = null;
 let mapOverviewNoiseJobId = 0;
@@ -68,6 +71,15 @@ function stopNoiseJob() {
   mapOverviewNoiseJobId += 1;
   mapOverviewNoiseActiveKey = '';
   worker.postMessage({ type: 'cancel', jobId: mapOverviewNoiseJobId });
+}
+
+function resetMapOverviewCache() {
+  mapOverviewCacheCanvas = null;
+  mapOverviewCacheKey = '';
+  mapOverviewCacheDataRef = null;
+  mapOverviewCacheBiomesRef = null;
+  mapOverviewCacheCellsRef = null;
+  stopNoiseJob();
 }
 
 function queueNoiseSamplingJob(cacheKey, data, cacheTilePx, viewType) {
@@ -153,11 +165,22 @@ export function drawCachedMapOverview(ctx, params) {
     overlayContours ? 1 : 0
   ].join('|');
 
+  const dataRefsChanged =
+    mapOverviewCacheDataRef !== data ||
+    mapOverviewCacheBiomesRef !== biomes ||
+    mapOverviewCacheCellsRef !== cells;
+  if (dataRefsChanged) {
+    resetMapOverviewCache();
+  }
+
   if (!mapOverviewCacheCanvas || mapOverviewCacheKey !== mapCacheKey) {
     mapOverviewCacheCanvas = document.createElement('canvas');
     mapOverviewCacheCanvas.width = Math.max(1, width * cacheTilePx);
     mapOverviewCacheCanvas.height = Math.max(1, height * cacheTilePx);
     mapOverviewCacheKey = mapCacheKey;
+    mapOverviewCacheDataRef = data;
+    mapOverviewCacheBiomesRef = biomes;
+    mapOverviewCacheCellsRef = cells;
     const mctx = mapOverviewCacheCanvas.getContext('2d');
     const wlOverview = resolveWaterLevel(data.config || {});
     if (mctx) {
@@ -169,7 +192,13 @@ export function drawCachedMapOverview(ctx, params) {
       const tileW = cacheTilePx;
       const tileH = cacheTilePx;
       const biomeColorById = new Map(Object.values(BIOMES).map((b) => [b.id, b.color]));
-      const useMicroNoiseSampling = cacheTilePx > 1 && cameraScaleQ >= 8 && !overlayContours;
+      // Keep biome view deterministic across zoom levels: anomaly/biome ownership must come
+      // from the stable macro biome map, not micro re-sampling in the noise worker.
+      const useMicroNoiseSampling =
+        viewType === 'elevation' &&
+        cacheTilePx > 1 &&
+        cameraScaleQ >= 8 &&
+        !overlayContours;
       for (let y = startY; y < endY; y++) {
         for (let x = startX; x < endX; x++) {
           const idx = y * width + x;

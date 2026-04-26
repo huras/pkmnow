@@ -77,6 +77,8 @@ const HYBRID_SHADOW_FRAME_BUDGET = {
 };
 /** @type {WeakMap<HTMLCanvasElement, HTMLCanvasElement>} */
 const _treeGroundShadowSilhouetteCache = new WeakMap();
+/** @type {WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>} */
+const _treeGroundShadowWithBaseCache = new WeakMap();
 /** @type {WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement>>} */
 const _berryGroundShadowStageCache = new WeakMap();
 /** @type {WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement>>} */
@@ -541,6 +543,65 @@ function getTreeGroundShadowSilhouetteCanvas(canopyCanvas) {
 }
 
 /**
+ * Extends canopy silhouette source with a trunk/base block so one shadow pass
+ * already includes both canopy and tree base contact.
+ * @param {{ canvas: HTMLCanvasElement, left: number, top: number, w: number, h: number, flipX: boolean, anchorX: number }} meta
+ * @param {any} item
+ * @param {number} tileW
+ * @param {number} tileH
+ * @param {(n: number) => number} snapPx
+ */
+function withTreeBaseShadowMeta(meta, item, tileW, tileH, snapPx) {
+  if (!meta?.canvas?.width) return meta;
+  if (!(item?.type === 'tree' || (item?.type === 'scatter' && scatterItemKeyIsTree(item.itemKey)))) return meta;
+  const cols = Math.max(1, Number(item?.cols) || (item?.type === 'tree' ? 2 : 1));
+  const trunkW = Math.max(2, Math.round(tileW * (item?.type === 'tree' ? 0.56 : Math.min(1.12, 0.34 + cols * 0.24))));
+  const trunkH = Math.max(2, Math.round(tileH * (item?.type === 'tree' ? 0.78 : 0.62)));
+  const localAnchorX = snapPx(meta.anchorX - meta.left);
+  const trunkX = Math.round(localAnchorX - trunkW * 0.5);
+  // Pull the trunk block upward so it overlaps the canopy alpha a few pixels.
+  // Without overlap, the mirrored/skewed multiply pass can read like two separate shadow pieces.
+  const overlapPx = Math.max(2, Math.round(trunkH * 0.14));
+  const trunkY = Math.max(
+    0,
+    Math.min(
+      Math.round(meta.canvas.height - trunkH + overlapPx),
+      Math.max(0, meta.canvas.height - 1)
+    )
+  );
+  const drawH = Math.min(trunkH, Math.max(1, meta.canvas.height - trunkY));
+  const key = `${trunkW}|${trunkH}|${trunkX}|${trunkY}|${drawH}`;
+  let variants = _treeGroundShadowWithBaseCache.get(meta.canvas);
+  if (!variants) {
+    variants = new Map();
+    _treeGroundShadowWithBaseCache.set(meta.canvas, variants);
+  }
+  let merged = variants.get(key);
+  if (!merged) {
+    merged = document.createElement('canvas');
+    merged.width = meta.canvas.width;
+    // Keep the same vertical bounds as the canopy composite: the trunk block is pulled upward
+    // into the canopy alpha so we don't need a taller staging canvas (avoids pivot drift).
+    merged.height = meta.canvas.height;
+    const mctx = merged.getContext('2d');
+    if (!mctx) return meta;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, merged.width, merged.height);
+    mctx.imageSmoothingEnabled = false;
+    mctx.drawImage(meta.canvas, 0, 0);
+    mctx.fillStyle = 'rgb(0,0,0)';
+    mctx.fillRect(trunkX, trunkY, trunkW, drawH);
+    variants.set(key, merged);
+  }
+  return {
+    ...meta,
+    canvas: merged,
+    w: merged.width,
+    h: merged.height
+  };
+}
+
+/**
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ canvas: HTMLCanvasElement, left: number, top: number, flipX: boolean, anchorX: number }} meta
  * @param {(n: number) => number} snapPx
@@ -943,6 +1004,7 @@ export function drawVegetationHybridShadow(ctx, item, options) {
     shake01 = Math.max(getDetailHitShake01(`${item.originX},${item.originY}`), bump01);
   }
   if (!meta) return;
+  meta = withTreeBaseShadowMeta(meta, item, tileW, tileH, snapPx);
   const vegetationShadowTuning =
     item.type === 'scatter' && isBerryTreeKey(item.itemKey)
       ? BERRY_GROUND_SHADOW_TUNING

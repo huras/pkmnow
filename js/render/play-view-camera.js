@@ -149,7 +149,10 @@ export function computePlayViewState(p) {
   const screenGrid = isScreenGridCameraOn();
   const gridBlend = getScreenGridBlend();
   const z = Math.max(0, Number(playerZ) || 0);
-  const zNorm = Math.min(1, z / PLAY_CAMERA_Z_REF);
+  // Jumping can raise `z`, but should not trigger flight-style terrain resizing.
+  // Only use altitude-driven zoom/framing span for actual flight mode.
+  const zForResize = flightActive ? z : 0;
+  const zNorm = Math.min(1, zForResize / PLAY_CAMERA_Z_REF);
   const t = zNorm * zNorm * (3 - 2 * zNorm);
   const flightTighten = flightActive && zNorm > 0.02 ? 0.04 * (1 - zNorm) : 0;
   const scaleFeel = Math.max(
@@ -161,15 +164,15 @@ export function computePlayViewState(p) {
     Math.min(1, VIEW_SCALE_MIN + (1 - VIEW_SCALE_MIN) * (1 - t))
   );
 
-  const wantFlightZoom = flightActive && z > FLIGHT_CAM_Z_EPS;
+  const wantFlightZoom = flightActive && zForResize > FLIGHT_CAM_Z_EPS;
   if (wantFlightZoom) {
     flightZoomBlend = Math.min(1, flightZoomBlend + dt * FLIGHT_ZOOM_BLEND_RISE_PER_S);
   } else {
     flightZoomBlend = Math.max(0, flightZoomBlend - dt * FLIGHT_ZOOM_BLEND_FALL_PER_S);
   }
 
-  const kGround = verticalFramingSpanCoeff(z, framingHeightTiles, vy);
-  const kFlight = verticalFramingSpanCoeffFlightZoom(z, framingHeightTiles, vy);
+  const kGround = verticalFramingSpanCoeff(zForResize, framingHeightTiles, vy);
+  const kFlight = verticalFramingSpanCoeffFlightZoom(zForResize, framingHeightTiles, vy);
   const b = flightZoomBlend * flightZoomBlend * (3 - 2 * flightZoomBlend);
   const K = kGround * (1 - b) + kFlight * b;
 

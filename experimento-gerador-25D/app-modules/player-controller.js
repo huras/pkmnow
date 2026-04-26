@@ -130,6 +130,8 @@ export function createPlayerController({
     logicalGroundY: 0,
     speciesHeightTiles: null,
     shadowMesh: null,
+    standIndicatorMesh: null,
+    standIndicatorPulse: 0,
   };
 
   function createBlobShadowTexture() {
@@ -240,6 +242,20 @@ export function createPlayerController({
     state.shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
     state.shadowMesh.renderOrder = 1;
     playerGroup.add(state.shadowMesh);
+
+    // Ground marker to clearly indicate player standing tile.
+    const markerGeo = new THREE.RingGeometry(0.34, 0.46, 48);
+    markerGeo.rotateX(-Math.PI / 2);
+    const markerMat = new THREE.MeshBasicMaterial({
+      color: '#7de2ff',
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    state.standIndicatorMesh = new THREE.Mesh(markerGeo, markerMat);
+    state.standIndicatorMesh.renderOrder = 3;
+    playerGroup.add(state.standIndicatorMesh);
 
     drawCurrentFrame(true);
     updateMeshScale(frameW, frameH);
@@ -533,6 +549,19 @@ export function createPlayerController({
       );
       state.shadowMesh.visible = state.mesh.visible;
     }
+    if (state.standIndicatorMesh) {
+      state.standIndicatorMesh.position.set(
+        state.x - state.bounds.offsetX,
+        state.logicalGroundY + 0.022,
+        state.y - state.bounds.offsetY
+      );
+      const pulse = 1 + Math.sin(state.standIndicatorPulse) * 0.08;
+      state.standIndicatorMesh.scale.set(pulse, pulse, pulse);
+      if (state.standIndicatorMesh.material) {
+        state.standIndicatorMesh.material.opacity = 0.6 + (Math.sin(state.standIndicatorPulse * 1.4) * 0.5 + 0.5) * 0.25;
+      }
+      state.standIndicatorMesh.visible = state.mesh.visible;
+    }
   }
 
   function placeAt(mx, my) {
@@ -550,6 +579,7 @@ export function createPlayerController({
 
   function tick(dt) {
     if (!state.active || !state.mesh || !state.world || !state.bounds) return;
+    state.standIndicatorPulse += Math.max(0, Number(dt) || 0) * 3.4;
     updatePosition(dt);
     drawCurrentFrame();
     syncMeshTransform();
@@ -589,6 +619,7 @@ export function createPlayerController({
     setVisible(v) {
       state.visible = !!v;
       if (state.mesh) state.mesh.visible = !!v && state.active;
+      if (state.standIndicatorMesh) state.standIndicatorMesh.visible = !!v && state.active;
     },
     placeAt,
     jump() {
