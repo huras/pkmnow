@@ -1,6 +1,5 @@
-import { BIOMES, resolveWaterLevel } from '../biomes.js';
+import { BIOMES } from '../biomes.js';
 import { MACRO_TILE_STRIDE, foliageDensity, getMicroTile } from '../chunking.js';
-import { elevationToStep } from '../chunking.js';
 import { getFogDiscoveredRevision, isFogMicroTileDiscovered } from '../main/play-vision-fog.js';
 import {
   BIOME_VEGETATION,
@@ -13,7 +12,7 @@ import {
   SCATTER_NOISE_THRESHOLD
 } from '../biome-tiles.js';
 import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
-import { PLAY_CHUNK_SIZE, DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP } from './render-constants.js';
+import { PLAY_CHUNK_SIZE } from './render-constants.js';
 import { hasPlayChunk, getPlayChunkCacheRevision } from './play-chunk-cache.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
@@ -93,7 +92,6 @@ let baseCacheData = null;
 let baseCacheZoom = '';
 let baseCacheW = 0;
 let baseCacheH = 0;
-let baseCacheCliffRingsPerStep = 1;
 /** @type {Set<string>} */
 const minimapPortraitRequests = new Set();
 const minimapBiomeRgbCache = new Map();
@@ -234,7 +232,7 @@ function computeTransform(w, h, dataW, dataH, playerMacroX, playerMacroY, zoom) 
 // ---------------------------------------------------------------------------
 // Base-layer (re)build
 // ---------------------------------------------------------------------------
-function rebuildBase(w, h, data, zoom, cliffRingsPerHeightStep = DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP) {
+function rebuildBase(w, h, data, zoom) {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -242,7 +240,7 @@ function rebuildBase(w, h, data, zoom, cliffRingsPerHeightStep = DEFAULT_CLIFF_R
   if (!ctx) return canvas;
   ctx.imageSmoothingEnabled = false;
 
-  const { width: dataW, height: dataH, biomes, paths, graph, cells } = data;
+  const { width: dataW, height: dataH, biomes, paths, graph } = data;
 
   // Player is not available when building the base — we treat full-map as
   // the build target. Panning/zooming is applied when compositing.
@@ -265,56 +263,6 @@ function rebuildBase(w, h, data, zoom, cliffRingsPerHeightStep = DEFAULT_CLIFF_R
       ctx.fillStyle = colorByBiomeId.get(bId) || '#222';
       ctx.fillRect(Math.floor(x * tileW), Math.floor(y * tileH), Math.ceil(tileW), Math.ceil(tileH));
     }
-  }
-
-  const ringsPerStep = Math.max(
-    0,
-    Math.min(10, Math.round(Number(cliffRingsPerHeightStep) || DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP))
-  );
-  if (ringsPerStep > 0 && cells) {
-    const wlOverview = resolveWaterLevel(data.config || {});
-    const ringSpacingPx = Math.max(0.2, Math.min(tileW, tileH) * 0.18);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = Math.max(1, Math.min(tileW, tileH) * 0.12);
-    for (let y = 0; y < dataH; y++) {
-      for (let x = 0; x < dataW; x++) {
-        const hStep = elevationToStep(cells[y * dataW + x], wlOverview);
-        if (x < dataW - 1) {
-          const hr = elevationToStep(cells[y * dataW + (x + 1)], wlOverview);
-          const d = Math.abs(hStep - hr);
-          const ringCount = Math.max(0, Math.min(120, d * ringsPerStep));
-          if (ringCount > 0) {
-            const dir = hStep < hr ? -1 : 1;
-            for (let r = 0; r < ringCount; r++) {
-              const off = dir * r * ringSpacingPx;
-              const sx = (x + 1) * tileW + off;
-              ctx.beginPath();
-              ctx.moveTo(sx, y * tileH);
-              ctx.lineTo(sx, (y + 1) * tileH);
-              ctx.stroke();
-            }
-          }
-        }
-        if (y < dataH - 1) {
-          const hd = elevationToStep(cells[(y + 1) * dataW + x], wlOverview);
-          const d = Math.abs(hStep - hd);
-          const ringCount = Math.max(0, Math.min(120, d * ringsPerStep));
-          if (ringCount > 0) {
-            const dir = hStep < hd ? -1 : 1;
-            for (let r = 0; r < ringCount; r++) {
-              const off = dir * r * ringSpacingPx;
-              const sy = (y + 1) * tileH + off;
-              ctx.beginPath();
-              ctx.moveTo(x * tileW, sy);
-              ctx.lineTo((x + 1) * tileW, sy);
-              ctx.stroke();
-            }
-          }
-        }
-      }
-    }
-    ctx.restore();
   }
 
   // Routes — golden lines
@@ -1074,10 +1022,6 @@ export function renderMinimap(canvas, data, player, options = {}) {
   ctx.imageSmoothingEnabled = false;
   if (ctx.webkitImageSmoothingEnabled !== undefined) ctx.webkitImageSmoothingEnabled = false;
 
-  const cliffRingsPerHeightStep = Math.max(
-    0,
-    Math.min(10, Math.round(Number(options.cliffRingsPerHeightStep) || DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP))
-  );
   const zoom = getZoom(canvas);
   /** `rebuildBase` output is identical for local sprite zooms; avoid duplicate full-world bakes. */
   const baseZoomKey = isLocalSpriteMinimapZoom(zoom) ? 'close' : zoom;
@@ -1088,16 +1032,14 @@ export function renderMinimap(canvas, data, player, options = {}) {
     baseCacheData !== data ||
     baseCacheZoom !== baseZoomKey ||
     baseCacheW !== w ||
-    baseCacheH !== h ||
-    baseCacheCliffRingsPerStep !== cliffRingsPerHeightStep;
+    baseCacheH !== h;
 
   if (needsRebuild) {
-    baseCacheCanvas = rebuildBase(w, h, data, baseZoomKey, cliffRingsPerHeightStep);
+    baseCacheCanvas = rebuildBase(w, h, data, baseZoomKey);
     baseCacheData = data;
     baseCacheZoom = baseZoomKey;
     baseCacheW = w;
     baseCacheH = h;
-    baseCacheCliffRingsPerStep = cliffRingsPerHeightStep;
   }
 
   // Player position in macro-tile space

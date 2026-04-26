@@ -1,7 +1,6 @@
 import {
   PLAY_CHUNK_SIZE,
   PLAY_BAKE_TILE_PX,
-  DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP,
   WATER_ANIM_SRC_W,
   WATER_ANIM_SRC_H,
   PLAY_SEA_OVERLAY_ALPHA_LOD01,
@@ -416,7 +415,6 @@ export function render(canvas, data, options = {}) {
       overlayPaths: useSvgOverlay ? false : overlayPaths,
       overlayGraph: useSvgOverlay ? false : overlayGraph,
       overlayContours,
-      cliffRingsPerHeightStep: options.settings?.cliffRingsPerHeightStep ?? DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP,
       camera: worldMapCamera,
       startX,
       startY,
@@ -711,97 +709,6 @@ export function render(canvas, data, options = {}) {
       }
     }
     addRenderFramePhaseMs('rndTileWarmMs', performance.now() - tTileWarm0);
-
-    // Cliff-height illusion multiplier (toolbox): duplicate north-facing cliff tiles
-    // upward (north) to fake taller cliff walls without altering collision geometry.
-    const cliffRingsRaw = Number(options.settings?.cliffRingsPerHeightStep);
-    const cliffRingsPerHeightStep = Number.isFinite(cliffRingsRaw)
-      ? Math.max(0, Math.min(10, Math.round(cliffRingsRaw)))
-      : DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP;
-    if (cliffRingsPerHeightStep > 0) {
-      const tCliffRings0 = performance.now();
-      const _microW = data.width * MACRO_TILE_STRIDE;
-      const _microH = data.height * MACRO_TILE_STRIDE;
-      const _northCliffRoles = (NORTH_CLIFF_EDGE_ROLES && NORTH_CLIFF_EDGE_ROLES.size > 0)
-        ? NORTH_CLIFF_EDGE_ROLES
-        : new Set(['EDGE_N', 'OUT_NW', 'OUT_NE']);
-      const _southCliffRoles = new Set(['EDGE_S', 'OUT_SW', 'OUT_SE']);
-      /** @type {Map<number, { img: CanvasImageSource, cols: number, spec: { tileId: number, flipX: boolean }, role: string } | null>} */
-      const _cliffMetaByTileKey = new Map();
-      const resolveCliffMeta = (mx, my) => {
-        const key = _tileKeyInt(mx, my);
-        if (_cliffMetaByTileKey.has(key)) return _cliffMetaByTileKey.get(key);
-        const tile = getCached(mx, my);
-        if (!tile || tile.heightStep < 1) {
-          _cliffMetaByTileKey.set(key, null);
-          return null;
-        }
-        const biomeSetName = BIOME_TO_TERRAIN[tile.biomeId] || 'grass';
-        const biomeSet = TERRAIN_SETS[biomeSetName];
-        if (!biomeSet) {
-          _cliffMetaByTileKey.set(key, null);
-          return null;
-        }
-        const isAtOrAbove = (r, c) => (getCached(c, r)?.heightStep ?? -99) >= tile.heightStep;
-        const role = getRoleForCell(my, mx, _microH, _microW, isAtOrAbove, biomeSet.type);
-        const isNorth = _northCliffRoles.has(role);
-        const isSouth = _southCliffRoles.has(role);
-        if (!isNorth && !isSouth) {
-          _cliffMetaByTileKey.set(key, null);
-          return null;
-        }
-        const imgPath = TessellationEngine.getImagePath(biomeSet.file);
-        const img = imageCache.get(imgPath);
-        const cols = TessellationEngine.getTerrainSheetCols(biomeSet);
-        const spec = getConcConvATerrainTileSpec(biomeSet, role);
-        if (!img || spec.tileId == null) {
-          _cliffMetaByTileKey.set(key, null);
-          return null;
-        }
-        const meta = { img, cols, spec, role };
-        _cliffMetaByTileKey.set(key, meta);
-        return meta;
-      };
-
-      for (let my = startY; my < endY; my++) {
-        for (let mx = startX; mx < endX; mx++) {
-          const meta = resolveCliffMeta(mx, my);
-          if (!meta) continue;
-          const tile = getCached(mx, my);
-          const isNorthFace = _northCliffRoles.has(meta.role);
-          const isSouthFace = _southCliffRoles.has(meta.role);
-          if (!isNorthFace && !isSouthFace) continue;
-          const neighborY = isSouthFace ? (my + 1) : (my - 1);
-          const sideNeighbor = getCached(mx, neighborY);
-          const dropSteps = Math.max(1, (tile?.heightStep ?? 0) - (sideNeighbor?.heightStep ?? 0));
-          const totalRings = Math.max(0, dropSteps * cliffRingsPerHeightStep);
-          const extraCopies = Math.max(0, Math.min(120, totalRings - 1));
-          // Visual anchor tweak: keep stacking behavior, but shift one extra tile north so
-          // duplicated bands stay clearly above the source cliff row (avoids blending back in).
-          const northShiftTiles = extraCopies + 1;
-          for (let i = 1; i <= extraCopies; i++) {
-            const oy = (isSouthFace ? (my + i) : (my - i)) - northShiftTiles;
-            if (oy < 0 || oy >= _microH) break;
-            if (oy < startY || oy >= endY) continue;
-            const px = snapPx(mx * tileW);
-            const py = snapPx(oy * tileH);
-            drawTerrainCellFromSheet(
-              ctx,
-              meta.img,
-              meta.cols,
-              16,
-              meta.spec.tileId,
-              px,
-              py,
-              tileW,
-              tileH,
-              meta.spec.flipX
-            );
-          }
-        }
-      }
-      addRenderFramePhaseMs('rndCliffRingsMs', performance.now() - tCliffRings0);
-    }
 
     // --- MODULAR RENDERING ---
     const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
@@ -1872,8 +1779,7 @@ export function render(canvas, data, options = {}) {
           recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
           playVision,
           debugShowAllSpawned: !!options.settings?.minimapShowAllSpawnedDebug,
-          showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay,
-          cliffRingsPerHeightStep: options.settings?.cliffRingsPerHeightStep ?? DEFAULT_CLIFF_RINGS_PER_HEIGHT_STEP
+          showMacroTileGrid: !!options.settings?.minimapMacroGridOverlay
         });
         _lastMinimapRenderAtMs = nowMs;
         _lastMinimapPlayerTileX = playerTileX;
