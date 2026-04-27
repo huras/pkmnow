@@ -307,12 +307,13 @@ export function render(canvas, data, options = {}) {
   PluginRegistry.executeHooks('preRender', ctx, data, options);
   const frameSeq = ++_renderFrameSeq;
 
+  const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
+  const appMode = options.settings?.appMode || 'map';
   let tFrame0 = 0;
   try {
     tFrame0 = performance.now();
-    const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
-    if (debug) console.log('[Render] Start');
-    beginRenderFrameProfile(options.settings?.appMode || 'map');
+    if (debug) console.log('[Render] Start', tFrame0, 'appMode:', appMode);
+    beginRenderFrameProfile(appMode);
     if (debug) console.log('[Render] Prep');
     const tPrep0 = performance.now();
 
@@ -328,7 +329,6 @@ export function render(canvas, data, options = {}) {
   const cw = canvas.width;
   const ch = canvas.height;
 
-  const appMode = options.settings?.appMode || 'map';
   const player = options.settings?.player || { x: 0, y: 0 };
   const frameNowMs =
     typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -407,6 +407,7 @@ export function render(canvas, data, options = {}) {
   addRenderFramePhaseMs('rndPrepMs', performance.now() - tPrep0);
 
   if (appMode === 'map') {
+    if (debug) console.log('[Render] Map Mode Entry');
     clearPlayCameraSnapshot();
     const tMap0 = performance.now();
     const worldMapCamera = options.settings?.worldMapCamera || null;
@@ -460,6 +461,7 @@ export function render(canvas, data, options = {}) {
     persistGlobalMapTrailIfNeeded(false);
     addRenderFramePhaseMs('rndMapMs', performance.now() - tMap0);
   } else {
+    if (debug) console.log('[Render] Play Mode Entry');
     resetWorldMapPlayerWaveTick();
     const tCam0 = performance.now();
     const snapPx = (n) => Math.round(n);
@@ -707,6 +709,7 @@ export function render(canvas, data, options = {}) {
       }
       return t;
     };
+    if (debug) console.log('[Render] Tile Warming', startY, endY, startX, endX);
     {
       for (let my = startY; my < endY; my++) {
         for (let mx = startX; mx < endX; mx++) getCached(mx, my);
@@ -785,6 +788,7 @@ export function render(canvas, data, options = {}) {
 
     // PASS 5a: Animated Grass — simple uniform pass, no deferred overlays.
     const tGrass0 = performance.now();
+    if (debug) console.log('[Render] Pass 5a: Grass');
     forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
       if (playVision?.enabled && !playVision.isVisible(mx, my)) return;
       drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx, precomputedLayers: grassLayersMap.get(_tileKeyInt(mx, my)) });
@@ -799,6 +803,7 @@ export function render(canvas, data, options = {}) {
     const collectStartY = Math.max(0, Math.floor(startY - ENTITY_COLLECTION_SHADOW_PAD_TILES));
     const collectEndX = Math.min(worldMicroW, Math.ceil(endX + ENTITY_COLLECTION_SHADOW_PAD_TILES));
     const collectEndY = Math.min(worldMicroH, Math.ceil(endY + ENTITY_COLLECTION_SHADOW_PAD_TILES));
+    if (debug) console.log('[Render] CollectItems');
     const renderItems = collectRenderItems({ 
       data, player, startX: collectStartX, startY: collectStartY, endX: collectEndX, endY: collectEndY, lodDetail, width, height, getCached, time, 
       activeProjectiles, activeParticles, activeCrystalShards, activeSpawnedSmallCrystals, activeCrystalDrops, playInputState,
@@ -1116,6 +1121,7 @@ export function render(canvas, data, options = {}) {
     }
     const playerFlashHoldVisual = getPlayerFlashHoldVisual();
 
+    if (debug) console.log('[Render] DrawItems', visibleRenderItems.length);
     if (debug) console.log('[Render] DrawItems', visibleRenderItems.length);
     for (const item of visibleRenderItems) {
       // Flush deferred canopies right before the player is drawn.
@@ -1780,6 +1786,7 @@ export function render(canvas, data, options = {}) {
         playerTileY !== _lastMinimapPlayerTileY;
       const canRenderByTime = nowMs - _lastMinimapRenderAtMs >= MINIMAP_RENDER_MIN_MS;
       if (forceMinimapRender || canRenderByTime) {
+        if (debug) console.log('[Render] Minimap');
         renderMinimap(minimapCanvas, data, player, {
           recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
           playVision,
