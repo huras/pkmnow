@@ -126,6 +126,7 @@ import { isWildLeaderRoamTargetVisible } from './main/wild-groups-visual-toggle-
 import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
+  drawSocialInspectorGroupRadiiOverlay,
   drawEnvironmentalEffects,
   drawVolumetricEnvironmentalLayer,
   drawDigChargeBar,
@@ -1618,6 +1619,17 @@ export function render(canvas, data, options = {}) {
     drawWorldReactionsOverlay(ctx, {
       showWorldReactionsOverlay:
         !!options.settings?.showWorldReactionsOverlay || !!window.debugWorldReactionsOverlay,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      cw,
+      ch
+    });
+    drawSocialInspectorGroupRadiiOverlay(ctx, {
+      showSocialInspectorRadiiOverlay: !!window.debugSocialInspectorRadiiOverlay,
       startX,
       startY,
       endX,

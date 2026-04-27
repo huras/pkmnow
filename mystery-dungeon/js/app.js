@@ -2,7 +2,16 @@ import { player, setPlayerSpecies, updatePlayer, applyPlayerWorldResumePosition,
 import { render, loadTilesetImages } from '../../js/render.js';
 import { imageCache } from '../../js/image-cache.js';
 import { ensurePokemonSheetsLoaded } from '../../js/pokemon/pokemon-asset-loader.js';
+import { ensureEffectAssetsLoaded } from '../../js/pokemon/effect-asset-loader.js';
 import { playInputState } from '../../js/main/play-input-state.js';
+import { recordPlayPointerClient } from '../../js/main/play-pointer-world.js';
+import { installPlayPointerCombat, updatePlayPointerCombat } from '../../js/main/play-mouse-combat.js';
+import { tryStrengthInteractKeyE, updateStrengthCarryInteraction } from '../../js/main/play-strength-carry.js';
+import { updateMoves, pushParticle } from '../../js/moves/moves-manager.js';
+import { getWildPokemonEntities } from '../../js/wild-pokemon/index.js';
+import { updateCrystalDropsAndPickup } from '../../js/main/play-crystal-tackle.js';
+import { updateBreakableDetailRegeneration } from '../../js/main/play-crystal-tackle.js';
+import { updateGrassFire, GRASS_FIRE_PARTICLE_SEC } from '../../js/play-grass-fire.js';
 import { DungeonGenerator } from './dungeon-generator.js';
 import { TILE_TYPES } from './tile-map.js';
 import { MACRO_TILE_STRIDE } from '../../js/chunking.js';
@@ -33,7 +42,10 @@ PluginRegistry.registerBiome('DUNGEON', {
     id: 100,
     name: 'Dungeon',
     color: '#333',
-    terrain: 'dungeon_rock' 
+    terrain: 'dungeon_rock',
+    foliage: null,
+    disableGrass: true,
+    disableTrees: true
 });
 
 /**
@@ -63,9 +75,17 @@ class MysteryDungeonApp {
         window.addEventListener('resize', () => this.setupCanvas());
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
+        this.installPointerTracking();
+        installPlayPointerCombat({
+            canvas: this.canvas,
+            getAppMode: () => 'play',
+            getPlayer: () => player,
+            getCurrentData: () => this.worldData
+        });
 
         // 1. Load Essential Tilesets
         await loadTilesetImages();
+        await ensureEffectAssetsLoaded(imageCache);
         
         // 2. Set Player Species (Charmander for testing)
         setPlayerSpecies(4); 
@@ -154,10 +174,14 @@ class MysteryDungeonApp {
         if (e.code === 'ArrowDown' || e.code === 'KeyS') player.inputY = 1;
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') player.inputX = -1;
         if (e.code === 'ArrowRight' || e.code === 'KeyD') player.inputX = 1;
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') player.runMode = true;
         
         if (e.code === 'Space') {
             playInputState.spaceHeld = true;
             tryJumpPlayer(player);
+        }
+        if (e.code === 'KeyE' && this.worldData) {
+            tryStrengthInteractKeyE(player, this.worldData);
         }
         if (e.shiftKey) playInputState.shiftLeftHeld = true;
     }
@@ -169,7 +193,21 @@ class MysteryDungeonApp {
         if (e.code === 'ArrowRight' || e.code === 'KeyD') if (player.inputX > 0) player.inputX = 0;
         
         if (e.code === 'Space') playInputState.spaceHeld = false;
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') player.runMode = false;
         if (!e.shiftKey) playInputState.shiftLeftHeld = false;
+    }
+
+    installPointerTracking() {
+        window.addEventListener('pointermove', (e) => {
+            recordPlayPointerClient(e.clientX, e.clientY);
+            playInputState.mouseValid = true;
+        }, true);
+        this.canvas.addEventListener('pointerenter', () => {
+            playInputState.mouseValid = true;
+        });
+        this.canvas.addEventListener('pointerleave', () => {
+            playInputState.mouseValid = false;
+        });
     }
 
     setupCanvas() {
@@ -191,6 +229,24 @@ class MysteryDungeonApp {
         // Use the REAL player update logic
         if (debug) console.log('[DungeonLoop] updatePlayer');
         updatePlayer(dt, this.worldData, time / 1000);
+        updatePlayPointerCombat(dt, player, this.worldData);
+        updateStrengthCarryInteraction(dt, player, this.worldData);
+        updateMoves(dt, getWildPokemonEntities(), this.worldData, player);
+        updateBreakableDetailRegeneration(dt, this.worldData);
+        updateGrassFire(dt, this.worldData, player.visualX ?? player.x, player.visualY ?? player.y, (wx, wy) => {
+            pushParticle({
+                type: 'grassFire',
+                x: wx,
+                y: wy,
+                vx: 0,
+                vy: 0,
+                z: 0.06,
+                vz: 0,
+                life: GRASS_FIRE_PARTICLE_SEC,
+                maxLife: GRASS_FIRE_PARTICLE_SEC
+            });
+        });
+        updateCrystalDropsAndPickup(dt, player);
 
         // Use the REAL renderer
         if (debug) console.log('[DungeonLoop] render');

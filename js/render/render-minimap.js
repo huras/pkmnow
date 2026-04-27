@@ -427,6 +427,26 @@ const MM_TILE_ROCK = 4;
 const MM_TILE_CRYSTAL = 5;
 const MM_TILE_CAVE = 6;
 
+function drawLocalMinimapCaveMarker(ctx, sx, sy, radiusPx) {
+  const r = Math.max(3.2, Number(radiusPx) || 4);
+  ctx.save();
+  ctx.shadowBlur = 5;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.fillStyle = 'rgba(14, 8, 8, 0.96)';
+  ctx.strokeStyle = 'rgba(240, 232, 220, 0.9)';
+  ctx.lineWidth = Math.max(1.2, r * 0.22);
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Inner dark core improves cave readability over terrain colors.
+  ctx.fillStyle = 'rgba(0,0,0,0.95)';
+  ctx.beginPath();
+  ctx.arc(sx, sy + r * 0.12, Math.max(1.4, r * 0.32), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function classifyLocalMinimapTile(mx, my, tile, data) {
   if (!tile) return MM_TILE_BARE;
 
@@ -559,6 +579,8 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
       const newImg = cctx.createImageData(w, h);
       const newPix = newImg.data;
       const oldPix = oldImg.data;
+      const caveMarkers = [];
+      const caveMarkerR = Math.max(4, Math.min(8, MACRO_TILE_STRIDE * pxPerMicro * 0.52));
       // Fill with dark background
       for (let i = 0; i < newPix.length; i += 4) {
         newPix[i] = 8; newPix[i + 1] = 12; newPix[i + 2] = 20; newPix[i + 3] = 230;
@@ -599,6 +621,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
           const color = localMinimapColor(tile?.biomeId, kind);
           const sx0 = Math.floor((mx - originX) * pxPerMicro);
           const sy0 = Math.floor((my - originY) * pxPerMicro);
+          if (kind === MM_TILE_CAVE) {
+            caveMarkers.push({ sx: sx0 + pxPerMicro * 0.5, sy: sy0 + pxPerMicro * 0.5 });
+          }
           for (let sdy = 0; sdy < pxPerMicro; sdy++) {
             for (let sdx = 0; sdx < pxPerMicro; sdx++) {
               const sx = sx0 + sdx;
@@ -611,6 +636,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
         }
       }
       cctx.putImageData(newImg, 0, 0);
+      for (const marker of caveMarkers) {
+        drawLocalMinimapCaveMarker(cctx, marker.sx, marker.sy, caveMarkerR);
+      }
       localMinimapCacheCanvas = cacheCanvas;
       localMinimapCacheData = data;
       localMinimapCacheW = w;
@@ -631,6 +659,8 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   cacheCanvas.height = h;
   const cctx = cacheCanvas.getContext('2d');
   if (!cctx) return;
+  const caveMarkers = [];
+  const caveMarkerR = Math.max(4, Math.min(8, MACRO_TILE_STRIDE * pxPerMicro * 0.52));
 
   const img = cctx.createImageData(w, h);
   const pix = img.data;
@@ -653,6 +683,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
       const color = localMinimapColor(tile?.biomeId, kind);
       const sx0 = Math.floor((mx - originX) * pxPerMicro);
       const sy0 = Math.floor((my - originY) * pxPerMicro);
+      if (kind === MM_TILE_CAVE) {
+        caveMarkers.push({ sx: sx0 + pxPerMicro * 0.5, sy: sy0 + pxPerMicro * 0.5 });
+      }
       for (let dy = 0; dy < pxPerMicro; dy++) {
         for (let dx = 0; dx < pxPerMicro; dx++) {
           const sx = sx0 + dx;
@@ -669,6 +702,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   }
 
   cctx.putImageData(img, 0, 0);
+  for (const marker of caveMarkers) {
+    drawLocalMinimapCaveMarker(cctx, marker.sx, marker.sy, caveMarkerR);
+  }
   localMinimapCacheCanvas = cacheCanvas;
   localMinimapCacheData = data;
   localMinimapCacheW = w;

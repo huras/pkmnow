@@ -63,7 +63,7 @@ import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
 import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
-const ACCEL = 32.0;
+const ACCEL = 12.0;
 const FRICTION = 20.0;
 const GROUND_R = 0.32; // Raio de colisão
 /** Player stamina is intentionally higher than generic entity default. */
@@ -85,7 +85,7 @@ const FLIGHT_LEVITATION_VERT_SPEED = 4.2;
 const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 1.25;
 const FLIGHT_LEVITATION_FRICTION_MULT = 0.69;
 /** Horizontal input acceleration while in creative flight (ground uses full `ACCEL`). */
-const FLIGHT_ACCEL_MULT = 0.85;
+const FLIGHT_ACCEL_MULT = 3.85;
 /** Walk / idle PMD cycle advances faster only while actually gaining altitude in creative flight. */
 const FLIGHT_RAISE_HEIGHT_ANIM_MULT = 2.5;
 /** Horizontal flight cap multiplier while moving (WASD); not stacked while actively gaining altitude. */
@@ -98,7 +98,7 @@ const FLIGHT_TETHER_IDLE_BLINK_SEC = 1;
 const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
-const RUN_SPEED_CAP_MULT = 2;
+const RUN_SPEED_CAP_MULT = 1.75;
 /** Hold-LMB combat charge: movement stays possible but slower. */
 const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
 /**

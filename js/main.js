@@ -2215,6 +2215,7 @@ function updateView() {
   const settings = getSettings();
   if (currentData) {
     render(canvas, currentData, { settings, hover, inventoryDropPreview: playInventoryDropPreview });
+    if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] render complete');
     renderMapOverlaySvg(mapOverlaySvg, currentData, {
       canvas,
       appMode,
@@ -2223,6 +2224,7 @@ function updateView() {
       useSvgOverlay: settings.worldMapUseSvgOverlay,
       camera: settings.worldMapCamera
     });
+    if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] renderMapOverlaySvg complete');
   }
 }
 

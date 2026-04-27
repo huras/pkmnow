@@ -662,6 +662,7 @@ export function createGameLoop(api) {
     if (debug) console.log('[Loop] updateView', tRenderStart);
     updateView();
     const tRenderEnd = performance.now();
+    if (debug) console.log('[Loop] Post-updateView', tRenderEnd);
     const playFpsEl = getPlayFpsEl();
     if (getAppMode() === 'play' && playFpsEl) {
       const tEnd = performance.now();
@@ -835,6 +836,7 @@ export function createGameLoop(api) {
         animFrameId = requestAnimationFrame(gameLoop);
       }
     }
+    if (debug) console.log('[Loop] Frame Complete');
   }
 
   function startGameLoop() {

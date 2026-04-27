@@ -82,6 +82,7 @@ export function installMinimapHudPopovers(options = {}) {
   /** @type {ReturnType<typeof setInterval> | null} */
   let inspectorRefreshTimer = null;
   let showLeaderRoamTarget = isWildLeaderRoamTargetVisible();
+  window.debugSocialInspectorRadiiOverlay = false;
 
   function syncGroupsLeaderTargetToggleUi() {
     if (!groupsLeaderTargetToggle) return;
@@ -151,6 +152,7 @@ export function installMinimapHudPopovers(options = {}) {
     }
     if (activeName !== 'inspector') {
       stopInspectorRefresh();
+      window.debugSocialInspectorRadiiOverlay = false;
     }
     popovers.forEach((p) => {
       if (p.name !== activeName) {
@@ -174,6 +176,7 @@ export function installMinimapHudPopovers(options = {}) {
       }
       if (name === 'inspector') {
         stopInspectorRefresh();
+        window.debugSocialInspectorRadiiOverlay = false;
       }
     } else {
       closeAllExcept(name);
@@ -195,6 +198,7 @@ export function installMinimapHudPopovers(options = {}) {
         refreshInspectorPanel();
         stopInspectorRefresh();
         inspectorRefreshTimer = setInterval(refreshInspectorPanel, 350);
+        window.debugSocialInspectorRadiiOverlay = true;
       }
       if (name === 'features') {
         refreshFeaturesPanel();
@@ -385,12 +389,14 @@ export function installMinimapHudPopovers(options = {}) {
     forceCloseAllPopovers: () => {
       stopGroupsRefresh();
       stopInspectorRefresh();
+      window.debugSocialInspectorRadiiOverlay = false;
       clearHoveredWildGroupEntityKey();
       closeAllExcept(null);
     },
     destroy: () => {
       clearHoveredWildGroupEntityKey();
       stopInspectorRefresh();
+      window.debugSocialInspectorRadiiOverlay = false;
       unlistenLocale();
       unlistenScreenGrid();
     }
