@@ -517,7 +517,9 @@ function buildEventPortraitHtml(eventRow, portraitRequests, rerender) {
       if (!tex?.src && !portraitRequests.has(requestKey)) {
         portraitRequests.add(requestKey);
         void ensureSpriteCollabPortraitLoaded(imageCache, dex, slug).then(() => {
-          portraitRequests.delete(requestKey);
+          if (getSpriteCollabPortraitImage(imageCache, dex, slug)?.src) {
+            portraitRequests.delete(requestKey);
+          }
           rerender();
         });
       }
@@ -537,13 +539,17 @@ function buildEventPortraitHtml(eventRow, portraitRequests, rerender) {
   const slug = String(eventRow?.portraitSlug || EVENT_LOG_PORTRAIT_SLUG).replace(/[^\w.-]/g, '') || EVENT_LOG_PORTRAIT_SLUG;
   const tex = getSpriteCollabPortraitImage(imageCache, dex, slug);
   const requestKey = `${dex}:${slug}`;
-  if (!tex?.src && !portraitRequests.has(requestKey)) {
-    portraitRequests.add(requestKey);
-    void ensureSpriteCollabPortraitLoaded(imageCache, dex, slug).then(() => {
-      portraitRequests.delete(requestKey);
-      rerender();
-    });
-  }
+      if (!tex?.src && !portraitRequests.has(requestKey)) {
+        portraitRequests.add(requestKey);
+        void ensureSpriteCollabPortraitLoaded(imageCache, dex, slug).then(() => {
+          // Only remove if we actually got an image; keeps it in the set on failure
+          // to avoid infinite re-render loops for missing assets.
+          if (getSpriteCollabPortraitImage(imageCache, dex, slug)?.src) {
+            portraitRequests.delete(requestKey);
+          }
+          rerender();
+        });
+      }
   const srcAttr = tex?.src ? ` src="${escapeHtml(tex.src)}"` : '';
   const hoverEntityKeyRaw = String(eventRow?.hoverEntityKey || '').trim();
   const hoverEntityKey = hoverEntityKeyRaw.length ? hoverEntityKeyRaw : '';

@@ -84,12 +84,16 @@ class MysteryDungeonApp {
     }
 
     wrapDungeonForEngine(dm) {
-        // The main engine expects macro-scale arrays for interpolation.
-        const macroW = Math.ceil(dm.width / MACRO_TILE_STRIDE) + 2;
-        const macroH = Math.ceil(dm.height / MACRO_TILE_STRIDE) + 2;
+        // Create a much larger macro grid (20x20 macro tiles)
+        const macroW = 20;
+        const macroH = 20;
         const macroSize = macroW * macroH;
         const totalMW = macroW * MACRO_TILE_STRIDE;
         const totalMH = macroH * MACRO_TILE_STRIDE;
+        
+        // Calculate offsets to center the dungeon (dm.width x dm.height)
+        const offsetX = Math.floor((totalMW - dm.width) / 2);
+        const offsetY = Math.floor((totalMH - dm.height) / 2);
         
         const worldData = {
             width: macroW,
@@ -101,8 +105,10 @@ class MysteryDungeonApp {
             anomaly: new Float32Array(macroSize).fill(0),
             biomes: new Int32Array(macroSize).fill(100), // Use DUNGEON biome ID
             config: { waterLevel: 0.2 },
-            noFoliage: true, // Suppress grass/trees/berries
-            microTiles: new Array(totalMW * totalMH) // Correct size for indexing
+            noFoliage: true, 
+            microTiles: new Array(totalMW * totalMH),
+            offsetX: offsetX, // Store offsets for spawnPlayer
+            offsetY: offsetY
         };
 
         for (let y = 0; y < dm.height; y++) {
@@ -110,7 +116,10 @@ class MysteryDungeonApp {
                 const type = dm.get(x, y);
                 const isWall = type === TILE_TYPES.WALL || type === TILE_TYPES.VOID;
                 
-                worldData.microTiles[y * totalMW + x] = {
+                const worldX = x + offsetX;
+                const worldY = y + offsetY;
+                
+                worldData.microTiles[worldY * totalMW + worldX] = {
                     biomeId: 100, // DUNGEON
                     heightStep: isWall ? 2 : 1,
                     elevation: 0.5,
@@ -127,11 +136,12 @@ class MysteryDungeonApp {
     }
 
     spawnPlayer() {
-        // Find a random floor tile
+        const { offsetX, offsetY } = this.worldData;
+        // Find a random floor tile relative to the dungeon center
         for (let y = 0; y < this.dungeonMap.height; y++) {
             for (let x = 0; x < this.dungeonMap.width; x++) {
                 if (this.dungeonMap.get(x, y) === TILE_TYPES.FLOOR) {
-                    applyPlayerWorldResumePosition(x + 0.5, y + 0.5, 0);
+                    applyPlayerWorldResumePosition(x + offsetX + 0.5, y + offsetY + 0.5, 0);
                     return;
                 }
             }
