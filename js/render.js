@@ -1786,7 +1786,7 @@ export function render(canvas, data, options = {}) {
         playerTileY !== _lastMinimapPlayerTileY;
       const canRenderByTime = nowMs - _lastMinimapRenderAtMs >= MINIMAP_RENDER_MIN_MS;
       if (forceMinimapRender || canRenderByTime) {
-        if (debug) console.log('[Render] Minimap');
+        if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Render] Minimap');
         renderMinimap(minimapCanvas, data, player, {
           recentTrailMicro: getGlobalMapPlayerTrailRecentMicro(),
           playVision,
@@ -1828,7 +1828,7 @@ export function render(canvas, data, options = {}) {
 
   ctx.restore();
 } finally {
-    if (debug) console.log('[Render] End');
+    if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Render] End');
     finalizeRenderFrameProfile(performance.now() - tFrame0);
   }
 }
