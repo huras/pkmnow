@@ -158,6 +158,11 @@ export function screenPxToWorldMacro(screenX, screenY) {
   return worldAtScreenPx(screenX, screenY, false);
 }
 
+export function jumpToWorldMapLocation(cx, cy, zoom = 12) {
+  state.targetZoom = clamp(zoom, WORLD_MAP_ZOOM_MIN, WORLD_MAP_ZOOM_MAX);
+  setTargetCenter(cx, cy);
+}
+
 export function getWorldMapCamera() {
   return resolveCameraSnapshot(state.cx, state.cy, state.zoom);
 }

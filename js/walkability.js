@@ -229,6 +229,15 @@ export const WALL_ROLES = new Set([
 
 /** Disabled: north-facing edge roles are treated like standard wall roles. */
 export const NORTH_CLIFF_EDGE_ROLES = new Set();
+const CLIFF_TILE_CIRCLE_BLOCK_RADIUS = 0.48;
+
+function worldPointInsideTileCenterCircle(x, y, mx, my, radius = CLIFF_TILE_CIRCLE_BLOCK_RADIUS) {
+  const cx = mx + 0.5;
+  const cy = my + 0.5;
+  const dx = x - cx;
+  const dy = y - cy;
+  return dx * dx + dy * dy <= radius * radius;
+}
 
 export const WALKABLE_SURFACE_TERRAIN_TILE_IDS = (() => {
   const s = new Set();
@@ -836,6 +845,33 @@ export function gatherTreeTrunkCirclesNearWorldPoint(wx, wy, data) {
   return out;
 }
 
+/**
+ * Lists nearby cliff wall-role cylinders for slide resolution.
+ * Radius is constant on base/top (true cylinder profile for terrain walls).
+ * @returns {Array<{ cx: number, cy: number, r: number, rTop: number, topZ: number }>}
+ */
+export function gatherCliffWallCirclesNearWorldPoint(wx, wy, data) {
+  const microW = data.width * MACRO_TILE_STRIDE;
+  const microH = data.height * MACRO_TILE_STRIDE;
+  const ix = Math.floor(wx);
+  const iy = Math.floor(wy);
+  const out = [];
+  for (let my = Math.max(0, iy - 3); my <= Math.min(microH - 1, iy + 3); my++) {
+    for (let mx = Math.max(0, ix - 3); mx <= Math.min(microW - 1, ix + 3); mx++) {
+      const role = getMicroTileRole(mx, my, data);
+      if (!WALL_ROLES.has(role)) continue;
+      out.push({
+        cx: mx + 0.5,
+        cy: my + 0.5,
+        r: CLIFF_TILE_CIRCLE_BLOCK_RADIUS,
+        rTop: CLIFF_TILE_CIRCLE_BLOCK_RADIUS,
+        topZ: HEIGHT_STEP_Z
+      });
+    }
+  }
+  return out;
+}
+
 /** Height (in tile z-units) at which a player can stand on top of a formal tree canopy. */
 export const FORMAL_TREE_CANOPY_Z = 1.25;
 /** Height for scatter-tree canopy (smaller procedural trees). */
@@ -946,7 +982,8 @@ export function canWalkMicroTile(
   cachedFoliageOverlayId,
   isAirborne = false,
   ignoreTreeTrunks = false,
-  relaxHeightStepVsSrc = false
+  relaxHeightStepVsSrc = false,
+  ignoreCliffCylinders = false
 ) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
@@ -958,8 +995,8 @@ export function canWalkMicroTile(
       const fol = cachedFoliageOverlayId === undefined ? 'u' : String(cachedFoliageOverlayId);
       cacheKey =
         srcX !== undefined && srcY !== undefined
-          ? `${mx},${my},${Math.floor(srcX)},${Math.floor(srcY)},${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0}`
-          : `${mx},${my},ns,${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0}`;
+          ? `${mx},${my},${Math.floor(srcX)},${Math.floor(srcY)},${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0},${ignoreCliffCylinders ? 1 : 0}`
+          : `${mx},${my},ns,${isAirborne ? 1 : 0},${fol},${relaxHeightStepVsSrc ? 1 : 0},${ignoreCliffCylinders ? 1 : 0}`;
       const cached = walkProbeCache.get(cacheKey);
       if (cached !== undefined) return cached;
     }
@@ -998,8 +1035,11 @@ export function canWalkMicroTile(
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
     if (WALL_ROLES.has(role)) {
+      if (ignoreCliffCylinders) {
+        _isCliffDrop = true;
+      } else {
       // Allow walking through cliff-face tiles when dropping from same/higher height.
-      if (!_isCliffDrop) {
+        if (!_isCliffDrop) {
         if (srcX !== undefined && srcY !== undefined) {
           const smx = Math.floor(srcX);
           const smy = Math.floor(srcY);
@@ -1010,8 +1050,12 @@ export function canWalkMicroTile(
           // Same height, walking onto cliff edge — allow (cliff drop path).
           _isCliffDrop = true;
         } else {
-          return finish(false);
+          if (worldPointInsideTileCenterCircle(x, y, mx, my)) return finish(false);
+          return finish(true);
         }
+      }
+      // Circular cliff collider: edge slivers remain passable, center blocks movement.
+      if (worldPointInsideTileCenterCircle(x, y, mx, my)) return finish(false);
       }
     }
   }
@@ -1048,7 +1092,16 @@ export function canWalkMicroTile(
  * @param {boolean} [isAirborne=false] — durante salto, ignora degraus de altura, paredes EDGE e base/overlay “solo”.
  * @param {boolean} [ignoreTreeTrunks=false]
  */
-export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTrunks = false) {
+export function canWildPokemonWalkMicroTile(
+  x,
+  y,
+  data,
+  srcX,
+  srcY,
+  isAirborne = false,
+  ignoreTreeTrunks = false,
+  ignoreCliffCylinders = false
+) {
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * MACRO_TILE_STRIDE || my < 0 || my >= data.height * MACRO_TILE_STRIDE) {
@@ -1088,7 +1141,10 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   if (!isAirborne) {
     const role = getMicroTileRole(mx, my, data);
-    if (WALL_ROLES.has(role)) return finish(false);
+    if (!ignoreCliffCylinders && WALL_ROLES.has(role)) {
+      if (worldPointInsideTileCenterCircle(x, y, mx, my)) return finish(false);
+      return finish(true);
+    }
   }
 
   const sid = getBaseTerrainSpriteId(mx, my, data);
@@ -1100,7 +1156,7 @@ export function canWildPokemonWalkMicroTile(x, y, data, srcX, srcY, isAirborne =
 
   const lakeWalkRole = getLakeLotusFoliageWalkRole(mx, my, data);
 
-  if (!isAirborne && !isBaseTerrainSpriteWalkable(sid)) {
+  if (!isAirborne && !ignoreCliffCylinders && !isBaseTerrainSpriteWalkable(sid)) {
     const lavaSprite = isSpriteInTerrainSet(sid, 'lava-lake-dirt');
     const swimOk =
       targetTile.biomeId === BIOMES.OCEAN.id ||
@@ -1142,6 +1198,33 @@ export function syncEntityZWithTerrain(entity, ox, oy, nx, ny, data) {
     const dh = nt.heightStep - ot.heightStep;
     if (dh !== 0) {
       entity.z = Math.max(0, (entity.z || 0) - dh * HEIGHT_STEP_Z);
+      entity._terrainStepVisualOffsetZ = (Number(entity._terrainStepVisualOffsetZ) || 0) + dh * HEIGHT_STEP_Z;
     }
   }
+}
+
+const TERRAIN_STEP_VISUAL_Z_SMOOTH_RATE = 18;
+
+/**
+ * Smooths only the visual Z offset injected by terrain-step transitions.
+ * Physical `entity.z` stays authoritative for collisions and gameplay.
+ * @param {object} entity
+ * @param {number} dt
+ */
+export function advanceEntityTerrainStepVisualOffset(entity, dt) {
+  if (!entity) return;
+  const targetZ = Math.max(0, Number(entity.z) || 0);
+  const rawOffset = Number(entity._terrainStepVisualOffsetZ) || 0;
+  if (!Number.isFinite(rawOffset) || Math.abs(rawOffset) <= 1e-4) {
+    entity._terrainStepVisualOffsetZ = 0;
+    entity.visualZ = targetZ;
+    return;
+  }
+  const dtSafe = Math.max(0, Number(dt) || 0);
+  const alpha = 1 - Math.exp(-TERRAIN_STEP_VISUAL_Z_SMOOTH_RATE * dtSafe);
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  let nextOffset = rawOffset + (0 - rawOffset) * clampedAlpha;
+  if (Math.abs(nextOffset) <= 1e-4) nextOffset = 0;
+  entity._terrainStepVisualOffsetZ = nextOffset;
+  entity.visualZ = Math.max(0, targetZ + nextOffset);
 }

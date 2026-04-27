@@ -11,7 +11,11 @@
  * skip entirely when feet cannot interact with any listed circle, iterate only that small list.
  */
 
-import { gatherTreeTrunkCirclesNearWorldPoint, trunkEffectiveRadiusAtZ } from './walkability.js';
+import {
+  gatherTreeTrunkCirclesNearWorldPoint,
+  gatherCliffWallCirclesNearWorldPoint,
+  trunkEffectiveRadiusAtZ
+} from './walkability.js';
 
 const SEP_ITERS = 5;
 const VEL_SLIDE_PASSES = 3;
@@ -149,6 +153,29 @@ export function resolvePivotWithFeetVsTreeTrunks(pivotX, pivotY, feetDx, feetDy,
     circlesSlide = circles;
   }
   const slid = slideVelocityVsTrunkListAtFeet(sep.x, sep.y, bodyRadius, vx, vy, circlesSlide, playerZ);
+  return {
+    x: pivotX + dfx,
+    y: pivotY + dfy,
+    vx: slid.vx,
+    vy: slid.vy
+  };
+}
+
+/**
+ * Terrain wall cylinders (cliffs): fixed top/base radius, slide on contact normal like tree trunks.
+ * @returns {{ x: number, y: number, vx: number, vy: number }}
+ */
+export function resolvePivotWithFeetVsCliffCylinders(pivotX, pivotY, feetDx, feetDy, bodyRadius, vx, vy, data, playerZ = 0) {
+  const fx0 = pivotX + 0.5 + feetDx;
+  const fy0 = pivotY + 0.5;
+  const circles = gatherCliffWallCirclesNearWorldPoint(fx0, fy0, data);
+  if (circles.length === 0 || !feetMayInteractWithCircles(fx0, fy0, bodyRadius, circles, playerZ)) {
+    return { x: pivotX, y: pivotY, vx, vy };
+  }
+  const sep = separateWorldCircleFromTrunkList(fx0, fy0, bodyRadius, circles, playerZ);
+  const dfx = sep.x - fx0;
+  const dfy = sep.y - fy0;
+  const slid = slideVelocityVsTrunkListAtFeet(sep.x, sep.y, bodyRadius, vx, vy, circles, playerZ);
   return {
     x: pivotX + dfx,
     y: pivotY + dfy,

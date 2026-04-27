@@ -342,6 +342,41 @@ function rebuildBase(w, h, data, zoom) {
       }
     }
   }
+  
+  // Landmarks (Caves, ruins, etc)
+  if (data.landmarks && data.landmarks.length) {
+    for (const lm of data.landmarks) {
+      const px = (lm.x + 0.5) * tileW;
+      const py = (lm.y + 0.5) * tileH;
+      const r = Math.max(1.8, tileW * 0.5);
+
+      ctx.save();
+      ctx.shadowBlur = 2;
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      
+      if (lm.type === 'CAVE') {
+        // Cave arch icon
+        ctx.fillStyle = '#1a0d06';
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = Math.max(0.8, tileW * 0.08);
+        // Draw a small arch shape
+        ctx.beginPath();
+        ctx.arc(px, py, r, Math.PI, 0, false); // top arch
+        ctx.lineTo(px + r, py + r * 0.6);
+        ctx.lineTo(px - r, py + r * 0.6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Generic dot for others
+        ctx.fillStyle = '#ff00ff'; // Magenta for ruins/temples
+        ctx.beginPath();
+        ctx.arc(px, py, r * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
 
   return canvas;
 }
@@ -390,6 +425,7 @@ const MM_TILE_GRASS = 2;
 const MM_TILE_TREE = 3;
 const MM_TILE_ROCK = 4;
 const MM_TILE_CRYSTAL = 5;
+const MM_TILE_CAVE = 6;
 
 function classifyLocalMinimapTile(mx, my, tile, data) {
   if (!tile) return MM_TILE_BARE;
@@ -400,6 +436,21 @@ function classifyLocalMinimapTile(mx, my, tile, data) {
   const isTreeRoot = !!treeType && (mx + my) % 3 === 0 && treeNoise >= TREE_DENSITY_THRESHOLD;
   const isTreeRight = !!treeType && (mx + my) % 3 === 1 && treeWestNoise >= TREE_DENSITY_THRESHOLD;
   if (isTreeRoot || isTreeRight) return MM_TILE_TREE;
+
+  if (tile.heightStep >= 1 && !tile.isRoad && !tile.isCity) {
+    if ((mx * 7 + my * 13) % 47 === 0 && foliageDensity(mx, my, data.seed + 1234, 0.1) > 0.55) {
+      // Quick cliff-edge check: at least one cardinal neighbor must have a LOWER heightStep
+      // to confirm this is on an actual cliff edge where a cave could be placed.
+      const hs = tile.heightStep;
+      const hN = getMicroTile(mx, my - 1, data)?.heightStep ?? hs;
+      const hS = getMicroTile(mx, my + 1, data)?.heightStep ?? hs;
+      const hE = getMicroTile(mx + 1, my, data)?.heightStep ?? hs;
+      const hW = getMicroTile(mx - 1, my, data)?.heightStep ?? hs;
+      if (hN < hs || hS < hs || hE < hs || hW < hs) {
+        return MM_TILE_CAVE;
+      }
+    }
+  }
 
   if (!tile.isRoad && !tile.isCity && !tile.urbanBuilding) {
     const scatterNoise = foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE);
@@ -424,6 +475,7 @@ function localMinimapColor(biomeId, tileKind) {
   if (tileKind === MM_TILE_GRASS) return mulRgb(base, 0.84);
   if (tileKind === MM_TILE_ROCK) return mixRgb(mulRgb(base, 0.78), { r: 122, g: 126, b: 132 }, 0.22);
   if (tileKind === MM_TILE_CRYSTAL) return mixRgb(mulRgb(base, 0.9), { r: 185, g: 228, b: 255 }, 0.38);
+  if (tileKind === MM_TILE_CAVE) return { r: 35, g: 15, b: 8 }; // Dark cave entrance brown
   return mulRgb(base, 0.56);
 }
 

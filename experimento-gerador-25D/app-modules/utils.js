@@ -59,6 +59,7 @@ export function getTileUvRect(tileId, cols) {
 
 export function atlasColsFromPath(path) {
   if (path?.includes('caves')) return 50;
+  if (path?.includes('magiscarf') || path?.includes('further_additional')) return 54;
   if (path?.includes('Berry Trees')) return 66;
   return 57;
 }

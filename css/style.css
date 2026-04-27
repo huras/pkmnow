@@ -1980,9 +1980,10 @@ button.btn-secondary.is-active {
 .minimap-panel__berries-btn[aria-pressed="true"],
 .minimap-panel__groups-btn[aria-pressed="true"],
 .minimap-panel__pokeradar-btn[aria-pressed="true"],
-.minimap-panel__screen-grid-cam-btn[aria-pressed="true"],
-.minimap-panel__adaptive-perf-btn[aria-pressed="true"],
-.minimap-panel__event-log-btn[aria-pressed="true"] {
+  .minimap-panel__screen-grid-cam-btn[aria-pressed="true"],
+  .minimap-panel__adaptive-perf-btn[aria-pressed="true"],
+  .minimap-panel__event-log-btn[aria-pressed="true"],
+  #minimap-features-toggle[aria-pressed="true"] {
   background: rgba(154, 216, 255, 0.18);
   border-color: rgba(154, 216, 255, 0.4);
   color: #fff;
@@ -2178,15 +2179,24 @@ button.btn-secondary.is-active {
   filter: brightness(1.08);
 }
 
-#minimap-save-modal-clear {
-  background: rgba(120, 40, 45, 0.35);
-  color: #ffd6d8;
-  border-color: rgba(255, 120, 130, 0.35);
-}
-
 #minimap-save-modal-clear:hover {
   background: rgba(180, 50, 55, 0.45);
   color: #fff;
+}
+
+.minimap-features-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.minimap-features-list::-webkit-scrollbar {
+  width: 5px;
+}
+.minimap-features-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.minimap-features-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* ─── Play help wiki (minimap book icon) ─────────────────────────────────── */

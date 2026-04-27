@@ -34,6 +34,18 @@ export function placeLandmarks(rng, width, height, biomes, anomaly, graph) {
       if (rules) {
         for (const rule of rules) {
           if (rng() < rule.prob) {
+            // Special check for caves: Must be near a biome transition (likely a cliff)
+            if (rule.type === 'CAVE') {
+              const neighbors = [
+                biomes[y * width + (x - 1)],
+                biomes[y * width + (x + 1)],
+                biomes[(y - 1) * width + x],
+                biomes[(y + 1) * width + x]
+              ];
+              const isEdge = neighbors.some(nb => nb !== undefined && nb !== bId);
+              if (!isEdge) continue; // Skip flat mountain centers
+            }
+
             landmarks.push({
               x, 
               y,
@@ -48,5 +60,5 @@ export function placeLandmarks(rng, width, height, biomes, anomaly, graph) {
   }
 
   // To prevent overcrowding, keep only a subset.
-  return landmarks.sort(() => rng() - 0.5).slice(0, 10);
+  return landmarks.sort(() => rng() - 0.5).slice(0, 150);
 }

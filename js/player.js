@@ -11,6 +11,7 @@ import {
   beginWalkProbeCache,
   endWalkProbeCache,
   syncEntityZWithTerrain,
+  advanceEntityTerrainStepVisualOffset,
   getTreeCanopyZAtPoint,
   HEIGHT_STEP_Z
 } from './walkability.js';
@@ -45,7 +46,7 @@ import {
   canEntityStartSprint,
   tickEntityStamina
 } from './entity-stamina.js';
-import { resolvePivotWithFeetVsTreeTrunks } from './circle-tree-trunk-resolve.js';
+import { resolvePivotWithFeetVsTreeTrunks, resolvePivotWithFeetVsCliffCylinders } from './circle-tree-trunk-resolve.js';
 import { PMD_DEFAULT_MON_ANIMS } from './pokemon/pmd-default-timing.js';
 import { getDexAnimMeta, getDexAnimSlice } from './pokemon/pmd-anim-metadata.js';
 import { NATIONAL_DEX_MAX } from './pokemon/gen1-name-to-dex.js';
@@ -141,6 +142,7 @@ export const player = {
   y: 0,
   visualX: 0,
   visualY: 0,
+  visualZ: 0,
   vx: 0,
   vy: 0,
   vz: 0,
@@ -339,6 +341,7 @@ export function applyPlayerWorldResumePosition(x, y, z = 0) {
   player.y = yf;
   player.visualX = xf;
   player.visualY = yf;
+  player.visualZ = zf;
   player.vx = 0;
   player.vy = 0;
   player.vz = 0;
@@ -370,6 +373,7 @@ export function setPlayerPos(x, y) {
   player.y = y;
   player.visualX = x;
   player.visualY = y;
+  player.visualZ = 0;
   player.vx = 0;
   player.vy = 0;
   player.vz = 0;
@@ -603,6 +607,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
   if (!data) return false;
 
   const isMoving = !!player.grounded && Math.hypot(player.vx ?? 0, player.vy ?? 0) > 0.1;
+  const ignoreCliffCylinders = !!ignoreTreeTrunks;
   const burrowWalk =
     !isAirborne &&
     isPlayerUndergroundBurrowWalkActive(player.dexId ?? 0, {
@@ -645,7 +650,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
 
   // 1. LOGICAL TRAVERSAL (The "Feet"):
   if (!isAirborne) {
-    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks, treeCanopyWalkRelax)) {
+    if (!canWalkMicroTile(fx, fy, data, sfx, sfy, undefined, isAirborne, ignoreTreeTrunks, treeCanopyWalkRelax, ignoreCliffCylinders)) {
       return false;
     }
     if (!pivotCellHeightTraversalOk(x, y, srcX, srcY, data, treeCanopyWalkRelax)) {
@@ -662,7 +667,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
         if ((player.z || 0) < heightDiff) return false;
       }
     }
-    if (!canWalkMicroTile(fx, fy, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks)) {
+    if (!canWalkMicroTile(fx, fy, data, undefined, undefined, undefined, isAirborne, ignoreTreeTrunks, false, ignoreCliffCylinders)) {
       return false;
     }
   }
@@ -670,11 +675,19 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
   // 2. PHYSICAL BODY (The "Corners"):
   // For cliff drops, treat corners as airborne so they pass through cliff-face wall tiles.
   const cornerAirborne = isAirborne || isDropMovement;
+  // Cylinder footprint (top/base same radius): radial samples around feet center.
+  // Replaces old square-corner probe so entity physics matches circular collider semantics.
+  const diag = GROUND_R * 0.70710678;
   const points = [
-    { x: fx - GROUND_R, y: fy - GROUND_R },
-    { x: fx + GROUND_R, y: fy - GROUND_R },
-    { x: fx - GROUND_R, y: fy + GROUND_R },
-    { x: fx + GROUND_R, y: fy + GROUND_R }
+    { x: fx, y: fy },
+    { x: fx - GROUND_R, y: fy },
+    { x: fx + GROUND_R, y: fy },
+    { x: fx, y: fy - GROUND_R },
+    { x: fx, y: fy + GROUND_R },
+    { x: fx - diag, y: fy - diag },
+    { x: fx + diag, y: fy - diag },
+    { x: fx - diag, y: fy + diag },
+    { x: fx + diag, y: fy + diag }
   ];
 
   for (const p of points) {
@@ -684,7 +697,7 @@ export function canWalk(x, y, data, srcX, srcY, isAirborne = false, ignoreTreeTr
 
     const cornerTreeRelax =
       treeCanopyWalkRelax && !cornerAirborne && getTreeCanopyZAtPoint(p.x, p.y, data) > 0;
-    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks, cornerTreeRelax)) {
+    if (!canWalkMicroTile(p.x, p.y, data, undefined, undefined, undefined, cornerAirborne, ignoreTreeTrunks, cornerTreeRelax, ignoreCliffCylinders)) {
       return false;
     }
   }
@@ -1188,14 +1201,25 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   if (player.grounded && !isAirborne && data && !playerBurrowWalkActive) {
     const fd = playerFeetDeltaTiles();
-    const r = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data, player.z || 0);
+    const rTree = resolvePivotWithFeetVsTreeTrunks(player.x, player.y, fd.dx, fd.dy, GROUND_R, player.vx, player.vy, data, player.z || 0);
+    const rCliff = resolvePivotWithFeetVsCliffCylinders(
+      rTree.x,
+      rTree.y,
+      fd.dx,
+      fd.dy,
+      GROUND_R,
+      rTree.vx,
+      rTree.vy,
+      data,
+      player.z || 0
+    );
     
-    syncEntityZWithTerrain(player, player.x, player.y, r.x, r.y, data);
+    syncEntityZWithTerrain(player, player.x, player.y, rCliff.x, rCliff.y, data);
 
-    player.x = r.x;
-    player.y = r.y;
-    player.vx = r.vx;
-    player.vy = r.vy;
+    player.x = rCliff.x;
+    player.y = rCliff.y;
+    player.vx = rCliff.vx;
+    player.vy = rCliff.vy;
 
     // After height sync: if z rose above groundZ, player stepped off a cliff → become airborne.
     if (player.z > (player.groundZ || 0) + 0.05) {
@@ -1308,6 +1332,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   player.visualX = player.x;
   player.visualY = player.y;
+  advanceEntityTerrainStepVisualOffset(player, dt);
   player.animRow = DIRECTION_ROW_MAP[player.facing] || 0;
 
   player.ghostPhaseAlpha = computeGhostPhaseShiftDrawAlpha({

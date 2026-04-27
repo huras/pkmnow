@@ -1,0 +1,13 @@
+We need at least 2 types of cut, because grass pokemon will use vine whip. most pokemon will use slash, pshychich pokemon might use a psychich slasm or so, but that is it.
+Cut will cut grass of course, and damage details in an circle piece area.
+It can use the same sprites animation as tackle with its own params since the most important thing is the cutting effected and feedback and how we will implement it
+
+I'm thinking:
+Holding tecla 1, should skill wheel where you can choose tackle, cut, or strength (to be implemented)
+
+tecla 1 (acima do Q) = set tackle on left clilck
+tecla 2 (acima do W) = set cut on left clilck
+
+right click seria pra projeteis
+
+or autodetect tackle reachable if not, then do cut haha

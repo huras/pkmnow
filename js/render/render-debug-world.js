@@ -1,6 +1,8 @@
 import { BIOMES } from '../biomes.js';
 import {
   canWalkMicroTile,
+  getMicroTileRole,
+  WALL_ROLES,
   formalTreeTrunkOverlapsMicroCell,
   getFormalTreeTrunkWorldXSpan,
   scatterPhysicsCircleOverlapsMicroCellAny,
@@ -10,7 +12,8 @@ import {
   endWildWalkProbeCache,
   TREE_CANOPY_WALK_RADIUS_MULT,
   FORMAL_TREE_CANOPY_Z,
-  SCATTER_TREE_CANOPY_Z
+  SCATTER_TREE_CANOPY_Z,
+  HEIGHT_STEP_Z
 } from '../walkability.js';
 import { scatterItemKeyIsTree } from '../scatter-pass2-debug.js';
 import { circleAabbIntersectsRect } from '../main/play-collider-overlay-cache.js';
@@ -743,8 +746,39 @@ export function drawWorldColliderOverlay(ctx, options) {
         for (let mx = Math.max(startX, mxMin); mx < endX && mx <= mxMax; mx++) {
           const v = cellFlags[(my - myMin) * stride + (mx - mxMin)];
           if (v === 1) {
-            ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
-            ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            const role = getMicroTileRole(mx, my, data);
+            if (WALL_ROLES.has(role)) {
+              const cx = mx * tileW + twCell * 0.5;
+              const cy = my * tileH + thCell * 0.5;
+              const rx = Math.max(1, twCell * 0.48);
+              const ry = Math.max(1, thCell * 0.48);
+              const topOff = Math.max(1, HEIGHT_STEP_Z * tileH);
+              // Cliff cylinder should drop to the lower terrain level:
+              // top sits on the current tile plane; base sits one step below.
+              const cyTop = cy;
+              const cyBase = cy + topOff;
+              ctx.fillStyle = 'rgba(220, 60, 120, 0.18)';
+              ctx.strokeStyle = 'rgba(255, 120, 165, 0.9)';
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.ellipse(cx, cyTop, rx, ry, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.strokeStyle = 'rgba(255, 120, 165, 0.6)';
+              ctx.beginPath();
+              ctx.ellipse(cx, cyBase, rx, ry, 0, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.strokeStyle = 'rgba(255, 120, 165, 0.34)';
+              ctx.beginPath();
+              ctx.moveTo(cx - rx, cyTop); ctx.lineTo(cx - rx, cyBase);
+              ctx.moveTo(cx + rx, cyTop); ctx.lineTo(cx + rx, cyBase);
+              ctx.moveTo(cx, cyTop - ry); ctx.lineTo(cx, cyBase - ry);
+              ctx.moveTo(cx, cyTop + ry); ctx.lineTo(cx, cyBase + ry);
+              ctx.stroke();
+            } else {
+              ctx.fillStyle = 'rgba(220, 60, 120, 0.3)';
+              ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);
+            }
           } else if (v === 2) {
             ctx.fillStyle = 'rgba(90, 220, 255, 0.26)';
             ctx.fillRect(mx * tileW, my * tileH, twCell, thCell);

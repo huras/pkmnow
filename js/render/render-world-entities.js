@@ -160,7 +160,8 @@ export function drawScatter(ctx, item, options) {
         const tx = originX + ox;
         const ty = originY + oy;
         const dt = getCached(tx, ty);
-        if (dt && dt.heightStep === getCached(originX, originY).heightStep) {
+        const isCave = item.itemKey && item.itemKey.includes('cave-entrance');
+        if (dt && (isCave || dt.heightStep === getCached(originX, originY).heightStep)) {
           ctx.drawImage(img, (id % atlasCols) * 16, Math.floor(id / atlasCols) * 16, 16, 16, snapPx(tx * tileW), snapPx(ty * tileH), Math.ceil(tileW), Math.ceil(tileH));
         }
       });

@@ -17,37 +17,41 @@ export function drawPlayEntityFootAndAirCollider(ctx, item, tileW, tileH, snapPx
   const fcyGround = snapPx(ft.y * tileH);
   const fcyBody = snapPx(ft.y * tileH - zLift * tileH);
 
-  const showAirTether =
-    item.showAirGroundTether !== undefined ? !!item.showAirGroundTether : zLift > 0.02;
+  const topY = zLift > 0.02 ? fcyBody : fcyGround;
+  const baseY = fcyGround;
+  const showCylinder = zLift > 0.02;
 
-  if (zLift > 0.02 && showAirTether) {
-    ctx.strokeStyle = 'rgba(200, 255, 220, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(fcx, fcyGround);
-    ctx.lineTo(fcx, fcyBody);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.strokeStyle = 'rgba(0, 255, 140, 0.3)';
-    ctx.fillStyle = 'rgba(0, 255, 140, 0.05)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(fcx, fcyGround, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = 'rgba(0, 255, 140, 0.58)';
+  // Top cap
+  ctx.strokeStyle = 'rgba(0, 255, 140, 0.62)';
   ctx.fillStyle = 'rgba(0, 255, 140, 0.12)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(fcx, fcyBody, r, 0, Math.PI * 2);
+  ctx.arc(fcx, topY, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+
+  if (showCylinder) {
+    // Base cap + side rulings for true cylinder debug visual.
+    ctx.strokeStyle = 'rgba(0, 255, 140, 0.35)';
+    ctx.fillStyle = 'rgba(0, 255, 140, 0.05)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(fcx, baseY, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(0, 255, 140, 0.45)';
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(fcx - r, topY); ctx.lineTo(fcx - r, baseY);
+    ctx.moveTo(fcx + r, topY); ctx.lineTo(fcx + r, baseY);
+    ctx.moveTo(fcx, topY - r); ctx.lineTo(fcx, baseY - r);
+    ctx.moveTo(fcx, topY + r); ctx.lineTo(fcx, baseY + r);
+    ctx.stroke();
+  }
+
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.fillRect(fcx - 2, fcyBody - 2, 4, 4);
+  ctx.fillRect(fcx - 2, topY - 2, 4, 4);
 }
 
 /** Combat hurtbox (damage) — sprite-centered XY, same z lift as body circle; not walk feet. */

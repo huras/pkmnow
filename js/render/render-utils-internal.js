@@ -2,6 +2,7 @@ import { TessellationEngine } from '../tessellation-engine.js';
 
 export const TCOLS_NATURE = 57;
 export const TCOLS_CAVES = 50;
+export const TCOLS_MAGISCARF = 54;
 
 /**
  * Resolves the texture atlas and column count for a given object set.
@@ -12,6 +13,8 @@ export function atlasFromObjectSet(objSet, imageCache) {
   let cols = TCOLS_NATURE;
   if (path?.includes('caves')) {
     cols = TCOLS_CAVES;
+  } else if (path?.includes('magiscarf') || path?.includes('further_additional')) {
+    cols = TCOLS_MAGISCARF;
   } else if (path?.includes('Berry Trees')) {
     cols = 66;
   }

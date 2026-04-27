@@ -878,12 +878,13 @@ export function createGameLoop(api) {
  *   getCurrentData: () => object | null,
  *   refreshPlayModeInfoBar: () => void,
  *   onEscapePlay: () => void,
+ *   onQuickSave?: () => void,
  *   onPlaySocialAction?: (action: import('../social/social-actions.js').SocialAction) => void,
  *   player: import('../player.js').player
  * }} api
  */
 export function registerPlayKeyboard(api) {
-  const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, onPlaySocialAction, player } = api;
+  const { getAppMode, getCurrentData, refreshPlayModeInfoBar, onEscapePlay, onQuickSave, onPlaySocialAction, player } = api;
 
   /** Same cardinal twice within this window enables sprint; clears when movement stops (game loop). */
   const RUN_DOUBLE_TAP_MS = 320;
@@ -930,6 +931,13 @@ export function registerPlayKeyboard(api) {
         ].includes(e.key)
       ) {
         e.preventDefault();
+      }
+
+      if (!e.repeat && (e.ctrlKey || e.metaKey) && !e.altKey && e.code === 'KeyS') {
+        e.preventDefault();
+        e.stopPropagation();
+        onQuickSave?.();
+        return;
       }
 
       // Block Ctrl+W / Ctrl+S / Ctrl+N… with movement keys (capture + stopPropagation).

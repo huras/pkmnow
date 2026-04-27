@@ -8,7 +8,7 @@ import {
   updateWildMotion
 } from './wild-motion-ai.js';
 import { tickWildGroupLeaderPhaseWhenMotionSkipped } from './wild-group-behavior.js';
-import { beginWildWalkProbeCache, endWildWalkProbeCache } from '../walkability.js';
+import { beginWildWalkProbeCache, endWildWalkProbeCache, advanceEntityTerrainStepVisualOffset } from '../walkability.js';
 
 /** Skip heavy wander pathing when far (sleep/flee/approach/alert still run every frame). */
 const WILD_WANDER_LOD_SKIP_DIST = 40;
@@ -82,6 +82,7 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
       if (e?._strengthCarryHidden) continue;
       const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
       const distToAiPlayer = ignorePlayer ? 99999 : distToPlayer;
+      advanceEntityTerrainStepVisualOffset(e, dt);
 
       const distanceInactivated =
         distToPlayer > WILD_WANDER_LOD_SKIP_DIST &&

@@ -5,6 +5,7 @@ import {
   populateScenarioSelect,
   triggerScenarioOnNearestGroup
 } from './social-inspector-popover.js';
+import { renderFeaturesPopoverList } from './minimap-features-popover.js';
 import {
   isWildLeaderRoamTargetVisible,
   setWildLeaderRoamTargetVisible
@@ -60,6 +61,9 @@ export function installMinimapHudPopovers(options = {}) {
   const cameraPop = document.getElementById('minimap-camera-popover');
   const debugToolsToggle = document.getElementById('minimap-debug-tools-toggle');
   const debugToolsPop = document.getElementById('minimap-debug-tools-popover');
+  const featuresToggle = document.getElementById('minimap-features-toggle');
+  const featuresPop = document.getElementById('minimap-features-popover');
+  const featuresList = document.getElementById('minimap-features-list');
   const cameraEnableToggle = document.getElementById('minimap-camera-enable-toggle');
   const cameraAllowOtherScreensToggle = document.getElementById('minimap-camera-allow-other-screens-toggle');
   const cameraScrollRange = /** @type {HTMLInputElement | null} */ (document.getElementById('minimap-camera-scroll-duration'));
@@ -113,6 +117,13 @@ export function installMinimapHudPopovers(options = {}) {
     renderSocialInspectorList(inspectorList, imageCache);
   }
 
+  function refreshFeaturesPanel() {
+    if (!featuresList) return;
+    const data = getCurrentData();
+    if (!data) return;
+    renderFeaturesPopoverList(featuresList, data);
+  }
+
   function syncTranslatableButtons() {
     if (groupsFarCryTriggerBtn) groupsFarCryTriggerBtn.textContent = t('play.nextFarCry');
     if (groupsLeaderTargetToggle) groupsLeaderTargetToggle.textContent = t('play.leaderTarget');
@@ -129,7 +140,8 @@ export function installMinimapHudPopovers(options = {}) {
     ...(languageToggle && languagePop ? [{ toggle: languageToggle, pop: languagePop, name: 'language' }] : []),
     ...(audioToggle && audioPop ? [{ toggle: audioToggle, pop: audioPop, name: 'audio' }] : []),
     ...(screenGridToggle && cameraPop ? [{ toggle: screenGridToggle, pop: cameraPop, name: 'camera' }] : []),
-    ...(debugToolsToggle && debugToolsPop ? [{ toggle: debugToolsToggle, pop: debugToolsPop, name: 'debugTools' }] : [])
+    ...(debugToolsToggle && debugToolsPop ? [{ toggle: debugToolsToggle, pop: debugToolsPop, name: 'debugTools' }] : []),
+    ...(featuresToggle && featuresPop ? [{ toggle: featuresToggle, pop: featuresPop, name: 'features' }] : [])
   ];
 
   function closeAllExcept(activeName) {
@@ -183,6 +195,9 @@ export function installMinimapHudPopovers(options = {}) {
         refreshInspectorPanel();
         stopInspectorRefresh();
         inspectorRefreshTimer = setInterval(refreshInspectorPanel, 350);
+      }
+      if (name === 'features') {
+        refreshFeaturesPanel();
       }
     }
   }
@@ -245,6 +260,11 @@ export function installMinimapHudPopovers(options = {}) {
   groupsToggle?.addEventListener('click', (e) => {
     e.stopPropagation();
     togglePopover('groups');
+  });
+
+  featuresToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePopover('features');
   });
 
   groupsLeaderTargetToggle?.addEventListener('click', (e) => {

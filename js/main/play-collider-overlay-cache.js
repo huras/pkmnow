@@ -62,7 +62,8 @@ export function buildPlayColliderOverlayCache(data, player, imageCache, overlayF
     for (let my = myMin; my <= myMax; my++) {
       for (let mx = mxMin; mx <= mxMax; mx++) {
         const ftCell = worldFeetFromPivotCell(mx, my, imageCache, overlayFeetDex, !!overlayFeetMoving);
-        const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, ftCell.x, ftCell.y, undefined, false);
+        // Probe tile-local blocking (walls/cliffs included) without source-tile drop allowances.
+        const feetOk = canWalkMicroTile(ftCell.x, ftCell.y, data, undefined, undefined, undefined, false);
         let v = 0;
         if (!feetOk) v = CELL_BLOCKED;
         else if (formalTreeTrunkOverlapsMicroCell(mx, my, data)) v = CELL_FORMAL;

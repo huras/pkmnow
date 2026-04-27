@@ -1,0 +1,6 @@
+olha. cá entre nós.
+ o que quero primeiro é ver o terreno renderizando em chunks enquanto o player anda nele igual tá aqui:
+a) Ou vc faz o terreno plano mas com textura usando os sprites do mesmos tilesets.
+b) Ou vc faz sem textura mas com reelevo, lembrando que os cliffs não são 90º graus de inclinação, mas 45º 
+
+ambos do jeito que vc tá fazendo tudo automatico sem eu mexer em quasissimamente nada
