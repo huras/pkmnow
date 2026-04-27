@@ -198,6 +198,18 @@ function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX
   return false;
 }
 
+function markWildAirborneOnDownhillStep(entity, ox, oy, nx, ny, data) {
+  if (!entity || !data) return;
+  if (!entity.grounded || entity.jumping) return;
+  if ((entity.z || 0) <= 0.05) return;
+  const ot = getMicroTile(Math.floor((Number(ox) || 0) + 0.5), Math.floor((Number(oy) || 0) + 0.5), data);
+  const nt = getMicroTile(Math.floor((Number(nx) || 0) + 0.5), Math.floor((Number(ny) || 0) + 0.5), data);
+  if (!ot || !nt) return;
+  if ((Number(nt.heightStep) || 0) < (Number(ot.heightStep) || 0)) {
+    entity.grounded = false;
+  }
+}
+
 function getWildWanderWalkSpeed(entity) {
   const phase = String(entity?.groupPhase || '').toUpperCase();
   if (phase === 'EXPLORE') {
@@ -443,6 +455,7 @@ export function applyWildTreeTrunkResolution(entity, data) {
     entity.z || 0
   );
   syncEntityZWithTerrain(entity, entity.x, entity.y, rCliff.x, rCliff.y, data);
+  markWildAirborneOnDownhillStep(entity, entity.x, entity.y, rCliff.x, rCliff.y, data);
   entity.x = rCliff.x;
   entity.y = rCliff.y;
   entity.vx = rCliff.vx;
@@ -459,6 +472,7 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
   const ig = true;
   if (wildWalkOk(nx, ny, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, nx, ny, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, nx, ny, data);
     entity.x = nx;
     entity.y = ny;
     return true;
@@ -504,17 +518,20 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
 
   if (moved) {
     syncEntityZWithTerrain(entity, ox, oy, px, py, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, px, py, data);
     entity.x = px;
     entity.y = py;
     return true;
   }
   if (wildWalkOk(nx, oy, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, nx, oy, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, nx, oy, data);
     entity.x = nx;
     return true;
   }
   if (wildWalkOk(ox, ny, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, ox, ny, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, ox, ny, data);
     entity.y = ny;
     return true;
   }

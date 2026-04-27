@@ -844,6 +844,20 @@ function pickPmdSeqFrame(seq, tickInLoop) {
 }
 
 /**
+ * Cache total tick sum per PMD sequence array.
+ * Sequence arrays are reused metadata references, so WeakMap keeps this O(1) after first hit.
+ */
+const PMD_SEQ_TOTAL_TICKS_CACHE = new WeakMap();
+function getPmdSeqTotalTicks(seq) {
+  if (!Array.isArray(seq) || seq.length === 0) return 0;
+  const cached = PMD_SEQ_TOTAL_TICKS_CACHE.get(seq);
+  if (cached != null) return cached;
+  const total = seq.reduce((a, b) => a + b, 0);
+  PMD_SEQ_TOTAL_TICKS_CACHE.set(seq, total);
+  return total;
+}
+
+/**
  * @param {number} progress normalized tackle phase 0..1
  * @returns {number} normalized lunge amount 0..1..0
  */
@@ -1370,7 +1384,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   if (shootPlaying) {
     const seq = pmdMeta.shoot.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._shootAnimTick = (player._shootAnimTick || 0) + dt * 60;
     const t = Math.min(player._shootAnimTick, Math.max(0.0001, total - 0.0001));
     player.animFrame = pickPmdSeqFrame(seq, t);
@@ -1380,7 +1394,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player._shootAnimTick = 0;
     player._chargeAnimTick = 0;
     const seq = atkSliceMeta.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._lmbAttackAnimTick = (player._lmbAttackAnimTick || 0) + dt * 60;
     const t = Math.min(player._lmbAttackAnimTick, Math.max(0.0001, total - 0.0001));
     player.animFrame = pickPmdSeqFrame(seq, t);
@@ -1390,7 +1404,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player._shootAnimTick = 0;
     player._lmbAttackAnimTick = 0;
     const seq = pmdMeta.charge.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._chargeAnimTick = (player._chargeAnimTick || 0) + dt * 60;
     const loopTick = player._chargeAnimTick % total;
     player.animFrame = pickPmdSeqFrame(seq, loopTick);
@@ -1423,7 +1437,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
       const seq = player.digActive
         ? meta?.dig?.durations || meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk
         : meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
-      const totalTicks = seq.reduce((a, b) => a + b, 0);
+      const totalTicks = getPmdSeqTotalTicks(seq);
 
       const walkDistanceCycle = 3.5;
       const animT = (player.totalDistMoved % walkDistanceCycle) / walkDistanceCycle;
@@ -1442,7 +1456,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     } else {
       const meta = getDexAnimMeta(player.dexId);
       const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
-      const totalTicks = seq.reduce((a, b) => a + b, 0);
+      const totalTicks = getPmdSeqTotalTicks(seq);
 
       player.idleTimer += dt * 60 * raisingFlightAnimMul;
       const loopTick = player.idleTimer % totalTicks;
