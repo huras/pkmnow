@@ -41,6 +41,7 @@ PluginRegistry.registerBiome('DUNGEON', {
  */
 class MysteryDungeonApp {
     constructor() {
+        if (typeof window !== 'undefined') window.__DEBUG_LOOP__ = true;
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
         
@@ -182,13 +183,17 @@ class MysteryDungeonApp {
     }
 
     loop(time) {
+        const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
+        if (debug) console.log('[DungeonLoop] Start', time);
         const dt = Math.min(0.1, (time - this.lastTime) / 1000);
         this.lastTime = time;
 
         // Use the REAL player update logic
+        if (debug) console.log('[DungeonLoop] updatePlayer');
         updatePlayer(dt, this.worldData, time / 1000);
 
         // Use the REAL renderer
+        if (debug) console.log('[DungeonLoop] render');
         render(this.canvas, this.worldData, {
             settings: {
                 appMode: 'play',
