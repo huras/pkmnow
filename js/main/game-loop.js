@@ -659,7 +659,7 @@ export function createGameLoop(api) {
     }
 
     const tRenderStart = performance.now();
-    if (debug) console.log('[Loop] updateView');
+    if (debug) console.log('[Loop] updateView', tRenderStart);
     updateView();
     const tRenderEnd = performance.now();
     const playFpsEl = getPlayFpsEl();

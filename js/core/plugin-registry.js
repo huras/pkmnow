@@ -153,9 +153,12 @@ class PokemonPluginRegistry {
   }
 
   executeHooks(hookName, ...args) {
+    const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
     const set = this.hooks.get(hookName);
     if (set) {
+      if (debug) console.log('[PluginRegistry] executeHooks', hookName, set.size);
       for (const cb of set) {
+        if (debug) console.log('[PluginRegistry]   executing callback');
         try { cb(...args); } catch (e) { console.error(`[PluginRegistry] Hook error (${hookName}):`, e); }
       }
     }
