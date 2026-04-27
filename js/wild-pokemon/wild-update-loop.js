@@ -78,10 +78,14 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
 
     const toDelete = [];
     const frameNo = nextWildUpdateFrame();
+    const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
+    
     for (const [k, e] of entitiesByKey.entries()) {
+      if (debug) console.log('[WildLoop] Processing', k, e?.dexId);
       if (e?._strengthCarryHidden) continue;
       const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
       const distToAiPlayer = ignorePlayer ? 99999 : distToPlayer;
+      if (debug) console.log('[WildLoop] advanceVisualOffset');
       advanceEntityTerrainStepVisualOffset(e, dt);
 
       const distanceInactivated =
@@ -134,8 +138,10 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
       mark = performance.now();
 
       if (!skipWanderMotion) {
+        if (debug) console.log('[WildLoop] updateWildMotion', k);
         updateWildMotion(e, stepDt, data, aiPlayerX, aiPlayerY);
       } else {
+        if (debug) console.log('[WildLoop] skipWanderMotion', k);
         e.vx = 0;
         e.vy = 0;
         e.animMoving = false;

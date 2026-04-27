@@ -408,6 +408,8 @@ export function createGameLoop(api) {
   }
 
   function gameLoop(timestamp) {
+    const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
+    if (debug) console.log('[Loop] Start frame', timestamp);
     const tLoopStart = performance.now();
     const dt = (timestamp - lastTimestamp) / 1000;
     lastTimestamp = timestamp;
@@ -415,6 +417,7 @@ export function createGameLoop(api) {
     setGameTime(timestamp / 1000);
 
     // --- Plugin Hooks: preUpdate ---
+    if (debug) console.log('[Loop] preUpdate hooks');
     PluginRegistry.executeHooks('preUpdate', simDt);
 
     if (getAppMode() === 'play') advanceWorldTime?.(simDt);
@@ -490,8 +493,10 @@ export function createGameLoop(api) {
 
       const currentData = getCurrentData();
     const tUpdPlayer0 = performance.now();
+    if (debug) console.log('[Loop] updatePlayer');
     updatePlayer(simDt, currentData, getGameTimeSec?.());
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
+    if (debug) console.log('[Loop] updateEncounterCinematic');
     updateEncounterCinematic(player, simDt);
     updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
 
@@ -537,6 +542,7 @@ export function createGameLoop(api) {
       );
       accWildUpdateSec = wildUpdateGate.nextAccumulatorSec;
       if (wildUpdateGate.shouldRun) {
+        if (debug) console.log('[Loop] updateWildPokemon');
         updateWildPokemon(wildUpdateGate.stepDtSec, currentData, pvx, pvy);
       }
       updateBreakdown.updWildMs = performance.now() - tWild0;
@@ -591,6 +597,7 @@ export function createGameLoop(api) {
           playAudioSyncCadenceMs.biomeBgm
         )
       ) {
+        if (debug) console.log('[Loop] syncBiomeBgm');
         syncBiomeBgm(currentData, player);
         lastBiomeBgmSyncAtMs = nowMs;
       }
@@ -652,6 +659,7 @@ export function createGameLoop(api) {
     }
 
     const tRenderStart = performance.now();
+    if (debug) console.log('[Loop] updateView');
     updateView();
     const tRenderEnd = performance.now();
     const playFpsEl = getPlayFpsEl();

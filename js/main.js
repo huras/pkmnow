@@ -190,6 +190,11 @@ if (typeof window !== 'undefined' && typeof window.treeCanopyAnimationFps === 'u
 const WORLD_MAP_CONTINUOUS_ZOOM_ENABLED = true;
 const WORLD_MAP_USE_SVG_OVERLAY = false;
 
+if (typeof window !== 'undefined') {
+  /** Global toggle for verbose subsystem loop logging. Turn on via console: `window.__DEBUG_LOOP__ = true`. */
+  window.__DEBUG_LOOP__ = true;
+}
+
 /** Blur inputs / buttons so WASD and hotkeys go to the game after clicking the map. */
 function blurFocusedUiAwayFromCanvas() {
   const ae = document.activeElement;
