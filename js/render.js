@@ -126,6 +126,7 @@ import { isWildLeaderRoamTargetVisible } from './main/wild-groups-visual-toggle-
 import {
   drawWorldColliderOverlay,
   drawWorldReactionsOverlay,
+  drawSocialInspectorGroupRadiiOverlay,
   drawEnvironmentalEffects,
   drawVolumetricEnvironmentalLayer,
   drawDigChargeBar,
@@ -251,9 +252,9 @@ let _lastMinimapRenderAtMs = 0;
 let _lastMinimapPlayerTileX = Number.NaN;
 let _lastMinimapPlayerTileY = Number.NaN;
 let _lastMinimapAppMode = '';
-const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_STILL = 3.8;
-const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_MOVE = 1.1;
-const PLAY_CHUNK_BAKE_FAST_MOVE_SPEED = 2.4;
+const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_STILL = 7.5;
+const PLAY_CHUNK_BAKE_FRAME_BUDGET_MS_MOVE = 9.0;
+const PLAY_CHUNK_BAKE_FAST_MOVE_SPEED = 3.4;
 // Temporary safety switch: biome correctness over worker precompute speed.
 // Keep metadata worker disabled until we fully eliminate stale/mismatched biome payloads.
 const PLAY_CHUNK_USE_WORKER_METADATA = false;
@@ -1618,6 +1619,17 @@ export function render(canvas, data, options = {}) {
     drawWorldReactionsOverlay(ctx, {
       showWorldReactionsOverlay:
         !!options.settings?.showWorldReactionsOverlay || !!window.debugWorldReactionsOverlay,
+      startX,
+      startY,
+      endX,
+      endY,
+      tileW,
+      tileH,
+      cw,
+      ch
+    });
+    drawSocialInspectorGroupRadiiOverlay(ctx, {
+      showSocialInspectorRadiiOverlay: !!window.debugSocialInspectorRadiiOverlay,
       startX,
       startY,
       endX,

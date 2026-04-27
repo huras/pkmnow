@@ -1,7 +1,9 @@
 import { jumpToWorldMapLocation } from './world-map-camera-state.js';
 import { setPlayerPos } from '../player.js';
+import { player } from '../player.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { HEIGHT_STEP_Z } from '../walkability.js';
+import { isCaveLandmarkCurrentlyRenderable } from '../cave-placement.js';
 
 export function renderFeaturesPopoverList(container, data) {
     container.innerHTML = '';
@@ -17,7 +19,9 @@ export function renderFeaturesPopoverList(container, data) {
     }
 
     // Caves
-    const caves = (data.landmarks || []).filter(lm => lm.type === 'CAVE');
+    const caves = (data.landmarks || [])
+        .filter(lm => lm.type === 'CAVE')
+        .filter(lm => isCaveLandmarkCurrentlyRenderable(lm, data));
     if (caves.length) {
         renderSectionHeader(container, 'Cave Entrances');
         caves.forEach((cave, i) => {
@@ -46,6 +50,16 @@ export function renderFeaturesPopoverList(container, data) {
     }
 }
 
+function getDistanceTilesFromPlayer(mx, my) {
+    const px = Number(player?.x);
+    const py = Number(player?.y);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+    const targetMicroX = (Number(mx) + 0.5) * MACRO_TILE_STRIDE;
+    const targetMicroY = (Number(my) + 0.5) * MACRO_TILE_STRIDE;
+    if (!Number.isFinite(targetMicroX) || !Number.isFinite(targetMicroY)) return null;
+    return Math.hypot(targetMicroX - px, targetMicroY - py);
+}
+
 function renderSectionHeader(container, text) {
     const header = document.createElement('div');
     header.style = 'font-weight: bold; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-top: 8px; color: #8af; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em;';
@@ -61,7 +75,9 @@ function createFeatureRow(label, mx, my, jumpZoom, options = {}, data = {}) {
     const jumpBtn = document.createElement('button');
     jumpBtn.type = 'button';
     jumpBtn.style = 'flex: 1; background: rgba(40,45,60,0.6); border: 1px solid rgba(255,255,255,0.1); color: #eee; padding: 6px 10px; text-align: left; cursor: pointer; border-radius: 4px 0 0 4px; font-size: 0.82rem; transition: all 0.2s; font-family: "Inter", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-    jumpBtn.textContent = label;
+    const distanceTiles = getDistanceTilesFromPlayer(mx, my);
+    const distanceSuffix = Number.isFinite(distanceTiles) ? ` · ${Math.max(0, Math.round(distanceTiles))}t` : '';
+    jumpBtn.textContent = `${label}${distanceSuffix}`;
     jumpBtn.title = `Focus map on ${label}`;
     
     jumpBtn.onmouseover = () => {

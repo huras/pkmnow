@@ -38,6 +38,13 @@ import { renderPhaseMs } from './render-frame-phases.js';
 import {
   updateAndDrawVolumetricWeatherParticles
 } from '../weather/volumetric-weather-particles.js';
+import { getWildPokemonEntities } from '../wild-pokemon/index.js';
+import {
+  WILD_BOIDS_SEPARATION_RADIUS,
+  WILD_BOIDS_ALIGNMENT_RADIUS,
+  WILD_BOIDS_COHESION_RADIUS,
+  WILD_GROUP_FOLLOW_MAX_DIST
+} from '../wild-pokemon/wild-group-behavior.js';
 
 const CLOUD_WRAP_PAD_PX = 220;
 const CLOUD_ALPHA_GAIN = 1.25;
@@ -1134,6 +1141,89 @@ export function drawWorldReactionsOverlay(ctx, options) {
   ctx.fillText('danger = bright border', panelX + 166, panelY + 39);
   ctx.fillStyle = 'rgba(230,235,245,0.78)';
   ctx.fillText(`cells visible: ${cells.length}`, panelX + 10, panelY + 56);
+  ctx.restore();
+}
+
+/**
+ * Draws social-inspector radii over nearby wild entities with a color legend.
+ */
+export function drawSocialInspectorGroupRadiiOverlay(ctx, options) {
+  const { showSocialInspectorRadiiOverlay, startX, startY, endX, endY, tileW, tileH, cw, ch } = options;
+  if (!showSocialInspectorRadiiOverlay) return;
+  const wilds = getWildPokemonEntities();
+  if (!Array.isArray(wilds) || wilds.length === 0) return;
+
+  const separationR = Math.max(0.05, Number(WILD_BOIDS_SEPARATION_RADIUS) || 0.75);
+  const alignmentR = Math.max(separationR, Number(WILD_BOIDS_ALIGNMENT_RADIUS) || 1.25);
+  const cohesionR = Math.max(alignmentR, Number(WILD_BOIDS_COHESION_RADIUS) || 1.6);
+  const followR = Math.max(cohesionR, Number(WILD_GROUP_FOLLOW_MAX_DIST) || 2);
+
+  const visible = [];
+  for (const e of wilds) {
+    if (!e || e.isDespawning || e.deadState) continue;
+    if ((e.spawnPhase ?? 1) < 0.35) continue;
+    const x = Number(e.x);
+    const y = Number(e.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (x < startX - followR || x > endX + followR || y < startY - followR || y > endY + followR) continue;
+    visible.push(e);
+    if (visible.length >= 12) break;
+  }
+  if (visible.length === 0) return;
+
+  const drawRadius = (x, y, radiusTiles, strokeStyle, fillStyle, lineDash = []) => {
+    const px = x * tileW;
+    const py = y * tileH;
+    ctx.strokeStyle = strokeStyle;
+    ctx.fillStyle = fillStyle;
+    ctx.lineWidth = 1.25;
+    ctx.setLineDash(lineDash);
+    ctx.beginPath();
+    ctx.ellipse(px, py, Math.max(1, radiusTiles * tileW), Math.max(1, radiusTiles * tileH), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  ctx.save();
+  for (const e of visible) {
+    const x = Number(e.x) || 0;
+    const y = Number(e.y) || 0;
+    drawRadius(x, y, cohesionR, 'rgba(85, 170, 255, 0.72)', 'rgba(85, 170, 255, 0.05)');
+    drawRadius(x, y, alignmentR, 'rgba(255, 170, 70, 0.76)', 'rgba(255, 170, 70, 0.06)', [7, 4]);
+    drawRadius(x, y, separationR, 'rgba(255, 95, 95, 0.86)', 'rgba(255, 95, 95, 0.09)');
+    if (e.groupId) {
+      drawRadius(x, y, followR, 'rgba(170, 120, 255, 0.66)', 'rgba(170, 120, 255, 0.03)', [3, 3]);
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.fillRect(Math.round(x * tileW) - 1, Math.round(y * tileH) - 1, 3, 3);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const panelX = 14;
+  const panelY = 86;
+  const panelW = Math.min(420, Math.max(300, cw * 0.38));
+  const panelH = 90;
+  ctx.fillStyle = 'rgba(8, 10, 14, 0.72)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+  ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelW - 1, panelH - 1);
+  ctx.font = '12px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#e8edf8';
+  ctx.fillText('Social radii overlay (Inspector)', panelX + 10, panelY + 16);
+  ctx.fillStyle = 'rgba(255, 95, 95, 0.95)';
+  ctx.fillText(`Separation (${separationR.toFixed(2)}t)`, panelX + 12, panelY + 38);
+  ctx.fillStyle = 'rgba(255, 170, 70, 0.95)';
+  ctx.fillText(`Alignment (${alignmentR.toFixed(2)}t)`, panelX + 12, panelY + 56);
+  ctx.fillStyle = 'rgba(85, 170, 255, 0.95)';
+  ctx.fillText(`Cohesion (${cohesionR.toFixed(2)}t)`, panelX + 192, panelY + 38);
+  ctx.fillStyle = 'rgba(170, 120, 255, 0.95)';
+  ctx.fillText(`Follow max (${followR.toFixed(2)}t, grouped only)`, panelX + 192, panelY + 56);
+  ctx.fillStyle = 'rgba(230,235,245,0.78)';
+  ctx.fillText(`wild shown: ${visible.length}`, panelX + 10, panelY + 76);
   ctx.restore();
 }
 

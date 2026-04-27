@@ -1,5 +1,7 @@
 import { BIOMES } from '../biomes.js';
 import { MACRO_TILE_STRIDE, foliageDensity, getMicroTile } from '../chunking.js';
+import { isCaveEntranceCandidateAtMicro, isCaveLandmarkCurrentlyRenderable } from '../cave-placement.js';
+import { getStaticEntitiesForChunk } from './static-entity-cache.js';
 import { getFogDiscoveredRevision, isFogMicroTileDiscovered } from '../main/play-vision-fog.js';
 import {
   BIOME_VEGETATION,
@@ -346,6 +348,7 @@ function rebuildBase(w, h, data, zoom) {
   // Landmarks (Caves, ruins, etc)
   if (data.landmarks && data.landmarks.length) {
     for (const lm of data.landmarks) {
+      if (lm.type === 'CAVE' && !isCaveLandmarkCurrentlyRenderable(lm, data)) continue;
       const px = (lm.x + 0.5) * tileW;
       const py = (lm.y + 0.5) * tileH;
       const r = Math.max(1.8, tileW * 0.5);
@@ -427,6 +430,90 @@ const MM_TILE_ROCK = 4;
 const MM_TILE_CRYSTAL = 5;
 const MM_TILE_CAVE = 6;
 
+function drawLocalMinimapCaveMarker(ctx, sx, sy, radiusPx) {
+  const r = Math.max(3.2, Number(radiusPx) || 4);
+  ctx.save();
+  ctx.shadowBlur = 5;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.fillStyle = 'rgba(14, 8, 8, 0.96)';
+  ctx.strokeStyle = 'rgba(240, 232, 220, 0.9)';
+  ctx.lineWidth = Math.max(1.2, r * 0.22);
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Inner dark core improves cave readability over terrain colors.
+  ctx.fillStyle = 'rgba(0,0,0,0.95)';
+  ctx.beginPath();
+  ctx.arc(sx, sy + r * 0.12, Math.max(1.4, r * 0.32), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function pushUniqueCaveMarker(caveMarkers, caveMarkerKeys, mx, my, sx, sy) {
+  // Cave candidates can occupy adjacent micro-tiles; collapse to one icon per local cluster.
+  const clusterSizeMicro = 6;
+  const key = `${Math.floor(mx / clusterSizeMicro)},${Math.floor(my / clusterSizeMicro)}`;
+  if (caveMarkerKeys.has(key)) return;
+  caveMarkerKeys.add(key);
+  caveMarkers.push({ sx, sy });
+}
+
+function pushLocalLandmarkCaveMarkers(caveMarkers, caveMarkerKeys, data, originX, originY, pxPerMicro, viewW, viewH) {
+  const landmarks = Array.isArray(data?.landmarks) ? data.landmarks : [];
+  for (const lm of landmarks) {
+    if (!lm || lm.type !== 'CAVE') continue;
+    if (!isCaveLandmarkCurrentlyRenderable(lm, data)) continue;
+    const macroX = Math.floor(Number(lm.x));
+    const macroY = Math.floor(Number(lm.y));
+    if (!Number.isFinite(macroX) || !Number.isFinite(macroY)) continue;
+    const microX = (macroX + 0.5) * MACRO_TILE_STRIDE;
+    const microY = (macroY + 0.5) * MACRO_TILE_STRIDE;
+    const sx = (microX - originX) * pxPerMicro;
+    const sy = (microY - originY) * pxPerMicro;
+    if (sx < -12 || sy < -12 || sx > viewW + 12 || sy > viewH + 12) continue;
+    pushUniqueCaveMarker(caveMarkers, caveMarkerKeys, Math.floor(microX), Math.floor(microY), sx, sy);
+  }
+}
+
+function pushLocalRenderedCaveMarkers(caveMarkers, caveMarkerKeys, data, originX, originY, pxPerMicro, viewW, viewH) {
+  const fullW = data.width * MACRO_TILE_STRIDE;
+  const fullH = data.height * MACRO_TILE_STRIDE;
+  const startX = Math.max(0, originX);
+  const startY = Math.max(0, originY);
+  const endX = Math.min(fullW, originX + Math.floor(viewW / pxPerMicro));
+  const endY = Math.min(fullH, originY + Math.floor(viewH / pxPerMicro));
+  if (startX >= endX || startY >= endY) return;
+
+  const chunkX0 = Math.floor(startX / PLAY_CHUNK_SIZE);
+  const chunkY0 = Math.floor(startY / PLAY_CHUNK_SIZE);
+  const chunkX1 = Math.floor((endX - 1) / PLAY_CHUNK_SIZE);
+  const chunkY1 = Math.floor((endY - 1) / PLAY_CHUNK_SIZE);
+
+  for (let cy = chunkY0; cy <= chunkY1; cy++) {
+    for (let cx = chunkX0; cx <= chunkX1; cx++) {
+      const key = `${cx},${cy}`;
+      const entities = getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH);
+      if (!Array.isArray(entities) || entities.length === 0) continue;
+      for (const e of entities) {
+        const itemKey = String(e?.itemKey || '');
+        if (e?.type !== 'scatter' || !itemKey.includes('cave-entrance')) continue;
+        const ox = Number(e.originX);
+        const oy = Number(e.originY);
+        const cols = Math.max(1, Number(e.cols) || 1);
+        const rows = Math.max(1, Number(e.rows) || 1);
+        if (!Number.isFinite(ox) || !Number.isFinite(oy)) continue;
+        const mx = ox + cols * 0.5;
+        const my = oy + rows * 0.5;
+        const sx = (mx - originX) * pxPerMicro;
+        const sy = (my - originY) * pxPerMicro;
+        if (sx < -12 || sy < -12 || sx > viewW + 12 || sy > viewH + 12) continue;
+        pushUniqueCaveMarker(caveMarkers, caveMarkerKeys, Math.floor(mx), Math.floor(my), sx, sy);
+      }
+    }
+  }
+}
+
 function classifyLocalMinimapTile(mx, my, tile, data) {
   if (!tile) return MM_TILE_BARE;
 
@@ -436,21 +523,6 @@ function classifyLocalMinimapTile(mx, my, tile, data) {
   const isTreeRoot = !!treeType && (mx + my) % 3 === 0 && treeNoise >= TREE_DENSITY_THRESHOLD;
   const isTreeRight = !!treeType && (mx + my) % 3 === 1 && treeWestNoise >= TREE_DENSITY_THRESHOLD;
   if (isTreeRoot || isTreeRight) return MM_TILE_TREE;
-
-  if (tile.heightStep >= 1 && !tile.isRoad && !tile.isCity) {
-    if ((mx * 7 + my * 13) % 47 === 0 && foliageDensity(mx, my, data.seed + 1234, 0.1) > 0.55) {
-      // Quick cliff-edge check: at least one cardinal neighbor must have a LOWER heightStep
-      // to confirm this is on an actual cliff edge where a cave could be placed.
-      const hs = tile.heightStep;
-      const hN = getMicroTile(mx, my - 1, data)?.heightStep ?? hs;
-      const hS = getMicroTile(mx, my + 1, data)?.heightStep ?? hs;
-      const hE = getMicroTile(mx + 1, my, data)?.heightStep ?? hs;
-      const hW = getMicroTile(mx - 1, my, data)?.heightStep ?? hs;
-      if (hN < hs || hS < hs || hE < hs || hW < hs) {
-        return MM_TILE_CAVE;
-      }
-    }
-  }
 
   if (!tile.isRoad && !tile.isCity && !tile.urbanBuilding) {
     const scatterNoise = foliageDensity(mx, my, data.seed + SCATTER_NOISE_SEED_OFFSET, SCATTER_NOISE_SCALE);
@@ -559,6 +631,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
       const newImg = cctx.createImageData(w, h);
       const newPix = newImg.data;
       const oldPix = oldImg.data;
+      const caveMarkers = [];
+      const caveMarkerKeys = new Set();
+      const caveMarkerR = Math.max(4, Math.min(8, MACRO_TILE_STRIDE * pxPerMicro * 0.52));
       // Fill with dark background
       for (let i = 0; i < newPix.length; i += 4) {
         newPix[i] = 8; newPix[i + 1] = 12; newPix[i + 2] = 20; newPix[i + 3] = 230;
@@ -610,7 +685,11 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
           }
         }
       }
+      pushLocalRenderedCaveMarkers(caveMarkers, caveMarkerKeys, data, originX, originY, pxPerMicro, w, h);
       cctx.putImageData(newImg, 0, 0);
+      for (const marker of caveMarkers) {
+        drawLocalMinimapCaveMarker(cctx, marker.sx, marker.sy, caveMarkerR);
+      }
       localMinimapCacheCanvas = cacheCanvas;
       localMinimapCacheData = data;
       localMinimapCacheW = w;
@@ -631,6 +710,9 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
   cacheCanvas.height = h;
   const cctx = cacheCanvas.getContext('2d');
   if (!cctx) return;
+  const caveMarkers = [];
+  const caveMarkerKeys = new Set();
+  const caveMarkerR = Math.max(4, Math.min(8, MACRO_TILE_STRIDE * pxPerMicro * 0.52));
 
   const img = cctx.createImageData(w, h);
   const pix = img.data;
@@ -668,7 +750,11 @@ function drawLocalLoadedSpriteTileMinimap(ctx, data, playerX, playerY, canvasSiz
     }
   }
 
+  pushLocalRenderedCaveMarkers(caveMarkers, caveMarkerKeys, data, originX, originY, pxPerMicro, w, h);
   cctx.putImageData(img, 0, 0);
+  for (const marker of caveMarkers) {
+    drawLocalMinimapCaveMarker(cctx, marker.sx, marker.sy, caveMarkerR);
+  }
   localMinimapCacheCanvas = cacheCanvas;
   localMinimapCacheData = data;
   localMinimapCacheW = w;

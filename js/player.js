@@ -63,7 +63,7 @@ import { onPlayerEarthquakeLanding } from './moves/earthquake-move.js';
 import { rumblePlayerGamepadPokemonHitTaken } from './main/play-gamepad-rumble.js';
 
 const MAX_SPEED = WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
-const ACCEL = 32.0;
+const ACCEL = 12.0;
 const FRICTION = 20.0;
 const GROUND_R = 0.32; // Raio de colisão
 /** Player stamina is intentionally higher than generic entity default. */
@@ -85,7 +85,7 @@ const FLIGHT_LEVITATION_VERT_SPEED = 4.2;
 const FLIGHT_LEVITATION_MAX_SPEED_MULT = 1.38 * 1.25;
 const FLIGHT_LEVITATION_FRICTION_MULT = 0.69;
 /** Horizontal input acceleration while in creative flight (ground uses full `ACCEL`). */
-const FLIGHT_ACCEL_MULT = 0.85;
+const FLIGHT_ACCEL_MULT = 3.85;
 /** Walk / idle PMD cycle advances faster only while actually gaining altitude in creative flight. */
 const FLIGHT_RAISE_HEIGHT_ANIM_MULT = 2.5;
 /** Horizontal flight cap multiplier while moving (WASD); not stacked while actively gaining altitude. */
@@ -98,7 +98,7 @@ const FLIGHT_TETHER_IDLE_BLINK_SEC = 1;
 const FLIGHT_TETHER_IDLE_BLINK_HZ = 6;
 
 /** Sprint: double-tap the same direction (WASD / arrows); clears when movement stops. */
-const RUN_SPEED_CAP_MULT = 2;
+const RUN_SPEED_CAP_MULT = 1.75;
 /** Hold-LMB combat charge: movement stays possible but slower. */
 const LMB_COMBAT_CHARGE_SPEED_MUL = 0.46;
 /**
@@ -844,6 +844,20 @@ function pickPmdSeqFrame(seq, tickInLoop) {
 }
 
 /**
+ * Cache total tick sum per PMD sequence array.
+ * Sequence arrays are reused metadata references, so WeakMap keeps this O(1) after first hit.
+ */
+const PMD_SEQ_TOTAL_TICKS_CACHE = new WeakMap();
+function getPmdSeqTotalTicks(seq) {
+  if (!Array.isArray(seq) || seq.length === 0) return 0;
+  const cached = PMD_SEQ_TOTAL_TICKS_CACHE.get(seq);
+  if (cached != null) return cached;
+  const total = seq.reduce((a, b) => a + b, 0);
+  PMD_SEQ_TOTAL_TICKS_CACHE.set(seq, total);
+  return total;
+}
+
+/**
  * @param {number} progress normalized tackle phase 0..1
  * @returns {number} normalized lunge amount 0..1..0
  */
@@ -1370,7 +1384,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
 
   if (shootPlaying) {
     const seq = pmdMeta.shoot.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._shootAnimTick = (player._shootAnimTick || 0) + dt * 60;
     const t = Math.min(player._shootAnimTick, Math.max(0.0001, total - 0.0001));
     player.animFrame = pickPmdSeqFrame(seq, t);
@@ -1380,7 +1394,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player._shootAnimTick = 0;
     player._chargeAnimTick = 0;
     const seq = atkSliceMeta.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._lmbAttackAnimTick = (player._lmbAttackAnimTick || 0) + dt * 60;
     const t = Math.min(player._lmbAttackAnimTick, Math.max(0.0001, total - 0.0001));
     player.animFrame = pickPmdSeqFrame(seq, t);
@@ -1390,7 +1404,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     player._shootAnimTick = 0;
     player._lmbAttackAnimTick = 0;
     const seq = pmdMeta.charge.durations;
-    const total = seq.reduce((a, b) => a + b, 0);
+    const total = getPmdSeqTotalTicks(seq);
     player._chargeAnimTick = (player._chargeAnimTick || 0) + dt * 60;
     const loopTick = player._chargeAnimTick % total;
     player.animFrame = pickPmdSeqFrame(seq, loopTick);
@@ -1423,7 +1437,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
       const seq = player.digActive
         ? meta?.dig?.durations || meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk
         : meta?.walk?.durations || PMD_DEFAULT_MON_ANIMS.Walk;
-      const totalTicks = seq.reduce((a, b) => a + b, 0);
+      const totalTicks = getPmdSeqTotalTicks(seq);
 
       const walkDistanceCycle = 3.5;
       const animT = (player.totalDistMoved % walkDistanceCycle) / walkDistanceCycle;
@@ -1442,7 +1456,7 @@ export function updatePlayer(dt, data, gameTimeSec) {
     } else {
       const meta = getDexAnimMeta(player.dexId);
       const seq = meta?.idle?.durations || PMD_DEFAULT_MON_ANIMS.Idle;
-      const totalTicks = seq.reduce((a, b) => a + b, 0);
+      const totalTicks = getPmdSeqTotalTicks(seq);
 
       player.idleTimer += dt * 60 * raisingFlightAnimMul;
       const loopTick = player.idleTimer % totalTicks;

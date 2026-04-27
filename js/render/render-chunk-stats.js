@@ -66,7 +66,7 @@ export function getAdaptivePlayChunkBakeBudget({
   }
 
   budget = Math.max(budget, budget + playChunkBakeBoost);
-  return Math.min(12, Math.max(1, budget));
+  return Math.min(16, Math.max(1, budget));
 }
 
 export function getPlayChunkFrameStats() {

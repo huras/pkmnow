@@ -309,7 +309,10 @@ export const BIOME_TO_FOLIAGE = new Proxy(_BIOME_TO_FOLIAGE, {
  * Retorna o variant de grama para um biome ID.
  */
 export function getGrassVariant(biomeId) {
+  const mod = PluginRegistry.getBiomeById(biomeId);
+  if (mod?.disableGrass) return null;
   if (NO_GRASS_BIOMES.has(biomeId)) return null;
+  if (typeof mod?.grassVariant === 'string') return mod.grassVariant;
   if (isLakeLotusFoliageTerrainSet(BIOME_TO_FOLIAGE[biomeId])) return 'lotus';
   if (biomeId === BIOMES.SNOW.id || biomeId === BIOMES.TUNDRA.id || biomeId === BIOMES.TAIGA.id) return 'ice';
   if (biomeId === BIOMES.DESERT.id || biomeId === BIOMES.SAVANNA.id) return 'desert';
@@ -320,6 +323,9 @@ export function getGrassVariant(biomeId) {
  * Retorna o tipo de árvore para um biome ID.
  */
 export function getTreeType(biomeId, mx = 0, my = 0, seed = 0) {
+  const mod = PluginRegistry.getBiomeById(biomeId);
+  if (mod?.disableTrees) return null;
+  if (typeof mod?.treeType === 'string') return mod.treeType;
   if (NO_TREE_BIOMES.has(biomeId)) return null;
   
   // Deterministic variety within the same biome

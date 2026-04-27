@@ -137,6 +137,31 @@ export function renderSocialInspectorList(listEl, imageCache) {
       bars.appendChild(noMem);
     }
 
+    const follow = groupBehavior.resolveGroupFollowTarget(e, entitiesByKey);
+    const isFollower = !!follow && !follow.isLeader;
+    const isLeader = !!follow && !!follow.isLeader;
+    const rescueTargetKey = String(e._groupRescueMemberKey || '');
+    const rescueTargetActive = rescueTargetKey && Number(e._groupRescueHoldSec || 0) > 0;
+    const debug = document.createElement('div');
+    debug.className = 'social-inspector__no-mem';
+    debug.textContent =
+      `grp:${e.groupId ? String(e.groupId) : '-'} ` +
+      `role:${isLeader ? 'leader' : isFollower ? 'follower' : 'solo'} ` +
+      `stall:${Number(e._stallProgressSec || 0).toFixed(2)}s ` +
+      `blk:${Math.max(0, Math.floor(Number(e._blockedMoveFrames) || 0))}`;
+    bars.appendChild(debug);
+
+    if (e.groupId) {
+      const debug2 = document.createElement('div');
+      debug2.className = 'social-inspector__no-mem';
+      debug2.textContent =
+        `stray:${Number(e._groupStrayAccumSec || 0).toFixed(2)}s ` +
+        `rescue:${Math.max(0, Number(e._groupRescueHoldSec || 0)).toFixed(2)}s ` +
+        `assistBreak:${Math.max(0, Number(e._leaderAssistBreakSec || 0)).toFixed(2)}s` +
+        (rescueTargetActive ? ` target:${rescueTargetKey}` : '');
+      bars.appendChild(debug2);
+    }
+
     info.appendChild(nameLine);
     info.appendChild(bars);
     row.appendChild(portrait);

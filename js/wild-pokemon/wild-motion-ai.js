@@ -72,7 +72,51 @@ const WILD_VISION_RANGE_BASE_MULT = 1.45;
 const WILD_VISION_RANGE_MIN_TILES = 8.5;
 const WILD_STALL_PROGRESS_THRESHOLD = 0.015;
 const WILD_STALL_ABANDON_SEC = 0.9;
+const ROAM_PHASE_WALK_SPEED_MULT = 0.75;
 const EXPLORE_PHASE_WALK_SPEED_MULT = 0.5;
+const GROUP_STRANDED_DIST_TILES = groupBehavior.WILD_GROUP_FOLLOW_MAX_DIST * 1.35;
+const GROUP_STRANDED_TIMEOUT_SEC = 2.6;
+const GROUP_RESCUE_HOLD_SEC = 4.5;
+const GROUP_RESCUE_CLEAR_DIST_TILES = 1.35;
+const GROUP_ASSIST_BREAK_SEC = 3.5;
+
+function ensureGroupRescueState(entity) {
+  if (!entity) return;
+  if (entity._groupStrayAccumSec == null) entity._groupStrayAccumSec = 0;
+  if (entity._groupRescueMemberKey == null) entity._groupRescueMemberKey = null;
+  if (entity._groupRescueHoldSec == null) entity._groupRescueHoldSec = 0;
+  if (entity._leaderAssistBreakSec == null) entity._leaderAssistBreakSec = 0;
+}
+
+function pickStrandedFollowerForRescue(leader, entitiesByKey, dt) {
+  if (!leader || !entitiesByKey) return null;
+  const groupId = String(leader.groupId || '');
+  const leaderKey = String(leader.key || '');
+  if (!groupId || !leaderKey) return null;
+
+  let best = null;
+  for (const member of entitiesByKey.values()) {
+    if (!member || member === leader) continue;
+    if (String(member.groupId || '') !== groupId) continue;
+    if (member.deadState || member.isDespawning || (member.spawnPhase ?? 1) < 0.35) continue;
+    ensureGroupRescueState(member);
+    const dx = (Number(member.x) || 0) - (Number(leader.x) || 0);
+    const dy = (Number(member.y) || 0) - (Number(leader.y) || 0);
+    const dist = Math.hypot(dx, dy);
+    const likelyStuck = (Number(member._stallProgressSec) || 0) >= 0.25 || (Number(member._blockedMoveFrames) || 0) >= 8;
+    if (dist > GROUP_STRANDED_DIST_TILES && likelyStuck) {
+      member._groupStrayAccumSec = (Number(member._groupStrayAccumSec) || 0) + Math.max(0, Number(dt) || 0);
+    } else {
+      member._groupStrayAccumSec = Math.max(0, (Number(member._groupStrayAccumSec) || 0) - 0.05);
+    }
+    if ((Number(member._groupStrayAccumSec) || 0) < GROUP_STRANDED_TIMEOUT_SEC) continue;
+    const score = (Number(member._groupStrayAccumSec) || 0) + dist * 0.12;
+    if (!best || score > best.score) {
+      best = { member, score };
+    }
+  }
+  return best?.member || null;
+}
 
 export function ensureWildPhysicsState(entity) {
   if (entity.z == null) entity.z = 0;
@@ -134,6 +178,7 @@ function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX
   }
   entity.vx = 0;
   entity.vy = 0;
+  const assistBreaking = (Number(entity._leaderAssistBreakSec) || 0) > 0;
   if ((entity._followerTackleCooldownSec || 0) <= 0 && Number.isFinite(targetX) && Number.isFinite(targetY)) {
     const dx = Number(targetX) - (Number(entity.x) || 0);
     const dy = Number(targetY) - (Number(entity.y) || 0);
@@ -147,15 +192,33 @@ function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX
       const bx = ax + nx * reach;
       const by = ay + ny * reach;
       tryBreakDetailsAlongSegment(ax, ay, bx, by, data, { hitSource: 'tackle', pz: entity.z ?? 0 });
-      entity._followerTackleCooldownSec = 0.55;
+      entity._followerTackleCooldownSec = assistBreaking ? 0.22 : 0.55;
     }
   }
   return false;
 }
 
+function markWildAirborneOnDownhillStep(entity, ox, oy, nx, ny, data) {
+  if (!entity || !data) return;
+  if (!entity.grounded || entity.jumping) return;
+  if ((entity.z || 0) <= 0.05) return;
+  const ot = getMicroTile(Math.floor((Number(ox) || 0) + 0.5), Math.floor((Number(oy) || 0) + 0.5), data);
+  const nt = getMicroTile(Math.floor((Number(nx) || 0) + 0.5), Math.floor((Number(ny) || 0) + 0.5), data);
+  if (!ot || !nt) return;
+  if ((Number(nt.heightStep) || 0) < (Number(ot.heightStep) || 0)) {
+    entity.grounded = false;
+  }
+}
+
 function getWildWanderWalkSpeed(entity) {
-  const isExplorePhase = entity?.groupPhase === 'EXPLORE';
-  return WORLD_MAX_WALK_SPEED_TILES_PER_SEC * (isExplorePhase ? EXPLORE_PHASE_WALK_SPEED_MULT : 1);
+  const phase = String(entity?.groupPhase || '').toUpperCase();
+  if (phase === 'EXPLORE') {
+    return WORLD_MAX_WALK_SPEED_TILES_PER_SEC * EXPLORE_PHASE_WALK_SPEED_MULT;
+  }
+  if (phase === 'ROAM') {
+    return WORLD_MAX_WALK_SPEED_TILES_PER_SEC * ROAM_PHASE_WALK_SPEED_MULT;
+  }
+  return WORLD_MAX_WALK_SPEED_TILES_PER_SEC;
 }
 
 export function integrateWildPokemonVertical(entity, dt) {
@@ -392,6 +455,7 @@ export function applyWildTreeTrunkResolution(entity, data) {
     entity.z || 0
   );
   syncEntityZWithTerrain(entity, entity.x, entity.y, rCliff.x, rCliff.y, data);
+  markWildAirborneOnDownhillStep(entity, entity.x, entity.y, rCliff.x, rCliff.y, data);
   entity.x = rCliff.x;
   entity.y = rCliff.y;
   entity.vx = rCliff.vx;
@@ -408,6 +472,7 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
   const ig = true;
   if (wildWalkOk(nx, ny, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, nx, ny, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, nx, ny, data);
     entity.x = nx;
     entity.y = ny;
     return true;
@@ -453,17 +518,20 @@ export function tryApplyWildPokemonMove(entity, nx, ny, data, air) {
 
   if (moved) {
     syncEntityZWithTerrain(entity, ox, oy, px, py, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, px, py, data);
     entity.x = px;
     entity.y = py;
     return true;
   }
   if (wildWalkOk(nx, oy, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, nx, oy, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, nx, oy, data);
     entity.x = nx;
     return true;
   }
   if (wildWalkOk(ox, ny, data, ox, oy, entity, air, ig)) {
     syncEntityZWithTerrain(entity, ox, oy, ox, ny, data);
+    markWildAirborneOnDownhillStep(entity, ox, oy, ox, ny, data);
     entity.y = ny;
     return true;
   }
@@ -679,6 +747,33 @@ export function steerTowardAngle(entity, targetAng, speed, data, isAirborne, nar
 
 const WILD_KNOCKBACK_DAMP_PER_SEC = 4.8;
 
+function wildTouchesAtLeastTwoTreeColliders(entity, data) {
+  if (!entity || !data) return false;
+  const feet = worldFeetFromPivotCell(
+    Number(entity.x) || 0,
+    Number(entity.y) || 0,
+    imageCache,
+    entity.dexId ?? 1,
+    !!entity.animMoving
+  );
+  const circles = gatherTreeTrunkCirclesNearWorldPoint(feet.x, feet.y, data);
+  if (!circles || circles.length < 2) return false;
+  const bodyR = WILD_TREE_BODY_R;
+  let touching = 0;
+  for (let i = 0; i < circles.length; i++) {
+    const c = circles[i];
+    const tr = trunkEffectiveRadiusAtZ(c, entity.z || 0);
+    const dx = feet.x - c.cx;
+    const dy = feet.y - c.cy;
+    const rr = tr + bodyR + 0.03;
+    if (dx * dx + dy * dy <= rr * rr) {
+      touching++;
+      if (touching >= 2) return true;
+    }
+  }
+  return false;
+}
+
 /* ── High-Affinity Follow ───────────────────────────────────────────────── */
 const FOLLOW_PLAYER_AFFINITY_ENTER = 2.2;   // affinity needed to START following
 const FOLLOW_PLAYER_AFFINITY_EXIT  = 1.0;   // drop below this → stop following
@@ -687,10 +782,14 @@ const FOLLOW_PLAYER_WALK_SPEED     = 1.6;   // tiles/sec when following
 
 export function updateWildMotion(entity, dt, data, playerX, playerY) {
   ensureWildPhysicsState(entity);
+  ensureGroupRescueState(entity);
   scenarioOrchestrator.update(dt);
   
   if ((entity._followerTackleCooldownSec || 0) > 0) {
     entity._followerTackleCooldownSec = Math.max(0, (entity._followerTackleCooldownSec || 0) - dt);
+  }
+  if ((entity._leaderAssistBreakSec || 0) > 0) {
+    entity._leaderAssistBreakSec = Math.max(0, (entity._leaderAssistBreakSec || 0) - dt);
   }
   if (entity.deadState) {
     entity.vx = 0;
@@ -953,6 +1052,51 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
   if (entity.aiState === 'wander') {
     const groupFollow = groupBehavior.resolveGroupFollowTarget(entity, entitiesByKey);
     const followerMode = !!groupFollow && !groupFollow.isLeader;
+    const leaderMode = !!groupFollow && !!groupFollow.isLeader;
+
+    if (
+      leaderMode &&
+      !groupCombatBreakActive &&
+      !entity.wildGrassHostileDeathBattle &&
+      String(entity.groupPhase || '') !== 'SCENIC'
+    ) {
+      if ((Number(entity._groupRescueHoldSec) || 0) > 0) {
+        entity._groupRescueHoldSec = Math.max(0, (Number(entity._groupRescueHoldSec) || 0) - dt);
+        const rescued = entitiesByKey.get(String(entity._groupRescueMemberKey || ''));
+        if (
+          rescued &&
+          String(rescued.groupId || '') === String(entity.groupId || '') &&
+          !rescued.deadState &&
+          !rescued.isDespawning
+        ) {
+          const rx = Number(rescued.x) || 0;
+          const ry = Number(rescued.y) || 0;
+          const dd = Math.hypot((Number(entity.x) || 0) - rx, (Number(entity.y) || 0) - ry);
+          if (dd > GROUP_RESCUE_CLEAR_DIST_TILES) {
+            assignWildTargetIfEndpointClear(entity, rx, ry, data, wildIsAirborne(entity));
+          } else {
+            entity._groupRescueHoldSec = 0;
+          }
+        } else {
+          entity._groupRescueHoldSec = 0;
+        }
+      } else {
+        const stranded = pickStrandedFollowerForRescue(entity, entitiesByKey, dt);
+        if (stranded) {
+          entity._groupRescueMemberKey = String(stranded.key || '');
+          entity._groupRescueHoldSec = GROUP_RESCUE_HOLD_SEC;
+          const sx = Number(stranded.x) || 0;
+          const sy = Number(stranded.y) || 0;
+          assignWildTargetIfEndpointClear(entity, sx, sy, data, wildIsAirborne(entity));
+          for (const member of entitiesByKey.values()) {
+            if (!member || String(member.groupId || '') !== String(entity.groupId || '')) continue;
+            member._leaderAssistBreakSec = Math.max(Number(member._leaderAssistBreakSec) || 0, GROUP_ASSIST_BREAK_SEC);
+          }
+        } else {
+          entity._groupRescueMemberKey = null;
+        }
+      }
+    }
 
     // ── High-Affinity → Follow Player ──
     if (!followerMode && entity.socialMemory && !entity.wildGrassHostileDeathBattle) {
@@ -1275,6 +1419,18 @@ export function updateWildMotion(entity, dt, data, playerX, playerY) {
     wildMovedTiles < expectedMove * 0.15
   ) {
     entity._stallProgressSec = (entity._stallProgressSec || 0) + dt;
+    if (
+      followerTeamMode &&
+      entity.grounded &&
+      !wildIsAirborne(entity) &&
+      entity._stallProgressSec >= WILD_STALL_ABANDON_SEC * 0.45 &&
+      wildTouchesAtLeastTwoTreeColliders(entity, data)
+    ) {
+      if (tryWildPokemonJump(entity, { vzScale: 0.95 })) {
+        entity._stallProgressSec = 0;
+        entity._blockedMoveFrames = 0;
+      }
+    }
     if (entity._stallProgressSec >= WILD_STALL_ABANDON_SEC) {
       entity.targetX = null;
       entity.targetY = null;
