@@ -57,6 +57,7 @@ export function bakeChunk(cx, cy, data, tileW, tileH, metadata = null) {
   const natureImg = imageCache.get('tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.png');
   const TCOLS_NATURE_BAKE = 57;
   const TCOLS_CAVES_BAKE = 50;
+  const TCOLS_MAGISCARF_BAKE = 54;
 
   const drawTile16 = (tileId, px, py) => {
     if (!natureImg || tileId == null || tileId < 0) return;
@@ -71,7 +72,9 @@ export function bakeChunk(cx, cy, data, tileW, tileH, metadata = null) {
     const path = TessellationEngine.getImagePath(objSet?.file);
     const img = path ? imageCache.get(path) : null;
     if (!img) return;
-    const cols = path.includes('caves') ? TCOLS_CAVES_BAKE : TCOLS_NATURE_BAKE;
+    const cols = path.includes('caves') ? TCOLS_CAVES_BAKE
+      : (path.includes('magiscarf') || path.includes('further_additional')) ? TCOLS_MAGISCARF_BAKE
+      : TCOLS_NATURE_BAKE;
     const sx = (tileId % cols) * 16;
     const sy = Math.floor(tileId / cols) * 16;
     octx.drawImage(img, sx, sy, 16, 16, Math.round(px), Math.round(py), twNat, thNat);

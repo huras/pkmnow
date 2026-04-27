@@ -107,6 +107,13 @@ export function endMicroTileCache() {
  * NUNCA salva estado na memória. Usa a interpolação do Macro-Grid para computar infinito.
  */
 export function getMicroTile(mx, my, macroData) {
+    // 0. Manual Override (Pixel-perfect data provided by the caller)
+    if (macroData.microTiles) {
+        const mW = (macroData.width * MACRO_TILE_STRIDE);
+        const manual = macroData.microTiles[my * mW + mx];
+        if (manual) return manual;
+    }
+
     if (microTileCache) {
         // Bitpack mx,my into a 32-bit integer key for Map speed (safe up to ~32k wide map)
         const key = (mx << 15) | (my & 0x7fff);
@@ -402,8 +409,8 @@ export function getMicroTile(mx, my, macroData) {
     }
 
     // New Layered Terrain Data
-    let fDensity = foliageDensity(mx, my, seed + 9992, 0.08); // Restaurado para 0.08
-    if (bId === BIOMES.FLOWER_FIELDS.id) {
+    let fDensity = macroData.noFoliage ? 0 : foliageDensity(mx, my, seed + 9992, 0.08); 
+    if (!macroData.noFoliage && bId === BIOMES.FLOWER_FIELDS.id) {
         // Second FBM octave + ridge shaping → more tiles pass scatter gates while keeping macro-scale clumps.
         const coarse = foliageDensity(mx, my, seed + 9992, 0.05);
         const fine = foliageDensity(mx * 2.2, my * 2.2, seed + 18102, 0.19);

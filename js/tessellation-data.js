@@ -789,6 +789,64 @@ export const TERRAIN_SETS = {
   }
 };
 export const OBJECT_SETS = {
+  "cave-entrance-south [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          665, 666, 667,
+          719, 720, 721,
+          773, 774, 775
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "cave-entrance-east [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          662, 663, 664,
+          716, 717, 718,
+          770, 771, 772
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "cave-entrance-west [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          668, 669, 670,
+          722, 723, 724,
+          776, 777, 778
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "cave-entrance-north [1x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "1x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          725, 726, 727
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
   "small-grass [1x1]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx",
     "shape": "1x1",

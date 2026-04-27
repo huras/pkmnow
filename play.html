@@ -459,6 +459,21 @@
               </div>
             </div>
             <div class="minimap-panel__header-row">
+              <span class="minimap-panel__section-title">Nav</span>
+              <div class="minimap-panel__header-actions">
+                <button
+                  type="button"
+                  id="minimap-features-toggle"
+                  class="minimap-panel__adaptive-perf-btn"
+                  title="Feature Navigator (Roads, Cities, Caves)"
+                  aria-label="Feature Navigator"
+                  aria-pressed="false"
+                >
+                  NAV
+                </button>
+              </div>
+            </div>
+            <div class="minimap-panel__header-row">
               <span class="minimap-panel__section-title">Display</span>
               <div class="minimap-panel__header-actions">
                 <button
@@ -787,6 +802,13 @@
                 <label class="play-world-time-row"><input type="checkbox" id="play-world-time-run" checked /> <span data-i18n="play.advanceRealtime">進行 (リアルタイム)</span></label>
                 <label class="play-world-time-row"><span data-i18n="play.gameHoursPerRealSecond">ゲーム時間 / 実秒</span> <input type="number" id="play-world-time-speed" class="play-world-time-speed" min="0" step="0.01" value="0.02" /></label>
               </div>
+            </div>
+          </div>
+          
+          <div id="minimap-features-popover" class="minimap-camera-popover hidden" role="dialog" aria-label="Feature Navigator">
+            <div class="minimap-camera-popover__head">Feature Navigator</div>
+            <div id="minimap-features-list" class="minimap-features-list" style="max-height: 300px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 4px;">
+              <div style="color: #889; font-size: 0.8rem; padding: 8px;">Select a feature to jump...</div>
             </div>
           </div>
 

@@ -518,6 +518,7 @@ export function collectRenderItems(options) {
             ? scatterTreeTrunkFootprintRowOYRel(basePart, activeRows, activeCols, sItem)
             : Math.max(0, activeRows - 1);
           const trunkSortY = myScan + trunkRowOYRel + 1;
+          const dt = getCached ? getCached(mxScan, myScan) : null;
           renderItems.push({
             type: 'scatter',
             itemKey: sItem,
@@ -527,6 +528,7 @@ export function collectRenderItems(options) {
             cols: activeCols,
             rows: activeRows,
             y: trunkSortY - 0.1,
+            z: dt ? dt.heightStep * (typeof HEIGHT_STEP_Z !== 'undefined' ? HEIGHT_STEP_Z : 0.25) : 0,
             sortY:
               activeObjSet.sortYOffset !== undefined
                 ? myScan + activeObjSet.sortYOffset

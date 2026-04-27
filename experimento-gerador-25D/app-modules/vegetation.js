@@ -655,6 +655,33 @@ vec3 objectNormal = normalize(mix(faceCamNormal, faceSunNormal, clamp(sunFacingM
             }
           }
         }
+
+        // --- CAVE LANDMARK FORCE SPAWN ---
+        if (currentWorld.landmarks) {
+          const cave = currentWorld.landmarks.find(lm => 
+            lm.type === 'CAVE' && 
+            lm.x === Math.floor(c.mx / MACRO_TILE_STRIDE) && 
+            lm.y === Math.floor(c.my / MACRO_TILE_STRIDE)
+          );
+          if (cave) {
+            const centerX = cave.x * MACRO_TILE_STRIDE + Math.floor(MACRO_TILE_STRIDE / 2);
+            const centerY = cave.y * MACRO_TILE_STRIDE + Math.floor(MACRO_TILE_STRIDE / 2);
+            if (c.mx === centerX && c.my === centerY) {
+              const suffix = (cave.facing === 'north') ? ' [1x3]' : ' [3x3]';
+              const caveKey = `cave-entrance-${cave.facing || 'south'}${suffix}`;
+              const texInfo = await getObjectBillboardTexture(caveKey);
+              if (texInfo?.texture) {
+                const batch = getBatch(textureBatches, texInfo.texture);
+                const w = texInfo.tilesW * 0.95;
+                const h = texInfo.tilesH * 0.95;
+                const itemPy = c.h * settings.stepHeight + detailLift + 0.15;
+                pushQuad(batch, px, itemPy, pz, w, h);
+                pushShadowQuad(shadowBatch, px, c.h * settings.stepHeight, pz, w * 0.5);
+              }
+            }
+          }
+        }
+
         const grassVariant = getGrassVariant(c.biomeId);
         const grassTiles = grassVariant ? GRASS_TILES[grassVariant] : null;
         const grassTileId = grassTiles?.original ?? grassTiles?.small ?? grassTiles?.grass2;

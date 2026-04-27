@@ -16,6 +16,7 @@ export async function loadTilesetImages(onProgress) {
     ...PALETTE_GRASSY_IMAGE_PATHS,
     ...allPaletteBaseTransitionImagePaths(),
     'tilesets/PokemonCenter.png',
+    'tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.png',
     'tilesets/gengar_walk.png',
     'tilesets/gengar_idle.png',
     'tilesets/Game Boy Advance - Pokemon Ruby _ Sapphire - Miscellaneous - Berry Trees.png',

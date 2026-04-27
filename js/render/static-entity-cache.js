@@ -164,7 +164,96 @@ export function getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH) {
         }
       }
 
-      // --- c. Buildings ---
+      // --- c. Caves (Dungeon Entrances) ---
+      let caveItemKey = null;
+      let caveColOffset = 0;
+      let caveRowOffset = 0;
+
+      // Check if this macro-tile has a CAVE landmark (forced via world generator)
+      const macroX = Math.floor(mxScan / MACRO_TILE_STRIDE);
+      const macroY = Math.floor(myScan / MACRO_TILE_STRIDE);
+      const isLandmarkTile = data.landmarks && data.landmarks.some(lm => lm.x === macroX && lm.y === macroY && lm.type === 'CAVE');
+      
+      // Determine if we are at a specific center-ish spot for the forced landmark
+      // or if procedural noise triggers it.
+      const isForcedLandmarkOrigin = isLandmarkTile && (mxScan % MACRO_TILE_STRIDE === 20 && myScan % MACRO_TILE_STRIDE === 20);
+
+      if (t.heightStep >= 1 && !t.isRoad && !t.isCity) {
+        const set = TERRAIN_SETS[BIOME_TO_TERRAIN[t.biomeId] || 'grass'];
+        if (set) {
+          const checkAtOrAbove = (r, c) => (directGet(c, r)?.heightStep ?? -99) >= t.heightStep;
+          const role = getRoleForCell(myScan, mxScan, fullH, fullW, checkAtOrAbove, set.type);
+          
+          if (role === 'EDGE_S' || role === 'EDGE_N' || role === 'EDGE_E' || role === 'EDGE_W') {
+            // Noise threshold for placing a cave OR forced landmark nearby.
+            const noiseTrigger = (mxScan * 7 + myScan * 13) % 47 === 0 && foliageDensity(mxScan, myScan, data.seed + 1234, 0.1) > 0.55;
+            
+            // If it's a landmark tile, we accept any valid cliff edge within that macro tile
+            // but we pick the first one we find or a specific one to avoid duplicates.
+            // Using a simple deterministic check for "first valid edge in macro tile"
+            const landmarkTrigger = isLandmarkTile && !noiseTrigger; 
+
+            if (noiseTrigger || landmarkTrigger) {
+                // Ensure straight cliff
+                const roleLeft = getRoleForCell(myScan, mxScan - 1, fullH, fullW, checkAtOrAbove, set.type);
+                const roleRight = getRoleForCell(myScan, mxScan + 1, fullH, fullW, checkAtOrAbove, set.type);
+                const roleTop = getRoleForCell(myScan - 1, mxScan, fullH, fullW, checkAtOrAbove, set.type);
+                const roleBottom = getRoleForCell(myScan + 1, mxScan, fullH, fullW, checkAtOrAbove, set.type);
+                
+                if (role === 'EDGE_S' && roleLeft === 'EDGE_S' && roleRight === 'EDGE_S') {
+                    caveItemKey = 'cave-entrance-south [3x3]';
+                    caveColOffset = 1; caveRowOffset = 1;
+                } else if (role === 'EDGE_E' && roleTop === 'EDGE_E' && roleBottom === 'EDGE_E') {
+                    caveItemKey = 'cave-entrance-east [3x3]';
+                    caveColOffset = 1; caveRowOffset = 1;
+                } else if (role === 'EDGE_W' && roleTop === 'EDGE_W' && roleBottom === 'EDGE_W') {
+                    caveItemKey = 'cave-entrance-west [3x3]';
+                    caveColOffset = 1; caveRowOffset = 1;
+                } else if (role === 'EDGE_N' && roleLeft === 'EDGE_N' && roleRight === 'EDGE_N') {
+                    caveItemKey = 'cave-entrance-north [1x3]';
+                    caveColOffset = 1; caveRowOffset = 0;
+                }
+            }
+          }
+        }
+      }
+      
+      // Special case: If we have a CAVE landmark but NO procedural cliff was found in the whole macro tile,
+      // we could force a "standalone" cave, but let's try to be smart.
+      // For now, the landmarkTrigger logic above will catch the first cliff in the landmark tile.
+      
+      if (caveItemKey) {
+        // If we found a cave for a landmark tile, we should mark it so we don't spawn multiple in the same macro-tile.
+        if (isLandmarkTile) {
+            // Simple way to prevent multiple caves in one macro-tile for landmarks:
+            // Check if we already pushed one for this macro cell in this chunk.
+            const macroKey = `lm-cave-${macroX}-${macroY}`;
+            if (entities.some(e => e._lmKey === macroKey)) {
+                caveItemKey = null; // Already placed one
+            }
+        }
+      }
+
+      if (caveItemKey) {
+        const objSet = OBJECT_SETS[caveItemKey];
+        if (objSet) {
+          const { cols, rows } = parseShape(objSet.shape);
+          entities.push({
+            type: 'scatter',
+            itemKey: caveItemKey,
+            objSet,
+            originX: mxScan - caveColOffset,
+            originY: myScan - caveRowOffset,
+            cols,
+            rows,
+            windSway: false,
+            hasOverride: false,
+            _lmKey: isLandmarkTile ? `lm-cave-${macroX}-${macroY}` : undefined
+          });
+        }
+      }
+
+      // --- d. Buildings ---
       if (t.urbanBuilding && t.urbanBuildingOrigin) {
         entities.push({
           type: 'building',

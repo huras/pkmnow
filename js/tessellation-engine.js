@@ -134,6 +134,7 @@ export const TessellationEngine = {
         if (Number.isFinite(sc) && sc > 0) return Math.floor(sc);
         const path = this.getImagePath(terrainSet.file);
         if (path.includes('caves')) return 50;
+        if (path.includes('magiscarf') || path.includes('further_additional')) return 54;
         return 57;
     },
 
@@ -173,7 +174,9 @@ export const TessellationEngine = {
         const set = this.getObjectSet(name);
         if (!set) return null;
 
-        const cols = set.file.includes('caves') ? 50 : 57;
+        const cols = set.file.includes('caves') ? 50
+            : (set.file.includes('magiscarf') || set.file.includes('further_additional')) ? 54
+            : 57;
         const allIds = [];
         set.parts.forEach(p => allIds.push(...p.ids));
         if (allIds.length === 0) return null;

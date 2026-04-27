@@ -190,6 +190,7 @@ export function scatterHasWindSway(itemKey) {
   if (k.includes('dirt-rock') || k.includes('dirt-rocks')) return false;
   if (k.includes('big-cactus')) return false;
   if (k.includes('shell')) return false;
+  if (k.includes('cave')) return false;
   return true;
 }
 
@@ -200,6 +201,7 @@ export function scatterHasWindSway(itemKey) {
 export function isSortableScatter(itemKey) {
   const k = String(itemKey).toLowerCase();
   return (
+    k.includes('cave-entrance') ||
     k.includes('crystal') ||
     k.includes('rock') ||
     k.includes('cactus') ||
