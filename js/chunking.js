@@ -17,10 +17,34 @@ function lerp(a, b, t) {
     return a * (1 - t) + b * t;
 }
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
 function getMacroVal(grid, x, y, width, height) {
     const clampX = Math.max(0, Math.min(width - 1, x));
     const clampY = Math.max(0, Math.min(height - 1, y));
     return grid[clampY * width + clampX];
+}
+
+function sampleSecondaryHeightPassNoise(mx, my, seed) {
+    // 4x the base macro frequency: original macro interpolation is ~1 / MACRO_TILE_STRIDE.
+    // Here we sample at ~4 / MACRO_TILE_STRIDE to get tighter micro plateaus.
+    const secondaryScale = 4 / MACRO_TILE_STRIDE;
+    return foliageDensity(mx, my, seed + 0x62f9, secondaryScale);
+}
+
+function applySecondaryHeightPass(baseHeightStep, mx, my, macroData) {
+    const base = Math.floor(Number(baseHeightStep) || 0);
+    // "Plateaus" only: keep beaches/water untouched.
+    if (base < 1) return base;
+    const seed = Number(macroData?.seed) || 0;
+    const n = sampleSecondaryHeightPassNoise(mx, my, seed);
+    // Dead zone in the middle for stable flats; only ±1 step at extremes.
+    let delta = 0;
+    if (n <= 0.33) delta = -1;
+    else if (n >= 0.67) delta = 1;
+    return clamp(base + delta, 1, LAND_STEPS);
 }
 
 /**
@@ -80,7 +104,8 @@ export function getHeightStepAt(mx, my, macroData) {
     const e01 = getMacroVal(cells, ix, iy + 1, width, height);
     const e11 = getMacroVal(cells, ix + 1, iy + 1, width, height);
     const e = lerp(lerp(e00, e10, sx), lerp(e01, e11, sx), sy);
-    return elevationToStep(e, waterLevel);
+    const baseStep = elevationToStep(e, waterLevel);
+    return applySecondaryHeightPass(baseStep, mx, my, macroData);
 }
 
 let microTileCache = null;
@@ -423,7 +448,7 @@ export function getMicroTile(mx, my, macroData) {
     const res = {
         biomeId: bId,
         elevation: e,
-        heightStep,
+        heightStep: (!isCity && !isRoad) ? applySecondaryHeightPass(heightStep, mx, my, macroData) : heightStep,
         isCity,
         isRoad,
         urbanBuilding,
