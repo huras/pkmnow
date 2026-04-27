@@ -310,7 +310,10 @@ export function render(canvas, data, options = {}) {
   let tFrame0 = 0;
   try {
     tFrame0 = performance.now();
+    const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
+    if (debug) console.log('[Render] Start');
     beginRenderFrameProfile(options.settings?.appMode || 'map');
+    if (debug) console.log('[Render] Prep');
     const tPrep0 = performance.now();
 
   if (!didWarnTerrainSetRoles) {
@@ -391,6 +394,7 @@ export function render(canvas, data, options = {}) {
     tileH = ch / height;
   }
 
+  if (debug) console.log('[Render] SyncChunks');
   if (syncPlayChunkCache(data, tileW, appMode)) {
     clearGrassFireStateForNewMap();
     clearGrassCutStateForNewMap();
@@ -1112,6 +1116,7 @@ export function render(canvas, data, options = {}) {
     }
     const playerFlashHoldVisual = getPlayerFlashHoldVisual();
 
+    if (debug) console.log('[Render] DrawItems', visibleRenderItems.length);
     for (const item of visibleRenderItems) {
       // Flush deferred canopies right before the player is drawn.
       if (_deferredCanopies && !_deferredCanopiesFlushed && item.type === 'player') {
@@ -1816,6 +1821,7 @@ export function render(canvas, data, options = {}) {
 
   ctx.restore();
 } finally {
+    if (debug) console.log('[Render] End');
     finalizeRenderFrameProfile(performance.now() - tFrame0);
   }
 }
