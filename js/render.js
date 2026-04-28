@@ -48,6 +48,7 @@ import {
 import { getGroundWetness01 } from './main/weather-state.js';
 
 import { drawEncounterCinematicOverlay } from './encounter/encounter-cinematic.js';
+import { drawDungeonTransitionOverlay } from './dungeon/dungeon-transition.js';
 
 import {
   drawBatchedProjectile,
@@ -1780,6 +1781,7 @@ export function render(canvas, data, options = {}) {
       drawFarCryScreenWaves(ctx, getActiveFarCryScreenWaves(), { w: cw, h: ch });
       applyMotionStutterMask(ctx, cw, ch, player, camNoShakePx);
       drawEncounterCinematicOverlay(ctx, cw, ch);
+      drawDungeonTransitionOverlay(ctx, cw, ch);
     }
 
     const tMm0 = performance.now();

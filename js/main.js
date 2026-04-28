@@ -2,6 +2,22 @@ import { isPlayShell } from './main/app-shell.js';
 import { getPlayPointerMode, setPlayPointerMode } from './main/play-pointer-mode.js';
 import { generate, DEFAULT_CONFIG } from './generator.js';
 import { render, loadTilesetImages } from './render.js';
+import { renderDungeon } from './dungeon/dungeon-render.js';
+import { findNearbyCavePortal } from './dungeon/cave-portals.js';
+import {
+  enterDungeon,
+  leaveDungeon,
+  getDungeonState,
+  updateDungeonRuntime,
+  isDungeonActive
+} from './dungeon/dungeon-runtime.js';
+import {
+  startDungeonTransition,
+  updateDungeonTransition,
+  isDungeonTransitionBlocking,
+  drawDungeonTransitionOverlay
+} from './dungeon/dungeon-transition.js';
+import { setTryEnterDungeonFromInteractKey } from './dungeon/play-interact-dungeon.js';
 import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
@@ -919,6 +935,10 @@ let didAutoResumePlayOnInitialLoad = false;
 /** @type {import('./ui/character-selector.js').CharacterSelector | null} */
 let playCharacterSelector = null;
 let appMode = 'map';
+let pendingDungeonPortalProbeTileKey = '';
+let activeCavePortal = null;
+/** Tracks whether `#hud-info` is showing the cave-enter line (non-immersive UI). */
+let playInfoBarCaveHintActive = false;
 let currentConfig = { ...DEFAULT_CONFIG };
 let gameTime = 0;
 /** World clock for day phases (hours in [0, 24)). */
@@ -1739,7 +1759,8 @@ function refreshPlayModeInfoBar(force = false) {
   const rx = Math.round(px * 10);
   const ry = Math.round(py * 10);
   const rz = Math.round(pz * 100);
-  const key = `${rx},${ry},${rz},${bId}`;
+  const caveHudKey = activeCavePortal ? activeCavePortal.id : '';
+  const key = `${rx},${ry},${rz},${bId},${caveHudKey}`;
   const now = performance.now();
   if (!force) {
     const sameSig = key === lastHudTileKey;
@@ -1761,8 +1782,19 @@ function refreshPlayModeInfoBar(force = false) {
   const carryMobility = getStrengthCarryMobilityInfo(player);
   const grabPrompt = getStrengthGrabPromptInfo(player, currentData);
   const immersive = isPlayImmersiveMinimalUi();
+  const caveHudActive = !!activeCavePortal && !isDungeonTransitionBlocking();
   if (playImmersiveHintEl) {
-    if (immersive && (carryPrompt || grabPrompt)) {
+    if (immersive && caveHudActive) {
+      const immersiveHtml =
+        `<div class="play-immersive-hint__row">` +
+        `<span class="play-immersive-hint__action">${t('play.actionEnterCave')}</span>` +
+        `<span class="play-immersive-hint__key">E</span>` +
+        `</div>`;
+      if (playImmersiveHintEl.innerHTML !== immersiveHtml) {
+        playImmersiveHintEl.innerHTML = immersiveHtml;
+      }
+      playImmersiveHintEl.classList.add('play-immersive-hint--visible');
+    } else if (immersive && (carryPrompt || grabPrompt)) {
       const ctxPrompt = carryPrompt || grabPrompt;
       const label = String(
         ctxPrompt.displayName || detailLabelFromItemKey(ctxPrompt.itemKey) || t('play.detailLabelFallback')
@@ -1785,6 +1817,20 @@ function refreshPlayModeInfoBar(force = false) {
     } else {
       if (playImmersiveHintEl.innerHTML) playImmersiveHintEl.innerHTML = '';
       playImmersiveHintEl.classList.remove('play-immersive-hint--visible');
+    }
+  }
+
+  if (!immersive && infoBar) {
+    const canShowCave = caveHudActive;
+    if (canShowCave) {
+      const caveHud =
+        `<span class="play-immersive-hint__action">${t('play.actionEnterCave')}</span>` +
+        `<span class="play-immersive-hint__key">E</span>`;
+      if (infoBar.innerHTML !== caveHud) infoBar.innerHTML = caveHud;
+      playInfoBarCaveHintActive = true;
+    } else if (playInfoBarCaveHintActive) {
+      infoBar.innerHTML = '';
+      playInfoBarCaveHintActive = false;
     }
   }
 }
@@ -2084,6 +2130,54 @@ function mapClientToMacro(clientX, clientY) {
   return { gx: Math.floor(p.x), gy: Math.floor(p.y) };
 }
 
+function refreshNearbyCavePortalProbe() {
+  if (appMode !== 'play' || !currentData || isDungeonTransitionBlocking()) {
+    activeCavePortal = null;
+    pendingDungeonPortalProbeTileKey = '';
+    return;
+  }
+  const qx = Math.floor(Number(player.x) * 4);
+  const qy = Math.floor(Number(player.y) * 4);
+  const probeKey = `${qx},${qy}:${currentData.seed}`;
+  if (probeKey === pendingDungeonPortalProbeTileKey) return;
+  pendingDungeonPortalProbeTileKey = probeKey;
+  activeCavePortal = findNearbyCavePortal(currentData, player.x, player.y, 1.2);
+}
+
+function requestEnterDungeonFromPortal(portal) {
+  if (!portal || !currentData || appMode !== 'play' || isDungeonTransitionBlocking()) return;
+  startDungeonTransition('enter', () => {
+    const ok = enterDungeon({
+      portalId: portal.id,
+      worldSeed: currentData.seed,
+      returnWorldX: Number.isFinite(portal.interactX) ? portal.interactX : portal.worldX,
+      returnWorldY: Number.isFinite(portal.interactY) ? portal.interactY : portal.worldY
+    });
+    if (!ok) return;
+    appMode = 'dungeon';
+    playInputState.mouseValid = false;
+    invalidatePlayPointerHover();
+    clearPlayInventoryDropPreview();
+    syncMapContinueButtonVisibility();
+    if (infoBar) infoBar.innerHTML = 'Dungeon';
+    playFpsSampleTimes.length = 0;
+  });
+}
+
+function requestExitDungeonToOverworld() {
+  if (appMode !== 'dungeon' || isDungeonTransitionBlocking() || !isDungeonActive()) return;
+  startDungeonTransition('exit', () => {
+    const exit = leaveDungeon();
+    if (!exit) return;
+    appMode = 'play';
+    setPlayerPos(exit.returnWorldX, exit.returnWorldY);
+    activeCavePortal = null;
+    pendingDungeonPortalProbeTileKey = '';
+    playFpsSampleTimes.length = 0;
+    refreshPlayModeInfoBar(true);
+  });
+}
+
 function getSettings() {
   const viewType = document.querySelector('input[name="viewType"]:checked')?.value || 'biomes';
   const overlayPaths = chkRotas?.checked ?? true;
@@ -2214,17 +2308,23 @@ function updateView() {
   if (appMode === 'map') updateWorldMapCameraBounds();
   const settings = getSettings();
   if (currentData) {
-    render(canvas, currentData, { settings, hover, inventoryDropPreview: playInventoryDropPreview });
-    if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] render complete');
-    renderMapOverlaySvg(mapOverlaySvg, currentData, {
-      canvas,
-      appMode,
-      overlayPaths: settings.overlayPaths,
-      overlayGraph: settings.overlayGraph,
-      useSvgOverlay: settings.worldMapUseSvgOverlay,
-      camera: settings.worldMapCamera
-    });
-    if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] renderMapOverlaySvg complete');
+    if (appMode === 'dungeon') {
+      renderDungeon(canvas, getDungeonState(), gameTime);
+      const ctx = canvas.getContext('2d');
+      if (ctx) drawDungeonTransitionOverlay(ctx, canvas.width, canvas.height);
+    } else {
+      render(canvas, currentData, { settings, hover, inventoryDropPreview: playInventoryDropPreview });
+      if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] render complete');
+      renderMapOverlaySvg(mapOverlaySvg, currentData, {
+        canvas,
+        appMode,
+        overlayPaths: settings.overlayPaths,
+        overlayGraph: settings.overlayGraph,
+        useSvgOverlay: settings.worldMapUseSvgOverlay,
+        camera: settings.worldMapCamera
+      });
+      if (typeof window !== 'undefined' && window.__DEBUG_LOOP__) console.log('[Main] renderMapOverlaySvg complete');
+    }
   }
 }
 
@@ -2258,6 +2358,16 @@ const { startGameLoop, stopGameLoop } = createGameLoop({
     playSessionSeconds = Math.max(0, Math.min(31_536_000, playSessionSeconds + d));
   },
   getGameTimeSec: () => gameTime,
+  isExternalTransitionBlocking: () => isDungeonTransitionBlocking(),
+  onPlayFrameAfterPlayerUpdate: (_data, dt) => {
+    updateDungeonTransition(dt);
+    refreshNearbyCavePortalProbe();
+  },
+  onDungeonFrame: (dt, inputX, inputY) => {
+    updateDungeonTransition(dt);
+    const step = updateDungeonRuntime(dt, inputX, inputY);
+    if (step?.wantsExit) requestExitDungeonToOverworld();
+  },
   onPlayHudFrame: (data) => {
     const nowMs = performance.now();
     if (nowMs - lastPlayAuxHudSyncAtMs < PLAY_AUX_HUD_SYNC_CADENCE_MS) return;
@@ -2303,6 +2413,12 @@ registerPlayKeyboard({
     });
   },
   player
+});
+
+setTryEnterDungeonFromInteractKey(() => {
+  if (appMode !== 'play' || !activeCavePortal || isDungeonTransitionBlocking()) return false;
+  requestEnterDungeonFromPortal(activeCavePortal);
+  return true;
 });
 
 installPlayPointerCombat({
@@ -2701,6 +2817,8 @@ function enterPlayMode(gx, gy, opts = {}) {
   resetPlayAutosaveSchedule();
   sessionEnteredPlayOnCurrentMap = true;
   playInputState.mouseValid = false;
+  activeCavePortal = null;
+  pendingDungeonPortalProbeTileKey = '';
   invalidatePlayPointerHover();
   clearPlayInventoryDropPreview();
   appMode = 'play';
@@ -2714,6 +2832,7 @@ function enterPlayMode(gx, gy, opts = {}) {
   minimapEventLogUi.clearPlayEventLogHudEngaged();
   minimapHudPopovers.forceCloseAllPopovers();
   if (infoBar) infoBar.innerHTML = '';
+  playInfoBarCaveHintActive = false;
   playFpsSampleTimes.length = 0;
   if (playFpsEl) playFpsEl.textContent = t('play.fpsPlaceholder');
   syncInfiniteLifeToggleUi();
@@ -2746,6 +2865,7 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
+  if (appMode === 'dungeon' && isDungeonActive()) leaveDungeon();
   resetFarCrySystem();
   stopBiomeBgm();
   stopWeatherAmbientAudio();

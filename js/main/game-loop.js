@@ -23,6 +23,7 @@ import {
   handleSpecialAttackHotkeyUp
 } from './play-mouse-combat.js';
 import { tryStrengthInteractKeyE, updateStrengthCarryInteraction } from './play-strength-carry.js';
+import { tryEnterDungeonFromInteractKey } from '../dungeon/play-interact-dungeon.js';
 import { updateThrownMapDetailEntities } from './thrown-map-detail-entities.js';
 import {
   updateCrystalShardParticles,
@@ -371,7 +372,10 @@ export function createGameLoop(api) {
     advancePlaySessionSeconds,
     getGameTimeSec,
     onEscapePlay,
-    getPlaySessionPersistExtra
+    getPlaySessionPersistExtra,
+    isExternalTransitionBlocking,
+    onPlayFrameAfterPlayerUpdate,
+    onDungeonFrame
   } = api;
   let lastFpsHudWriteMs = 0;
   let lastFpsHudText = '';
@@ -446,7 +450,7 @@ export function createGameLoop(api) {
       keyboardMoveY: inY
     });
 
-    if (['play'].includes(getAppMode())) {
+    if (['play', 'dungeon'].includes(getAppMode())) {
       if (mergedX === 0 && mergedY === 0) {
         player.runMode = false;
       } else if (gamepadAnalogMove) {
@@ -467,7 +471,7 @@ export function createGameLoop(api) {
     }
 
     // Encounter cinematic blocks player input (only during tension/reveal bars)
-    if (isEncounterCinematicBlocking()) {
+    if (isEncounterCinematicBlocking() || isExternalTransitionBlocking?.()) {
       player.inputX = 0;
       player.inputY = 0;
     }
@@ -492,15 +496,23 @@ export function createGameLoop(api) {
     try {
 
       const currentData = getCurrentData();
+      const mode = getAppMode();
     const tUpdPlayer0 = performance.now();
-    if (debug) console.log('[Loop] updatePlayer');
-    updatePlayer(simDt, currentData, getGameTimeSec?.());
+    if (mode === 'play') {
+      if (debug) console.log('[Loop] updatePlayer');
+      updatePlayer(simDt, currentData, getGameTimeSec?.());
+      onPlayFrameAfterPlayerUpdate?.(currentData, simDt);
+    } else if (mode === 'dungeon') {
+      onDungeonFrame?.(simDt, player.inputX || 0, player.inputY || 0);
+    }
     updateBreakdown.updPlayerMs = performance.now() - tUpdPlayer0;
-    if (debug) console.log('[Loop] updateEncounterCinematic');
-    updateEncounterCinematic(player, simDt);
-    updatePlayGrassRustle(simDt, player, getAppMode() === 'play' ? currentData : null);
+    if (mode === 'play') {
+      if (debug) console.log('[Loop] updateEncounterCinematic');
+      updateEncounterCinematic(player, simDt);
+    }
+    updatePlayGrassRustle(simDt, player, mode === 'play' ? currentData : null);
 
-    if (getAppMode() === 'play') {
+    if (mode === 'play') {
       updateCrystalShardParticles(simDt);
       updateCrystalDropsAndPickup(simDt, player);
       const breakableGate = consumeCadence(
@@ -519,7 +531,7 @@ export function createGameLoop(api) {
       }
     }
 
-    if (currentData && getAppMode() === 'play') {
+    if (currentData && mode === 'play') {
       const pvx = player.visualX ?? player.x;
       const pvy = player.visualY ?? player.y;
       syncSpatialListenerFromPlayer(player);
@@ -664,7 +676,7 @@ export function createGameLoop(api) {
     const tRenderEnd = performance.now();
     if (debug) console.log('[Loop] Post-updateView', tRenderEnd);
     const playFpsEl = getPlayFpsEl();
-    if (getAppMode() === 'play' && playFpsEl) {
+    if ((getAppMode() === 'play' || getAppMode() === 'dungeon') && playFpsEl) {
       const tEnd = performance.now();
       const frameMs = tEnd - tLoopStart;
       playFpsSampleTimes.push(tEnd);
@@ -806,7 +818,7 @@ export function createGameLoop(api) {
         lastFpsHudCompact = compact;
       }
     }
-    if (getAppMode() === 'play') {
+    if (getAppMode() === 'play' || getAppMode() === 'dungeon') {
       const fpsCap = getPlayFpsCap();
       if (fpsCap > 0) {
         const minFrameMs = 1000 / fpsCap;
@@ -914,7 +926,7 @@ export function registerPlayKeyboard(api) {
   window.addEventListener(
     'keydown',
     (e) => {
-    if (getAppMode() === 'play') {
+    if (getAppMode() === 'play' || getAppMode() === 'dungeon') {
       const el = e.target instanceof HTMLElement ? e.target : null;
       if (
         el &&
@@ -959,13 +971,13 @@ export function registerPlayKeyboard(api) {
       if (e.code === 'Space') {
         playInputState.spaceHeld = true;
       }
-      if (e.code === 'KeyF') {
+      if (e.code === 'KeyF' && getAppMode() === 'play') {
         e.preventDefault();
         togglePlayerCreativeFlight();
         if (getCurrentData()) refreshPlayModeInfoBar(true);
       }
 
-      if (e.code === 'KeyG' && !e.repeat) {
+      if (e.code === 'KeyG' && !e.repeat && getAppMode() === 'play') {
         e.preventDefault();
         const on = toggleDeadzoneCamera();
         console.log(`[camera] deadzone ${on ? 'ON' : 'OFF'}`);
@@ -1006,17 +1018,19 @@ export function registerPlayKeyboard(api) {
         if (getCurrentData()) refreshPlayModeInfoBar(true);
       }
 
-      if (e.key === ' ' && !e.repeat) {
+      if (e.key === ' ' && !e.repeat && getAppMode() === 'play') {
         if (!isEncounterCinematicBlocking()) tryJumpPlayer(getCurrentData());
       }
 
-      if (!e.repeat && handleFieldSkillHotkeyDown(e.code)) {
+      if (getAppMode() === 'play' && !e.repeat && handleFieldSkillHotkeyDown(e.code)) {
         e.preventDefault();
-      } else if (!e.repeat && handleSpecialAttackHotkeyDown(e.code)) {
+      } else if (getAppMode() === 'play' && !e.repeat && handleSpecialAttackHotkeyDown(e.code)) {
         e.preventDefault();
-      } else if (!e.repeat && e.code === 'KeyE') {
+      } else if (getAppMode() === 'play' && !e.repeat && e.code === 'KeyE') {
         const data = getCurrentData();
-        if (data && tryStrengthInteractKeyE(player, data)) {
+        if (data && tryEnterDungeonFromInteractKey()) {
+          e.preventDefault();
+        } else if (data && tryStrengthInteractKeyE(player, data)) {
           e.preventDefault();
         }
       }
@@ -1064,13 +1078,13 @@ export function registerPlayKeyboard(api) {
   );
 
   window.addEventListener('blur', () => {
-    if (getAppMode() !== 'play') return;
+    if (getAppMode() !== 'play' && getAppMode() !== 'dungeon') return;
     clearHeldPlayKeys();
   });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'hidden') return;
-    if (getAppMode() !== 'play') return;
+    if (getAppMode() !== 'play' && getAppMode() !== 'dungeon') return;
     clearHeldPlayKeys();
   });
 }

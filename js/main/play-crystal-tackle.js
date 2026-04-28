@@ -7,7 +7,7 @@ import { parseShape, seededHash } from '../tessellation-logic.js';
 import { MACRO_TILE_STRIDE, getMicroTile } from '../chunking.js';
 import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
-import { invalidateStaticEntityCache } from '../render/static-entity-cache.js';
+import { getStaticEntitiesForChunk, invalidateStaticEntityCache } from '../render/static-entity-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { harvestBerryTree, getBerryTreeState } from './berry-tree-system.js';
@@ -152,6 +152,24 @@ const DETAIL_SWEEP_INTERVAL_SEC = 0.5;
 const DETAIL_HIT_BAR_ANIM_SEC = 0.16;
 const DETAIL_HIT_BAR_LINGER_SEC = 1.05;
 const DETAIL_HIT_SHAKE_SEC = 0.18;
+
+function isPersistentDungeonPortalItemKey(itemKey) {
+  const key = String(itemKey || '');
+  return key.includes('cave-entrance') && !key.includes('cave-entrance-blocked');
+}
+
+function isBlockedDungeonPortalItemKey(itemKey) {
+  return String(itemKey || '').includes('cave-entrance-blocked');
+}
+
+function resolveOpenedDungeonPortalItemKey(itemKey) {
+  const key = String(itemKey || '');
+  if (key.includes('south-cave-entrance-blocked')) return 'cave-entrance-south [3x3]';
+  if (key.includes('east-cave-entrance-blocked')) return 'cave-entrance-east [3x3]';
+  if (key.includes('west-cave-entrance-blocked')) return 'cave-entrance-west [3x3]';
+  if (key.includes('north-cave-entrance-blocked')) return 'cave-entrance-north [1x3]';
+  return null;
+}
 
 const chunkRebakeBatchKeys = new Set();
 let chunkRebakeBatchDepth = 0;
@@ -1294,6 +1312,19 @@ function segmentCircleFirstHitT(ax, ay, bx, by, cx, cy, r) {
 
 function markDestroyedDetailAndScheduleRegen(st, nowSec, opts = {}) {
   if (!st || st.destroyed) return;
+  if (isBlockedDungeonPortalItemKey(st.itemKey)) {
+    const openedCaveItemKey = resolveOpenedDungeonPortalItemKey(st.itemKey);
+    if (openedCaveItemKey) {
+      setScatterItemKeyOverride(st.ox, st.oy, openedCaveItemKey);
+      unregisterDestroyedDetailOrigin(st.ox, st.oy);
+      detailBreakStateByOrigin.delete(`${st.ox},${st.oy}`);
+      detailHitHpBars.delete(`${st.ox},${st.oy}`);
+      detailHitShakeAtSec.delete(`${st.ox},${st.oy}`);
+      clearScatterSolidBlockCache();
+      invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+      return;
+    }
+  }
   setScatterItemKeyOverride(st.ox, st.oy, null);
   if (!opts.skipTreeTopFall) pushVegetationDissolveFromSt(st, nowSec);
   st.destroyed = true;
@@ -1322,6 +1353,19 @@ function sweepDetailBreakState(data, nowSec) {
       continue;
     }
     if (st.destroyed) {
+      if (isBlockedDungeonPortalItemKey(st.itemKey)) {
+        const openedCaveItemKey = resolveOpenedDungeonPortalItemKey(st.itemKey);
+        if (openedCaveItemKey) {
+          setScatterItemKeyOverride(st.ox, st.oy, openedCaveItemKey);
+          unregisterDestroyedDetailOrigin(st.ox, st.oy);
+          detailBreakStateByOrigin.delete(key);
+          detailHitHpBars.delete(key);
+          detailHitShakeAtSec.delete(key);
+          clearScatterSolidBlockCache();
+          invalidateChunksOverlappingFootprint(st.ox, st.oy, st.cols, st.rows);
+          continue;
+        }
+      }
       if (strengthCarriedBlockRegenKeys.has(key)) {
         continue;
       }
@@ -1458,6 +1502,7 @@ function tryApplyTreeTackleEffects(cx, cy, biomeId, seed, data) {
  *   worldHitOnceSet?: Set<string>,
  *   spawnedHitOnceSet?: Set<number>,
  *   hitSource?: 'tackle' | 'cut' | 'other',
+ *   breakPowerTag?: 'fireBlast' | 'flameCharge' | 'other',
  *   detailCharge01?: number | null,
  *   treeDemolishOneShot?: boolean,
  *   excludePureGrassScatterHits?: boolean,
@@ -1614,11 +1659,36 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
       if (worldHitOnceSet) worldHitOnceSet.add(worldKey);
       continue;
     }
-    if (isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
+    if (!isPersistentDungeonPortalItemKey(hit.itemKey) && isPlayDetailScatterOriginDestroyed(hit.rootOx, hit.rootOy)) continue;
     const objSet = OBJECT_SETS[hit.itemKey];
     const shape = objSet ? parseShape(objSet.shape) : { rows: 1, cols: 1 };
-    const st = getOrCreateDetailBreakState(hit.rootOx, hit.rootOy, hit.itemKey, objSet, nowSec);
-    if (st.destroyed) continue;
+    if (isPersistentDungeonPortalItemKey(hit.itemKey)) {
+      continue;
+    }
+    const isBlockedCaveEntrance = isBlockedDungeonPortalItemKey(hit.itemKey);
+    const st = getOrCreateDetailBreakState(
+      hit.rootOx,
+      hit.rootOy,
+      hit.itemKey,
+      objSet,
+      nowSec,
+      isBlockedCaveEntrance ? 20 : undefined
+    );
+    if (st.destroyed) {
+      if (isBlockedCaveEntrance) {
+        const openedCaveItemKey = resolveOpenedDungeonPortalItemKey(hit.itemKey);
+        if (openedCaveItemKey) {
+          setScatterItemKeyOverride(hit.rootOx, hit.rootOy, openedCaveItemKey);
+          unregisterDestroyedDetailOrigin(hit.rootOx, hit.rootOy);
+          detailBreakStateByOrigin.delete(worldKey);
+          detailHitHpBars.delete(worldKey);
+          detailHitShakeAtSec.delete(worldKey);
+          clearScatterSolidBlockCache();
+          invalidateChunksOverlappingFootprint(hit.rootOx, hit.rootOy, shape.cols, shape.rows);
+        }
+      }
+      continue;
+    }
     const hpBefore = st.hitsRemaining;
     const isTreeHit = scatterItemKeyIsTree(hit.itemKey);
     const hitX = hit.cx ?? hit.rootOx + 0.5;
@@ -1626,6 +1696,14 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
     const baseTreeDmg =
       isTreeHit && !(hitSource === 'cut' || hitSource === 'tackle') ? 0 : 1;
     let treeDamage = baseTreeDmg > 0 ? baseTreeDmg + bonusHits : 0;
+    if (isBlockedCaveEntrance) {
+      const highPowerFire = opts.breakPowerTag === 'fireBlast' || opts.breakPowerTag === 'flameCharge';
+      if (highPowerFire) {
+        treeDamage = st.hitsRemaining;
+      } else {
+        treeDamage = hitSource === 'cut' || hitSource === 'tackle' ? 1 : 0;
+      }
+    }
     if (treeDemolishOneShot && isTreeHit && treeDamage > 0) {
       treeDamage = st.hitsRemaining;
     }
@@ -1683,6 +1761,20 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
         );
       }
       continue;
+    }
+
+    if (isBlockedCaveEntrance) {
+      const openedCaveItemKey = resolveOpenedDungeonPortalItemKey(hit.itemKey);
+      if (openedCaveItemKey) {
+        setScatterItemKeyOverride(hit.rootOx, hit.rootOy, openedCaveItemKey);
+        unregisterDestroyedDetailOrigin(hit.rootOx, hit.rootOy);
+        detailBreakStateByOrigin.delete(worldKey);
+        detailHitHpBars.delete(worldKey);
+        detailHitShakeAtSec.delete(worldKey);
+        clearScatterSolidBlockCache();
+        invalidateChunksOverlappingFootprint(hit.rootOx, hit.rootOy, shape.cols, shape.rows);
+        continue;
+      }
     }
 
     if (hitSource === 'cut' && scatterItemKeyIsTree(hit.itemKey)) {
@@ -1894,6 +1986,35 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
   beginChunkRebakeBatch();
   const microW = data.width * MACRO_TILE_STRIDE;
   const microH = data.height * MACRO_TILE_STRIDE;
+  const blockedCaveChunkMemo = new Map();
+  const blockedCaveByOriginMemo = new Map();
+  const blockedCaveHitAddedOrigins = new Set();
+  const getBlockedCaveAtOrigin = (ox, oy) => {
+    const originKey = `${ox},${oy}`;
+    if (blockedCaveByOriginMemo.has(originKey)) return blockedCaveByOriginMemo.get(originKey);
+    const cx = Math.floor(ox / PLAY_CHUNK_SIZE);
+    const cy = Math.floor(oy / PLAY_CHUNK_SIZE);
+    if (cx < 0 || cy < 0) {
+      blockedCaveByOriginMemo.set(originKey, null);
+      return null;
+    }
+    const chunkKey = `${cx},${cy}`;
+    if (!blockedCaveChunkMemo.has(chunkKey)) {
+      const entities = getStaticEntitiesForChunk(cx, cy, chunkKey, data, microW, microH);
+      const byOrigin = new Map();
+      for (const ent of entities) {
+        if (ent?.type !== 'scatter') continue;
+        const itemKey = String(ent.itemKey || '');
+        if (!itemKey.includes('cave-entrance-blocked')) continue;
+        byOrigin.set(`${ent.originX | 0},${ent.originY | 0}`, ent);
+      }
+      blockedCaveChunkMemo.set(chunkKey, byOrigin);
+    }
+    const chunkMap = blockedCaveChunkMemo.get(chunkKey);
+    const found = chunkMap?.get(originKey) || null;
+    blockedCaveByOriginMemo.set(originKey, found);
+    return found;
+  };
   /** @type {Array<any>} */
   const hits = [];
   const stepTiles =
@@ -1921,6 +2042,56 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
     const ht = segmentCircleFirstHitT(px, py, ex, ey, sc.x, sc.y, detailR + TACKLE_SWEEP_RADIUS_TILES);
     if (ht == null) continue;
     hits.push({ type: 'spawnedSmall', id: sc.id, itemKey: sc.itemKey, x: sc.x, y: sc.y, t: ht });
+  }
+  // Add blocked cave candidates directly from nearby chunk entities so detection is
+  // consistent across terrain-step edges and not dependent on origin sampling windows.
+  {
+    const minX = Math.min(px, ex) - 8;
+    const maxX = Math.max(px, ex) + 8;
+    const minY = Math.min(py, ey) - 8;
+    const maxY = Math.max(py, ey) + 8;
+    const cx0 = Math.max(0, Math.floor(minX / PLAY_CHUNK_SIZE));
+    const cy0 = Math.max(0, Math.floor(minY / PLAY_CHUNK_SIZE));
+    const cx1 = Math.max(0, Math.floor(maxX / PLAY_CHUNK_SIZE));
+    const cy1 = Math.max(0, Math.floor(maxY / PLAY_CHUNK_SIZE));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const chunkKey = `${cx},${cy}`;
+        const entities = getStaticEntitiesForChunk(cx, cy, chunkKey, data, microW, microH);
+        for (const ent of entities) {
+          if (ent?.type !== 'scatter') continue;
+          const itemKey = String(ent.itemKey || '');
+          if (!itemKey.includes('cave-entrance-blocked')) continue;
+          const ox = ent.originX | 0;
+          const oy = ent.originY | 0;
+          const originKey = `${ox},${oy}`;
+          if (blockedCaveHitAddedOrigins.has(originKey)) continue;
+          const overrideKey = String(getScatterItemKeyOverride(ox, oy) || '');
+          const alreadyOpenedByOverride =
+            overrideKey.includes('cave-entrance') && !overrideKey.includes('cave-entrance-blocked');
+          if (alreadyOpenedByOverride) continue;
+          const cols = Math.max(1, Number(ent.cols) || 1);
+          const rows = Math.max(1, Number(ent.rows) || 1);
+          const cx0Ent = ox + cols * 0.5;
+          const cy0Ent = oy + rows * 0.5;
+          const detailRBase = Math.max(0.4, Math.max(cols, rows) * 0.34);
+          const detailR = detailRBase * TACKLE_DETAIL_HURTBOX_RADIUS_MULT;
+          const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
+          const ht = segmentCircleFirstHitT(px, py, ex, ey, cx0Ent, cy0Ent, rr);
+          if (ht == null) continue;
+          hits.push({
+            type: 'worldDetail',
+            rootOx: ox,
+            rootOy: oy,
+            itemKey,
+            cx: cx0Ent,
+            cy: cy0Ent,
+            t: ht
+          });
+          blockedCaveHitAddedOrigins.add(originKey);
+        }
+      }
+    }
   }
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -1971,6 +2142,36 @@ export function tryBreakDetailsAlongSegment(ax, ay, bx, by, data, opts = {}) {
             t: ht
           });
           continue;
+        }
+        const blockedCaveEnt = getBlockedCaveAtOrigin(ox, oy);
+        if (blockedCaveEnt) {
+          if (blockedCaveHitAddedOrigins.has(`${ox},${oy}`)) continue;
+          const overrideKey = String(getScatterItemKeyOverride(ox, oy) || '');
+          const alreadyOpenedByOverride =
+            overrideKey.includes('cave-entrance') && !overrideKey.includes('cave-entrance-blocked');
+          if (alreadyOpenedByOverride) continue;
+          const itemKey = String(blockedCaveEnt.itemKey || '');
+          if (opts.excludePureGrassScatterHits && scatterItemKeyIsPureGrassDecoration(itemKey)) continue;
+          const cols = Math.max(1, Number(blockedCaveEnt.cols) || 1);
+          const rows = Math.max(1, Number(blockedCaveEnt.rows) || 1);
+          const cx0 = ox + cols * 0.5;
+          const cy0 = oy + rows * 0.5;
+          const detailRBase = Math.max(0.4, Math.max(cols, rows) * 0.34);
+          const detailR = detailRBase * TACKLE_DETAIL_HURTBOX_RADIUS_MULT;
+          const rr = detailR + TACKLE_SWEEP_RADIUS_TILES;
+          const ht = segmentCircleFirstHitT(px, py, ex, ey, cx0, cy0, rr);
+          if (ht != null) {
+            hits.push({
+              type: 'worldDetail',
+              rootOx: ox,
+              rootOy: oy,
+              itemKey,
+              cx: cx0,
+              cy: cy0,
+              t: ht
+            });
+            continue;
+          }
         }
         const charred = isPlayFormalTreeRootCharred(ox, oy);
         if (charred || (!isPlayFormalTreeRootDestroyed(ox, oy) && didFormalTreeSpawnAtRoot(ox, oy, data))) {

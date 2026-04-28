@@ -283,7 +283,7 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
   } else if (p.type === 'flameChargeTrail' || p.type === 'flameChargeHead') {
     const tier = Number(p.tier) || 2;
     const head = p.type === 'flameChargeHead';
-    const r = (head ? tileW * 0.16 : tileW * 0.11) * (0.55 + 0.45 * a) * (tier === 3 ? 1.12 : tier === 2 ? 1.04 : 1);
+    const r = (head ? tileW * 0.22 : tileW * 0.155) * (0.55 + 0.45 * a) * (tier === 3 ? 1.16 : tier === 2 ? 1.08 : 1.03);
     const grd = ctx.createRadialGradient(px - r * 0.2, py - r * 0.25, r * 0.05, px, py, r);
     grd.addColorStop(0, head ? 'rgba(255,255,220,0.95)' : 'rgba(255,240,180,0.88)');
     grd.addColorStop(0.45, 'rgba(255,120,40,0.72)');

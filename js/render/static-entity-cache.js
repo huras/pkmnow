@@ -36,6 +36,33 @@ import { PLAY_CHUNK_SIZE } from './render-constants.js';
 
 /** @type {Map<string, object[]>} chunk key → static entity descriptor list */
 const _chunkEntityCache = new Map();
+const BLOCKED_CAVE_CHANCE = 0.82;
+
+function shouldUseBlockedCaveEntrance(mx, my, seed, isLandmarkTile) {
+  if (isLandmarkTile) return true;
+  const sx = (mx | 0) * 73856093;
+  const sy = (my | 0) * 19349663;
+  const ss = (seed | 0) * 83492791;
+  const hash = (sx ^ sy ^ ss) >>> 0;
+  const roll01 = (hash & 0xffff) / 0x10000;
+  return roll01 < BLOCKED_CAVE_CHANCE;
+}
+
+function resolveCaveEntranceItemKey(baseItemKey, mx, my, seed, isLandmarkTile) {
+  if (!shouldUseBlockedCaveEntrance(mx, my, seed, isLandmarkTile)) return baseItemKey;
+  switch (baseItemKey) {
+    case 'cave-entrance-south [3x3]':
+      return 'south-cave-entrance-blocked [3x3]';
+    case 'cave-entrance-east [3x3]':
+      return 'east-cave-entrance-blocked [3x3]';
+    case 'cave-entrance-west [3x3]':
+      return 'west-cave-entrance-blocked [3x3]';
+    case 'cave-entrance-north [1x3]':
+      return 'north-cave-entrance-blocked [1x3]';
+    default:
+      return baseItemKey;
+  }
+}
 
 /** Scatter origin validity memo — persists across frames, cleared on map change. */
 let _scatterMemo = new Map();
@@ -201,16 +228,16 @@ export function getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH) {
                 const roleBottom = getRoleForCell(myScan + 1, mxScan, fullH, fullW, checkAtOrAbove, set.type);
                 
                 if (role === 'EDGE_S' && roleLeft === 'EDGE_S' && roleRight === 'EDGE_S') {
-                    caveItemKey = 'cave-entrance-south [3x3]';
+                    caveItemKey = resolveCaveEntranceItemKey('cave-entrance-south [3x3]', mxScan, myScan, data.seed, isLandmarkTile);
                     caveColOffset = 1; caveRowOffset = 1;
                 } else if (role === 'EDGE_E' && roleTop === 'EDGE_E' && roleBottom === 'EDGE_E') {
-                    caveItemKey = 'cave-entrance-east [3x3]';
+                    caveItemKey = resolveCaveEntranceItemKey('cave-entrance-east [3x3]', mxScan, myScan, data.seed, isLandmarkTile);
                     caveColOffset = 1; caveRowOffset = 1;
                 } else if (role === 'EDGE_W' && roleTop === 'EDGE_W' && roleBottom === 'EDGE_W') {
-                    caveItemKey = 'cave-entrance-west [3x3]';
+                    caveItemKey = resolveCaveEntranceItemKey('cave-entrance-west [3x3]', mxScan, myScan, data.seed, isLandmarkTile);
                     caveColOffset = 1; caveRowOffset = 1;
                 } else if (role === 'EDGE_N' && roleLeft === 'EDGE_N' && roleRight === 'EDGE_N') {
-                    caveItemKey = 'cave-entrance-north [1x3]';
+                    caveItemKey = resolveCaveEntranceItemKey('cave-entrance-north [1x3]', mxScan, myScan, data.seed, isLandmarkTile);
                     caveColOffset = 1; caveRowOffset = 0;
                 }
             }

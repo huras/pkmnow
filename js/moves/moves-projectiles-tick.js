@@ -155,7 +155,14 @@ export function tickActiveProjectiles(ctx) {
       if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
-        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle', pz: zBeam });
+        const breakPowerTag =
+          proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard' ? 'fireBlast' : 'other';
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {
+          worldHitOnceSet: detailSet,
+          hitSource: 'tackle',
+          breakPowerTag,
+          pz: zBeam
+        });
       }
 
       if (proj.timeToLive <= 0) {
@@ -302,9 +309,12 @@ export function tickActiveProjectiles(ctx) {
       if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
+        const breakPowerTag =
+          proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard' ? 'fireBlast' : 'other';
         tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {
           worldHitOnceSet: detailSet,
           hitSource: 'tackle',
+          breakPowerTag,
           pz: zDet
         });
       }

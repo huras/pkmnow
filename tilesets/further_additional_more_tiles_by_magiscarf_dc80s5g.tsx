@@ -79,4 +79,50 @@
  <tile id="776" type="west-cave-entrance"/>
  <tile id="777" type="west-cave-entrance"/>
  <tile id="778" type="west-cave-entrance"/>
+ <tile id="878" type="east-cave-entrance-blocked"/>
+ <tile id="879" type="east-cave-entrance-blocked"/>
+ <tile id="880" type="east-cave-entrance-blocked"/>
+ <tile id="881" type="south-cave-entrance-blocked"/>
+ <tile id="882" type="south-cave-entrance-blocked"/>
+ <tile id="883" type="south-cave-entrance-blocked"/>
+ <tile id="884" type="west-cave-entrance-blocked"/>
+ <tile id="885" type="west-cave-entrance-blocked"/>
+ <tile id="886" type="west-cave-entrance-blocked"/>
+ <tile id="932" type="east-cave-entrance-blocked"/>
+ <tile id="933" type="east-cave-entrance-blocked">
+  <properties>
+   <property name="role" value="center"/>
+  </properties>
+ </tile>
+ <tile id="934" type="east-cave-entrance-blocked"/>
+ <tile id="935" type="south-cave-entrance-blocked"/>
+ <tile id="936" type="south-cave-entrance-blocked">
+  <properties>
+   <property name="role" value="center"/>
+  </properties>
+ </tile>
+ <tile id="937" type="south-cave-entrance-blocked"/>
+ <tile id="938" type="west-cave-entrance-blocked"/>
+ <tile id="939" type="west-cave-entrance-blocked">
+  <properties>
+   <property name="role" value="center"/>
+  </properties>
+ </tile>
+ <tile id="940" type="west-cave-entrance-blocked"/>
+ <tile id="941" type="north-cave-entrance-blocked"/>
+ <tile id="942" type="north-cave-entrance-blocked">
+  <properties>
+   <property name="role" value="center"/>
+  </properties>
+ </tile>
+ <tile id="943" type="north-cave-entrance-blocked"/>
+ <tile id="986" type="east-cave-entrance-blocked"/>
+ <tile id="987" type="east-cave-entrance-blocked"/>
+ <tile id="988" type="east-cave-entrance-blocked"/>
+ <tile id="989" type="south-cave-entrance-blocked"/>
+ <tile id="990" type="south-cave-entrance-blocked"/>
+ <tile id="991" type="south-cave-entrance-blocked"/>
+ <tile id="992" type="west-cave-entrance-blocked"/>
+ <tile id="993" type="west-cave-entrance-blocked"/>
+ <tile id="994" type="west-cave-entrance-blocked"/>
 </tileset>
