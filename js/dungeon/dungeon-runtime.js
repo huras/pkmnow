@@ -1,9 +1,11 @@
 import { DUNGEON_TILE_TYPES } from './tile-map.js';
 import { generateDeterministicDungeon } from './dungeon-generator.js';
+import { stringToSeed } from '../rng.js';
 
 const state = {
   active: false,
   portalId: '',
+  dungeonId: '',
   worldSeed: 0,
   map: null,
   playerX: 0,
@@ -29,27 +31,30 @@ export function getDungeonState() {
 }
 
 export function enterDungeon(params) {
-  const portalId = String(params?.portalId || '');
-  if (!portalId) return false;
+  const entranceId = String(params?.portalId || '');
+  if (!entranceId) return false;
+  const dungeonId = String(params?.dungeonId || entranceId);
   const worldSeed = Number(params?.worldSeed) || 0;
-  const cacheKey = `${worldSeed}:${portalId}`;
+  const cacheKey = `${worldSeed}:${dungeonId}`;
   let generated = dungeonCache.get(cacheKey);
   if (!generated) {
     generated = generateDeterministicDungeon({
       worldSeed,
-      portalId
+      portalId: dungeonId
     });
     dungeonCache.set(cacheKey, generated);
   }
 
+  const spawn = resolveEntrySpawnPoint(generated.map, generated.entry, generated.exit, entranceId);
   state.active = true;
-  state.portalId = portalId;
+  state.portalId = entranceId;
+  state.dungeonId = dungeonId;
   state.worldSeed = worldSeed;
   state.map = generated.map;
   state.entry = generated.entry;
   state.exit = generated.exit;
-  state.playerX = generated.entry.x + 0.5;
-  state.playerY = generated.entry.y + 0.5;
+  state.playerX = spawn.x + 0.5;
+  state.playerY = spawn.y + 0.5;
   state.lastPlayerX = state.playerX;
   state.lastPlayerY = state.playerY;
   state.returnWorldX = Number(params?.returnWorldX) || 0;
@@ -64,7 +69,8 @@ export function leaveDungeon() {
   const out = {
     returnWorldX: state.returnWorldX,
     returnWorldY: state.returnWorldY,
-    portalId: state.portalId
+    portalId: state.portalId,
+    dungeonId: state.dungeonId
   };
   return out;
 }
@@ -107,4 +113,23 @@ function isWalkableAt(x, y, map) {
     t === DUNGEON_TILE_TYPES.STAIRS_DOWN ||
     t === DUNGEON_TILE_TYPES.STAIRS_UP
   );
+}
+
+function resolveEntrySpawnPoint(map, fallbackEntry, fallbackExit, entranceId) {
+  if (!map) return fallbackEntry;
+  const candidates = [];
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const t = map.get(x, y);
+      const walkable = t === DUNGEON_TILE_TYPES.FLOOR || t === DUNGEON_TILE_TYPES.CORRIDOR;
+      if (!walkable) continue;
+      if (x === fallbackEntry?.x && y === fallbackEntry?.y) continue;
+      if (x === fallbackExit?.x && y === fallbackExit?.y) continue;
+      candidates.push({ x, y });
+    }
+  }
+  if (candidates.length === 0) return fallbackEntry || { x: 1, y: 1 };
+  const seed = stringToSeed(String(entranceId || 'entrance-default'));
+  const idx = Math.abs(seed % candidates.length);
+  return candidates[idx];
 }

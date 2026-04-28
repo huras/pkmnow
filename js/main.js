@@ -2149,6 +2149,7 @@ function requestEnterDungeonFromPortal(portal) {
   startDungeonTransition('enter', () => {
     const ok = enterDungeon({
       portalId: portal.id,
+      dungeonId: portal.dungeonId || portal.id,
       worldSeed: currentData.seed,
       returnWorldX: Number.isFinite(portal.interactX) ? portal.interactX : portal.worldX,
       returnWorldY: Number.isFinite(portal.interactY) ? portal.interactY : portal.worldY

@@ -2,6 +2,7 @@ import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { getStaticEntitiesForChunk } from '../render/static-entity-cache.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getScatterItemKeyOverride } from '../main/scatter-item-override.js';
+const LINK_MAX_DIST_TILES = 4.25;
 
 function isCaveEntity(entity) {
   if (!entity || entity.type !== 'scatter') return false;
@@ -53,11 +54,12 @@ export function findNearbyCavePortal(data, playerX, playerY, maxDistance = 1.15)
   const py = Math.floor(Number(playerY) || 0);
   const baseCx = Math.floor(px / PLAY_CHUNK_SIZE);
   const baseCy = Math.floor(py / PLAY_CHUNK_SIZE);
+  const portals = [];
   let best = null;
   let bestDistSq = maxDistance * maxDistance;
 
-  for (let cy = baseCy - 1; cy <= baseCy + 1; cy++) {
-    for (let cx = baseCx - 1; cx <= baseCx + 1; cx++) {
+  for (let cy = baseCy - 2; cy <= baseCy + 2; cy++) {
+    for (let cx = baseCx - 2; cx <= baseCx + 2; cx++) {
       if (cx < 0 || cy < 0) continue;
       const key = `${cx},${cy}`;
       const entities = getStaticEntitiesForChunk(cx, cy, key, data, fullW, fullH);
@@ -67,6 +69,7 @@ export function findNearbyCavePortal(data, playerX, playerY, maxDistance = 1.15)
           continue;
         }
         const portal = buildPortalFromEntity(entity);
+        portals.push(portal);
         const dx = portal.interactX - playerX;
         const dy = portal.interactY - playerY;
         const d2 = dx * dx + dy * dy;
@@ -77,7 +80,39 @@ export function findNearbyCavePortal(data, playerX, playerY, maxDistance = 1.15)
       }
     }
   }
-  return best;
+  if (!best) return null;
+  const dungeonGroupId = resolvePortalGroupId(best, portals);
+  return {
+    ...best,
+    dungeonId: `cave-group:${dungeonGroupId}`
+  };
+}
+
+function resolvePortalGroupId(seedPortal, portals) {
+  if (!seedPortal || !Array.isArray(portals) || portals.length === 0) {
+    return String(seedPortal?.id || 'solo');
+  }
+  const visited = new Set();
+  const queue = [seedPortal];
+  const members = [];
+  const maxD2 = LINK_MAX_DIST_TILES * LINK_MAX_DIST_TILES;
+  while (queue.length > 0) {
+    const cur = queue.pop();
+    if (!cur || visited.has(cur.id)) continue;
+    visited.add(cur.id);
+    members.push(cur);
+    for (let i = 0; i < portals.length; i++) {
+      const p = portals[i];
+      if (!p || visited.has(p.id)) continue;
+      const dx = (p.worldX - cur.worldX);
+      const dy = (p.worldY - cur.worldY);
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= maxD2) queue.push(p);
+    }
+  }
+  if (members.length === 0) return seedPortal.id;
+  members.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return String(members[0].id || seedPortal.id);
 }
 
 function resolvePortalInteractPoint(itemKey, ox, oy, cols, rows, centerX, centerY) {
