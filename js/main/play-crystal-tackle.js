@@ -1766,6 +1766,8 @@ function applySortedDetailHits(hits, data, opts, nowSec, consumedWorld, consumed
     if (isBlockedCaveEntrance) {
       const openedCaveItemKey = resolveOpenedDungeonPortalItemKey(hit.itemKey);
       if (openedCaveItemKey) {
+        // Small rock burst when breaking cave blockage.
+        spawnCrystalShards(hit.rootOx, hit.rootOy, 'dirt-rock [1x1]', data);
         setScatterItemKeyOverride(hit.rootOx, hit.rootOy, openedCaveItemKey);
         unregisterDestroyedDetailOrigin(hit.rootOx, hit.rootOy);
         detailBreakStateByOrigin.delete(worldKey);

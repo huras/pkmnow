@@ -43,13 +43,13 @@ export function tickFireSpinHold(player, dt, pushParticle, charge01) {
   const spinRate = 4.2 + cp * 6.5 + ramp * 9.0 + ch * 1.8;
   player.fireSpinOrbitAngle = (player.fireSpinOrbitAngle || 0) + spinRate * dt;
   const a = player.fireSpinOrbitAngle;
-  const baseR = 0.38 + cp * 0.42 + ramp * 0.55;
-  const wobble = 0.12 + cp * 0.16 + ramp * 0.22;
+  const baseR = 0.62 + cp * 0.58 + ramp * 0.72;
+  const wobble = 0.2 + cp * 0.22 + ramp * 0.28;
   const R = Math.max(0.18, baseR + Math.sin(a * 2.1) * wobble);
   const px = (player.visualX ?? player.x) + 0.5 + Math.cos(a) * R;
   const py = (player.visualY ?? player.y) + 0.5 + Math.sin(a) * R;
   const pz = Math.max(0.06, (player.z || 0) * 0.35 + 0.08);
-  const interval = Math.max(0.012, 0.034 - ramp * 0.018 - cp * 0.008);
+  const interval = Math.max(0.01, 0.03 - ramp * 0.015 - cp * 0.007);
   player.fireSpinParticleAcc = (player.fireSpinParticleAcc || 0) + dt;
   while ((player.fireSpinParticleAcc || 0) >= interval) {
     player.fireSpinParticleAcc -= interval;
@@ -58,29 +58,45 @@ export function tickFireSpinHold(player, dt, pushParticle, charge01) {
       type: 'fireSpinSpark',
       x: px + jitter,
       y: py + jitter,
-      z: pz + Math.random() * 0.04,
+      z: pz + Math.random() * 0.08,
       vx: (Math.random() - 0.5) * 0.35,
       vy: (Math.random() - 0.5) * 0.35,
       vz: 0.15 + Math.random() * 0.2,
-      life: 0.14 + ramp * 0.12 + cp * 0.08,
-      maxLife: 0.14 + ramp * 0.12 + cp * 0.08,
-      size01: 0.35 + ramp * 0.45 + cp * 0.25
+      life: 0.18 + ramp * 0.14 + cp * 0.1,
+      maxLife: 0.18 + ramp * 0.14 + cp * 0.1,
+      size01: 0.9 + ramp * 0.65 + cp * 0.42
     });
   }
-  const second = a + Math.PI * 0.72;
+  const second = a + Math.PI * 0.66;
   const R2 = Math.max(0.16, baseR * 0.82 + Math.sin(second * 1.9) * wobble * 0.9);
+  const third = a + Math.PI * 1.35;
+  const R3 = Math.max(0.16, baseR * 0.78 + Math.sin(third * 2.05) * wobble * 0.85);
   if (ramp > 0.35 || cp > 0.35) {
     pushParticle({
       type: 'fireSpinSpark',
       x: (player.visualX ?? player.x) + 0.5 + Math.cos(second) * R2,
       y: (player.visualY ?? player.y) + 0.5 + Math.sin(second) * R2,
-      z: pz * 0.92,
+      z: pz * 0.95,
       vx: (Math.random() - 0.5) * 0.28,
       vy: (Math.random() - 0.5) * 0.28,
       vz: 0.12,
-      life: 0.12 + ramp * 0.1,
-      maxLife: 0.12 + ramp * 0.1,
-      size01: 0.32 + ramp * 0.35
+      life: 0.16 + ramp * 0.12,
+      maxLife: 0.16 + ramp * 0.12,
+      size01: 0.82 + ramp * 0.48 + cp * 0.24
+    });
+  }
+  if (ramp > 0.62 || cp > 0.55) {
+    pushParticle({
+      type: 'fireSpinSpark',
+      x: (player.visualX ?? player.x) + 0.5 + Math.cos(third) * R3,
+      y: (player.visualY ?? player.y) + 0.5 + Math.sin(third) * R3,
+      z: pz * 1.02,
+      vx: (Math.random() - 0.5) * 0.24,
+      vy: (Math.random() - 0.5) * 0.24,
+      vz: 0.1,
+      life: 0.14 + ramp * 0.1,
+      maxLife: 0.14 + ramp * 0.1,
+      size01: 0.76 + ramp * 0.42 + cp * 0.2
     });
   }
 }

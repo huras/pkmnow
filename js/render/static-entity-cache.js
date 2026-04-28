@@ -29,6 +29,7 @@ import { getRoleForCell, parseShape, terrainRoleAllowsScatter2CContinuation } fr
 import { hasScatterItemKeyOverride } from '../main/scatter-item-override.js';
 import { resolveScatterVegetationItemKey } from '../vegetation-channels.js';
 import { PLAY_CHUNK_SIZE } from './render-constants.js';
+import { GAMEPLAY_CONFIG } from '../gameplay-config.js';
 
 // ---------------------------------------------------------------------------
 // Module-level cache — one entry per chunk, keyed by "cx,cy" string.
@@ -36,8 +37,6 @@ import { PLAY_CHUNK_SIZE } from './render-constants.js';
 
 /** @type {Map<string, object[]>} chunk key → static entity descriptor list */
 const _chunkEntityCache = new Map();
-const BLOCKED_CAVE_CHANCE = 0.82;
-
 function shouldUseBlockedCaveEntrance(mx, my, seed, isLandmarkTile) {
   if (isLandmarkTile) return true;
   const sx = (mx | 0) * 73856093;
@@ -45,7 +44,8 @@ function shouldUseBlockedCaveEntrance(mx, my, seed, isLandmarkTile) {
   const ss = (seed | 0) * 83492791;
   const hash = (sx ^ sy ^ ss) >>> 0;
   const roll01 = (hash & 0xffff) / 0x10000;
-  return roll01 < BLOCKED_CAVE_CHANCE;
+  const blockedChance = Math.max(0, Math.min(1, Number(GAMEPLAY_CONFIG.blockedCaveSpawnChance) || 0));
+  return roll01 < blockedChance;
 }
 
 function resolveCaveEntranceItemKey(baseItemKey, mx, my, seed, isLandmarkTile) {

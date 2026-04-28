@@ -2,7 +2,7 @@ import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { getStaticEntitiesForChunk } from '../render/static-entity-cache.js';
 import { MACRO_TILE_STRIDE } from '../chunking.js';
 import { getScatterItemKeyOverride } from '../main/scatter-item-override.js';
-const LINK_MAX_DIST_TILES = 4.25;
+import { GAMEPLAY_CONFIG } from '../gameplay-config.js';
 
 function isCaveEntity(entity) {
   if (!entity || entity.type !== 'scatter') return false;
@@ -95,7 +95,8 @@ function resolvePortalGroupId(seedPortal, portals) {
   const visited = new Set();
   const queue = [seedPortal];
   const members = [];
-  const maxD2 = LINK_MAX_DIST_TILES * LINK_MAX_DIST_TILES;
+  const linkMax = Math.max(0.5, Number(GAMEPLAY_CONFIG.caveConnectionDistanceTiles) || 4.25);
+  const maxD2 = linkMax * linkMax;
   while (queue.length > 0) {
     const cur = queue.pop();
     if (!cur || visited.has(cur.id)) continue;

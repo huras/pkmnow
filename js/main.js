@@ -135,6 +135,7 @@ import {
 } from './render/play-camera-offset.js';
 import { isPlayStrictCullingEnabled, togglePlayStrictCulling } from './render/play-strict-culling.js';
 import { detailScatterGridPreviewHtml } from './main/detail-scatter-preview-html.js';
+import { GAMEPLAY_CONFIG } from './gameplay-config.js';
 import { getBiomeBgmUiState, stopBiomeBgm } from './audio/biome-bgm.js';
 import { stopWeatherAmbientAudio } from './audio/weather-ambient-audio.js';
 import { stopEarthquakeAmbientAudio } from './audio/earthquake-ambient-audio.js';
@@ -2418,9 +2419,45 @@ registerPlayKeyboard({
 
 setTryEnterDungeonFromInteractKey(() => {
   if (appMode !== 'play' || !activeCavePortal || isDungeonTransitionBlocking()) return false;
+  if (!isPlayerFacingCavePortal(player, activeCavePortal)) return false;
   requestEnterDungeonFromPortal(activeCavePortal);
   return true;
 });
+
+function isPlayerFacingCavePortal(playerEntity, portal) {
+  if (!playerEntity || !portal) return false;
+  const facing = facingUnitFromDirection(String(playerEntity.facing || 'down'));
+  const txPortal = Number.isFinite(Number(portal.worldX)) ? Number(portal.worldX) : Number(portal.interactX);
+  const tyPortal = Number.isFinite(Number(portal.worldY)) ? Number(portal.worldY) : Number(portal.interactY);
+  const dx = txPortal - Number(playerEntity.x);
+  const dy = tyPortal - Number(playerEntity.y);
+  const len = Math.hypot(dx, dy);
+  if (!Number.isFinite(len) || len < 1e-4) return true;
+  const tx = dx / len;
+  const ty = dy / len;
+  const dot = facing.x * tx + facing.y * ty;
+  const minDot = Math.max(-1, Math.min(1, Number(GAMEPLAY_CONFIG.caveFacingDotMin) || 0.1));
+  return dot >= minDot;
+}
+
+function facingUnitFromDirection(dir) {
+  const d = String(dir || 'down');
+  if (d === 'up') return { x: 0, y: -1 };
+  if (d === 'down') return { x: 0, y: 1 };
+  if (d === 'left') return { x: -1, y: 0 };
+  if (d === 'right') return { x: 1, y: 0 };
+  if (d === 'up-left') return normalizeVec(-1, -1);
+  if (d === 'up-right') return normalizeVec(1, -1);
+  if (d === 'down-left') return normalizeVec(-1, 1);
+  if (d === 'down-right') return normalizeVec(1, 1);
+  return { x: 0, y: 1 };
+}
+
+function normalizeVec(x, y) {
+  const l = Math.hypot(x, y);
+  if (!Number.isFinite(l) || l < 1e-6) return { x: 0, y: 1 };
+  return { x: x / l, y: y / l };
+}
 
 installPlayPointerCombat({
   canvas,
