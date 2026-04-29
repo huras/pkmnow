@@ -101,7 +101,9 @@ export function updateDungeonRuntime(dt, inputX, inputY) {
   const py = Math.floor(state.playerY);
   const tile = state.map.get(px, py);
   if (tile !== DUNGEON_TILE_TYPES.STAIRS_DOWN) state.exitArmed = true;
-  const wantsExit = state.exitArmed && tile === DUNGEON_TILE_TYPES.STAIRS_UP;
+  const isExitTile =
+    tile === DUNGEON_TILE_TYPES.STAIRS_UP || tile === DUNGEON_TILE_TYPES.STAIRS_DOWN;
+  const wantsExit = state.exitArmed && isExitTile;
   return { wantsExit };
 }
 

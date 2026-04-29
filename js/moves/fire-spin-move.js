@@ -6,6 +6,9 @@
 
 import { EMBER_TRAIL_INTERVAL, FIRE_FRAME_H, FIRE_FRAME_W } from './move-constants.js';
 import { isChargeStrongAttackEligible, getChargeLevel } from '../main/play-charge-levels.js';
+import { tryPlayerCutHitWildCircle } from '../wild-pokemon/index.js';
+import { tryApplyFireHitToFormalTreesAt } from '../main/play-crystal-tackle.js';
+import { grassFireTryIgniteAt } from '../play-grass-fire.js';
 
 /** @typedef {1 | 2 | 3} FireSpinTier */
 
@@ -16,6 +19,11 @@ export const PLAYER_FIRE_SPIN_COOLDOWN_BY_LEVEL = Object.freeze({
 });
 
 const MAX_CHANNEL_SEC = 1.35;
+const FIRE_SPIN_DT_MAX = 0.05;
+const FIRE_SPIN_PARTICLE_TICKS_MAX = 6;
+const FIRE_SPIN_DAMAGE_TICKS_MAX = 2;
+const FIRE_SPIN_PARTICLE_ACC_MAX_SEC = 0.18;
+const FIRE_SPIN_DAMAGE_ACC_MAX_SEC = 0.24;
 
 /**
  * @param {import('../player.js').player} player
@@ -25,6 +33,7 @@ export function resetFireSpinChannel(player) {
   player.fireSpinChannelSec = 0;
   player.fireSpinOrbitAngle = 0;
   player.fireSpinParticleAcc = 0;
+  player.fireSpinDamageTickAcc = 0;
 }
 
 /**
@@ -33,15 +42,17 @@ export function resetFireSpinChannel(player) {
  * @param {number} dt
  * @param {(p: object) => void} pushParticle
  * @param {number} charge01 — bound-slot charge 0..1 (same meter as other charged moves)
+ * @param {object | null} [data]
  */
-export function tickFireSpinHold(player, dt, pushParticle, charge01) {
+export function tickFireSpinHold(player, dt, pushParticle, charge01, data = null) {
   if (!player || !pushParticle) return;
+  const safeDt = Math.max(0, Math.min(FIRE_SPIN_DT_MAX, Number(dt) || 0));
   const cp = Math.max(0, Math.min(1, charge01 || 0));
-  player.fireSpinChannelSec = Math.min(MAX_CHANNEL_SEC, (player.fireSpinChannelSec || 0) + dt);
+  player.fireSpinChannelSec = Math.min(MAX_CHANNEL_SEC, (player.fireSpinChannelSec || 0) + safeDt);
   const ch = player.fireSpinChannelSec || 0;
   const ramp = Math.min(1, ch / MAX_CHANNEL_SEC);
   const spinRate = 4.2 + cp * 6.5 + ramp * 9.0 + ch * 1.8;
-  player.fireSpinOrbitAngle = (player.fireSpinOrbitAngle || 0) + spinRate * dt;
+  player.fireSpinOrbitAngle = (player.fireSpinOrbitAngle || 0) + spinRate * safeDt;
   const a = player.fireSpinOrbitAngle;
   const baseR = 0.62 + cp * 0.58 + ramp * 0.72;
   const wobble = 0.2 + cp * 0.22 + ramp * 0.28;
@@ -50,8 +61,13 @@ export function tickFireSpinHold(player, dt, pushParticle, charge01) {
   const py = (player.visualY ?? player.y) + 0.5 + Math.sin(a) * R;
   const pz = Math.max(0.06, (player.z || 0) * 0.35 + 0.08);
   const interval = Math.max(0.01, 0.03 - ramp * 0.015 - cp * 0.007);
-  player.fireSpinParticleAcc = (player.fireSpinParticleAcc || 0) + dt;
-  while ((player.fireSpinParticleAcc || 0) >= interval) {
+  player.fireSpinParticleAcc = Math.min(
+    FIRE_SPIN_PARTICLE_ACC_MAX_SEC,
+    (player.fireSpinParticleAcc || 0) + safeDt
+  );
+  let particleTicks = 0;
+  while ((player.fireSpinParticleAcc || 0) >= interval && particleTicks < FIRE_SPIN_PARTICLE_TICKS_MAX) {
+    particleTicks++;
     player.fireSpinParticleAcc -= interval;
     const jitter = (Math.random() - 0.5) * 0.06;
     pushParticle({
@@ -98,6 +114,41 @@ export function tickFireSpinHold(player, dt, pushParticle, charge01) {
       maxLife: 0.14 + ramp * 0.1,
       size01: 0.76 + ramp * 0.42 + cp * 0.2
     });
+  }
+
+  // Channeling Fire Spin now deals periodic contact damage around the player.
+  if (data) {
+    const tickEverySec = Math.max(0.09, 0.17 - cp * 0.06 - ramp * 0.03);
+    player.fireSpinDamageTickAcc = Math.min(
+      FIRE_SPIN_DAMAGE_ACC_MAX_SEC,
+      (player.fireSpinDamageTickAcc || 0) + safeDt
+    );
+    let damageTicks = 0;
+    while ((player.fireSpinDamageTickAcc || 0) >= tickEverySec && damageTicks < FIRE_SPIN_DAMAGE_TICKS_MAX) {
+      damageTicks++;
+      player.fireSpinDamageTickAcc -= tickEverySec;
+      const cx = (player.visualX ?? player.x) + 0.5;
+      const cy = (player.visualY ?? player.y) + 0.5;
+      const radius = 0.62 + cp * 0.58 + ramp * 0.78;
+      const damage = 1.8 + cp * 2.1 + ramp * 2.6;
+      const knockback = 1.1 + cp * 0.9 + ramp * 1.2;
+      tryPlayerCutHitWildCircle(player, data, cx, cy, radius, {
+        damage,
+        knockback
+      });
+      const hitZ = Number(player.z) || 0;
+      // Fire Spin hold should burn vegetation (fire interaction), not tackle-break it.
+      const spokes = 8;
+      for (let i = 0; i < spokes; i++) {
+        const ang = (i / spokes) * Math.PI * 2 + (player.fireSpinOrbitAngle || 0) * 0.35;
+        const tx = cx + Math.cos(ang) * radius;
+        const ty = cy + Math.sin(ang) * radius;
+        tryApplyFireHitToFormalTreesAt(tx, ty, hitZ, 'fireSpinBurst', data);
+        grassFireTryIgniteAt(tx, ty, hitZ, 'fireSpinBurst', data);
+      }
+      tryApplyFireHitToFormalTreesAt(cx, cy, hitZ, 'fireSpinBurst', data);
+      grassFireTryIgniteAt(cx, cy, hitZ, 'fireSpinBurst', data);
+    }
   }
 }
 

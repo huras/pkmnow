@@ -1459,7 +1459,7 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   if (virtLeft && !mod && lmb === 'fireSpin') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeLeft01 || 0);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeLeft01 || 0, data);
   }
   if (virtLeft && !mod && lmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1503,7 +1503,7 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   if (virtRight && !mod && rmb === 'fireSpin') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeRight01 || 0);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeRight01 || 0, data);
   }
   if (virtRight && !mod && rmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
@@ -1547,7 +1547,7 @@ export function updatePlayPointerCombat(dt, player, data) {
   }
   if (virtMiddle && !mod && mmb === 'fireSpin') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);
-    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeMmb01 || 0);
+    tickFireSpinHold(player, dt, pushParticle, playInputState.chargeMmb01 || 0, data);
   }
   if (virtMiddle && !mod && mmb === 'hydroPump') {
     applyPlayerFacingFromStreamAim(player, sx, sy, tx, ty);

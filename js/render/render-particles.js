@@ -1,5 +1,5 @@
 import { imageCache } from '../image-cache.js';
-import { BURN_START_FRAME, BURN_START_FRAMES } from '../moves/move-constants.js';
+import { BURN_START_FRAME, BURN_START_FRAMES, FIRE_FRAME_H, FIRE_FRAME_W } from '../moves/move-constants.js';
 
 const FIELD_SPIN_WIND_TEX = 'vfx/ETF_Texture_Wind_01.png';
 let fieldSpinWindTexInflight = null;
