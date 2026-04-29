@@ -2142,15 +2142,20 @@ function refreshNearbyCavePortalProbe() {
   const probeKey = `${qx},${qy}:${currentData.seed}`;
   if (probeKey === pendingDungeonPortalProbeTileKey) return;
   pendingDungeonPortalProbeTileKey = probeKey;
-  activeCavePortal = findNearbyCavePortal(currentData, player.x, player.y, 1.2);
+  activeCavePortal = findNearbyCavePortal(currentData, player.x, player.y, 1.45);
 }
 
 function requestEnterDungeonFromPortal(portal) {
   if (!portal || !currentData || appMode !== 'play' || isDungeonTransitionBlocking()) return;
+  const probeX = Number.isFinite(portal.interactX) ? portal.interactX : portal.worldX;
+  const probeY = Number.isFinite(portal.interactY) ? portal.interactY : portal.worldY;
+  const caveTile = getMicroTile(Math.floor(probeX), Math.floor(probeY), currentData);
+  const caveBiomeId = Number(caveTile?.biomeId) || 0;
   startDungeonTransition('enter', () => {
     const ok = enterDungeon({
       portalId: portal.id,
       dungeonId: portal.dungeonId || portal.id,
+      biomeId: caveBiomeId,
       worldSeed: currentData.seed,
       returnWorldX: Number.isFinite(portal.interactX) ? portal.interactX : portal.worldX,
       returnWorldY: Number.isFinite(portal.interactY) ? portal.interactY : portal.worldY
@@ -2418,9 +2423,12 @@ registerPlayKeyboard({
 });
 
 setTryEnterDungeonFromInteractKey(() => {
-  if (appMode !== 'play' || !activeCavePortal || isDungeonTransitionBlocking()) return false;
-  if (!isPlayerFacingCavePortal(player, activeCavePortal)) return false;
-  requestEnterDungeonFromPortal(activeCavePortal);
+  if (appMode !== 'play' || isDungeonTransitionBlocking()) return false;
+  const portalNow =
+    activeCavePortal || (currentData ? findNearbyCavePortal(currentData, player.x, player.y, 1.45) : null);
+  if (!portalNow) return false;
+  if (!isPlayerFacingCavePortal(player, portalNow)) return false;
+  requestEnterDungeonFromPortal(portalNow);
   return true;
 });
 

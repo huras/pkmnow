@@ -1817,6 +1817,7 @@ function collectDetailHitsInDisk(px, py, radiusTiles, data, opts) {
   const microWm = microW;
   const microHm = microH;
   const seed = data.seed ?? 0;
+  const blockedCaveHitAddedOrigins = new Set();
   const originMemo = new Map();
   const tileMemo = new Map();
   const getTileCached = (x, y) => {
@@ -1830,6 +1831,59 @@ function collectDetailHitsInDisk(px, py, radiusTiles, data, opts) {
   /** @type {any[]} */
   const hits = [];
   const sweep = TACKLE_SWEEP_RADIUS_TILES;
+
+  // Include blocked cave entrances directly from static chunk entities so circular
+  // melee (Cut) can break them consistently.
+  {
+    const minX = px - R - 8;
+    const maxX = px + R + 8;
+    const minY = py - R - 8;
+    const maxY = py + R + 8;
+    const cx0 = Math.max(0, Math.floor(minX / PLAY_CHUNK_SIZE));
+    const cy0 = Math.max(0, Math.floor(minY / PLAY_CHUNK_SIZE));
+    const cx1 = Math.max(0, Math.floor(maxX / PLAY_CHUNK_SIZE));
+    const cy1 = Math.max(0, Math.floor(maxY / PLAY_CHUNK_SIZE));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const chunkKey = `${cx},${cy}`;
+        const entities = getStaticEntitiesForChunk(cx, cy, chunkKey, data, microW, microH);
+        for (const ent of entities) {
+          if (ent?.type !== 'scatter') continue;
+          const itemKey = String(ent.itemKey || '');
+          if (!itemKey.includes('cave-entrance-blocked')) continue;
+          const ox = ent.originX | 0;
+          const oy = ent.originY | 0;
+          const originKey = `${ox},${oy}`;
+          if (blockedCaveHitAddedOrigins.has(originKey)) continue;
+          const overrideKey = String(getScatterItemKeyOverride(ox, oy) || '');
+          const alreadyOpenedByOverride =
+            overrideKey.includes('cave-entrance') && !overrideKey.includes('cave-entrance-blocked');
+          if (alreadyOpenedByOverride) continue;
+          const cols = Math.max(1, Number(ent.cols) || 1);
+          const rows = Math.max(1, Number(ent.rows) || 1);
+          const cx0Ent = ox + cols * 0.5;
+          const cy0Ent = oy + rows * 0.5;
+          const detailRBase = Math.max(0.4, Math.max(cols, rows) * 0.34);
+          const detailR = detailRBase * TACKLE_DETAIL_HURTBOX_RADIUS_MULT;
+          const rr = detailR + sweep;
+          const dx = cx0Ent - px;
+          const dy = cy0Ent - py;
+          if (dx * dx + dy * dy > (R + rr) * (R + rr)) continue;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          hits.push({
+            type: 'worldDetail',
+            rootOx: ox,
+            rootOy: oy,
+            itemKey,
+            cx: cx0Ent,
+            cy: cy0Ent,
+            t: dist / Math.max(0.001, R)
+          });
+          blockedCaveHitAddedOrigins.add(originKey);
+        }
+      }
+    }
+  }
 
   for (const sc of activeSpawnedSmallCrystals) {
     const detailR = Math.max(0.01, (sc.radius || 0.3) * TACKLE_DETAIL_HURTBOX_RADIUS_MULT);

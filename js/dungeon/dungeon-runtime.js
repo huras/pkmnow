@@ -6,10 +6,16 @@ const state = {
   active: false,
   portalId: '',
   dungeonId: '',
+  biomeId: 0,
   worldSeed: 0,
   map: null,
   playerX: 0,
   playerY: 0,
+  facing: 'down',
+  animRow: 0,
+  animFrame: 0,
+  animClockSec: 0,
+  animMoving: false,
   lastPlayerX: 0,
   lastPlayerY: 0,
   entry: null,
@@ -49,12 +55,18 @@ export function enterDungeon(params) {
   state.active = true;
   state.portalId = entranceId;
   state.dungeonId = dungeonId;
+  state.biomeId = Number(params?.biomeId) || 0;
   state.worldSeed = worldSeed;
   state.map = generated.map;
   state.entry = generated.entry;
   state.exit = generated.exit;
   state.playerX = spawn.x + 0.5;
   state.playerY = spawn.y + 0.5;
+  state.facing = 'down';
+  state.animRow = 0;
+  state.animFrame = 0;
+  state.animClockSec = 0;
+  state.animMoving = false;
   state.lastPlayerX = state.playerX;
   state.lastPlayerY = state.playerY;
   state.returnWorldX = Number(params?.returnWorldX) || 0;
@@ -83,9 +95,11 @@ export function updateDungeonRuntime(dt, inputX, inputY) {
   let nx = state.playerX;
   let ny = state.playerY;
   const len = Math.hypot(ix, iy);
+  state.animMoving = len > 1e-4;
   if (len > 1e-4) {
     const ux = ix / len;
     const uy = iy / len;
+    applyFacingFromInput(ux, uy);
     const step = DUNGEON_MOVE_SPEED * d;
     const tx = state.playerX + ux * step;
     const ty = state.playerY + uy * step;
@@ -96,6 +110,13 @@ export function updateDungeonRuntime(dt, inputX, inputY) {
   state.lastPlayerY = state.playerY;
   state.playerX = nx;
   state.playerY = ny;
+  if (state.animMoving) {
+    state.animClockSec += d;
+    state.animFrame = Math.floor(state.animClockSec * 8) % 4;
+  } else {
+    state.animClockSec = 0;
+    state.animFrame = 0;
+  }
 
   const px = Math.floor(state.playerX);
   const py = Math.floor(state.playerY);
@@ -106,6 +127,32 @@ export function updateDungeonRuntime(dt, inputX, inputY) {
   const wantsExit = state.exitArmed && isExitTile;
   return { wantsExit };
 }
+
+function applyFacingFromInput(ix, iy) {
+  const x = Number(ix) || 0;
+  const y = Number(iy) || 0;
+  if (Math.abs(x) < 1e-4 && Math.abs(y) < 1e-4) return;
+  let key = 'down';
+  if (x > 0.33 && y < -0.33) key = 'up-right';
+  else if (x < -0.33 && y < -0.33) key = 'up-left';
+  else if (x > 0.33 && y > 0.33) key = 'down-right';
+  else if (x < -0.33 && y > 0.33) key = 'down-left';
+  else if (Math.abs(x) >= Math.abs(y)) key = x < 0 ? 'left' : 'right';
+  else key = y < 0 ? 'up' : 'down';
+  state.facing = key;
+  state.animRow = DIRECTION_ROW_MAP[key] || 0;
+}
+
+const DIRECTION_ROW_MAP = {
+  down: 0,
+  'down-right': 1,
+  right: 2,
+  'up-right': 3,
+  up: 4,
+  'up-left': 5,
+  left: 6,
+  'down-left': 7
+};
 
 function isWalkableAt(x, y, map) {
   const t = map.get(Math.floor(x), Math.floor(y));
