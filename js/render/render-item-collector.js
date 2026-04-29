@@ -36,6 +36,11 @@ import { wildSexHudLabel } from '../pokemon/pokemon-sex.js';
 import { defaultPortraitSlugForBalloon } from '../pokemon/spritecollab-portraits.js';
 import { scatterTreeTrunkFootprintRowOYRel } from '../walkability.js';
 
+function isPersistentDungeonPortalItemKey(itemKey) {
+  const key = String(itemKey || '');
+  return key.includes('cave-entrance') && !key.includes('cave-entrance-blocked');
+}
+
 // New imports for sprite resolution
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-heights.js';
 import {
@@ -509,7 +514,7 @@ export function collectRenderItems(options) {
             activeWindSway = scatterHasWindSway(overrideKey);
           }
           if (!isSortableScatter(sItem)) continue;
-          if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
+          if (!isPersistentDungeonPortalItemKey(sItem) && isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
           const isTreeScatter = scatterItemKeyIsTree(sItem);
           const basePart = activeObjSet?.parts?.find(
             (p) => p.role === 'base' || p.role === 'CENTER' || p.role === 'ALL'
@@ -546,7 +551,7 @@ export function collectRenderItems(options) {
           // Origin has a forced scatter but no natural procedural one.
           const overrideKey = getScatterItemKeyOverride(mxScan, myScan);
           if (!overrideKey || !isSortableScatter(overrideKey)) continue;
-          if (isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
+          if (!isPersistentDungeonPortalItemKey(overrideKey) && isPlayDetailScatterOriginDestroyed(mxScan, myScan)) continue;
           const activeObjSet = OBJECT_SETS[overrideKey];
           if (!activeObjSet) continue;
           const { cols: activeCols, rows: activeRows } = parseShape(activeObjSet.shape);

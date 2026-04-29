@@ -34,16 +34,31 @@ function sampleSecondaryHeightPassNoise(mx, my, seed) {
     return foliageDensity(mx, my, seed + 0x62f9, secondaryScale);
 }
 
+function sampleSecondaryNeighborhoodAvg(mx, my, seed) {
+    let sum = 0;
+    let count = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            sum += sampleSecondaryHeightPassNoise(mx + dx, my + dy, seed);
+            count++;
+        }
+    }
+    return count > 0 ? (sum / count) : 0.5;
+}
+
 function applySecondaryHeightPass(baseHeightStep, mx, my, macroData) {
     const base = Math.floor(Number(baseHeightStep) || 0);
     // "Plateaus" only: keep beaches/water untouched.
     if (base < 1) return base;
     const seed = Number(macroData?.seed) || 0;
     const n = sampleSecondaryHeightPassNoise(mx, my, seed);
+    const nAvg = sampleSecondaryNeighborhoodAvg(mx, my, seed);
+    // Use local consensus to avoid 1-tile spikes/holes that create no visual room for relief.
+    const score = (n * 0.45) + (nAvg * 0.55);
     // Dead zone in the middle for stable flats; only ±1 step at extremes.
     let delta = 0;
-    if (n <= 0.33) delta = -1;
-    else if (n >= 0.67) delta = 1;
+    if (score <= 0.30) delta = -1;
+    else if (score >= 0.70) delta = 1;
     return clamp(base + delta, 1, LAND_STEPS);
 }
 

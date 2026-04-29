@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Palette Preview</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; background: #121212; color: #eaeaea; margin: 20px; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 38vw);
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .right-panel { position: static !important; }
+    }
+    .left-panel { min-width: 0; }
+    .right-panel {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+    }
+    h1 { margin: 0 0 8px; }
+    .meta { color: #bdbdbd; margin-bottom: 16px; }
+    .toolbar { display: flex; gap: 10px; align-items: center; margin: 8px 0 14px; flex-wrap: wrap; }
+    .toolbar button { background: #262626; color: #ededed; border: 1px solid #3a3a3a; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    .toolbar button:hover { background: #303030; }
+    .viewer { margin: 0; }
+    .viewer canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid #333;
+      border-radius: 8px;
+      width: 100%;
+      height: auto;
+      max-height: calc(100vh - 80px);
+      object-fit: contain;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .group { margin-bottom: 24px; }
+    h2 { margin: 12px 0 8px; }
+    .group-meta { color: #a8a8a8; margin-bottom: 10px; }
+    .card { background: #1b1b1b; border: 1px solid #2b2b2b; border-radius: 10px; padding: 10px; text-align: left; color: inherit; cursor: pointer; }
+    .card.active { outline: 2px solid #ff00ff; border-color: #ff00ff; }
+    .swatch-wrap {
+      height: 56px; border-radius: 8px; margin-bottom: 8px; padding: 1px;
+      background-image:
+        linear-gradient(45deg, #8f8f8f 25%, transparent 25%),
+        linear-gradient(-45deg, #8f8f8f 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #8f8f8f 75%),
+        linear-gradient(-45deg, transparent 75%, #8f8f8f 75%);
+      background-size: 10px 10px; background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+    }
+    .swatch { width: 100%; height: 100%; border-radius: 7px; }
+    code { display: block; margin-top: 4px; background: #101010; border: 1px solid #2a2a2a; border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <main class="left-panel">
+      <h1>Palette Preview</h1>
+      <div class="meta">tilesets/tileset_ver_3__free___by_magiscarf_dbf3bkq_subset_top_left_37x16_tiles.png - 256x592 - 40 unique colors</div>
+      <div class="toolbar">
+        <button id="clear-selection" type="button">Clear selection</button>
+        <span>Click a color card to toggle magenta highlight on image.</span>
+      </div>
+      <h2>Grouped by average spatial distance</h2>
+<section class="group">
+  <h2>Group 1</h2>
+  <div class="group-meta">center: (126.8, 289.0) | colors: 2 | pixels: 96644</div>
+  <div class="grid">
+<button class="card" type="button" data-color="0,0,0,0" title="Toggle highlight for 0,0,0,0">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(0,0,0,0.0000);"></div></div>
+  <code>0,0,0,0</code>
+  <code>#00000000</code>
+  <code>px: 89527</code>
+  <code>avg: (127.1, 291.7)</code>
+</button>
+<button class="card" type="button" data-color="71,92,63,255" title="Toggle highlight for 71,92,63,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(71,92,63,1.0000);"></div></div>
+  <code>71,92,63,255</code>
+  <code>#475C3FFF</code>
+  <code>px: 7117</code>
+  <code>avg: (123.6, 255.6)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 2</h2>
+  <div class="group-meta">center: (109.4, 195.5) | colors: 11 | pixels: 20573</div>
+  <div class="grid">
+<button class="card" type="button" data-color="107,122,96,255" title="Toggle highlight for 107,122,96,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(107,122,96,1.0000);"></div></div>
+  <code>107,122,96,255</code>
+  <code>#6B7A60FF</code>
+  <code>px: 6386</code>
+  <code>avg: (118.7, 202.7)</code>
+</button>
+<button class="card" type="button" data-color="144,151,123,255" title="Toggle highlight for 144,151,123,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(144,151,123,1.0000);"></div></div>
+  <code>144,151,123,255</code>
+  <code>#90977BFF</code>
+  <code>px: 5466</code>
+  <code>avg: (89.1, 215.9)</code>
+</button>
+<button class="card" type="button" data-color="178,169,144,255" title="Toggle highlight for 178,169,144,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(178,169,144,1.0000);"></div></div>
+  <code>178,169,144,255</code>
+  <code>#B2A990FF</code>
+  <code>px: 2512</code>
+  <code>avg: (70.6, 168.2)</code>
+</button>
+<button class="card" type="button" data-color="118,103,47,255" title="Toggle highlight for 118,103,47,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(118,103,47,1.0000);"></div></div>
+  <code>118,103,47,255</code>
+  <code>#76672FFF</code>
+  <code>px: 2068</code>
+  <code>avg: (136.8, 162.3)</code>
+</button>
+<button class="card" type="button" data-color="60,52,36,255" title="Toggle highlight for 60,52,36,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(60,52,36,1.0000);"></div></div>
+  <code>60,52,36,255</code>
+  <code>#3C3424FF</code>
+  <code>px: 1232</code>
+  <code>avg: (126.7, 208.6)</code>
+</button>
+<button class="card" type="button" data-color="47,72,48,255" title="Toggle highlight for 47,72,48,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(47,72,48,1.0000);"></div></div>
+  <code>47,72,48,255</code>
+  <code>#2F4830FF</code>
+  <code>px: 1195</code>
+  <code>avg: (130.2, 199.7)</code>
+</button>
+<button class="card" type="button" data-color="153,137,80,255" title="Toggle highlight for 153,137,80,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(153,137,80,1.0000);"></div></div>
+  <code>153,137,80,255</code>
+  <code>#998950FF</code>
+  <code>px: 988</code>
+  <code>avg: (135.1, 178.7)</code>
+</button>
+<button class="card" type="button" data-color="92,81,69,255" title="Toggle highlight for 92,81,69,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(92,81,69,1.0000);"></div></div>
+  <code>92,81,69,255</code>
+  <code>#5C5145FF</code>
+  <code>px: 326</code>
+  <code>avg: (137.2, 155.6)</code>
+</button>
+<button class="card" type="button" data-color="115,95,75,255" title="Toggle highlight for 115,95,75,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(115,95,75,1.0000);"></div></div>
+  <code>115,95,75,255</code>
+  <code>#735F4BFF</code>
+  <code>px: 270</code>
+  <code>avg: (135.7, 171.8)</code>
+</button>
+<button class="card" type="button" data-color="72,66,57,255" title="Toggle highlight for 72,66,57,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(72,66,57,1.0000);"></div></div>
+  <code>72,66,57,255</code>
+  <code>#484239FF</code>
+  <code>px: 128</code>
+  <code>avg: (137.5, 151.0)</code>
+</button>
+<button class="card" type="button" data-color="251,251,251,255" title="Toggle highlight for 251,251,251,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(251,251,251,1.0000);"></div></div>
+  <code>251,251,251,255</code>
+  <code>#FBFBFBFF</code>
+  <code>px: 2</code>
+  <code>avg: (80.0, 158.0)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 3</h2>
+  <div class="group-meta">center: (117.0, 472.2) | colors: 8 | pixels: 14888</div>
+  <div class="grid">
+<button class="card" type="button" data-color="175,148,120,255" title="Toggle highlight for 175,148,120,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(175,148,120,1.0000);"></div></div>
+  <code>175,148,120,255</code>
+  <code>#AF9478FF</code>
+  <code>px: 4956</code>
+  <code>avg: (114.6, 481.7)</code>
+</button>
+<button class="card" type="button" data-color="177,191,195,255" title="Toggle highlight for 177,191,195,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(177,191,195,1.0000);"></div></div>
+  <code>177,191,195,255</code>
+  <code>#B1BFC3FF</code>
+  <code>px: 4368</code>
+  <code>avg: (118.5, 472.5)</code>
+</button>
+<button class="card" type="button" data-color="147,120,92,255" title="Toggle highlight for 147,120,92,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(147,120,92,1.0000);"></div></div>
+  <code>147,120,92,255</code>
+  <code>#93785CFF</code>
+  <code>px: 2248</code>
+  <code>avg: (119.6, 450.9)</code>
+</button>
+<button class="card" type="button" data-color="203,177,148,255" title="Toggle highlight for 203,177,148,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(203,177,148,1.0000);"></div></div>
+  <code>203,177,148,255</code>
+  <code>#CBB194FF</code>
+  <code>px: 2109</code>
+  <code>avg: (113.2, 469.4)</code>
+</button>
+<button class="card" type="button" data-color="121,106,85,255" title="Toggle highlight for 121,106,85,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(121,106,85,1.0000);"></div></div>
+  <code>121,106,85,255</code>
+  <code>#796A55FF</code>
+  <code>px: 1113</code>
+  <code>avg: (126.4, 479.4)</code>
+</button>
+<button class="card" type="button" data-color="158,156,123,255" title="Toggle highlight for 158,156,123,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(158,156,123,1.0000);"></div></div>
+  <code>158,156,123,255</code>
+  <code>#9E9C7BFF</code>
+  <code>px: 54</code>
+  <code>avg: (76.8, 438.3)</code>
+</button>
+<button class="card" type="button" data-color="190,177,124,255" title="Toggle highlight for 190,177,124,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(190,177,124,1.0000);"></div></div>
+  <code>190,177,124,255</code>
+  <code>#BEB17CFF</code>
+  <code>px: 34</code>
+  <code>avg: (109.3, 443.9)</code>
+</button>
+<button class="card" type="button" data-color="194,183,151,255" title="Toggle highlight for 194,183,151,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(194,183,151,1.0000);"></div></div>
+  <code>194,183,151,255</code>
+  <code>#C2B797FF</code>
+  <code>px: 6</code>
+  <code>avg: (112.7, 468.7)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 4</h2>
+  <div class="group-meta">center: (191.0, 246.2) | colors: 3 | pixels: 10959</div>
+  <div class="grid">
+<button class="card" type="button" data-color="241,242,241,255" title="Toggle highlight for 241,242,241,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(241,242,241,1.0000);"></div></div>
+  <code>241,242,241,255</code>
+  <code>#F1F2F1FF</code>
+  <code>px: 6783</code>
+  <code>avg: (190.1, 248.1)</code>
+</button>
+<button class="card" type="button" data-color="213,219,223,255" title="Toggle highlight for 213,219,223,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(213,219,223,1.0000);"></div></div>
+  <code>213,219,223,255</code>
+  <code>#D5DBDFFF</code>
+  <code>px: 3402</code>
+  <code>avg: (192.9, 245.2)</code>
+</button>
+<button class="card" type="button" data-color="141,180,171,255" title="Toggle highlight for 141,180,171,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(141,180,171,1.0000);"></div></div>
+  <code>141,180,171,255</code>
+  <code>#8DB4ABFF</code>
+  <code>px: 774</code>
+  <code>avg: (190.6, 234.1)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 5</h2>
+  <div class="group-meta">center: (127.8, 370.2) | colors: 2 | pixels: 5790</div>
+  <div class="grid">
+<button class="card" type="button" data-color="64,56,40,255" title="Toggle highlight for 64,56,40,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(64,56,40,1.0000);"></div></div>
+  <code>64,56,40,255</code>
+  <code>#403828FF</code>
+  <code>px: 5000</code>
+  <code>avg: (127.0, 364.9)</code>
+</button>
+<button class="card" type="button" data-color="129,109,83,255" title="Toggle highlight for 129,109,83,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(129,109,83,1.0000);"></div></div>
+  <code>129,109,83,255</code>
+  <code>#816D53FF</code>
+  <code>px: 790</code>
+  <code>avg: (132.9, 403.5)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 6</h2>
+  <div class="group-meta">center: (60.7, 263.7) | colors: 1 | pixels: 1251</div>
+  <div class="grid">
+<button class="card" type="button" data-color="196,183,160,255" title="Toggle highlight for 196,183,160,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(196,183,160,1.0000);"></div></div>
+  <code>196,183,160,255</code>
+  <code>#C4B7A0FF</code>
+  <code>px: 1251</code>
+  <code>avg: (60.7, 263.7)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 7</h2>
+  <div class="group-meta">center: (75.4, 437.8) | colors: 6 | pixels: 905</div>
+  <div class="grid">
+<button class="card" type="button" data-color="226,217,163,255" title="Toggle highlight for 226,217,163,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(226,217,163,1.0000);"></div></div>
+  <code>226,217,163,255</code>
+  <code>#E2D9A3FF</code>
+  <code>px: 238</code>
+  <code>avg: (68.6, 464.7)</code>
+</button>
+<button class="card" type="button" data-color="202,200,172,255" title="Toggle highlight for 202,200,172,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(202,200,172,1.0000);"></div></div>
+  <code>202,200,172,255</code>
+  <code>#CAC8ACFF</code>
+  <code>px: 234</code>
+  <code>avg: (78.1, 427.6)</code>
+</button>
+<button class="card" type="button" data-color="183,182,166,255" title="Toggle highlight for 183,182,166,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(183,182,166,1.0000);"></div></div>
+  <code>183,182,166,255</code>
+  <code>#B7B6A6FF</code>
+  <code>px: 232</code>
+  <code>avg: (77.5, 423.0)</code>
+</button>
+<button class="card" type="button" data-color="227,225,193,255" title="Toggle highlight for 227,225,193,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(227,225,193,1.0000);"></div></div>
+  <code>227,225,193,255</code>
+  <code>#E3E1C1FF</code>
+  <code>px: 129</code>
+  <code>avg: (81.2, 443.9)</code>
+</button>
+<button class="card" type="button" data-color="214,212,180,255" title="Toggle highlight for 214,212,180,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(214,212,180,1.0000);"></div></div>
+  <code>214,212,180,255</code>
+  <code>#D6D4B4FF</code>
+  <code>px: 40</code>
+  <code>avg: (72.6, 419.4)</code>
+</button>
+<button class="card" type="button" data-color="220,217,177,255" title="Toggle highlight for 220,217,177,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(220,217,177,1.0000);"></div></div>
+  <code>220,217,177,255</code>
+  <code>#DCD9B1FF</code>
+  <code>px: 32</code>
+  <code>avg: (71.7, 416.5)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 8</h2>
+  <div class="group-meta">center: (173.4, 421.3) | colors: 5 | pixels: 490</div>
+  <div class="grid">
+<button class="card" type="button" data-color="35,134,177,255" title="Toggle highlight for 35,134,177,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(35,134,177,1.0000);"></div></div>
+  <code>35,134,177,255</code>
+  <code>#2386B1FF</code>
+  <code>px: 382</code>
+  <code>avg: (175.4, 422.1)</code>
+</button>
+<button class="card" type="button" data-color="209,232,249,255" title="Toggle highlight for 209,232,249,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(209,232,249,1.0000);"></div></div>
+  <code>209,232,249,255</code>
+  <code>#D1E8F9FF</code>
+  <code>px: 46</code>
+  <code>avg: (176.0, 418.3)</code>
+</button>
+<button class="card" type="button" data-color="86,164,96,255" title="Toggle highlight for 86,164,96,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(86,164,96,1.0000);"></div></div>
+  <code>86,164,96,255</code>
+  <code>#56A460FF</code>
+  <code>px: 32</code>
+  <code>avg: (144.7, 419.3)</code>
+</button>
+<button class="card" type="button" data-color="154,206,239,255" title="Toggle highlight for 154,206,239,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(154,206,239,1.0000);"></div></div>
+  <code>154,206,239,255</code>
+  <code>#9ACEEFFF</code>
+  <code>px: 20</code>
+  <code>avg: (174.3, 418.0)</code>
+</button>
+<button class="card" type="button" data-color="166,157,148,255" title="Toggle highlight for 166,157,148,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(166,157,148,1.0000);"></div></div>
+  <code>166,157,148,255</code>
+  <code>#A69D94FF</code>
+  <code>px: 10</code>
+  <code>avg: (176.4, 418.2)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 9</h2>
+  <div class="group-meta">center: (219.2, 523.1) | colors: 1 | pixels: 51</div>
+  <div class="grid">
+<button class="card" type="button" data-color="112,110,87,255" title="Toggle highlight for 112,110,87,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(112,110,87,1.0000);"></div></div>
+  <code>112,110,87,255</code>
+  <code>#706E57FF</code>
+  <code>px: 51</code>
+  <code>avg: (219.2, 523.1)</code>
+</button>
+  </div>
+</section>
+<section class="group">
+  <h2>Group 10</h2>
+  <div class="group-meta">center: (210.0, 329.0) | colors: 1 | pixels: 1</div>
+  <div class="grid">
+<button class="card" type="button" data-color="43,122,72,255" title="Toggle highlight for 43,122,72,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(43,122,72,1.0000);"></div></div>
+  <code>43,122,72,255</code>
+  <code>#2B7A48FF</code>
+  <code>px: 1</code>
+  <code>avg: (210.0, 329.0)</code>
+</button>
+  </div>
+</section>
+      <h2>All colors (flat list)</h2>
+      <div class="grid">
+<button class="card" type="button" data-color="0,0,0,0" title="Toggle highlight for 0,0,0,0">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(0,0,0,0.0000);"></div></div>
+  <code>0,0,0,0</code>
+  <code>#00000000</code>
+  <code>px: 89527</code>
+  <code>avg: (127.1, 291.7)</code>
+</button>
+<button class="card" type="button" data-color="35,134,177,255" title="Toggle highlight for 35,134,177,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(35,134,177,1.0000);"></div></div>
+  <code>35,134,177,255</code>
+  <code>#2386B1FF</code>
+  <code>px: 382</code>
+  <code>avg: (175.4, 422.1)</code>
+</button>
+<button class="card" type="button" data-color="43,122,72,255" title="Toggle highlight for 43,122,72,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(43,122,72,1.0000);"></div></div>
+  <code>43,122,72,255</code>
+  <code>#2B7A48FF</code>
+  <code>px: 1</code>
+  <code>avg: (210.0, 329.0)</code>
+</button>
+<button class="card" type="button" data-color="47,72,48,255" title="Toggle highlight for 47,72,48,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(47,72,48,1.0000);"></div></div>
+  <code>47,72,48,255</code>
+  <code>#2F4830FF</code>
+  <code>px: 1195</code>
+  <code>avg: (130.2, 199.7)</code>
+</button>
+<button class="card" type="button" data-color="60,52,36,255" title="Toggle highlight for 60,52,36,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(60,52,36,1.0000);"></div></div>
+  <code>60,52,36,255</code>
+  <code>#3C3424FF</code>
+  <code>px: 1232</code>
+  <code>avg: (126.7, 208.6)</code>
+</button>
+<button class="card" type="button" data-color="64,56,40,255" title="Toggle highlight for 64,56,40,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(64,56,40,1.0000);"></div></div>
+  <code>64,56,40,255</code>
+  <code>#403828FF</code>
+  <code>px: 5000</code>
+  <code>avg: (127.0, 364.9)</code>
+</button>
+<button class="card" type="button" data-color="71,92,63,255" title="Toggle highlight for 71,92,63,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(71,92,63,1.0000);"></div></div>
+  <code>71,92,63,255</code>
+  <code>#475C3FFF</code>
+  <code>px: 7117</code>
+  <code>avg: (123.6, 255.6)</code>
+</button>
+<button class="card" type="button" data-color="72,66,57,255" title="Toggle highlight for 72,66,57,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(72,66,57,1.0000);"></div></div>
+  <code>72,66,57,255</code>
+  <code>#484239FF</code>
+  <code>px: 128</code>
+  <code>avg: (137.5, 151.0)</code>
+</button>
+<button class="card" type="button" data-color="86,164,96,255" title="Toggle highlight for 86,164,96,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(86,164,96,1.0000);"></div></div>
+  <code>86,164,96,255</code>
+  <code>#56A460FF</code>
+  <code>px: 32</code>
+  <code>avg: (144.7, 419.3)</code>
+</button>
+<button class="card" type="button" data-color="92,81,69,255" title="Toggle highlight for 92,81,69,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(92,81,69,1.0000);"></div></div>
+  <code>92,81,69,255</code>
+  <code>#5C5145FF</code>
+  <code>px: 326</code>
+  <code>avg: (137.2, 155.6)</code>
+</button>
+<button class="card" type="button" data-color="107,122,96,255" title="Toggle highlight for 107,122,96,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(107,122,96,1.0000);"></div></div>
+  <code>107,122,96,255</code>
+  <code>#6B7A60FF</code>
+  <code>px: 6386</code>
+  <code>avg: (118.7, 202.7)</code>
+</button>
+<button class="card" type="button" data-color="112,110,87,255" title="Toggle highlight for 112,110,87,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(112,110,87,1.0000);"></div></div>
+  <code>112,110,87,255</code>
+  <code>#706E57FF</code>
+  <code>px: 51</code>
+  <code>avg: (219.2, 523.1)</code>
+</button>
+<button class="card" type="button" data-color="115,95,75,255" title="Toggle highlight for 115,95,75,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(115,95,75,1.0000);"></div></div>
+  <code>115,95,75,255</code>
+  <code>#735F4BFF</code>
+  <code>px: 270</code>
+  <code>avg: (135.7, 171.8)</code>
+</button>
+<button class="card" type="button" data-color="118,103,47,255" title="Toggle highlight for 118,103,47,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(118,103,47,1.0000);"></div></div>
+  <code>118,103,47,255</code>
+  <code>#76672FFF</code>
+  <code>px: 2068</code>
+  <code>avg: (136.8, 162.3)</code>
+</button>
+<button class="card" type="button" data-color="121,106,85,255" title="Toggle highlight for 121,106,85,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(121,106,85,1.0000);"></div></div>
+  <code>121,106,85,255</code>
+  <code>#796A55FF</code>
+  <code>px: 1113</code>
+  <code>avg: (126.4, 479.4)</code>
+</button>
+<button class="card" type="button" data-color="129,109,83,255" title="Toggle highlight for 129,109,83,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(129,109,83,1.0000);"></div></div>
+  <code>129,109,83,255</code>
+  <code>#816D53FF</code>
+  <code>px: 790</code>
+  <code>avg: (132.9, 403.5)</code>
+</button>
+<button class="card" type="button" data-color="141,180,171,255" title="Toggle highlight for 141,180,171,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(141,180,171,1.0000);"></div></div>
+  <code>141,180,171,255</code>
+  <code>#8DB4ABFF</code>
+  <code>px: 774</code>
+  <code>avg: (190.6, 234.1)</code>
+</button>
+<button class="card" type="button" data-color="144,151,123,255" title="Toggle highlight for 144,151,123,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(144,151,123,1.0000);"></div></div>
+  <code>144,151,123,255</code>
+  <code>#90977BFF</code>
+  <code>px: 5466</code>
+  <code>avg: (89.1, 215.9)</code>
+</button>
+<button class="card" type="button" data-color="147,120,92,255" title="Toggle highlight for 147,120,92,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(147,120,92,1.0000);"></div></div>
+  <code>147,120,92,255</code>
+  <code>#93785CFF</code>
+  <code>px: 2248</code>
+  <code>avg: (119.6, 450.9)</code>
+</button>
+<button class="card" type="button" data-color="153,137,80,255" title="Toggle highlight for 153,137,80,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(153,137,80,1.0000);"></div></div>
+  <code>153,137,80,255</code>
+  <code>#998950FF</code>
+  <code>px: 988</code>
+  <code>avg: (135.1, 178.7)</code>
+</button>
+<button class="card" type="button" data-color="154,206,239,255" title="Toggle highlight for 154,206,239,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(154,206,239,1.0000);"></div></div>
+  <code>154,206,239,255</code>
+  <code>#9ACEEFFF</code>
+  <code>px: 20</code>
+  <code>avg: (174.3, 418.0)</code>
+</button>
+<button class="card" type="button" data-color="158,156,123,255" title="Toggle highlight for 158,156,123,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(158,156,123,1.0000);"></div></div>
+  <code>158,156,123,255</code>
+  <code>#9E9C7BFF</code>
+  <code>px: 54</code>
+  <code>avg: (76.8, 438.3)</code>
+</button>
+<button class="card" type="button" data-color="166,157,148,255" title="Toggle highlight for 166,157,148,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(166,157,148,1.0000);"></div></div>
+  <code>166,157,148,255</code>
+  <code>#A69D94FF</code>
+  <code>px: 10</code>
+  <code>avg: (176.4, 418.2)</code>
+</button>
+<button class="card" type="button" data-color="175,148,120,255" title="Toggle highlight for 175,148,120,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(175,148,120,1.0000);"></div></div>
+  <code>175,148,120,255</code>
+  <code>#AF9478FF</code>
+  <code>px: 4956</code>
+  <code>avg: (114.6, 481.7)</code>
+</button>
+<button class="card" type="button" data-color="177,191,195,255" title="Toggle highlight for 177,191,195,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(177,191,195,1.0000);"></div></div>
+  <code>177,191,195,255</code>
+  <code>#B1BFC3FF</code>
+  <code>px: 4368</code>
+  <code>avg: (118.5, 472.5)</code>
+</button>
+<button class="card" type="button" data-color="178,169,144,255" title="Toggle highlight for 178,169,144,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(178,169,144,1.0000);"></div></div>
+  <code>178,169,144,255</code>
+  <code>#B2A990FF</code>
+  <code>px: 2512</code>
+  <code>avg: (70.6, 168.2)</code>
+</button>
+<button class="card" type="button" data-color="183,182,166,255" title="Toggle highlight for 183,182,166,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(183,182,166,1.0000);"></div></div>
+  <code>183,182,166,255</code>
+  <code>#B7B6A6FF</code>
+  <code>px: 232</code>
+  <code>avg: (77.5, 423.0)</code>
+</button>
+<button class="card" type="button" data-color="190,177,124,255" title="Toggle highlight for 190,177,124,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(190,177,124,1.0000);"></div></div>
+  <code>190,177,124,255</code>
+  <code>#BEB17CFF</code>
+  <code>px: 34</code>
+  <code>avg: (109.3, 443.9)</code>
+</button>
+<button class="card" type="button" data-color="194,183,151,255" title="Toggle highlight for 194,183,151,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(194,183,151,1.0000);"></div></div>
+  <code>194,183,151,255</code>
+  <code>#C2B797FF</code>
+  <code>px: 6</code>
+  <code>avg: (112.7, 468.7)</code>
+</button>
+<button class="card" type="button" data-color="196,183,160,255" title="Toggle highlight for 196,183,160,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(196,183,160,1.0000);"></div></div>
+  <code>196,183,160,255</code>
+  <code>#C4B7A0FF</code>
+  <code>px: 1251</code>
+  <code>avg: (60.7, 263.7)</code>
+</button>
+<button class="card" type="button" data-color="202,200,172,255" title="Toggle highlight for 202,200,172,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(202,200,172,1.0000);"></div></div>
+  <code>202,200,172,255</code>
+  <code>#CAC8ACFF</code>
+  <code>px: 234</code>
+  <code>avg: (78.1, 427.6)</code>
+</button>
+<button class="card" type="button" data-color="203,177,148,255" title="Toggle highlight for 203,177,148,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(203,177,148,1.0000);"></div></div>
+  <code>203,177,148,255</code>
+  <code>#CBB194FF</code>
+  <code>px: 2109</code>
+  <code>avg: (113.2, 469.4)</code>
+</button>
+<button class="card" type="button" data-color="209,232,249,255" title="Toggle highlight for 209,232,249,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(209,232,249,1.0000);"></div></div>
+  <code>209,232,249,255</code>
+  <code>#D1E8F9FF</code>
+  <code>px: 46</code>
+  <code>avg: (176.0, 418.3)</code>
+</button>
+<button class="card" type="button" data-color="213,219,223,255" title="Toggle highlight for 213,219,223,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(213,219,223,1.0000);"></div></div>
+  <code>213,219,223,255</code>
+  <code>#D5DBDFFF</code>
+  <code>px: 3402</code>
+  <code>avg: (192.9, 245.2)</code>
+</button>
+<button class="card" type="button" data-color="214,212,180,255" title="Toggle highlight for 214,212,180,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(214,212,180,1.0000);"></div></div>
+  <code>214,212,180,255</code>
+  <code>#D6D4B4FF</code>
+  <code>px: 40</code>
+  <code>avg: (72.6, 419.4)</code>
+</button>
+<button class="card" type="button" data-color="220,217,177,255" title="Toggle highlight for 220,217,177,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(220,217,177,1.0000);"></div></div>
+  <code>220,217,177,255</code>
+  <code>#DCD9B1FF</code>
+  <code>px: 32</code>
+  <code>avg: (71.7, 416.5)</code>
+</button>
+<button class="card" type="button" data-color="226,217,163,255" title="Toggle highlight for 226,217,163,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(226,217,163,1.0000);"></div></div>
+  <code>226,217,163,255</code>
+  <code>#E2D9A3FF</code>
+  <code>px: 238</code>
+  <code>avg: (68.6, 464.7)</code>
+</button>
+<button class="card" type="button" data-color="227,225,193,255" title="Toggle highlight for 227,225,193,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(227,225,193,1.0000);"></div></div>
+  <code>227,225,193,255</code>
+  <code>#E3E1C1FF</code>
+  <code>px: 129</code>
+  <code>avg: (81.2, 443.9)</code>
+</button>
+<button class="card" type="button" data-color="241,242,241,255" title="Toggle highlight for 241,242,241,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(241,242,241,1.0000);"></div></div>
+  <code>241,242,241,255</code>
+  <code>#F1F2F1FF</code>
+  <code>px: 6783</code>
+  <code>avg: (190.1, 248.1)</code>
+</button>
+<button class="card" type="button" data-color="251,251,251,255" title="Toggle highlight for 251,251,251,255">
+  <div class="swatch-wrap"><div class="swatch" style="background: rgba(251,251,251,1.0000);"></div></div>
+  <code>251,251,251,255</code>
+  <code>#FBFBFBFF</code>
+  <code>px: 2</code>
+  <code>avg: (80.0, 158.0)</code>
+</button>
+      </div>
+    </main>
+    <aside class="right-panel">
+      <div class="viewer">
+        <canvas id="image-canvas" width="256" height="592"></canvas>
+      </div>
+    </aside>
+  </div>
+  <script>
+    const imageSrc = "data:image/png;base64,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";
+    const canvas = document.getElementById('image-canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const clearBtn = document.getElementById('clear-selection');
+    const cards = Array.from(document.querySelectorAll('.card[data-color]'));
+    const selectedColors = new Set();
+    let original = null;
+
+    const image = new Image();
+    image.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0);
+      original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      repaint();
+    };
+    image.src = imageSrc;
+
+    function repaint() {
+      if (!original) return;
+      const next = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
+      const data = next.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const key = data[i] + ',' + data[i + 1] + ',' + data[i + 2] + ',' + data[i + 3];
+        if (selectedColors.has(key)) {
+          data[i] = 255;
+          data[i + 1] = 0;
+          data[i + 2] = 255;
+          data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(next, 0, 0);
+    }
+
+    function syncActiveState() {
+      for (const card of cards) {
+        const key = card.dataset.color;
+        card.classList.toggle('active', selectedColors.has(key));
+      }
+    }
+
+    for (const card of cards) {
+      card.addEventListener('click', () => {
+        const key = card.dataset.color;
+        if (selectedColors.has(key)) selectedColors.delete(key);
+        else selectedColors.add(key);
+        syncActiveState();
+        repaint();
+      });
+    }
+
+    clearBtn.addEventListener('click', () => {
+      selectedColors.clear();
+      syncActiveState();
+      repaint();
+    });
+  </script>
+</body>
+</html>

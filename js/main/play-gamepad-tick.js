@@ -1,6 +1,7 @@
 import { tryJumpPlayer, togglePlayerCreativeFlight } from '../player.js';
 import { playInputState } from './play-input-state.js';
 import { tryStrengthInteractKeyE } from './play-strength-carry.js';
+import { tryEnterDungeonFromInteractKey } from '../dungeon/play-interact-dungeon.js';
 import { samplePlayGamepadFrame, dpadEdgeToBindingSlot } from './play-gamepad-poll.js';
 import { attackWheel } from '../ui/attack-wheel.js';
 import { dualBindWheel } from '../ui/dual-bind-wheel.js';
@@ -119,7 +120,9 @@ export function tickPlayGamepadFrame(api) {
         attackWheel.confirmFromGamepadCircle();
       } else {
         const data = getCurrentData();
-        if (data) tryStrengthInteractKeyE(player, data);
+        if (data) {
+          if (!tryEnterDungeonFromInteractKey()) tryStrengthInteractKeyE(player, data);
+        }
       }
     }
   }

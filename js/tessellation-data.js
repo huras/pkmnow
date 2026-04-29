@@ -789,6 +789,64 @@ export const TERRAIN_SETS = {
   }
 };
 export const OBJECT_SETS = {
+  "south-cave-entrance-blocked [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          881, 882, 883,
+          935, 936, 937,
+          989, 990, 991
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "east-cave-entrance-blocked [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          878, 879, 880,
+          932, 933, 934,
+          986, 987, 988
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "west-cave-entrance-blocked [3x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "3x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          884, 885, 886,
+          938, 939, 940,
+          992, 993, 994
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
+  "north-cave-entrance-blocked [1x3]": {
+    "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
+    "shape": "1x3",
+    "parts": [
+      {
+        "role": "ALL",
+        "ids": [
+          941, 942, 943
+        ]
+      }
+    ],
+    "sortYOffset": -1
+  },
   "cave-entrance-south [3x3]": {
     "file": "H:/cursor/Youtube/pokemon-region-generator/tilesets/further_additional_more_tiles_by_magiscarf_dc80s5g.tsx",
     "shape": "3x3",

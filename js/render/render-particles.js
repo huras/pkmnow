@@ -1,5 +1,5 @@
 import { imageCache } from '../image-cache.js';
-import { BURN_START_FRAME, BURN_START_FRAMES } from '../moves/move-constants.js';
+import { BURN_START_FRAME, BURN_START_FRAMES, FIRE_FRAME_H, FIRE_FRAME_W } from '../moves/move-constants.js';
 
 const FIELD_SPIN_WIND_TEX = 'vfx/ETF_Texture_Wind_01.png';
 let fieldSpinWindTexInflight = null;
@@ -283,7 +283,7 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
   } else if (p.type === 'flameChargeTrail' || p.type === 'flameChargeHead') {
     const tier = Number(p.tier) || 2;
     const head = p.type === 'flameChargeHead';
-    const r = (head ? tileW * 0.16 : tileW * 0.11) * (0.55 + 0.45 * a) * (tier === 3 ? 1.12 : tier === 2 ? 1.04 : 1);
+    const r = (head ? tileW * 0.22 : tileW * 0.155) * (0.55 + 0.45 * a) * (tier === 3 ? 1.16 : tier === 2 ? 1.08 : 1.03);
     const grd = ctx.createRadialGradient(px - r * 0.2, py - r * 0.25, r * 0.05, px, py, r);
     grd.addColorStop(0, head ? 'rgba(255,255,220,0.95)' : 'rgba(255,240,180,0.88)');
     grd.addColorStop(0.45, 'rgba(255,120,40,0.72)');
@@ -295,16 +295,41 @@ export function drawBatchedParticle(ctx, p, tileW, tileH, snapPx) {
     ctx.fill();
     ctx.globalAlpha = 1;
   } else if (p.type === 'fireSpinSpark') {
-    const s = Math.max(0.25, Math.min(1.2, Number(p.size01) || 0.6));
-    const r = Math.max(1.5, tileW * 0.07 * s) * (0.45 + 0.55 * a);
-    const grd = ctx.createRadialGradient(px - r * 0.15, py - r * 0.2, r * 0.04, px, py, r);
-    grd.addColorStop(0, `rgba(255,255,200,${0.55 * a})`);
-    grd.addColorStop(0.5, `rgba(255,140,40,${0.5 * a})`);
-    grd.addColorStop(1, `rgba(200,40,0,${0.08 * a})`);
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fill();
+    const img = imageCache.get('tilesets/effects/actual-fire.png');
+    const s = Math.max(0.45, Math.min(2.2, Number(p.size01) || 0.95));
+    const nowSec = performance.now() * 0.001;
+    const frame = Math.floor((nowSec * 18 + (p.x + p.y) * 2.15) % 4);
+    const dw = Math.ceil(tileW * 0.92 * s);
+    const dh = Math.ceil(tileH * 1.06 * s);
+    if (img && img.naturalWidth) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, 0.96 * a);
+      ctx.drawImage(img, 0, frame * FIRE_FRAME_H, FIRE_FRAME_W, FIRE_FRAME_H, px - dw * 0.5, py - dh * 0.62, dw, dh);
+      ctx.globalAlpha = Math.min(1, 0.5 * a);
+      ctx.drawImage(
+        img,
+        0,
+        ((frame + 1) % 4) * FIRE_FRAME_H,
+        FIRE_FRAME_W,
+        FIRE_FRAME_H,
+        px - dw * 0.56,
+        py - dh * 0.68,
+        dw * 1.12,
+        dh * 1.12
+      );
+      ctx.restore();
+    } else {
+      const r = Math.max(3.2, tileW * 0.16 * s) * (0.5 + 0.5 * a);
+      const grd = ctx.createRadialGradient(px - r * 0.15, py - r * 0.22, r * 0.04, px, py, r);
+      grd.addColorStop(0, `rgba(255,255,200,${0.62 * a})`);
+      grd.addColorStop(0.5, `rgba(255,140,40,${0.56 * a})`);
+      grd.addColorStop(1, `rgba(200,40,0,${0.1 * a})`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (p.type === 'emberTrail') {
     ctx.fillStyle = '#ffa200';
     ctx.beginPath();

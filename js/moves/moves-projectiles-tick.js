@@ -85,6 +85,8 @@ export function tickActiveProjectiles(ctx) {
 
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
+    const prevX = Number(proj.x) || 0;
+    const prevY = Number(proj.y) || 0;
     const t = data ? getMicroTile(Math.floor(proj.x + 0.5), Math.floor(proj.y + 0.5), data) : null;
     const projAbsZ = (t ? (t.heightStep || 0) : 0) + (proj.z ?? 0);
 
@@ -152,10 +154,21 @@ export function tickActiveProjectiles(ctx) {
         });
       }
 
-      if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
+      if (
+        (proj.hasTackleTrait || proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard') &&
+        data &&
+        !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)
+      ) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
-        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, { worldHitOnceSet: detailSet, hitSource: 'tackle', pz: zBeam });
+        const breakPowerTag =
+          proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard' ? 'fireBlast' : 'other';
+        tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {
+          worldHitOnceSet: detailSet,
+          hitSource: 'tackle',
+          breakPowerTag,
+          pz: zBeam
+        });
       }
 
       if (proj.timeToLive <= 0) {
@@ -299,12 +312,19 @@ export function tickActiveProjectiles(ctx) {
         });
       }
 
-      if (proj.hasTackleTrait && data && !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)) {
+      if (
+        (proj.hasTackleTrait || proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard') &&
+        data &&
+        !WATER_PROJECTILES_NO_VEG_DAMAGE.has(proj.type)
+      ) {
         const detailSet =
           proj.psyHitDetails instanceof Set ? proj.psyHitDetails : (proj.psyHitDetails = new Set());
+        const breakPowerTag =
+          proj.type === 'fireBlastCore' || proj.type === 'fireBlastShard' ? 'fireBlast' : 'other';
         tryBreakDetailsAlongSegment(sx0, sy0, sx1, sy1, data, {
           worldHitOnceSet: detailSet,
           hitSource: 'tackle',
+          breakPowerTag,
           pz: zDet
         });
       }
@@ -503,6 +523,15 @@ export function tickActiveProjectiles(ctx) {
     }
 
     proj.timeToLive -= dt;
+    if (proj.type === 'fireBlastCore' && data && !proj.fromWild) {
+      const charge01 = Math.max(0, Math.min(1, Number(proj.fireBlastCharge01) || 0.22));
+      tryBreakDetailsAlongSegment(prevX, prevY, proj.x, proj.y, data, {
+        hitSource: 'tackle',
+        breakPowerTag: 'fireBlast',
+        detailCharge01: charge01,
+        pz: Number(proj.z) || 0
+      });
+    }
     if (proj.timeToLive <= 0) {
       emitProjectileWorldReactionOnce(proj, data, proj.x, proj.y);
       if (proj.type === 'incinerateCore') {

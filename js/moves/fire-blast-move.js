@@ -124,6 +124,8 @@ function pushOneFireBlastCore(
     splashRadius: cfg.splashRadius,
     sourceEntity,
     fromWild,
+    hasTackleTrait: true,
+    fireBlastCharge01: tier === 3 ? 1 : tier === 2 ? 0.62 : 0.22,
     hitsWild: !fromWild,
     hitsPlayer: !!fromWild,
     trailAcc: EMBER_TRAIL_INTERVAL,

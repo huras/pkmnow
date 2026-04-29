@@ -178,6 +178,23 @@ let minimapWildMarkerCandidatesCache = [];
 let minimapWildMarkerCandidatesBuiltAtMs = 0;
 let minimapWildMarkerCandidatesShowAll = false;
 
+function findCaveCenterInLandmarkMacro(landmark, data) {
+  if (!landmark || landmark.type !== 'CAVE' || !data) return null;
+  const macroX = Math.floor(Number(landmark.x));
+  const macroY = Math.floor(Number(landmark.y));
+  if (!Number.isFinite(macroX) || !Number.isFinite(macroY)) return null;
+  const startX = macroX * MACRO_TILE_STRIDE;
+  const startY = macroY * MACRO_TILE_STRIDE;
+  for (let my = startY; my < startY + MACRO_TILE_STRIDE; my++) {
+    for (let mx = startX; mx < startX + MACRO_TILE_STRIDE; mx++) {
+      if (isCaveEntranceCandidateAtMicro(mx, my, data)) {
+        return { x: mx + 0.5, y: my + 0.5 };
+      }
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -349,8 +366,15 @@ function rebuildBase(w, h, data, zoom) {
   if (data.landmarks && data.landmarks.length) {
     for (const lm of data.landmarks) {
       if (lm.type === 'CAVE' && !isCaveLandmarkCurrentlyRenderable(lm, data)) continue;
-      const px = (lm.x + 0.5) * tileW;
-      const py = (lm.y + 0.5) * tileH;
+      let px = (lm.x + 0.5) * tileW;
+      let py = (lm.y + 0.5) * tileH;
+      if (lm.type === 'CAVE') {
+        const center = findCaveCenterInLandmarkMacro(lm, data);
+        if (center) {
+          px = (center.x / MACRO_TILE_STRIDE) * tileW;
+          py = (center.y / MACRO_TILE_STRIDE) * tileH;
+        }
+      }
       const r = Math.max(1.8, tileW * 0.5);
 
       ctx.save();

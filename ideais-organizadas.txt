@@ -33,6 +33,15 @@ My ideias organizadas por tópico
   - Biomes and Flora (talvez procedural no talo)
   - Estruturas naturais (florestas, lagos, montanhas, mares)
   - Dex de biomas mostrando variação de spawn por dia/período
+- Dividir o mapa em regiões usando Voronoi.
+- Regra de descoberta por região: revelar tudo ou nada daquela região (sem revelação parcial fina).
+- Minimap com papel mais de radar do que mapa completo.
+- Revelação de terreno no minimapa é temporária e se perde após descansar.
+- Cada região tem uma torre/ponto alto para controle de leitura/navegação regional.
+- Habilidades de sensoriamento por pokémon no minimapa:
+  - alguns detectam cavernas e mostram entradas ocultas;
+  - outros detectam tipos específicos de alvo (recursos, estruturas, eventos, etc).
+- Isso torna espécies diferentes úteis para "caçar" coisas diferentes no mundo.
 - Histórico no mapa-múndi das decisões do player:
   - quando equipar/trocar ataques, registrar no mapa a posição onde isso aconteceu;
   - usar isso como "rastro mental" para entender o que o player estava pensando ao atravessar cada região.
