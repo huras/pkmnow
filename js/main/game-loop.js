@@ -11,6 +11,8 @@ import {
   getWildPokemonEntities,
   wildUpdatePerfLast
 } from '../wild-pokemon/index.js';
+import { getDungeonState, isDungeonActive } from '../dungeon/dungeon-runtime.js';
+import { buildDungeonWildDataProxy, syncDungeonWildWindow } from '../dungeon/dungeon-wild.js';
 import { updateMoves, pushParticle } from '../moves/moves-manager.js';
 import { updateGrassFire, GRASS_FIRE_PARTICLE_SEC } from '../play-grass-fire.js';
 import { tickLightning } from '../weather/lightning.js';
@@ -662,6 +664,36 @@ export function createGameLoop(api) {
       if (autosaveGate.shouldRun) {
         tickPlaySessionAutosave(timestamp / 1000, currentData, player, getPlaySessionPersistExtra?.() ?? null);
       }
+    } else if (currentData && mode === 'dungeon' && isDungeonActive()) {
+      updateCrystalShardParticles(simDt);
+      const ds = getDungeonState();
+      player.x = ds.playerX;
+      player.y = ds.playerY;
+      player.visualX = ds.playerX;
+      player.visualY = ds.playerY;
+      if (ds.facing) {
+        player.facing = ds.facing;
+        player.animRow = Number.isFinite(ds.animRow) ? ds.animRow : player.animRow;
+      }
+      player.animMoving = !!ds.animMoving;
+      const dungeonData = buildDungeonWildDataProxy(currentData, ds);
+      const tWildWindow0 = performance.now();
+      syncDungeonWildWindow(currentData, ds);
+      updateBreakdown.updWildWindowMs = performance.now() - tWildWindow0;
+      const tWild0 = performance.now();
+      updateWildPokemon(simDt, dungeonData, player.x, player.y);
+      updateBreakdown.updWildMs = performance.now() - tWild0;
+      updateBreakdown.updWildMiscMs = wildUpdatePerfLast.miscMs;
+      updateBreakdown.updWildVerticalMs = wildUpdatePerfLast.verticalMs;
+      updateBreakdown.updWildSocialMs = wildUpdatePerfLast.socialMs;
+      updateBreakdown.updWildMotionMs = wildUpdatePerfLast.motionMs;
+      updateBreakdown.updWildPostMs = wildUpdatePerfLast.postMs;
+      const tPointer0 = performance.now();
+      updatePlayPointerCombat(simDt, player, dungeonData);
+      updateBreakdown.updPointerMs = performance.now() - tPointer0;
+      const tMoves0 = performance.now();
+      updateMoves(simDt, getWildPokemonEntities(), dungeonData, player);
+      updateBreakdown.updMovesMs = performance.now() - tMoves0;
     }
 
       // --- Plugin Hooks: postUpdate ---

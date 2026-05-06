@@ -119,7 +119,7 @@ export function addShockPulse(x, y, amount = 0.5, radiusTiles = 1.9, data) {
 }
 
 export function updateWorldReactions(dt, data, focusX, focusY) {
-  if (!EXPERIMENT_WORLD_REACTIONS_V1 || !data || worldCells.size <= 0) return;
+  if (!EXPERIMENT_WORLD_REACTIONS_V1 || !data || data.__dungeonWalk || worldCells.size <= 0) return;
   updateAccum += Math.max(0, Number(dt) || 0);
   while (updateAccum >= UPDATE_STEP_SEC) {
     updateAccum -= UPDATE_STEP_SEC;

@@ -10,6 +10,9 @@ import { getResolvedSheets } from '../pokemon/pokemon-asset-loader.js';
 import { resolvePmdFrameSpecForSlice, resolveCanonicalPmdH } from '../pokemon/pmd-layout-metrics.js';
 import { POKEMON_HEIGHTS } from '../pokemon/pokemon-heights.js';
 import { PMD_MON_SHEET } from '../pokemon/pmd-default-timing.js';
+import { getWildPokemonEntities } from '../wild-pokemon/index.js';
+import { activeParticles } from '../moves/moves-manager.js';
+import { drawBatchedParticle } from '../render/render-particles.js';
 
 const TILE_PX = 28;
 
@@ -42,14 +45,44 @@ export function renderDungeon(canvas, dungeonState, timeSec) {
     }
   }
 
+  const wilds = getWildPokemonEntities()
+    .filter((e) => e?.isDungeonWild && !e?._strengthCarryHidden)
+    .sort((a, b) => {
+      const dy = (Number(a?.y) || 0) - (Number(b?.y) || 0);
+      if (dy !== 0) return dy;
+      return (Number(a?.x) || 0) - (Number(b?.x) || 0);
+    });
+  for (const w of wilds) {
+    const wx = Math.floor(Number(w.x) * TILE_PX - camX);
+    const wy = Math.floor(Number(w.y) * TILE_PX - camY);
+    drawDungeonPmdEntity(ctx, w, wx, wy);
+  }
+
   const px = Math.floor(dungeonState.playerX * TILE_PX - camX);
   const py = Math.floor(dungeonState.playerY * TILE_PX - camY);
   drawDungeonPlayerSprite(ctx, px, py, dungeonState);
+  drawDungeonParticles(ctx, camX, camY, cw, ch);
 
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
   ctx.font = `${Math.max(14, Math.floor(cw * 0.018))}px monospace`;
   ctx.fillText('Dungeon - use any stairs to exit', 18, 28);
   ctx.restore();
+}
+
+function drawDungeonParticles(ctx, camX, camY, cw, ch) {
+  if (!Array.isArray(activeParticles) || activeParticles.length === 0) return;
+  const margin = TILE_PX * 3;
+  const snap = (n) => Math.round(n);
+  for (const p of activeParticles) {
+    const x = Number(p?.x);
+    const y = Number(p?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const sx = x * TILE_PX - camX;
+    const sy = y * TILE_PX - camY;
+    if (sx < -margin || sy < -margin || sx > cw + margin || sy > ch + margin) continue;
+    drawBatchedParticle(ctx, p, TILE_PX, TILE_PX, snap);
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawDungeonTile(ctx, sx, sy, x, y, map, tileType, terrainDraw) {
@@ -73,21 +106,23 @@ function drawDungeonTerrainTile(ctx, sx, sy, x, y, map, tileType, terrainDraw) {
   const set = isWalk ? terrainDraw.floorSet : terrainDraw.wallSet;
   const img = isWalk ? terrainDraw.floorImg : terrainDraw.wallImg;
   const cols = isWalk ? terrainDraw.floorCols : terrainDraw.wallCols;
-  const role = getRoleForCell(
-    y,
-    x,
-    map.height,
-    map.width,
-    (r, c) => {
-      const t = map.get(c, r);
-      return isWalk ? isWalkableDungeonTile(t) : t === DUNGEON_TILE_TYPES.WALL;
-    },
-    set?.type || 'conc-conv-a'
-  );
-  const spec = getConcConvATerrainTileSpec(set, role);
-  const centerTileId = Number(set?.roles?.CENTER ?? set?.centerId);
-  const tileId = spec?.tileId != null ? spec.tileId : centerTileId;
-  drawTerrainCellFromSheet(ctx, img, cols, 16, tileId, sx, sy, TILE_PX, TILE_PX, !!spec?.flipX);
+  const centerTileId = Number(set?.roles?.CENTER ?? set?.centerId ?? 0);
+  if (isWalk) {
+    // Requested behavior: force CENTER tile for dungeon floors.
+    drawTerrainCellFromSheet(ctx, img, cols, 16, centerTileId, sx, sy, TILE_PX, TILE_PX, false);
+  } else {
+    const role = getRoleForCell(
+      y,
+      x,
+      map.height,
+      map.width,
+      (r, c) => map.get(c, r) === DUNGEON_TILE_TYPES.WALL,
+      set?.type || 'conc-conv-a'
+    );
+    const spec = getConcConvATerrainTileSpec(set, role);
+    const tileId = spec?.tileId != null ? spec.tileId : centerTileId;
+    drawTerrainCellFromSheet(ctx, img, cols, 16, tileId, sx, sy, TILE_PX, TILE_PX, !!spec?.flipX);
+  }
 
   if (isWalk) {
     const n = seededHash(x, y, 91823);
@@ -154,6 +189,39 @@ function isWalkableDungeonTile(tileType) {
     tileType === DUNGEON_TILE_TYPES.STAIRS_DOWN ||
     tileType === DUNGEON_TILE_TYPES.STAIRS_UP
   );
+}
+
+function drawDungeonPmdEntity(ctx, entity, screenX, screenY) {
+  const dex = Number(entity?.dexId) || 1;
+  const sheets = getResolvedSheets(imageCache, dex);
+  const moving = !!entity?.animMoving;
+  const sheet = moving ? sheets?.walk : sheets?.idle;
+  const slice = moving ? 'walk' : 'idle';
+  if (!sheet) {
+    ctx.fillStyle = 'rgba(200,180,255,0.78)';
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, TILE_PX * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  const { sw, sh, animCols } = resolvePmdFrameSpecForSlice(sheet, dex, slice);
+  const canonicalH = resolveCanonicalPmdH(sheets?.idle, sheets?.walk, dex);
+  const targetHeightTiles = POKEMON_HEIGHTS[dex] || 1.1;
+  const targetHeightPx = targetHeightTiles * TILE_PX;
+  const finalScale = targetHeightPx / Math.max(1, canonicalH);
+  const dw = sw * finalScale;
+  const dh = sh * finalScale;
+  const sx = ((Number(entity?.animFrame) || 0) % Math.max(1, animCols)) * sw;
+  const sy = (Number(entity?.animRow) || 0) * sh;
+  const dx = screenX - dw * 0.5;
+  const dy = screenY - dh * PMD_MON_SHEET.pivotYFrac;
+  const phase = Number(entity?.spawnPhase);
+  const a =
+    Number.isFinite(phase) ? Math.max(0, Math.min(1, phase)) : 1;
+  const prev = ctx.globalAlpha;
+  ctx.globalAlpha = prev * a;
+  ctx.drawImage(sheet, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.globalAlpha = prev;
 }
 
 function drawDungeonPlayerSprite(ctx, px, py, dungeonState) {

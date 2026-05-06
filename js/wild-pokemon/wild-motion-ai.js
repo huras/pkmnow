@@ -200,6 +200,7 @@ function steerFollowerSimple(entity, targetAng, speed, data, isAirborne, targetX
 
 function markWildAirborneOnDownhillStep(entity, ox, oy, nx, ny, data) {
   if (!entity || !data) return;
+  if (data.__dungeonWalk) return;
   if (!entity.grounded || entity.jumping) return;
   if ((entity.z || 0) <= 0.05) return;
   const ot = getMicroTile(Math.floor((Number(ox) || 0) + 0.5), Math.floor((Number(oy) || 0) + 0.5), data);
@@ -364,6 +365,11 @@ export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTr
     const ft = worldFeetFromPivotCell(destX, destY, imageCache, entity.dexId ?? 1, true);
     const mx = Math.floor(ft.x);
     const my = Math.floor(ft.y);
+    if (data?.__dungeonWalk) {
+      const dw = data.__dungeonWalk;
+      if (mx < 0 || mx >= dw.mapW || my < 0 || my >= dw.mapH) return false;
+      return dw.isWalkable(mx, my);
+    }
     const gw = data.width * MACRO_TILE_STRIDE;
     const gh = data.height * MACRO_TILE_STRIDE;
     if (mx < 0 || mx >= gw || my < 0 || my >= gh) return false;
@@ -390,6 +396,11 @@ export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTr
     return false;
   }
   if (!air) {
+    if (data?.__dungeonWalk) {
+      // Dungeon corridors can be 1-tile wide: radial footprint probes would over-reject.
+      // In dungeon mode we trust center-tile walkability from the dungeon grid.
+      return true;
+    }
     // Cylinder footprint (constant radius along Z for movement collision): radial samples.
     const r = WILD_TREE_BODY_R;
     const d = r * 0.70710678;
@@ -428,6 +439,7 @@ export function wildWalkOk(destX, destY, data, srcX, srcY, entity, air, ignoreTr
 
 export function applyWildTreeTrunkResolution(entity, data) {
   ensureWildPhysicsState(entity);
+  if (data?.__dungeonWalk) return;
   const air = !!entity.jumping || (entity.z || 0) > 0.05;
   if (!entity.grounded || air || !data) return;
   if (isUndergroundBurrowerDex(entity.dexId ?? 0) && entity.animMoving) return;

@@ -169,6 +169,7 @@ export function pivotCellHeightTraversalOk(
   macroData,
   relaxWhenOnTreeCanopy = false
 ) {
+  if (macroData?.__dungeonWalk) return true;
   if (relaxWhenOnTreeCanopy) return true;
   if (srcPivotX === undefined || srcPivotY === undefined) return true;
   const pmx = Math.floor(pivotX);
@@ -1102,6 +1103,13 @@ export function canWildPokemonWalkMicroTile(
   ignoreTreeTrunks = false,
   ignoreCliffCylinders = false
 ) {
+  if (data?.__dungeonWalk) {
+    const dw = data.__dungeonWalk;
+    const mx = Math.floor(Number(x) || 0);
+    const my = Math.floor(Number(y) || 0);
+    if (mx < 0 || my < 0 || mx >= dw.mapW || my >= dw.mapH) return false;
+    return dw.isWalkable(mx, my);
+  }
   const mx = Math.floor(x);
   const my = Math.floor(y);
   if (mx < 0 || mx >= data.width * MACRO_TILE_STRIDE || my < 0 || my >= data.height * MACRO_TILE_STRIDE) {
@@ -1187,6 +1195,7 @@ export function canWildPokemonWalkMicroTile(
  */
 export function syncEntityZWithTerrain(entity, ox, oy, nx, ny, data) {
   if (!data) return;
+  if (data.__dungeonWalk) return;
   const oFeetY = Math.floor(oy + 0.5);
   const nFeetY = Math.floor(ny + 0.5);
   if (oFeetY === nFeetY) return;

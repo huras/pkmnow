@@ -18,6 +18,7 @@ import {
   drawDungeonTransitionOverlay
 } from './dungeon/dungeon-transition.js';
 import { setTryEnterDungeonFromInteractKey } from './dungeon/play-interact-dungeon.js';
+import { prepareDungeonWildOnEnter, clearDungeonWildEntities } from './dungeon/dungeon-wild.js';
 import {
   resetWildPokemonManager,
   triggerPlayerSocialAction
@@ -2161,6 +2162,7 @@ function requestEnterDungeonFromPortal(portal) {
       returnWorldY: Number.isFinite(portal.interactY) ? portal.interactY : portal.worldY
     });
     if (!ok) return;
+    if (currentData) prepareDungeonWildOnEnter(currentData, getDungeonState());
     appMode = 'dungeon';
     playInputState.mouseValid = false;
     invalidatePlayPointerHover();
@@ -2174,6 +2176,7 @@ function requestEnterDungeonFromPortal(portal) {
 function requestExitDungeonToOverworld() {
   if (appMode !== 'dungeon' || isDungeonTransitionBlocking() || !isDungeonActive()) return;
   startDungeonTransition('exit', () => {
+    clearDungeonWildEntities();
     const exit = leaveDungeon();
     if (!exit) return;
     appMode = 'play';
