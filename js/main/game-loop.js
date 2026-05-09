@@ -53,6 +53,9 @@ import { updateBerryTrees, clearBerryTreeStates } from './berry-tree-system.js';
 export const heldKeys = new Set();
 export const playFpsSampleTimes = [];
 
+/** Prevents "spiral of death" / multi-second freezes after tab blur, debugger pauses, or hitch spikes. */
+const MAX_PLAY_FRAME_DELTA_SEC = 0.25;
+
 let lastTimestamp = 0;
 let animFrameId = null;
 let frameGateTimeoutId = null;
@@ -417,8 +420,9 @@ export function createGameLoop(api) {
     const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
     if (debug) console.log('[Loop] Start frame', timestamp);
     const tLoopStart = performance.now();
-    const dt = (timestamp - lastTimestamp) / 1000;
+    const rawDtSec = lastTimestamp ? (timestamp - lastTimestamp) / 1000 : 0;
     lastTimestamp = timestamp;
+    const dt = Math.min(MAX_PLAY_FRAME_DELTA_SEC, Math.max(0, Number(rawDtSec) || 0));
     const simDt = getGameplaySimDt(dt);
     setGameTime(timestamp / 1000);
 

@@ -7,6 +7,8 @@ export const EXPERIMENT_WORLD_REACTIONS_V1 = true;
 const CELL_SIZE_TILES = 2;
 const UPDATE_HZ = 8;
 const UPDATE_STEP_SEC = 1 / UPDATE_HZ;
+/** Hard cap on fixed-timestep ticks per frame (8 Hz → 24 steps ≈ 3s of backlog per frame max). */
+const MAX_REACTION_STEPS_PER_FRAME = 24;
 const MAX_TRACK_DIST_TILES = 140;
 const CELL_PRUNE_EPS = 0.025;
 
@@ -121,8 +123,10 @@ export function addShockPulse(x, y, amount = 0.5, radiusTiles = 1.9, data) {
 export function updateWorldReactions(dt, data, focusX, focusY) {
   if (!EXPERIMENT_WORLD_REACTIONS_V1 || !data || data.__dungeonWalk || worldCells.size <= 0) return;
   updateAccum += Math.max(0, Number(dt) || 0);
-  while (updateAccum >= UPDATE_STEP_SEC) {
+  let reactionSteps = 0;
+  while (updateAccum >= UPDATE_STEP_SEC && reactionSteps < MAX_REACTION_STEPS_PER_FRAME) {
     updateAccum -= UPDATE_STEP_SEC;
+    reactionSteps++;
     const fx = Number(focusX) || 0;
     const fy = Number(focusY) || 0;
     for (const [k, c] of worldCells.entries()) {
