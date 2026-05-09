@@ -38,7 +38,8 @@ import {
   isPlayerInfiniteLifeEnabled,
   setPlayerInfiniteLifeEnabled
 } from './player.js';
-import { MACRO_TILE_STRIDE, getMicroTile, getLandStepCurveExponent, setLandStepCurveExponent } from './chunking.js';
+import { MACRO_TILE_STRIDE, getMicroTile } from './chunking.js';
+import { getLandStepCurveExponent, setLandStepCurveExponent } from './land-step-curve.js';
 import { buildPlayModeTileDebugInfo } from './main/play-tile-debug-info.js';
 import {
   configureTileDebugModal,
