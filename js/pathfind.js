@@ -136,7 +136,8 @@ export function findPath(
     if (currentKey === endKey) {
       const path = [];
       let temp = currentKey;
-      while (cameFrom.has(temp)) {
+      let reconstructSafety = 5000;
+      while (cameFrom.has(temp) && reconstructSafety-- > 0) {
         path.push({ x: temp % width, y: Math.floor(temp / width) });
         temp = cameFrom.get(temp);
       }
