@@ -122,7 +122,8 @@ export function findPath(
   const fScore = new Float32Array(width * height).fill(Infinity);
   fScore[startKey] = heuristic(startX, startY, endX, endY);
 
-  while (openSet.size > 0) {
+  let maxIterations = 5000;
+  while (openSet.size > 0 && maxIterations-- > 0) {
     let currentKey = -1;
     let minF = Infinity;
     for (const key of openSet) {

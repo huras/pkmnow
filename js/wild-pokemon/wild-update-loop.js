@@ -81,6 +81,7 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
     const debug = !!(typeof window !== 'undefined' && window.__DEBUG_LOOP__);
     
     for (const [k, e] of entitiesByKey.entries()) {
+      const tEntityStart = performance.now();
       if (debug) console.log('[WildLoop] Processing', k, e?.dexId);
       if (e?._strengthCarryHidden) continue;
       const distToPlayer = Math.hypot(e.x - playerX, e.y - playerY);
@@ -162,6 +163,11 @@ export function updateWildPokemon(dt, data, playerX, playerY, options = {}) {
       }
 
       wildUpdatePerfLast.postMs += performance.now() - mark;
+      
+      if (performance.now() - tEntityStart > 50) {
+         console.warn(`[Watchdog] Wild entity ${k} (dex ${e.dexId}, state ${e.aiState}) took ${performance.now() - tEntityStart}ms to update`);
+         console.trace();
+      }
     }
     // Do not push play-event-log rows here: each despawning wild mon would trigger a
     // full log snapshot + HUD rebuild (and portrait fetches), which stutters badly when

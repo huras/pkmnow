@@ -272,7 +272,8 @@ function findCompanionSlotCandidates(leaderSlot, neededSlots, claimedKeys, entit
 }
 
 function pruneDebugSummonsIfNeeded() {
-  while ([...entitiesByKey.keys()].filter(isDebugSummonKey).length >= DEBUG_SUMMON_MAX) {
+  let safety = 200;
+  while ([...entitiesByKey.keys()].filter(isDebugSummonKey).length >= DEBUG_SUMMON_MAX && safety-- > 0) {
     for (const k of entitiesByKey.keys()) {
       if (isDebugSummonKey(k)) {
         entitiesByKey.delete(k);

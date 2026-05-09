@@ -517,6 +517,10 @@ export function createGameLoop(api) {
       updateEncounterCinematic(player, simDt);
     }
     updatePlayGrassRustle(simDt, player, mode === 'play' ? currentData : null);
+    if (performance.now() - tUpdPlayer0 > 100) {
+      console.warn(`[Watchdog] updatePlayer + cinematic took ${performance.now() - tUpdPlayer0}ms`);
+      console.trace();
+    }
 
     if (mode === 'play') {
       updateCrystalShardParticles(simDt);
@@ -585,6 +589,10 @@ export function createGameLoop(api) {
       const tMoves0 = performance.now();
       updateMoves(simDt, getWildPokemonEntities(), currentData, player);
       updateBreakdown.updMovesMs = performance.now() - tMoves0;
+      if (updateBreakdown.updMovesMs > 100) {
+        console.warn(`[Watchdog] updateMoves took ${updateBreakdown.updMovesMs}ms`);
+        console.trace();
+      }
       const tGrassFire0 = performance.now();
       updateGrassFire(simDt, currentData, pvx, pvy, (wx, wy) => {
         pushParticle({
@@ -710,6 +718,10 @@ export function createGameLoop(api) {
     if (debug) console.log('[Loop] updateView', tRenderStart);
     updateView();
     const tRenderEnd = performance.now();
+    if (tRenderEnd - tRenderStart > 100) {
+      console.warn(`[Watchdog] updateView took ${tRenderEnd - tRenderStart}ms`);
+      console.trace();
+    }
     if (debug) console.log('[Loop] Post-updateView', tRenderEnd);
     const playFpsEl = getPlayFpsEl();
     if ((getAppMode() === 'play' || getAppMode() === 'dungeon') && playFpsEl) {
