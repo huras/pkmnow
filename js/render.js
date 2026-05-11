@@ -7,6 +7,11 @@ import {
   VEG_MULTITILE_OVERLAP_PX
 } from './render/render-constants.js';
 import { computePlayViewState } from './render/play-view-camera.js';
+import {
+  getScreenGridChunkCullBounds,
+  getScreenGridBlend,
+  isScreenGridCameraOn
+} from './render/play-deadzone-camera.js';
 import { setPlayCameraSnapshot, clearPlayCameraSnapshot } from './render/play-camera-snapshot.js';
 import {
   syncPlayChunkCache,
@@ -530,11 +535,46 @@ export function render(canvas, data, options = {}) {
     var playVision = getPlayVisionFogState(data, player, { enabled: visionFogEnabled });
     addRenderFramePhaseMs('rndVisionMs', performance.now() - tVision0);
 
+    /** SNES grid ~locked: narrow tile window + chunks to room AABB (see play-deadzone-camera). */
+    let screenGridChunkCull = null;
+    let chunkPadPlay = playCam.chunkPad;
+    if (getScreenGridBlend() >= 0.999 && isScreenGridCameraOn()) {
+      const viewWTiles = cw / tileW;
+      const viewHTiles = ch / tileH;
+      const roomAabb = getScreenGridChunkCullBounds(viewWTiles, viewHTiles);
+      if (roomAabb) {
+        screenGridChunkCull = roomAabb;
+        const padTile = 1;
+        const microW = width * MACRO_TILE_STRIDE;
+        const microH = height * MACRO_TILE_STRIDE;
+        const nx0 = Math.max(0, Math.floor(roomAabb.minX) - padTile);
+        const ny0 = Math.max(0, Math.floor(roomAabb.minY) - padTile);
+        const nx1 = Math.min(microW, Math.ceil(roomAabb.maxX) + padTile);
+        const ny1 = Math.min(microH, Math.ceil(roomAabb.maxY) + padTile);
+        const ix0 = Math.max(startX, nx0);
+        const iy0 = Math.max(startY, ny0);
+        const ix1 = Math.min(endX, nx1);
+        const iy1 = Math.min(endY, ny1);
+        if (ix0 < ix1 && iy0 < iy1) {
+          startX = ix0;
+          startY = iy0;
+          endX = ix1;
+          endY = iy1;
+        } else {
+          startX = nx0;
+          startY = ny0;
+          endX = nx1;
+          endY = ny1;
+        }
+        chunkPadPlay = 0;
+      }
+    }
+
     // --- CHUNK BAKING & RENDERING ---
     const tChunkQ0 = performance.now();
     const maxChunkXi = Math.floor((width * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
     const maxChunkYi = Math.floor((height * MACRO_TILE_STRIDE - 1) / PLAY_CHUNK_SIZE);
-    const padC = playCam.chunkPad;
+    const padC = chunkPadPlay;
     let cStartX = Math.max(0, Math.floor(startX / PLAY_CHUNK_SIZE) - padC);
     let cStartY = Math.max(0, Math.floor(startY / PLAY_CHUNK_SIZE) - padC);
     let cEndX = Math.min(maxChunkXi, Math.floor((endX - 1) / PLAY_CHUNK_SIZE) + padC);
@@ -562,7 +602,8 @@ export function render(canvas, data, options = {}) {
     // If the visible area is mostly baked, use some of the budget to bake nearby chunks
     // that the player might move into soon. This reduces FPS drops during discovery.
     const strictCulling = isPlayStrictCullingEnabled();
-    const prebakeRadius = strictCulling ? 0 : 1; 
+    let prebakeRadius = strictCulling ? 0 : 1;
+    if (screenGridChunkCull) prebakeRadius = 0;
     if (prebakeRadius > 0) {
       for (let cy = cStartY - prebakeRadius; cy <= cEndY + prebakeRadius; cy++) {
         for (let cx = cStartX - prebakeRadius; cx <= cEndX + prebakeRadius; cx++) {
@@ -688,10 +729,18 @@ export function render(canvas, data, options = {}) {
         : 0,
       workerIngestMs: consumePlayChunkMetadataIngestMs()
     });
+    let pruneCx = Math.floor(player.x / PLAY_CHUNK_SIZE);
+    let pruneCy = Math.floor(player.y / PLAY_CHUNK_SIZE);
+    if (screenGridChunkCull) {
+      const cx = (screenGridChunkCull.minX + screenGridChunkCull.maxX) * 0.5;
+      const cy = (screenGridChunkCull.minY + screenGridChunkCull.maxY) * 0.5;
+      pruneCx = Math.floor(cx / PLAY_CHUNK_SIZE);
+      pruneCy = Math.floor(cy / PLAY_CHUNK_SIZE);
+    }
     prunePlayChunkCache({
       keepKeys: visibleChunkKeys,
-      centerCx: Math.floor(player.x / PLAY_CHUNK_SIZE),
-      centerCy: Math.floor(player.y / PLAY_CHUNK_SIZE)
+      centerCx: pruneCx,
+      centerCy: pruneCy
     });
     ctx.imageSmoothingEnabled = prevSmoothing;
     ctx.translate(currentTransX, currentTransY);

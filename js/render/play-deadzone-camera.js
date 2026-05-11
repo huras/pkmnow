@@ -14,6 +14,9 @@
  *     (and smooth fade-out when the encounter ends).
  *
  * Zero per-frame heap allocation.  All state is module-level primitives.
+ *
+ * Chunk bake culling: when grid blend ~1, {@link getScreenGridChunkCullBounds} in render.js
+ * narrows play-chunk visibility to the current room AABB (union while scrolling).
  */
 
 /* ── Transition timing ────────────────────────────────────────────────── */
@@ -66,9 +69,45 @@ let _blend = 0;
 /** Listeners notified on effective-state change (for UI sync). */
 const _listeners = [];
 
-// Self-init from localStorage.
-try { _manualOn = localStorage.getItem(LS_KEY) === '1'; } catch (_) { /* noop */ }
-// If manual was persisted ON, start fully blended.
+/** Reused output for {@link getScreenGridChunkCullBounds} (read immediately; do not retain). */
+const _chunkCullOut = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+const _chunkCullTmpA = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+const _chunkCullTmpB = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
+/**
+ * @param {number} roomIx
+ * @param {number} roomIy
+ * @param {number} viewW
+ * @param {number} viewH
+ * @param {{ minX: number, maxX: number, minY: number, maxY: number }} out
+ */
+function _fillRoomWorldAABB(roomIx, roomIy, viewW, viewH, out) {
+  const halfW = viewW * 0.5;
+  const halfH = viewH * 0.5;
+  let centerX;
+  let centerY;
+  if (_encounterActive) {
+    centerX = _roomCenterFromIndex(roomIx, _encounterAnchorX, viewW);
+    centerY = _roomCenterFromIndex(roomIy, _encounterAnchorY, viewH);
+  } else {
+    centerX = (roomIx + 0.5) * viewW;
+    centerY = (roomIy + 0.5) * viewH;
+  }
+  out.minX = centerX - halfW;
+  out.maxX = centerX + halfW;
+  out.minY = centerY - halfH;
+  out.maxY = centerY + halfH;
+}
+
+// Self-init from localStorage: default ON unless user saved '0' (off).
+try {
+  const v = localStorage.getItem(LS_KEY);
+  if (v === '0') _manualOn = false;
+  else if (v === '1') _manualOn = true;
+  else _manualOn = true;
+} catch (_) {
+  _manualOn = true;
+}
 if (_manualOn) _blend = 1;
 
 /* ── Derived helpers ──────────────────────────────────────────────────── */
@@ -209,6 +248,33 @@ export function getScreenGridCurrentRoomBounds() {
     screenW: _screenW,
     screenH: _screenH
   };
+}
+
+/**
+ * World-space AABB in micro tiles for play-chunk culling: current room, or union of
+ * from/to rooms while a room scroll is active. Uses the same room geometry as the camera.
+ *
+ * @param {number} viewW — `cw / effTileW` for this frame (must match {@link applyScreenGridCamera})
+ * @param {number} viewH — `ch / effTileH`
+ * @returns {{ minX: number, maxX: number, minY: number, maxY: number } | null} reused object; read-only before next call
+ */
+export function getScreenGridChunkCullBounds(viewW, viewH) {
+  if (!_isEffectivelyOn() || _blend <= 0.001) return null;
+  const vw = Number(viewW);
+  const vh = Number(viewH);
+  if (!(vw > 0) || !(vh > 0)) return null;
+
+  if (_scrolling) {
+    _fillRoomWorldAABB(_fromRoomX, _fromRoomY, vw, vh, _chunkCullTmpA);
+    _fillRoomWorldAABB(_toRoomX, _toRoomY, vw, vh, _chunkCullTmpB);
+    _chunkCullOut.minX = Math.min(_chunkCullTmpA.minX, _chunkCullTmpB.minX);
+    _chunkCullOut.maxX = Math.max(_chunkCullTmpA.maxX, _chunkCullTmpB.maxX);
+    _chunkCullOut.minY = Math.min(_chunkCullTmpA.minY, _chunkCullTmpB.minY);
+    _chunkCullOut.maxY = Math.max(_chunkCullTmpA.maxY, _chunkCullTmpB.maxY);
+  } else {
+    _fillRoomWorldAABB(_roomX, _roomY, vw, vh, _chunkCullOut);
+  }
+  return _chunkCullOut;
 }
 
 /**
