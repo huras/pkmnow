@@ -1,0 +1,31 @@
+{
+  "name": "region-walkability",
+  "version": "1.0.0",
+  "description": "Walkability + collider rules for region-map-gen worlds: tile walkability, trunk/cliff circles, entity stamina, scatter colliders.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./walkability.js": "./src/walkability.js",
+    "./world-movement-constants.js": "./src/world-movement-constants.js",
+    "./entity-stamina.js": "./src/entity-stamina.js",
+    "./scatter-collider-config.js": "./src/scatter-collider-config.js",
+    "./circle-tree-trunk-resolve.js": "./src/circle-tree-trunk-resolve.js",
+    "./destroyed-objects-registry.js": "./src/destroyed-objects-registry.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "dependencies": {
+    "region-map-gen": "*",
+    "region-terrain-tiles": "*"
+  },
+  "keywords": [
+    "walkability",
+    "collider",
+    "stamina",
+    "game"
+  ]
+}

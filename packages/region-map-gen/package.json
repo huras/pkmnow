@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./package.json": "./package.json",
     "./generator.js": "./src/generator.js",
+    "./world-from-biome-map.js": "./src/world-from-biome-map.js",
     "./rng.js": "./src/rng.js",
     "./chunking.js": "./src/chunking.js",
     "./biomes.js": "./src/biomes.js",

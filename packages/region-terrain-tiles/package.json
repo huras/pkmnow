@@ -1,0 +1,38 @@
+{
+  "name": "region-terrain-tiles",
+  "version": "1.0.0",
+  "description": "Biome-to-tile mapping, autotile data/engine, vegetation channels and palette remaps consumed by region-map-gen worlds.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./biome-tiles.js": "./src/biome-tiles.js",
+    "./tessellation-data.js": "./src/tessellation-data.js",
+    "./tessellation-engine.js": "./src/tessellation-engine.js",
+    "./vegetation-channels.js": "./src/vegetation-channels.js",
+    "./terrain-palette-base.js": "./src/terrain-palette-base.js",
+    "./terrain-palette-grassy.js": "./src/terrain-palette-grassy.js",
+    "./terrain-palette-remap.js": "./src/terrain-palette-remap.js",
+    "./terrain-palette-remap-core.js": "./src/terrain-palette-remap-core.js",
+    "./image-cache.js": "./src/image-cache.js",
+    "./animation-renderer.js": "./src/animation-renderer.js",
+    "./perlin-wind.js": "./src/perlin-wind.js",
+    "./scatter-pass2-debug.js": "./src/scatter-pass2-debug.js",
+    "./scatter-item-override.js": "./src/scatter-item-override.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "dependencies": {
+    "region-map-gen": "*"
+  },
+  "keywords": [
+    "tiles",
+    "autotile",
+    "biome",
+    "vegetation",
+    "palette"
+  ]
+}

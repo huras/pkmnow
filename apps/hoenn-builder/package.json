@@ -1,0 +1,16 @@
+{
+  "name": "hoenn-builder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hand-paint a macro biome map (256x256), save it as JSON, then walk it with a minimal player. Built on the region-* workspace packages.",
+  "dependencies": {
+    "region-map-gen": "*",
+    "region-terrain-tiles": "*",
+    "region-walkability": "*",
+    "region-render-2d": "*"
+  },
+  "scripts": {
+    "dev": "node ../../scripts/static-server.mjs apps/hoenn-builder 4173"
+  }
+}

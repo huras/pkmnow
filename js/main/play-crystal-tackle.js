@@ -9,6 +9,7 @@ import { PLAY_CHUNK_SIZE } from '../render/render-constants.js';
 import { enqueuePlayChunkBake } from '../render/play-chunk-cache.js';
 import { getStaticEntitiesForChunk, invalidateStaticEntityCache } from '../render/static-entity-cache.js';
 import { didFormalTreeSpawnAtRoot, getFormalTreeTrunkCircle, scatterPhysicsCircleAtOrigin } from '../walkability.js';
+import { setDestroyedObjectsHandlers } from 'region-walkability/destroyed-objects-registry.js';
 import { scatterItemKeyIsSolid, scatterItemKeyIsTree, validScatterOriginMicro } from '../scatter-pass2-debug.js';
 import { harvestBerryTree, getBerryTreeState } from './berry-tree-system.js';
 import {
@@ -261,6 +262,12 @@ export function isBerryTreeKey(itemKey) {
 export function isPlayFormalTreeRootDestroyed(rootX, my) {
   return destroyedFormalTreeRoots.has(`${rootX},${my}`);
 }
+
+setDestroyedObjectsHandlers({
+  isDetailScatterOriginDestroyed: isPlayDetailScatterOriginDestroyed,
+  isFormalTreeRootDestroyed: isPlayFormalTreeRootDestroyed,
+  getFormalTreeRegrowVisualAlpha01: (rootX, my) => getFormalTreeRegrowVisualAlpha01(rootX, my),
+});
 
 /**
  * Multiplies formal tree draw alpha during post-regen fade-in (1 when inactive).

@@ -24,6 +24,7 @@ import { preloadPokemonCry, playPokemonCry } from '../pokemon/pokemon-cries.js';
 import { imageCache } from '../image-cache.js';
 import { entitiesByKey } from '../wild-pokemon/wild-core-state.js';
 import { PLAY_BAKE_TILE_PX } from '../render/render-constants.js';
+import { setEncounterZoomMulProvider } from 'region-render-2d/encounter-zoom-registry.js';
 import {
   activateEncounterScreenGrid,
   deactivateEncounterScreenGrid,
@@ -91,6 +92,8 @@ export function isEncounterCinematicBlocking() {
 export function getEncounterZoomMul() {
   return _zoomMul;
 }
+
+setEncounterZoomMulProvider(getEncounterZoomMul);
 
 /**
  * Start the encounter cinematic.

@@ -1,0 +1,48 @@
+{
+  "name": "region-render-2d",
+  "version": "1.0.0",
+  "description": "Canvas2D rendering pipeline for region-map-gen worlds: chunk bake/cache, tile/grass layers, cameras, palette draws, static entity cache.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./render-constants.js": "./src/render-constants.js",
+    "./render-frame-phases.js": "./src/render-frame-phases.js",
+    "./render-chunk-stats.js": "./src/render-chunk-stats.js",
+    "./render-utils-internal.js": "./src/render-utils-internal.js",
+    "./conc-conv-a-terrain-blit.js": "./src/conc-conv-a-terrain-blit.js",
+    "./palette-base-draw.js": "./src/palette-base-draw.js",
+    "./map-overview-cache.js": "./src/map-overview-cache.js",
+    "./load-tileset-images.js": "./src/load-tileset-images.js",
+    "./canopy-sway-cache.js": "./src/canopy-sway-cache.js",
+    "./render-map-layers.js": "./src/render-map-layers.js",
+    "./play-chunk-bake.js": "./src/play-chunk-bake.js",
+    "./play-chunk-canopy.js": "./src/play-chunk-canopy.js",
+    "./play-chunk-cache.js": "./src/play-chunk-cache.js",
+    "./play-chunk-metadata-pool.js": "./src/play-chunk-metadata-pool.js",
+    "./play-view-camera.js": "./src/play-view-camera.js",
+    "./play-deadzone-camera.js": "./src/play-deadzone-camera.js",
+    "./play-camera-offset.js": "./src/play-camera-offset.js",
+    "./play-strict-culling.js": "./src/play-strict-culling.js",
+    "./render-item-visibility.js": "./src/render-item-visibility.js",
+    "./static-entity-cache.js": "./src/static-entity-cache.js",
+    "./gameplay-config.js": "./src/gameplay-config.js",
+    "./encounter-zoom-registry.js": "./src/encounter-zoom-registry.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "dependencies": {
+    "region-map-gen": "*",
+    "region-terrain-tiles": "*",
+    "region-walkability": "*"
+  },
+  "keywords": [
+    "render",
+    "canvas",
+    "tiles",
+    "camera"
+  ]
+}

@@ -3,6 +3,7 @@
  */
 
 export { generate, DEFAULT_CONFIG, normalizeSeed } from './generator.js';
+export { createWorldFromBiomeMap, defaultElevationForBiome } from './world-from-biome-map.js';
 export { createRng, stringToSeed } from './rng.js';
 export * from './chunking.js';
 export * from './biomes.js';

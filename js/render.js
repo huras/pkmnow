@@ -29,9 +29,11 @@ import { isPlayStrictCullingEnabled } from './render/play-strict-culling.js';
 import {
   clearGrassFireStateForNewMap,
   grassFireVisualPhaseAt,
-  grassFireCharredRegrowth01
+  grassFireCharredRegrowth01,
+  grassFireExtinguishBarVisibleAt,
+  grassFireBurningHpAt
 } from './play-grass-fire.js';
-import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt } from './play-grass-cut.js';
+import { clearGrassCutStateForNewMap, grassCutSuppressesAnimatedGrassAt, getGrassCutFadeoutAlpha01 } from './play-grass-cut.js';
 import { bakeChunk } from './render/play-chunk-bake.js';
 import {
   syncPlayChunkMetadataPool,
@@ -842,7 +844,16 @@ export function render(canvas, data, options = {}) {
     if (debug) console.log('[Render] Pass 5a: Grass');
     forEachAbovePlayerTile((mx, my, tile, tw, th, tx, ty) => {
       if (playVision?.enabled && !playVision.isVisible(mx, my)) return;
-      drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, { lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx, precomputedLayers: grassLayersMap.get(_tileKeyInt(mx, my)) });
+      drawGrass5aForCell(ctx, mx, my, tile, tw, th, tx, ty, {
+        lodDetail, tileW, tileH, vegAnimTime, natureImg, data, getCached, playChunkMap, snapPx,
+        precomputedLayers: grassLayersMap.get(_tileKeyInt(mx, my)),
+        getGrassCutFadeoutAlpha: getGrassCutFadeoutAlpha01,
+        getAnimatedGrassLayers: getPlayAnimatedGrassLayers,
+        getGrassFireVisualPhase: grassFireVisualPhaseAt,
+        getGrassFireCharredRegrowth01: grassFireCharredRegrowth01,
+        getGrassFireExtinguishBarVisible: grassFireExtinguishBarVisibleAt,
+        getGrassFireBurningHp: grassFireBurningHpAt,
+      });
     });
     addRenderFramePhaseMs('rndGrassMs', performance.now() - tGrass0);
 

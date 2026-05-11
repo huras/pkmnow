@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hoenn Builder — play</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/editor/editor.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "region-map-gen": "../../packages/region-map-gen/src/index.js",
+          "region-map-gen/": "../../packages/region-map-gen/src/",
+          "region-terrain-tiles": "../../packages/region-terrain-tiles/src/index.js",
+          "region-terrain-tiles/": "../../packages/region-terrain-tiles/src/",
+          "region-walkability": "../../packages/region-walkability/src/index.js",
+          "region-walkability/": "../../packages/region-walkability/src/",
+          "region-render-2d": "../../packages/region-render-2d/src/index.js",
+          "region-render-2d/": "../../packages/region-render-2d/src/"
+        }
+      }
+    </script>
+  </head>
+  <body class="hoenn-play-body">
+    <header class="hoenn-header hoenn-header--compact">
+      <h1>Hoenn Builder — play</h1>
+      <nav>
+        <a href="./index.html">← voltar ao editor</a>
+        <span id="play-status">Carregando…</span>
+      </nav>
+    </header>
+
+    <main class="hoenn-play-main">
+      <canvas
+        id="play-canvas"
+        width="960"
+        height="640"
+        aria-label="Mapa pintado em modo de exploração"
+        tabindex="0"
+      ></canvas>
+      <aside class="hoenn-play-hud">
+        <div>
+          <strong>Controles:</strong> WASD ou setas para mover.
+          Shift = correr.
+        </div>
+        <div id="play-coords">—</div>
+        <div id="play-biome">—</div>
+        <div id="play-fps">—</div>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/play/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hoenn Builder — editor</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/editor/editor.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "region-map-gen": "../../packages/region-map-gen/src/index.js",
+          "region-map-gen/": "../../packages/region-map-gen/src/",
+          "region-terrain-tiles": "../../packages/region-terrain-tiles/src/index.js",
+          "region-terrain-tiles/": "../../packages/region-terrain-tiles/src/",
+          "region-walkability": "../../packages/region-walkability/src/index.js",
+          "region-walkability/": "../../packages/region-walkability/src/",
+          "region-render-2d": "../../packages/region-render-2d/src/index.js",
+          "region-render-2d/": "../../packages/region-render-2d/src/"
+        }
+      }
+    </script>
+  </head>
+  <body class="editor-body">
+    <header class="editor-header">
+      <h1>Hoenn Builder</h1>
+      <div class="editor-header-right">
+        <span id="editor-status" class="editor-status">Inicializando…</span>
+        <a id="play-link" class="hoenn-btn-link" href="play.html">Jogar este mapa →</a>
+      </div>
+    </header>
+
+    <main class="editor-main">
+      <aside class="editor-sidebar">
+        <section>
+          <h2>Modo</h2>
+          <div class="mode-toggle">
+            <button type="button" data-mode="brush" class="active">Brush (B)</button>
+            <button type="button" data-mode="rect">Retângulo (R)</button>
+          </div>
+          <label>
+            Tamanho pincel:
+            <input type="range" id="brush-size" min="1" max="15" step="2" value="1" />
+            <span id="brush-size-label">1×1</span>
+          </label>
+          <p class="editor-help">
+            Clique e arraste para pintar. Botão do meio (ou Alt+arrasto) faz pan.
+            Scroll = zoom. <kbd>[</kbd> / <kbd>]</kbd> ajusta pincel.
+          </p>
+        </section>
+
+        <section>
+          <h2>Biomas</h2>
+          <div id="biome-palette" class="biome-palette"></div>
+        </section>
+
+        <section>
+          <h2>Mundo</h2>
+          <label>
+            Seed:
+            <input type="text" id="seed" value="hoenn-editor" />
+          </label>
+          <div class="hoenn-actions">
+            <button type="button" id="load-hoenn">Carregar preset Hoenn</button>
+            <button type="button" id="clear-map">Limpar tudo</button>
+            <button type="button" id="save-json">Exportar JSON</button>
+            <input type="file" id="import-json" accept=".json,application/json" hidden />
+            <button type="button" id="import-json-btn">Importar JSON</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="editor-canvas-wrap">
+        <canvas
+          id="editor-canvas"
+          width="1280"
+          height="800"
+          tabindex="0"
+          aria-label="Editor de mapa infinito"
+        ></canvas>
+        <div class="editor-canvas-hud">
+          <span id="hud-coords">—</span>
+          <span id="hud-biome">—</span>
+          <span id="zoom-label">100%</span>
+          <span id="hud-bounds">mapa vazio</span>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/editor/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,305 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --panel: #161a22;
+  --border: #2a2f3a;
+  --text: #e8eaed;
+  --muted: #9aa3b2;
+  --accent: #69b6ff;
+  --gold: #ffd24a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.editor-body { display: flex; flex-direction: column; }
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #11151c, #0e1116);
+  flex-shrink: 0;
+}
+
+.editor-header h1 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.editor-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.editor-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.editor-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 0;
+}
+
+.editor-sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.editor-sidebar h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.editor-sidebar label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.editor-sidebar input[type="text"] {
+  flex: 1;
+  background: #0a0d12;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+}
+
+.editor-help {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0.5rem 0 0;
+}
+
+.editor-help kbd {
+  background: #0a0d12;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.mode-toggle button {
+  background: #0a0d12;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mode-toggle button.active {
+  border-color: var(--accent);
+  background: #16263a;
+}
+
+.biome-palette {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.3rem;
+}
+
+.biome-swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  background: #0a0d12;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  text-align: left;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.biome-swatch:hover { border-color: var(--accent); }
+.biome-swatch.active { border-color: var(--accent); background: #16263a; }
+
+.biome-swatch-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+.hoenn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.hoenn-actions button,
+.hoenn-btn-link {
+  background: #1f2733;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.hoenn-actions button:hover,
+.hoenn-btn-link:hover { background: #2a3445; }
+
+.hoenn-btn-link {
+  background: #2a5b9a;
+  border-color: #69b6ff;
+}
+
+.editor-canvas-wrap {
+  position: relative;
+  background: #050810;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+#editor-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #050810;
+  cursor: pointer;
+  outline: none;
+  image-rendering: pixelated;
+}
+
+#editor-canvas:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.editor-canvas-hud {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 1rem;
+  background: rgba(10, 13, 18, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.editor-canvas-hud span:first-child,
+.editor-canvas-hud span:nth-child(2) { color: var(--text); }
+
+/* Play page reuses the dark theme but in a simpler shell. */
+.hoenn-play-body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hoenn-header {
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.hoenn-header h1 { margin: 0 0 0.25rem; font-size: 1.05rem; }
+.hoenn-header p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.hoenn-header a { color: var(--accent); }
+
+.hoenn-header--compact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hoenn-header--compact nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.hoenn-header--compact nav a { color: var(--accent); }
+
+.hoenn-play-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: 0;
+}
+
+#play-canvas {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  outline: none;
+}
+
+#play-canvas:focus { border-color: var(--accent); }
+
+.hoenn-play-hud {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.hoenn-play-hud strong { color: var(--text); }

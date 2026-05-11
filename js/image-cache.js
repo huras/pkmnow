@@ -1,2 +1,1 @@
-/** Shared texture cache (tilesets, Pokémon sheets). */
-export const imageCache = new Map();
+export * from 'region-terrain-tiles/image-cache.js';

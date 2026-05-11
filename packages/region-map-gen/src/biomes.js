@@ -29,6 +29,20 @@ export const BIOMES = {
   FLOWER_FIELDS: { id: 20, name: "Flower Fields", color: "#c86aa8" },
 };
 
+/**
+ * O(1) lookup from biome `id` to the biome object in {@link BIOMES}. Built
+ * eagerly so painted/authoritative-biome paths (e.g. `getMicroTile` for
+ * `source: 'painted'` worlds) can resolve `BIOMES_BY_ID[id]` without scanning.
+ */
+export const BIOMES_BY_ID = (() => {
+  const map = Object.create(null);
+  for (const key of Object.keys(BIOMES)) {
+    const b = BIOMES[key];
+    map[b.id] = b;
+  }
+  return map;
+})();
+
 /** Faixa de elevação (0–1) acima de `waterLevel` tratada como praia em `getBiome` — alinhar com `elevationToStep` em `chunking.js`. */
 export const BEACH_ELEVATION_BAND = 0.05;
 

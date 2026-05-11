@@ -2,6 +2,7 @@ import {
     getBiome,
     getBiomeWithAnomalies,
     BIOMES,
+    BIOMES_BY_ID,
     resolveWaterLevel,
     BEACH_ELEVATION_BAND
 } from './biomes.js';
@@ -234,6 +235,22 @@ export function getMicroTile(mx, my, macroData) {
     if (macroCX >= 0 && macroCX < width && macroCY >= 0 && macroCY < height) {
         const macroIdx = macroCY * width + macroCX;
         const macroBiomeId = macroData.biomes[macroIdx];
+
+        // Painted worlds (e.g. the hoenn-builder editor): the user-painted
+        // biome at this macro cell is the source of truth. The bilinearly
+        // interpolated (e, t, m, a) above would otherwise re-derive a biome
+        // from defaults (temperature/moisture/anomaly = 0.5/0.5/0), which
+        // doesn't necessarily match what the user clicked (e.g. JUNGLE on a
+        // 0.5/0.5 cell falls back to FOREST). For non-painted, generated
+        // worlds we keep the organic resolution above (it uses the anomaly
+        // noise to place special biomes).
+        if (macroData.source === 'painted') {
+            const painted = BIOMES_BY_ID[macroBiomeId];
+            if (painted) {
+                bId = macroBiomeId;
+                biomeObj = painted;
+            }
+        }
 
         // Se o bioma macro for um bioma "especial" (posicionado manualmente ou via regra especial), 
         // nós deixamos a resolução orgânica acima (getBiomeWithAnomalies) cuidar disso, 
