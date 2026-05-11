@@ -39,6 +39,18 @@ export function installMinimapEventLogUi() {
     };
   }
 
+  /** @type {HTMLElement | null} */
+  let minimapPanelEl = root.closest('.minimap-panel');
+  if (!(minimapPanelEl instanceof HTMLElement)) minimapPanelEl = null;
+
+  function setMinimapPanelHudEngaged(on) {
+    if (!minimapPanelEl || !minimapPanelEl.isConnected) {
+      minimapPanelEl = root.closest('.minimap-panel');
+      if (!(minimapPanelEl instanceof HTMLElement)) minimapPanelEl = null;
+    }
+    if (minimapPanelEl) minimapPanelEl.classList.toggle('minimap-panel--hud-engaged', !!on);
+  }
+
   /** @type {'all'|'local'|'global'|'social'|'system'} */
   let activeFilter = 'all';
   let pointerInside = false;
@@ -138,7 +150,7 @@ export function installMinimapEventLogUi() {
     if (!visible) {
       pointerInside = false;
       opaqueUntil = 0;
-      root.classList.remove('play-event-log-hud--engaged');
+      setMinimapPanelHudEngaged(false);
       if (hoveredPortraitEntityKey) {
         hoveredPortraitEntityKey = null;
         clearHoveredWildGroupEntityKey();
@@ -186,11 +198,11 @@ export function installMinimapEventLogUi() {
 
   function syncOpacity() {
     if (!visible) {
-      root.classList.remove('play-event-log-hud--engaged');
+      setMinimapPanelHudEngaged(false);
       return;
     }
     const engaged = pointerInside || performance.now() < opaqueUntil;
-    root.classList.toggle('play-event-log-hud--engaged', engaged);
+    setMinimapPanelHudEngaged(engaged);
   }
 
   function onResizePointerMove(ev) {

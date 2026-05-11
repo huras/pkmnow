@@ -133,7 +133,7 @@ export class CharacterSelector {
     this._lootIconPathMap = null;
     /** Cache so the loot list DOM is not rebuilt every frame (enables HTML5 drag from rows). */
     this._lastPlayItemHudSig = '';
-    /** Item HUD: dimmed to 50% unless hovered, dragging from inventory, or post-pickup highlight. */
+    /** Whole character panel dims in play mode (CSS); this keeps it opaque while dragging / pickup flash. */
     this._playItemHudPointerInside = false;
     this._playItemHudInventoryDragActive = false;
     /** @type {HTMLDivElement | null} */
@@ -472,13 +472,13 @@ export class CharacterSelector {
   }
 
   _syncPlayItemHudOpacity() {
-    const el = this.container?.querySelector('#play-item-hud');
-    if (!(el instanceof HTMLElement)) return;
+    const root = this.container?.querySelector('.character-selector');
+    if (!(root instanceof HTMLElement)) return;
     const engaged =
       this._playItemHudPointerInside ||
       this._playItemHudInventoryDragActive ||
       performance.now() < (this._playItemHudPickupOpaqueUntil || 0);
-    el.classList.toggle('play-item-hud--engaged', engaged);
+    root.classList.toggle('character-selector--item-engaged', engaged);
   }
 
   /** @param {string} itemKey */

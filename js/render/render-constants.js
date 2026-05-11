@@ -19,7 +19,7 @@ export const PLAY_SEA_OVERLAY_ALPHA_LOD01 = 0.82;
 export const PLAY_CHUNK_SIZE = 10;
 
 /** Pixel size per micro-tile used when baking play chunks (must stay constant for cache keys). */
-export const PLAY_BAKE_TILE_PX = 58;
+export const PLAY_BAKE_TILE_PX = 48;
 
 /** Normalizes player `z` for play camera zoom (align with flight cap in `player.js`). */
 export const PLAY_CAMERA_Z_REF = 58;

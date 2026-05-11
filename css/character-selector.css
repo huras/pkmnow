@@ -34,12 +34,6 @@
     inset 0 1px 0 rgba(120, 160, 255, 0.14),
     0 8px 28px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px) saturate(150%);
-  opacity: 0.5;
-  transition: opacity 0.38s ease;
-}
-
-.play-item-hud.play-item-hud--engaged {
-  opacity: 1;
 }
 
 .play-item-hud.play-item-hud--collapsed .play-item-hud__inventory-scroll {

@@ -358,6 +358,27 @@ button.btn-secondary.is-active {
   display: flex;
 }
 
+/* Play HUD: same fade as item inventory — dim until hover/focus (or JS “engaged” on minimap). */
+body.play-mode-active .character-selector,
+body.play-mode-active .app > .toolbar.play-shell-toolbar,
+body.play-mode-active .app > h1.play-shell-title,
+body.play-mode-active .map-wrap .minimap-panel:not(.hidden) {
+  opacity: 0.5;
+  transition: opacity 0.38s ease;
+}
+
+body.play-mode-active .character-selector:hover,
+body.play-mode-active .character-selector:focus-within,
+body.play-mode-active .character-selector.character-selector--item-engaged,
+body.play-mode-active .app > .toolbar.play-shell-toolbar:hover,
+body.play-mode-active .app > .toolbar.play-shell-toolbar:focus-within,
+body.play-mode-active .app > h1.play-shell-title:hover,
+body.play-mode-active .map-wrap .minimap-panel:not(.hidden):hover,
+body.play-mode-active .map-wrap .minimap-panel:not(.hidden):focus-within,
+body.play-mode-active .map-wrap .minimap-panel.minimap-panel--hud-engaged {
+  opacity: 1;
+}
+
 .play-event-log-hud {
   position: absolute;
   left: 50%;
@@ -374,8 +395,6 @@ button.btn-secondary.is-active {
   background: linear-gradient(180deg, rgba(18, 22, 42, 0.92) 0%, rgba(10, 12, 30, 0.95) 100%);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(8px) saturate(140%);
-  opacity: 0.5;
-  transition: opacity 0.38s ease;
   pointer-events: auto;
 }
 
@@ -477,10 +496,6 @@ button.btn-secondary.is-active {
 .play-event-log-hud.play-event-log-hud--collapsed {
   gap: 0;
   padding-bottom: 6px;
-}
-
-.play-event-log-hud.play-event-log-hud--engaged {
-  opacity: 1;
 }
 
 .play-event-log-hud__tabs {
