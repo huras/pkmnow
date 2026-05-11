@@ -2,16 +2,26 @@
   "name": "experimento-gerador-regiao-pkmn",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "region-map-gen": "workspace:*"
+  },
   "scripts": {
     "25d": "npm --prefix ./experimento-gerador-25D run dev",
     "vendor:lz-string": "node scripts/vendor-lz-string.mjs",
     "build:palettes": "node scripts/bake-terrain-palettes.mjs",
+    "export:vegetation-terrain-sprites": "node scripts/extract-grass-tree-terrain-sprites.mjs",
     "crawl:pokemondb-items": "node scripts/crawl-pokemondb-items.mjs",
     "download:pokemondb-item-images": "node scripts/download-pokemondb-item-images.mjs",
-    "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git fetch ; git checkout dev ; git pull'",
+    "image:colors": "node scripts/list-image-colors.mjs",
+    "deploy": "ssh root@191.101.78.194 'cd /var/www/html/pkmnow-demo ; git fetch ; git checkout xaxim-1 ; git pull'",
     "export:unity-height": "node scripts/export-unity-heightfield.mjs",
+    "merge:current-to-dev": "node -e \"const { execSync } = require('node:child_process'); const run = (c, inherit = true) => execSync(c, inherit ? { stdio: 'inherit', encoding: 'utf8' } : { encoding: 'utf8' }); const branch = run('git rev-parse --abbrev-ref HEAD', false).trim(); if (!branch || branch === 'HEAD') throw new Error('Detached HEAD; cannot infer current branch'); const dirty = run('git status --porcelain', false).trim().length > 0; let stashed = false; try { if (dirty) { run(`git stash push -u -m \\\"auto-merge-current-to-dev:${branch}\\\"`); stashed = true; } run('git fetch origin'); if (branch === 'dev') { run('git push origin dev'); } else { run('git checkout dev'); run(`git merge ${branch}`); run('git push origin dev'); run(`git checkout ${branch}`); } } finally { if (stashed) { try { run('git stash pop'); } catch (e) { console.error('Warning: could not auto-pop stash. Resolve manually with: git stash list / git stash pop'); } } }\"",
     "newgrounds:publish": "node scripts/newgrounds/publish.mjs",
-    "publish:newgrounds": "npm run newgrounds:publish"
+    "publish:newgrounds": "npm run newgrounds:publish",
+    "smoke:region-map-gen": "npm run smoke -w region-map-gen"
   },
   "devDependencies": {
     "cheerio": "^1.2.0",

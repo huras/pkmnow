@@ -4,7 +4,8 @@
  * Phase 1 – TENSION (cry + sprite preloading)
  *   • Player stops, exclamation balloon, cinema bars slide in, mild zoom
  *   • Player cycles facing directions ("looking around")
- *   • Screen-grid camera smoothly blends in, centred on encounter location
+ *   • Screen-grid camera: if manual Zelda grid is already on, keep the current screen;
+ *     otherwise blends in centred on encounter location
  *
  * Phase 2 – REVEAL (assets ready)
  *   • Cry plays, wild entity spawned, cinema bars slide out, zoom normalises
@@ -26,7 +27,8 @@ import { PLAY_BAKE_TILE_PX } from '../render/render-constants.js';
 import {
   activateEncounterScreenGrid,
   deactivateEncounterScreenGrid,
-  getScreenGridCurrentRoomBounds
+  getScreenGridCurrentRoomBounds,
+  isScreenGridCameraManualOn
 } from '../render/play-deadzone-camera.js';
 import { playEncounterMeLoop, stopEncounterMeLoop } from '../audio/encounter-me.js';
 import { pushPlayEventLog } from '../main/play-event-log-state.js';
@@ -189,8 +191,8 @@ export function updateEncounterCinematic(player, dt) {
         _onRevealFn = null;
       }
 
-      // Activate screen-grid camera centred on encounter position
-      if (_trackedEntityKey) {
+      // Screen-grid: only take over camera when manual Zelda grid is off (otherwise keep current room).
+      if (_trackedEntityKey && !isScreenGridCameraManualOn()) {
         const cvs = document.querySelector('#play-canvas') || document.querySelector('canvas');
         const cw = cvs ? cvs.width : window.innerWidth;
         const ch = cvs ? cvs.height : window.innerHeight;
@@ -248,8 +250,16 @@ function _isOutOfRoomWithMargin(x, y, room, margin) {
   return x < room.minX - margin || x > room.maxX + margin || y < room.minY - margin || y > room.maxY + margin;
 }
 
+function _encounterContainmentActive() {
+  if (_gridActivatedByUs) return true;
+  return (
+    isScreenGridCameraManualOn() &&
+    (_phase === 'reveal' || _phase === 'watching')
+  );
+}
+
 function _enforceEncounterScreenContainment(player) {
-  if (!_gridActivatedByUs) return;
+  if (!_encounterContainmentActive()) return;
   const room = getScreenGridCurrentRoomBounds();
   if (!room) return;
   const margin = Math.max(0, Number(ENCOUNTER_SCREEN_RECENTER_MARGIN_TILES) || 0);

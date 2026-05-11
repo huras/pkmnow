@@ -1,0 +1,33 @@
+{
+  "name": "region-map-gen",
+  "version": "1.0.0",
+  "description": "Procedural macro region map generation (FBM noise, biomes, roads, cities) — pure ESM, no DOM.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./generator.js": "./src/generator.js",
+    "./rng.js": "./src/rng.js",
+    "./chunking.js": "./src/chunking.js",
+    "./biomes.js": "./src/biomes.js",
+    "./tessellation-logic.js": "./src/tessellation-logic.js",
+    "./land-step-curve.js": "./src/land-step-curve.js",
+    "./core/plugin-registry.js": "./src/core/plugin-registry.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "scripts"
+  ],
+  "scripts": {
+    "smoke": "node ./scripts/smoke-generate.mjs"
+  },
+  "keywords": [
+    "procedural",
+    "map",
+    "noise",
+    "biome",
+    "game"
+  ]
+}
