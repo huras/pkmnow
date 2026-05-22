@@ -29,6 +29,13 @@ import {
 import { EditorRenderer, PAINTER_PX_PER_MACRO } from './editor-renderer.js';
 import { EditorInput } from './editor-input.js';
 import { loadHoennPreset } from '../world/load-painted-world.js';
+import { createPlayMode } from '../play/play-mode.js';
+import {
+  DEFAULT_PLAYER_DEX_ID,
+  FEATURED_DEX_IDS,
+  POKEMON_NAMES,
+  getPokemonName,
+} from '../play/pokemon-names.js';
 
 const $ = (sel) => document.querySelector(sel);
 const canvas = /** @type {HTMLCanvasElement} */ ($('#editor-canvas'));
@@ -43,6 +50,25 @@ const hudBiome = $('#hud-biome');
 const hudBounds = $('#hud-bounds');
 const seedInput = $('#seed');
 const statusEl = $('#editor-status');
+const body = document.body;
+const appModeButtons = document.querySelectorAll('[data-app-mode-btn]');
+
+// Play-mode HUD elements (created in HTML; populated by createPlayMode's onHud callback).
+const playSpeciesEl = $('#play-species');
+const playLevelEl = $('#play-level');
+const playBiomeEl = $('#play-biome');
+const playCoordsEl = $('#play-coords');
+const playFpsEl = $('#play-fps');
+const playHudSpecies = $('#play-hud-species');
+const playHudLevel = $('#play-hud-level');
+const playHudHpFill = $('#play-hud-hp-fill');
+const playHudHpText = $('#play-hud-hp-text');
+const playHudStaminaFill = $('#play-hud-stamina-fill');
+const playHudStaminaText = $('#play-hud-stamina-text');
+const playHudExpFill = $('#play-hud-exp-fill');
+const playHudExpText = $('#play-hud-exp-text');
+const playDexSelect = /** @type {HTMLSelectElement} */ ($('#play-dex-select'));
+const playDexInput = /** @type {HTMLInputElement} */ ($('#play-dex-input'));
 
 const BIOME_BY_ID = new Map(Object.values(BIOMES).map((b) => [b.id, b]));
 
@@ -54,7 +80,11 @@ const state = {
   mode: /** @type {'brush'|'rect'} */ ('brush'),
   window: /** @type {ReturnType<typeof buildWindowWorld> | null} */ (null),
   dirtyRedraw: true,
+  appMode: /** @type {'edit'|'play'} */ ('edit'),
+  playerDexId: DEFAULT_PLAYER_DEX_ID,
 };
+/** @type {ReturnType<typeof createPlayMode> | null} */
+let playMode = null;
 
 function setStatus(text) { if (statusEl) statusEl.textContent = text; }
 
@@ -177,10 +207,16 @@ const input = new EditorInput({
 });
 
 function loop() {
+  if (state.appMode !== 'edit') {
+    // Editor RAF is paused while the play-mode controller drives the canvas.
+    requestAnimationFrame(loop);
+    return;
+  }
   rebuildWindowIfNeeded();
   if (state.dirtyRedraw && state.window) {
     state.dirtyRedraw = false;
-    zoomLabel.textContent = `${(camera.zoom * 100).toFixed(0)}%`;
+    const pct = camera.zoom * 100;
+    zoomLabel.textContent = `${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%`;
     const overlays = {};
     if (input.hover && state.mode === 'brush') {
       overlays.brush = { macroX: input.hover.macroX, macroY: input.hover.macroY, size: state.brushSize };
@@ -283,10 +319,98 @@ function clearMap() {
   updateBoundsHud();
 }
 
+function setAppMode(mode) {
+  if (mode !== 'edit' && mode !== 'play') return;
+  if (state.appMode === mode) return;
+  state.appMode = mode;
+  body.setAttribute('data-app-mode', mode);
+  for (const btn of appModeButtons) {
+    btn.classList.toggle('active', btn.dataset.appModeBtn === mode);
+  }
+
+  if (mode === 'play') {
+    if (!playMode) {
+      playMode = createPlayMode({
+        canvas,
+        store: editorStore,
+        dexId: state.playerDexId,
+        source: 'editor',
+        onHud: updatePlayHud,
+        onStatus: (txt) => setStatus(txt),
+      });
+    }
+    playMode.start();
+  } else {
+    if (playMode) playMode.stop();
+    // Force a redraw of the editor view; bake cache is dropped by play mode's
+    // clearChunkCache, but the editor uses its own cache (kept across modes).
+    state.dirtyRedraw = true;
+  }
+}
+
+function updatePlayHud(data) {
+  if (!data) return;
+  if (playHudSpecies) playHudSpecies.textContent = data.speciesName;
+  if (playHudLevel) playHudLevel.textContent = String(data.level);
+  if (playSpeciesEl) playSpeciesEl.textContent = `${data.speciesName} (#${String(data.dexId).padStart(3, '0')})`;
+  if (playLevelEl) playLevelEl.textContent = String(data.level);
+  if (playBiomeEl) playBiomeEl.textContent = data.biome;
+  if (playCoordsEl) {
+    playCoordsEl.textContent = `(${Math.floor(data.x)}, ${Math.floor(data.y)}) · macro (${data.mx}, ${data.my})`;
+  }
+  if (playFpsEl) playFpsEl.textContent = `${data.fps.toFixed(0)} fps`;
+
+  setBarFill(playHudHpFill, data.hp, data.maxHp);
+  if (playHudHpText) playHudHpText.textContent = `${Math.round(data.hp)} / ${data.maxHp}`;
+
+  setBarFill(playHudStaminaFill, data.stamina, data.maxStamina);
+  if (playHudStaminaText) playHudStaminaText.textContent = `${Math.round(data.stamina)} / ${data.maxStamina}`;
+
+  setBarFill(playHudExpFill, data.exp, data.expToNext);
+  if (playHudExpText) playHudExpText.textContent = `${Math.round(data.exp)} / ${data.expToNext}`;
+}
+
+function setBarFill(el, value, max) {
+  if (!el) return;
+  const m = Math.max(1, Number(max) || 1);
+  const v = Math.max(0, Math.min(m, Number(value) || 0));
+  el.style.width = `${((v / m) * 100).toFixed(1)}%`;
+}
+
+function buildDexSelect() {
+  if (!playDexSelect) return;
+  playDexSelect.innerHTML = '';
+  for (const dex of FEATURED_DEX_IDS) {
+    const opt = document.createElement('option');
+    opt.value = String(dex);
+    opt.textContent = `#${String(dex).padStart(3, '0')} ${POKEMON_NAMES[dex]}`;
+    if (dex === state.playerDexId) opt.selected = true;
+    playDexSelect.appendChild(opt);
+  }
+  playDexSelect.addEventListener('change', () => {
+    const id = Number(playDexSelect.value) || DEFAULT_PLAYER_DEX_ID;
+    state.playerDexId = id;
+    if (playDexInput) playDexInput.value = String(id);
+    if (playMode) playMode.setDex(id);
+  });
+  if (playDexInput) {
+    playDexInput.value = String(state.playerDexId);
+    playDexInput.addEventListener('change', () => {
+      const id = Math.max(1, Math.min(493, Math.floor(Number(playDexInput.value) || DEFAULT_PLAYER_DEX_ID)));
+      state.playerDexId = id;
+      playDexInput.value = String(id);
+      // Keep the select in sync when the typed dex happens to be featured.
+      if (POKEMON_NAMES[id]) playDexSelect.value = String(id);
+      if (playMode) playMode.setDex(id);
+    });
+  }
+}
+
 async function init() {
   buildPalette();
   setMode('brush');
   setBrushSize(1);
+  buildDexSelect();
 
   brushSizeInput.addEventListener('input', (e) => {
     setBrushSize(e.target.value);
@@ -297,11 +421,30 @@ async function init() {
   }
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    // App mode toggles work from either side.
+    if (e.key === 'p' || e.key === 'P') {
+      setAppMode(state.appMode === 'play' ? 'edit' : 'play');
+      return;
+    }
+    if (e.key === 'Escape' && state.appMode === 'play') {
+      setAppMode('edit');
+      return;
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      if (state.appMode !== 'edit') setAppMode('edit');
+      return;
+    }
+    // Edit-only shortcuts.
+    if (state.appMode !== 'edit') return;
     if (e.key === 'b' || e.key === 'B') setMode('brush');
     else if (e.key === 'r' || e.key === 'R') setMode('rect');
     else if (e.key === '[') setBrushSize(state.brushSize - 2);
     else if (e.key === ']') setBrushSize(state.brushSize + 2);
   });
+
+  for (const btn of appModeButtons) {
+    btn.addEventListener('click', () => setAppMode(btn.dataset.appModeBtn));
+  }
 
   seedInput.addEventListener('change', () => {
     editorStore.seed = seedInput.value || 'hoenn-editor';

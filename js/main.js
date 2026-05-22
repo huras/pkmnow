@@ -171,6 +171,7 @@ import {
   wrapHours
 } from './main/world-time-of-day.js';
 import { installMinimapHudPopovers } from './main/minimap-hud-popovers.js';
+import { sliceWorldDataToSingleMacroTile } from './main/slice-world-to-single-macro.js';
 import { initMods } from './core/mod-loader.js';
 import { resetFarCrySystem } from './main/far-cry-system.js';
 import { syncCryIdentificationFromPeekSave } from './wild-pokemon/cry-identification-progress.js';
@@ -951,6 +952,12 @@ let playSessionSeconds = 0;
 let worldTimeRunning = true;
 /** After play on this map in the page session; map overview can show live player if there is no save yet. */
 let sessionEnteredPlayOnCurrentMap = false;
+/** `play-single-macro.html`: world map is full region; play uses one macro cell only. */
+const playSingleMacroMode = document.documentElement?.dataset?.playSingleMacro === '1';
+/** Full `currentData` kept while a sliced 1×1 macro world is active in play mode. */
+let fullRegionWorldBeforeSingleMacroSlice = null;
+/** Macro coordinates in the full region for the active single-macro play session. */
+let singleMacroPlayOrigin = null;
 // Weather engine state lives in `./main/weather-system.js` — this file only wires the
 // DOM panel + the tick call. Initial seed here so the first `getActiveWeatherParams()`
 // read (during `getSettings()` before the first tick) returns the correct shape.
@@ -2503,6 +2510,8 @@ installPlayContextMenu({
 
 function run() {
   resetWorldMapCamera();
+  fullRegionWorldBeforeSingleMacroSlice = null;
+  singleMacroPlayOrigin = null;
   sessionEnteredPlayOnCurrentMap = false;
   resetFarCrySystem();
   try {
@@ -2915,6 +2924,18 @@ btnMinimapBackToMap?.addEventListener('click', () => {
 
 btnBackToMap?.addEventListener('click', () => {
   if (appMode === 'play' && currentData) flushPlaySessionSave(currentData, player, buildPlaySessionPersistExtra());
+  if (playSingleMacroMode && fullRegionWorldBeforeSingleMacroSlice) {
+    currentData = fullRegionWorldBeforeSingleMacroSlice;
+    fullRegionWorldBeforeSingleMacroSlice = null;
+    if (singleMacroPlayOrigin) {
+      const og = singleMacroPlayOrigin;
+      singleMacroPlayOrigin = null;
+      setPlayerPos(
+        og.gx * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2,
+        og.gy * MACRO_TILE_STRIDE + MACRO_TILE_STRIDE / 2
+      );
+    }
+  }
   if (appMode === 'dungeon' && isDungeonActive()) leaveDungeon();
   resetFarCrySystem();
   stopBiomeBgm();
@@ -2990,6 +3011,15 @@ canvas.addEventListener('click', (e) => {
   const { gx, gy } = mapClientToMacro(e.clientX, e.clientY);
 
   if (gx >= 0 && gx < currentData.width && gy >= 0 && gy < currentData.height) {
+    if (playSingleMacroMode) {
+      const sliced = sliceWorldDataToSingleMacroTile(currentData, gx, gy);
+      if (!sliced) return;
+      fullRegionWorldBeforeSingleMacroSlice = currentData;
+      singleMacroPlayOrigin = { gx, gy };
+      currentData = sliced;
+      enterPlayMode(0, 0);
+      return;
+    }
     enterPlayMode(gx, gy);
   }
 });
@@ -3291,6 +3321,7 @@ function queueTryAutoResumePlayFromSave() {
 
 function tryAutoResumePlayFromSave() {
   if (didAutoResumePlayOnInitialLoad) return;
+  if (playSingleMacroMode) return;
   if (appMode !== 'map' || !currentData) return;
   const saved = peekPlaySessionSaveForMap(currentData);
   if (saved) {

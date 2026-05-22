@@ -120,7 +120,16 @@ export class EditorInput {
   }
 
   _onPointerDown(evt) {
-    this.canvas.focus?.();
+    // Avoid the UA scrolling the page (or a flex/grid ancestor) to show the
+    // focused canvas — on tall sidebars that can shove `.editor-header` off-screen.
+    const c = this.canvas;
+    if (typeof c.focus === 'function') {
+      try {
+        c.focus({ preventScroll: true });
+      } catch {
+        c.focus();
+      }
+    }
     this.canvas.setPointerCapture?.(evt.pointerId);
     if (evt.button === 1 || evt.button === 2 || evt.altKey) {
       this._panning = true;

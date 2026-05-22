@@ -31,6 +31,8 @@ html, body {
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, #11151c, #0e1116);
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .editor-header h1 {
@@ -54,6 +56,12 @@ html, body {
   flex: 1;
   display: grid;
   grid-template-columns: 280px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-main > .editor-sidebar,
+.editor-main > .editor-canvas-wrap {
   min-height: 0;
 }
 
@@ -303,3 +311,157 @@ html, body {
 }
 
 .hoenn-play-hud strong { color: var(--text); }
+
+/* ── App-mode visibility (edit vs play) ───────────────────────────────────
+ * Elements tagged `data-only-mode="edit"` or `="play"` are toggled by the
+ * body's `data-app-mode` attribute. The play overlay sits on top of the
+ * canvas without affecting layout.
+ */
+.editor-body[data-app-mode="edit"] [data-only-mode="play"],
+.editor-body[data-app-mode="play"] [data-only-mode="edit"] {
+  display: none !important;
+}
+
+.app-mode-toggle {
+  display: inline-flex;
+  background: #0a0d12;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.app-mode-toggle button {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 0.4rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+}
+
+.app-mode-toggle button:last-child { border-right: 0; }
+
+.app-mode-toggle button.active {
+  background: linear-gradient(180deg, #234c7e, #16263a);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.play-sidebar { gap: 1.2rem; }
+
+.play-sidebar select,
+.play-sidebar input[type="number"] {
+  flex: 1;
+  background: #0a0d12;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+}
+
+.play-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.play-stats span { color: var(--muted); }
+.play-stats strong { color: var(--text); font-weight: 500; }
+
+/* HUD overlay drawn on top of the canvas while in play mode. */
+.play-hud-overlay {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 280px;
+  background: rgba(10, 13, 18, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  pointer-events: none;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 0.85rem;
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.play-hud-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.play-hud-name strong {
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.play-hud-level {
+  color: var(--gold);
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.play-hud-bar {
+  display: grid;
+  grid-template-columns: 32px 1fr 80px;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.74rem;
+}
+
+.play-hud-bar-label {
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+}
+
+.play-hud-bar-track {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  height: 9px;
+  overflow: hidden;
+  position: relative;
+}
+
+.play-hud-bar-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.12s linear;
+  background: #52e070;
+}
+
+.play-hud-hp .play-hud-bar-fill { background: linear-gradient(90deg, #52e070, #a6ffba); }
+.play-hud-stamina .play-hud-bar-fill { background: linear-gradient(90deg, #59e36e, #b8e050); }
+.play-hud-exp .play-hud-bar-fill { background: linear-gradient(90deg, #6ca1ff, #b9d4ff); }
+
+.play-hud-bar-value {
+  text-align: right;
+  color: var(--muted);
+}
+
+.editor-body[data-app-mode="play"] #editor-canvas {
+  cursor: default;
+  /* Block paint/pan/zoom from the editor-input while playing. Keyboard input
+   * for the player is bound on `window`, so this doesn't affect movement. */
+  pointer-events: none;
+}
+
+.editor-body[data-app-mode="play"] .editor-main {
+  /* Sidebar narrower in play mode (only treinador/controles/status). */
+  grid-template-columns: 260px 1fr;
+}
+

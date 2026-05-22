@@ -21,17 +21,21 @@
       }
     </script>
   </head>
-  <body class="editor-body">
+  <body class="editor-body" data-app-mode="edit">
     <header class="editor-header">
       <h1>Hoenn Builder</h1>
       <div class="editor-header-right">
         <span id="editor-status" class="editor-status">Inicializando…</span>
-        <a id="play-link" class="hoenn-btn-link" href="play.html">Jogar este mapa →</a>
+        <div class="app-mode-toggle">
+          <button type="button" id="mode-edit-btn" class="active" data-app-mode-btn="edit">Editor (E)</button>
+          <button type="button" id="mode-play-btn" data-app-mode-btn="play">Jogar (P)</button>
+        </div>
+        <a id="play-link" class="hoenn-btn-link" href="play.html" title="Abre o modo de jogo em janela própria">Janela própria ↗</a>
       </div>
     </header>
 
     <main class="editor-main">
-      <aside class="editor-sidebar">
+      <aside class="editor-sidebar" data-only-mode="edit">
         <section>
           <h2>Modo</h2>
           <div class="mode-toggle">
@@ -70,6 +74,43 @@
         </section>
       </aside>
 
+      <aside class="editor-sidebar play-sidebar" data-only-mode="play">
+        <section>
+          <h2>Treinador</h2>
+          <label>
+            Pokémon:
+            <select id="play-dex-select"></select>
+          </label>
+          <label>
+            Dex# customizado:
+            <input type="number" id="play-dex-input" min="1" max="493" value="4" />
+          </label>
+          <p class="editor-help">
+            Qualquer dex 1–493 (carrega de <code>tilesets/pokemon/</code>; cai pra Charmander se faltar sheet).
+          </p>
+        </section>
+
+        <section>
+          <h2>Controles</h2>
+          <p class="editor-help">
+            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ou setas para mover.<br />
+            <kbd>Shift</kbd> = correr (gasta stamina).<br />
+            <kbd>P</kbd> ou <kbd>Esc</kbd> = voltar pro editor.
+          </p>
+        </section>
+
+        <section>
+          <h2>Status</h2>
+          <div class="play-stats">
+            <div><span>Espécie:</span> <strong id="play-species">—</strong></div>
+            <div><span>Nível:</span> <strong id="play-level">1</strong></div>
+            <div><span>Bioma:</span> <strong id="play-biome">—</strong></div>
+            <div><span>Posição:</span> <strong id="play-coords">—</strong></div>
+            <div><span>FPS:</span> <strong id="play-fps">—</strong></div>
+          </div>
+        </section>
+      </aside>
+
       <section class="editor-canvas-wrap">
         <canvas
           id="editor-canvas"
@@ -78,11 +119,33 @@
           tabindex="0"
           aria-label="Editor de mapa infinito"
         ></canvas>
-        <div class="editor-canvas-hud">
+        <div class="editor-canvas-hud" data-only-mode="edit">
           <span id="hud-coords">—</span>
           <span id="hud-biome">—</span>
           <span id="zoom-label">100%</span>
           <span id="hud-bounds">mapa vazio</span>
+        </div>
+
+        <div class="play-hud-overlay" data-only-mode="play">
+          <div class="play-hud-name">
+            <strong id="play-hud-species">—</strong>
+            <span class="play-hud-level">Lv <span id="play-hud-level">1</span></span>
+          </div>
+          <div class="play-hud-bar play-hud-hp" title="HP">
+            <div class="play-hud-bar-label">HP</div>
+            <div class="play-hud-bar-track"><div id="play-hud-hp-fill" class="play-hud-bar-fill"></div></div>
+            <div class="play-hud-bar-value" id="play-hud-hp-text">100 / 100</div>
+          </div>
+          <div class="play-hud-bar play-hud-stamina" title="Stamina">
+            <div class="play-hud-bar-label">SP</div>
+            <div class="play-hud-bar-track"><div id="play-hud-stamina-fill" class="play-hud-bar-fill"></div></div>
+            <div class="play-hud-bar-value" id="play-hud-stamina-text">100 / 100</div>
+          </div>
+          <div class="play-hud-bar play-hud-exp" title="EXP até o próximo nível">
+            <div class="play-hud-bar-label">EXP</div>
+            <div class="play-hud-bar-track"><div id="play-hud-exp-fill" class="play-hud-bar-fill"></div></div>
+            <div class="play-hud-bar-value" id="play-hud-exp-text">0 / 100</div>
+          </div>
         </div>
       </section>
     </main>

@@ -33,7 +33,7 @@ function getMacroVal(grid, x, y, width, height) {
 function sampleSecondaryHeightPassNoise(mx, my, seed) {
     // 4x the base macro frequency: original macro interpolation is ~1 / MACRO_TILE_STRIDE.
     // Here we sample at ~4 / MACRO_TILE_STRIDE to get tighter micro plateaus.
-    const secondaryScale = 4 / MACRO_TILE_STRIDE;
+    const secondaryScale = 2 / MACRO_TILE_STRIDE;
     return foliageDensity(mx, my, seed + 0x62f9, secondaryScale);
 }
 
