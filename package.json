@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "dependencies": {
-    "region-map-gen": "workspace:*"
+    "region-map-gen": "workspace:*",
+    "region-terrain-tiles": "workspace:*",
+    "region-walkability": "workspace:*",
+    "region-render-2d": "workspace:*"
   },
   "scripts": {
     "25d": "npm --prefix ./experimento-gerador-25D run dev",
