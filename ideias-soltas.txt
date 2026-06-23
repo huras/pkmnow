@@ -350,6 +350,14 @@ Runes
 	Navis - Mostra minimapa
 	Radaris - Mostra pokemon no minimapa
 
+Tools:
+	Ditto Tool (Symbiosis) - Transform into pokemon
+	Smeargle Tool (Move Imprinter) - Copy a move from a pokémon (unlocking it on any pokemon the player symbiosis into)
+	Gengar Tool (Haunting) - Posess a pokémon for some time or some PP usage or distance from posseion point.
+	Rocket Meoth Tool (Wildspeech) - Talk with pokemon
+
+
+
 
 Biome Inspration
 	https://www.deviantart.com/yuysusl/gallery

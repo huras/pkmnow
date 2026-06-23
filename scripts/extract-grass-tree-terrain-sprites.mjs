@@ -1,28 +1,32 @@
 /**
- * Export vegetation (grass / tree OBJECT_SETS) and terrain center tiles (TERRAIN_SETS)
- * using the same tessellation grouping as TessellationEngine.getObjectGrid (bounding box
- * in atlas space). Writes PNGs + manifest for cross-reference to tessellation-data.js.
+ * Export vegetation (grass / tree OBJECT_SETS), tree stumps, cavern entrances,
+ * and terrain center tiles (TERRAIN_SETS) using tessellation bounding-box grouping.
  *
  *   npm run export:vegetation-terrain-sprites
  *
- * Output: exported/sprites-vegetation-terrain/ (gitignored recommended)
+ * Output: exported/sprites-vegetation-terrain/
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { dirname, join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { PNG } from 'pngjs';
 import { TERRAIN_SETS, OBJECT_SETS } from '../js/tessellation-data.js';
+import { TREE_TILES } from '../js/biome-tiles.js';
 import { TessellationEngine } from '../js/tessellation-engine.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const OUT_ROOT = join(root, 'exported', 'sprites-vegetation-terrain');
 const TILE = 16;
+const NATURE_TSX =
+  'tilesets/flurmimons_tileset___nature_by_flurmimon_d9leui9.tsx';
 
 const TREE_RE =
   /\b(tree|palm|cactus|broadleaf|barodleaf|pine|mangrove|savannah-tree|japanese-green)\b/i;
 const GRASS_RE =
   /\b(grass|lily|daisy|coreopsis|vine|leaves-on-ground|cattail)\b/i;
+const CAVERN_ENTRANCE_RE = /\bcave-entrance\b/i;
+const BERRY_TREE_RE = /\bberry-tree\b/i;
 
 /** Match render-utils-internal / play-chunk-bake column counts. */
 function getObjectSheetCols(objSet) {
@@ -47,13 +51,20 @@ function collectObjectIds(objSet) {
   return ids;
 }
 
+function collectPartIds(objSet, roleMatch) {
+  const ids = [];
+  for (const p of objSet.parts || []) {
+    if (!roleMatch(p.role)) continue;
+    for (const id of p.ids || []) ids.push(id);
+  }
+  return ids;
+}
+
 /**
  * Same layout as TessellationEngine.getObjectGrid: place each tile id at its atlas (x,y)
  * inside the minimal bounding rectangle; holes stay transparent.
  */
-function buildObjectCompositeGrid(objSet) {
-  const cols = getObjectSheetCols(objSet);
-  const allIds = collectObjectIds(objSet);
+function buildCompositeGridFromIds(allIds, cols) {
   if (!allIds.length) return null;
 
   const tiles = allIds.map((id) => ({
@@ -71,7 +82,11 @@ function buildObjectCompositeGrid(objSet) {
   for (const t of tiles) {
     grid[t.y - minY][t.x - minX] = t.id;
   }
-  return { grid, gw, gh, cols, allIds };
+  return { grid, gw, gh, allIds };
+}
+
+function buildObjectCompositeGrid(objSet) {
+  return buildCompositeGridFromIds(collectObjectIds(objSet), getObjectSheetCols(objSet));
 }
 
 function loadPngCached(cache, relPath) {
@@ -123,11 +138,34 @@ function atlasBasenameFromPath(rel) {
   return b.replace(/[^a-z0-9_-]+/gi, '_');
 }
 
-function classifyVegetation(key) {
-  const base = key.replace(/\s*\[[0-9]+x[0-9]+\]\s*$/, '').toLowerCase();
+function objectKeyBase(key) {
+  return key.replace(/\s*\[[0-9]+x[0-9]+\]\s*$/, '').toLowerCase();
+}
+
+function classifyObjectExport(key, objSet) {
+  const base = objectKeyBase(key);
+  if (CAVERN_ENTRANCE_RE.test(base)) return 'cavern-entrances';
+  if (BERRY_TREE_RE.test(base)) return null;
   if (TREE_RE.test(base)) return 'trees';
   if (GRASS_RE.test(base)) return 'grasses';
   return null;
+}
+
+function isStumpCandidateObject(key, objSet) {
+  const base = objectKeyBase(key);
+  if (BERRY_TREE_RE.test(base)) return false;
+  if (CAVERN_ENTRANCE_RE.test(base)) return false;
+
+  const baseIds = collectPartIds(objSet, (r) => r === 'base');
+  if (!baseIds.length) return false;
+
+  const hasCanopy = (objSet.parts || []).some((p) => {
+    const r = String(p.role || '');
+    return r === 'top' || r === 'tops';
+  });
+  if (!hasCanopy) return false;
+
+  return TREE_RE.test(base);
 }
 
 function writePng(path, width, height, data) {
@@ -137,65 +175,150 @@ function writePng(path, width, height, data) {
   writeFileSync(path, PNG.sync.write(png));
 }
 
+function rasterizeIds(objSet, relAtlas, layout, pngCache) {
+  const src = loadPngCached(pngCache, relAtlas);
+  if (!src || !layout) return null;
+
+  const { grid, gw, gh } = layout;
+  const outW = gw * TILE;
+  const outH = gh * TILE;
+  const buf = Buffer.alloc(outW * outH * 4);
+  for (let i = 0; i < buf.length; i += 4) buf[i + 3] = 0;
+  const dst = { width: outW, height: outH, data: buf };
+
+  const srcCols = getObjectSheetCols(objSet);
+  for (let gy = 0; gy < gh; gy++) {
+    for (let gx = 0; gx < gw; gx++) {
+      const tid = grid[gy][gx];
+      if (tid != null) blitTile16(src, srcCols, tid, dst, gx * TILE, gy * TILE);
+    }
+  }
+  return { buf, outW, outH };
+}
+
+function exportObjectSprite({
+  category,
+  key,
+  objSet,
+  layout,
+  pngCache,
+  manifest,
+  nameSuffix = '',
+  manifestExtra = {}
+}) {
+  const relAtlas = TessellationEngine.getImagePath(objSet.file);
+  const raster = rasterizeIds(objSet, relAtlas, layout, pngCache);
+  if (!raster) return false;
+
+  const shape = objSet.shape || `${layout.gw}x${layout.gh}`;
+  const slug = slugifyObjectFilename(key);
+  const atlasTag = atlasBasenameFromPath(relAtlas);
+  const suffix = nameSuffix ? `__${nameSuffix}` : '';
+  const fname = `${slug}${suffix}__shape-${shape}__tiles-${layout.allIds.join('_')}__${atlasTag}.png`;
+  const outPath = join(OUT_ROOT, category, fname);
+  writePng(outPath, raster.outW, raster.outH, raster.buf);
+
+  manifest.push({
+    objectSetKey: key,
+    category,
+    shape: String(shape),
+    tileIds: layout.allIds,
+    atlasRelativePath: relAtlas,
+    gridSizeTiles: { w: layout.gw, h: layout.gh },
+    outputRelativePath: `exported/sprites-vegetation-terrain/${category}/${fname}`,
+    ...manifestExtra
+  });
+  return true;
+}
+
 function main() {
   const pngCache = new Map();
-  mkdirSync(join(OUT_ROOT, 'grasses'), { recursive: true });
-  mkdirSync(join(OUT_ROOT, 'trees'), { recursive: true });
-  mkdirSync(join(OUT_ROOT, 'terrain-centers', 'individual'), { recursive: true });
+  const categories = [
+    'grasses',
+    'trees',
+    'tree-stumps',
+    'cavern-entrances',
+    'terrain-centers/individual'
+  ];
+  for (const c of categories) {
+    mkdirSync(join(OUT_ROOT, c), { recursive: true });
+  }
 
   const manifest = {
     generatedBy: 'scripts/extract-grass-tree-terrain-sprites.mjs',
     grasses: [],
     trees: [],
+    treeStumps: [],
+    cavernEntrances: [],
     terrainCenters: []
   };
 
   for (const [key, objSet] of Object.entries(OBJECT_SETS)) {
-    const cat = classifyVegetation(key);
+    const cat = classifyObjectExport(key, objSet);
     if (!cat) continue;
 
     const layout = buildObjectCompositeGrid(objSet);
     if (!layout) continue;
 
-    const relAtlas = TessellationEngine.getImagePath(objSet.file);
-    const src = loadPngCached(pngCache, relAtlas);
-    if (!src) continue;
-
-    const { grid, gw, gh } = layout;
-    const outW = gw * TILE;
-    const outH = gh * TILE;
-    const buf = Buffer.alloc(outW * outH * 4);
-    for (let i = 0; i < buf.length; i += 4) {
-      buf[i + 3] = 0;
-    }
-    const dst = { width: outW, height: outH, data: buf };
-
-    const srcCols = getObjectSheetCols(objSet);
-    for (let gy = 0; gy < gh; gy++) {
-      for (let gx = 0; gx < gw; gx++) {
-        const tid = grid[gy][gx];
-        if (tid != null) blitTile16(src, srcCols, tid, dst, gx * TILE, gy * TILE);
-      }
-    }
-
-    const shape = objSet.shape || `${gw}x${gh}`;
-    const slug = slugifyObjectFilename(key);
-    const atlasTag = atlasBasenameFromPath(relAtlas);
-    const fname = `${slug}__shape-${shape}__tiles-${layout.allIds.join('_')}__${atlasTag}.png`;
-    const outPath = join(OUT_ROOT, cat, fname);
-
-    writePng(outPath, outW, outH, buf);
-
-    const entry = {
-      objectSetKey: key,
+    const manifestKey =
+      cat === 'cavern-entrances'
+        ? 'cavernEntrances'
+        : cat === 'trees'
+          ? 'trees'
+          : 'grasses';
+    exportObjectSprite({
       category: cat,
-      shape: String(shape),
-      tileIds: layout.allIds,
-      atlasRelativePath: relAtlas,
-      gridSizeTiles: { w: gw, h: gh },
-      outputRelativePath: `exported/sprites-vegetation-terrain/${cat}/${fname}`
-    };
-    manifest[cat === 'trees' ? 'trees' : 'grasses'].push(entry);
+      key,
+      objSet,
+      layout,
+      pngCache,
+      manifest: manifest[manifestKey]
+    });
+  }
+
+  for (const [key, objSet] of Object.entries(OBJECT_SETS)) {
+    if (!isStumpCandidateObject(key, objSet)) continue;
+
+    const baseIds = collectPartIds(objSet, (r) => r === 'base');
+    const cols = getObjectSheetCols(objSet);
+    const layout = buildCompositeGridFromIds(baseIds, cols);
+    if (!layout) continue;
+
+    exportObjectSprite({
+      category: 'tree-stumps',
+      key,
+      objSet,
+      layout,
+      pngCache,
+      manifest: manifest.treeStumps,
+      nameSuffix: 'stump-base',
+      manifestExtra: { stumpSource: 'object-set-base-part' }
+    });
+  }
+
+  const formalStumpObjSet = { file: NATURE_TSX, shape: '2x1' };
+  for (const [treeType, spec] of Object.entries(TREE_TILES)) {
+    const baseIds = spec?.base;
+    if (!Array.isArray(baseIds) || !baseIds.length) continue;
+
+    const layout = buildCompositeGridFromIds(baseIds, 57);
+    if (!layout) continue;
+
+    const key = `TREE_TILES.${treeType}`;
+    exportObjectSprite({
+      category: 'tree-stumps',
+      key,
+      objSet: formalStumpObjSet,
+      layout,
+      pngCache,
+      manifest: manifest.treeStumps,
+      nameSuffix: 'formal-stump',
+      manifestExtra: {
+        stumpSource: 'TREE_TILES',
+        treeType,
+        topTileIds: spec.top ?? []
+      }
+    });
   }
 
   const terrainEntries = [];
@@ -236,7 +359,7 @@ function main() {
     const cy = Math.floor(sheetIdx / sheetCols);
     blitTile16(src, tCols, centerId, sheetPng, cx * TILE, cy * TILE);
 
-    const tEntry = {
+    terrainEntries.push({
       terrainSetName: name,
       terrainType: set.type,
       centerTileId: centerId,
@@ -244,8 +367,7 @@ function main() {
       sheetCols: tCols,
       individualRelativePath: `exported/sprites-vegetation-terrain/terrain-centers/individual/${indName}`,
       atlasSheetCell: { x: cx, y: cy }
-    };
-    terrainEntries.push(tEntry);
+    });
     sheetIdx++;
   }
 
@@ -268,6 +390,10 @@ function main() {
     'grasses,',
     manifest.trees.length,
     'trees,',
+    manifest.treeStumps.length,
+    'tree stumps,',
+    manifest.cavernEntrances.length,
+    'cavern entrances,',
     manifest.terrainCenters.length,
     'terrain centers →',
     OUT_ROOT
